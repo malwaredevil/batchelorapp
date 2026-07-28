@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams, useLocation } from "wouter";
+import { Link, useParams, useLocation } from "wouter";
 import {
   ArrowLeft,
   Pencil,
@@ -32,6 +32,7 @@ import {
   useUpdateBlock,
   useCreateBlockTemplate,
   useListQuiltingCategories,
+  useListFabrics,
   getListBlocksQueryKey,
   getGetBlockQueryKey,
   getListBlockTemplatesQueryKey,
@@ -48,6 +49,21 @@ import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
 /** URL for the server-rasterised PNG preview of a block. */
 function blockPreviewUrl(blockId: number, sizePx: number): string {
   return `/api/quilting/blocks/${blockId}/preview.png?size=${sizePx}`;
+}
+
+/** Extract all unique fabric IDs referenced in a cell array. */
+function extractFabricIdsFromCells(cells: string[]): number[] {
+  const ids = new Set<number>();
+  for (const cell of cells) {
+    const parts = cell.split(":");
+    for (let i = 0; i < parts.length; i++) {
+      if (parts[i] === "fab" && i + 1 < parts.length) {
+        const n = parseInt(parts[i + 1], 10);
+        if (!isNaN(n)) ids.add(n);
+      }
+    }
+  }
+  return Array.from(ids).sort((a, b) => a - b);
 }
 
 export default function BlockDetail() {
@@ -69,6 +85,7 @@ export default function BlockDetail() {
   } = useGetBlock(Number.isFinite(blockId) ? blockId : 0);
 
   const { data: allCategories } = useListQuiltingCategories();
+  const { data: fabricsData } = useListFabrics({ pageSize: 200 });
 
   usePageAssistantContext(
     "quilting-block-detail",
@@ -218,6 +235,12 @@ export default function BlockDetail() {
   const cells = b.cells;
   const gridSize = b.gridSize;
   const gridH = Math.max(1, Math.ceil(cells.length / gridSize));
+
+  const usedFabricIds = extractFabricIdsFromCells(cells);
+  const fabricsList = fabricsData?.items ?? [];
+  const usedFabrics = usedFabricIds
+    .map((id) => fabricsList.find((f) => f.id === id))
+    .filter((f): f is NonNullable<typeof f> => f != null);
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -463,6 +486,35 @@ export default function BlockDetail() {
               </p>
             )}
           </section>
+
+          {/* Fabrics used */}
+          {usedFabrics.length > 0 && (
+            <section className="rounded-xl border border-card-border bg-card p-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Fabrics used
+              </p>
+              <div className="flex flex-col gap-1">
+                {usedFabrics.map((fabric) => (
+                  <Link
+                    key={fabric.id}
+                    href={`/quilting/fabrics/${fabric.id}`}
+                    className="flex items-center gap-3 rounded-lg px-1.5 py-1 -mx-1.5 transition-colors hover:bg-muted/60"
+                  >
+                    <div className="h-10 w-10 shrink-0 overflow-hidden rounded-md border border-border/40 bg-muted">
+                      <img
+                        src={`/api/quilting/fabrics/${fabric.id}/image`}
+                        alt={fabric.name}
+                        className="h-full w-full object-cover"
+                      />
+                    </div>
+                    <span className="text-sm font-medium leading-tight text-foreground">
+                      {fabric.name}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
         </div>
       </div>
       <PreviewZoomModal

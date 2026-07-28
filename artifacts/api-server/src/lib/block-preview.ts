@@ -424,18 +424,42 @@ export async function renderBlockPreviewPng(
     return { png: cached, etag, heightPx };
   }
 
+  // 3. Download each fabric image, embed at 2× the canvas size to give
+  // librsvg a higher-res source to downsample from (sharper bilinear
+  // filtering), then JPEG-encode at quality 95 to eliminate the block
+  // artifacts that are visible on fine crease-removed fabric textures at
+  // the lower quality 90 setting.
+  //
+  // Size budget: cap the embed at 1 200 px (longest edge) so the SVG
+  // payload stays well under libxml2's 10 MB parse limit even for complex
+  // blocks with 8+ unique fabrics (worst-case ≈ 8 × ~500 KB JPEG × 1.33
+  // base64 overhead ≈ 5 MB — comfortably below the limit).
+  //
+  // Crease-removed fabric PNGs can be ~20 MB.  Embedding them raw would
+  // easily exceed the 10 MB parse limit and cause Sharp to throw:
+  //   "Buffer size limit exceeded, try XML_PARSE_HUGE"
+  const { default: sharp } = await import("sharp");
+
+  // Embed at 2× the output canvas width for sharper downsampling by librsvg,
+  // capped at 1 200 px to bound the SVG payload size.
+  const embedSize = Math.min(1200, clampedSize * 2);
+
   if (fabIds.length > 0) {
-    // 3. Download each fabric image and base64-encode as a data URI (parallel)
     await Promise.all(
       fabRows.map(async (fab) => {
         if (!fab.imagePath) return;
         try {
-          const { buffer, contentType } = await downloadImageBuffer(
-            fab.imagePath,
-          );
-          const mime = contentType || "image/jpeg";
+          const { buffer } = await downloadImageBuffer(fab.imagePath);
+          // Resize to embedSize (never upscale), encode as high-quality JPEG.
+          const thumbnail = await sharp(buffer)
+            .resize(embedSize, embedSize, {
+              fit: "inside",
+              withoutEnlargement: true,
+            })
+            .jpeg({ quality: 95 })
+            .toBuffer();
           fabUriMap[fab.id] =
-            `data:${mime};base64,${buffer.toString("base64")}`;
+            `data:image/jpeg;base64,${thumbnail.toString("base64")}`;
         } catch (err) {
           logger.warn(
             {
@@ -453,7 +477,6 @@ export async function renderBlockPreviewPng(
   const svg = buildBlockSvg(cells, gridSize, seams, clampedSize, fabUriMap);
 
   // 5. Rasterise with sharp
-  const { default: sharp } = await import("sharp");
   const gridH = Math.max(1, Math.ceil(cells.length / gridSize));
   const cellPx = clampedSize / gridSize;
   const heightPx = Math.round(gridH * cellPx);

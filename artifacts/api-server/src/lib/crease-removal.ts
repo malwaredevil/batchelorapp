@@ -208,6 +208,7 @@ export async function removeCreasesFromBuffer(
     prompt: prompt ?? DEFAULT_INPAINT_PROMPT,
     n: 1,
     size: "1024x1024",
+    output_format: "png",
   });
 
   const b64 = response.data?.[0]?.b64_json;

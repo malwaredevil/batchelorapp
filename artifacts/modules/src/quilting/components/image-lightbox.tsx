@@ -16,6 +16,7 @@ interface ImageLightboxProps {
   images?: string[];
   currentIndex?: number;
   onNavigate?: (index: number) => void;
+  labels?: string[];
 }
 
 export function ImageLightbox({
@@ -26,6 +27,7 @@ export function ImageLightbox({
   images,
   currentIndex,
   onNavigate,
+  labels,
 }: ImageLightboxProps) {
   const scaleRef = useRef(1);
   const offsetRef = useRef({ x: 0, y: 0 });
@@ -105,11 +107,18 @@ export function ImageLightbox({
         <X className="h-5 w-5" />
       </button>
 
-      <p className="absolute top-4 left-1/2 -translate-x-1/2 z-10 text-xs text-white/50 pointer-events-none select-none">
-        {isMulti
-          ? `${(currentIndex ?? 0) + 1} / ${images!.length} · scroll to zoom · drag to pan`
-          : "Scroll to zoom · drag to pan · click outside to close"}
-      </p>
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-1.5 pointer-events-none select-none">
+        <p className="text-xs text-white/50">
+          {isMulti
+            ? `${(currentIndex ?? 0) + 1} / ${images!.length} · scroll to zoom · drag to pan`
+            : "Scroll to zoom · drag to pan · click outside to close"}
+        </p>
+        {labels && labels[currentIndex ?? 0] && (
+          <span className="rounded-full bg-white/15 px-2.5 py-0.5 text-[11px] font-medium text-white/80 backdrop-blur-sm">
+            {labels[currentIndex ?? 0]}
+          </span>
+        )}
+      </div>
 
       {isMulti && onNavigate && currentIndex !== undefined && (
         <>

@@ -598,12 +598,16 @@ export default function FabricDetail() {
               </div>
             </div>
             {(() => {
+              const sortedSupplementals = f.images
+                .slice()
+                .sort((a, b) => a.position - b.position);
               const allLightboxImages = [
                 f.imageUrl,
-                ...f.images
-                  .slice()
-                  .sort((a, b) => a.position - b.position)
-                  .map((img) => img.url),
+                ...sortedSupplementals.map((img) => img.url),
+              ];
+              const allLightboxLabels = [
+                "Default",
+                ...sortedSupplementals.map((_, i) => `Photo ${i + 2}`),
               ];
               return (
                 <ImageLightbox
@@ -617,6 +621,7 @@ export default function FabricDetail() {
                   images={allLightboxImages}
                   currentIndex={lightboxIndex ?? 0}
                   onNavigate={setLightboxIndex}
+                  labels={allLightboxLabels}
                 />
               );
             })()}

@@ -21,6 +21,8 @@ import {
   Sparkles,
   ChevronLeft,
   ChevronRight,
+  Check,
+  XCircle,
 } from "lucide-react";
 import { useBulkAdd } from "@/quilting/contexts/bulk-add-context";
 import { Button } from "@/components/ui/button";
@@ -58,6 +60,7 @@ import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
 import { CategoryEditDialog } from "@/quilting/components/CategoryEditDialog";
 import { PaletteMatchModal } from "@/quilting/components/PaletteMatchModal";
 import { QuickEditFabricSheet } from "@/quilting/components/quick-edit-fabric-sheet";
+import { FabricCreaseRemoverModal } from "@/quilting/components/FabricCreaseRemoverModal";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -128,12 +131,15 @@ type FabricSummary = {
   createdAt: Date | string;
 };
 
+type BulkItemStatus = "pending" | "processing" | "success" | "failed";
+
 function FabricCard({
   fabric,
   onDelete,
   onReanalyze,
   isBulkMode,
   isSelected,
+  bulkStatus,
   onToggleSelect,
   onFilterByPrintType,
   onFilterByCategory,
@@ -141,6 +147,7 @@ function FabricCard({
   activeColor,
   onEditCategories,
   onQuickEdit,
+  onCreaseRemover,
   onNavigate,
 }: {
   fabric: FabricSummary;
@@ -148,6 +155,7 @@ function FabricCard({
   onReanalyze: (id: number) => void;
   isBulkMode: boolean;
   isSelected: boolean;
+  bulkStatus?: BulkItemStatus;
   onToggleSelect: (id: number) => void;
   onFilterByPrintType?: (pt: string) => void;
   onFilterByCategory?: (id: number) => void;
@@ -155,11 +163,13 @@ function FabricCard({
   activeColor?: string[];
   onEditCategories?: () => void;
   onQuickEdit?: () => void;
+  onCreaseRemover?: () => void;
   onNavigate?: () => void;
 }) {
   const [, navigate] = useLocation();
   const [zoomOpen, setZoomOpen] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   return (
     <>
       <div
@@ -177,6 +187,23 @@ function FabricCard({
             ) : (
               <Square className="h-4 w-4" />
             )}
+          </div>
+        )}
+        {isBulkMode && bulkStatus && bulkStatus !== "pending" && (
+          <div
+            className={`absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full shadow-sm ${
+              bulkStatus === "processing"
+                ? "bg-amber-500 text-white"
+                : bulkStatus === "success"
+                  ? "bg-green-500 text-white"
+                  : "bg-red-500 text-white"
+            }`}
+          >
+            {bulkStatus === "processing" && (
+              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+            )}
+            {bulkStatus === "success" && <Check className="h-3.5 w-3.5" />}
+            {bulkStatus === "failed" && <XCircle className="h-3.5 w-3.5" />}
           </div>
         )}
         <Link
@@ -201,7 +228,7 @@ function FabricCard({
                 e.stopPropagation();
                 setZoomOpen(true);
               }}
-              className="absolute left-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-black/70"
+              className={`absolute left-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/50 text-white transition-opacity hover:bg-black/70 ${menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
               title="Zoom preview"
             >
               <ZoomIn className="h-3.5 w-3.5" />
@@ -283,12 +310,12 @@ function FabricCard({
 
         {!isBulkMode && (
           <div className="absolute right-2 top-2">
-            <DropdownMenu>
+            <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7 rounded-full bg-background/80 opacity-100 shadow-sm transition-opacity md:opacity-0 md:group-hover:opacity-100 hover:opacity-100"
+                  className={`h-7 w-7 rounded-full bg-background/80 shadow-sm transition-opacity hover:opacity-100 ${menuOpen ? "opacity-100" : "opacity-100 md:opacity-0 md:group-hover:opacity-100"}`}
                 >
                   <MoreVertical className="h-3.5 w-3.5" />
                   <span className="sr-only">Options</span>
@@ -328,6 +355,10 @@ function FabricCard({
                 >
                   <Download className="mr-2 h-3.5 w-3.5" />
                   Download photo
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onCreaseRemover?.()}>
+                  <Scissors className="mr-2 h-3.5 w-3.5" />
+                  Remove creases
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onEditCategories?.()}>
                   <Tag className="mr-2 h-3.5 w-3.5" />
@@ -411,6 +442,8 @@ export default function Fabrics() {
   const [quickEditItem, setQuickEditItem] = useState<FabricSummary | null>(
     null,
   );
+  const [creaseRemoverItem, setCreaseRemoverItem] =
+    useState<FabricSummary | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const { data: categoryApiList } = useListQuiltingCategories();
 
@@ -473,6 +506,9 @@ export default function Fabrics() {
     total: number;
     failed: number;
   } | null>(null);
+  const [bulkItemStatus, setBulkItemStatus] = useState<
+    Map<number, BulkItemStatus>
+  >(new Map());
 
   const bulkCreaseFixMutation = useLabBulkCreaseFix();
 
@@ -482,20 +518,45 @@ export default function Fabrics() {
     const ids = Array.from(selectedIds);
     setBulkCreaseProgress({ done: 0, total: ids.length, failed: 0 });
 
+    const initialStatus = new Map<number, BulkItemStatus>(
+      ids.map((id) => [id, "pending"]),
+    );
+    setBulkItemStatus(initialStatus);
+
     let totalSucceeded = 0;
     let totalFailed = 0;
 
     for (let i = 0; i < ids.length; i += CREASE_BATCH_SIZE) {
       const batch = ids.slice(i, i + CREASE_BATCH_SIZE);
+
+      setBulkItemStatus((prev) => {
+        const next = new Map(prev);
+        batch.forEach((id) => next.set(id, "processing"));
+        return next;
+      });
+
       try {
         const result = await bulkCreaseFixMutation.mutateAsync({
           data: { ids: batch },
         });
         totalSucceeded += result.succeeded.length;
         totalFailed += result.failed.length;
+
+        setBulkItemStatus((prev) => {
+          const next = new Map(prev);
+          result.succeeded.forEach((id) => next.set(id, "success"));
+          result.failed.forEach(({ id }) => next.set(id, "failed"));
+          return next;
+        });
       } catch {
         totalFailed += batch.length;
+        setBulkItemStatus((prev) => {
+          const next = new Map(prev);
+          batch.forEach((id) => next.set(id, "failed"));
+          return next;
+        });
       }
+
       setBulkCreaseProgress({
         done: totalSucceeded + totalFailed,
         total: ids.length,
@@ -505,15 +566,15 @@ export default function Fabrics() {
 
     queryClient.invalidateQueries({ queryKey: getListFabricsQueryKey() });
     setBulkCreaseProgress(null);
-    setSelectedIds(new Set());
-    setIsBulkMode(false);
 
     if (totalFailed === 0) {
       toast.success(
-        `Fixed creases on ${totalSucceeded} fabric${totalSucceeded !== 1 ? "s" : ""}`,
+        `Fixed creases on ${totalSucceeded} fabric${totalSucceeded !== 1 ? "s" : ""}. Click Done to exit.`,
       );
     } else {
-      toast.success(`Fixed ${totalSucceeded} fabrics, ${totalFailed} failed`);
+      toast.success(
+        `Fixed ${totalSucceeded}, failed ${totalFailed}. Click Done to exit.`,
+      );
     }
   }
 
@@ -538,6 +599,7 @@ export default function Fabrics() {
   function toggleBulkMode() {
     setIsBulkMode((v) => !v);
     setSelectedIds(new Set());
+    setBulkItemStatus(new Map());
   }
 
   function selectAll() {
@@ -1141,6 +1203,7 @@ export default function Fabrics() {
                 onReanalyze={handleReanalyze}
                 isBulkMode={isBulkMode}
                 isSelected={selectedIds.has(fabric.id)}
+                bulkStatus={bulkItemStatus.get(fabric.id)}
                 onToggleSelect={toggleSelect}
                 activeColor={colorFilter}
                 onFilterByPrintType={(pt) =>
@@ -1160,6 +1223,9 @@ export default function Fabrics() {
                   setCategoryEditItem(fabric as FabricSummary)
                 }
                 onQuickEdit={() => setQuickEditItem(fabric as FabricSummary)}
+                onCreaseRemover={() =>
+                  setCreaseRemoverItem(fabric as FabricSummary)
+                }
                 onNavigate={handleFabricNavigate}
               />
             ))}
@@ -1213,6 +1279,15 @@ export default function Fabrics() {
           fabric={quickEditItem as unknown as QuiltingFabric}
           onClose={() => setQuickEditItem(null)}
           onDeleted={() => setQuickEditItem(null)}
+        />
+      )}
+      {creaseRemoverItem && (
+        <FabricCreaseRemoverModal
+          fabricId={creaseRemoverItem.id}
+          fabricName={creaseRemoverItem.name}
+          imageUrl={creaseRemoverItem.imageUrl}
+          open={true}
+          onClose={() => setCreaseRemoverItem(null)}
         />
       )}
       <AlertDialog

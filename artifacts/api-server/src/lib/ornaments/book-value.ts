@@ -3,11 +3,26 @@
  * Hallmark ornament, sourced from hallmarkornaments.com and/or
  * hookedonhallmark.com.
  *
- * #217: Scraping now runs via the `apify/website-content-crawler` Apify actor
- * instead of direct server-side HTTP fetches.  This moves the fragile HTML
- * parsing onto Apify's infrastructure (proxy rotation, retries, run dashboard)
- * and keeps the server from making outbound requests to Hallmark sites directly.
- * The AI extraction step is unchanged.
+ * Page fetch uses a two-strategy fallback chain so a single provider failure
+ * doesn't silently kill the lookup:
+ *
+ *   Strategy 1 — Jina Reader (r.jina.ai): converts any public URL to clean
+ *     LLM-friendly markdown; handles Cloudflare-protected sites and avoids
+ *     outbound fetches from the server.  Requires JINA_API_KEY.
+ *
+ *   Strategy 2 — Direct HTTP: plain fetch with browser-like headers as a
+ *     best-effort fallback when Jina fails or is unconfigured.  Works for
+ *     sites that don't block server-side user-agents; returns stripped
+ *     plaintext from the raw HTML.
+ *
+ * If both strategies return no content for a site, that site is skipped.
+ * The AI extraction step is identical regardless of which strategy fetched
+ * the page.
+ *
+ * Note on Apify: the account's current plan blocks public actors
+ * ("public-actor-disabled"). Private/custom actors still work (the HooH
+ * catalog crawler rFw8VLb3KM2g4DVrE is one). A minimal custom fetch actor
+ * is a viable future option if both strategies below prove insufficient.
  */
 
 import { callModel, getModels } from "../ai-client";
@@ -93,17 +108,9 @@ async function extractValueFromText(
 const FETCH_TIMEOUT_MS = 20_000;
 const FETCH_MAX_CHARS = 8_000;
 
-/**
- * Fetch page text for a URL via the Jina Reader API (r.jina.ai), which
- * converts any public webpage to clean, LLM-friendly markdown without
- * requiring any special actor or plan.
- */
-async function fetchPageText(url: string): Promise<string | null> {
-  if (!env.jinaApiKey) {
-    logger.warn("book-value: JINA_API_KEY not configured, skipping fetch");
-    return null;
-  }
-
+/** Strategy 1: Jina Reader — clean markdown, handles Cloudflare. */
+async function fetchPageTextViaJina(url: string): Promise<string | null> {
+  if (!env.jinaApiKey) return null;
   try {
     const resp = await withRetry(
       () =>
@@ -120,16 +127,80 @@ async function fetchPageText(url: string): Promise<string | null> {
     if (!resp.ok) {
       logger.warn(
         { url, status: resp.status },
-        "book-value: Jina fetch failed",
+        "book-value: Jina fetch non-OK",
       );
       return null;
     }
     const text = (await resp.text()).trim();
     return text.length > 10 ? text.slice(0, FETCH_MAX_CHARS) : null;
   } catch (err) {
-    logger.warn({ err, url }, "book-value: page fetch failed");
+    logger.warn({ err, url }, "book-value: Jina fetch threw");
     return null;
   }
+}
+
+/** Strategy 2: Direct HTTP — browser-like headers, strips HTML tags. */
+async function fetchPageTextDirect(url: string): Promise<string | null> {
+  try {
+    const resp = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+      },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    if (!resp.ok) {
+      logger.warn(
+        { url, status: resp.status },
+        "book-value: direct fetch non-OK",
+      );
+      return null;
+    }
+    const html = await resp.text();
+    // Strip scripts, styles, and tags to get rough plaintext
+    const text = html
+      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, " ")
+      .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return text.length > 100 ? text.slice(0, FETCH_MAX_CHARS) : null;
+  } catch (err) {
+    logger.warn({ err, url }, "book-value: direct fetch threw");
+    return null;
+  }
+}
+
+/**
+ * Fetch page text for a URL using a two-strategy fallback chain:
+ * Jina Reader first (clean markdown, Cloudflare-aware), then direct HTTP.
+ */
+async function fetchPageText(url: string): Promise<string | null> {
+  // Strategy 1: Jina Reader
+  if (env.jinaApiKey) {
+    const text = await fetchPageTextViaJina(url);
+    if (text) {
+      logger.info({ url }, "book-value: fetched via Jina Reader");
+      return text;
+    }
+    logger.info(
+      { url },
+      "book-value: Jina returned no content, trying direct fetch",
+    );
+  } else {
+    logger.warn(
+      { url },
+      "book-value: JINA_API_KEY not configured, trying direct fetch",
+    );
+  }
+
+  // Strategy 2: Direct HTTP fallback
+  const text = await fetchPageTextDirect(url);
+  if (text) logger.info({ url }, "book-value: fetched via direct HTTP");
+  return text;
 }
 
 /**

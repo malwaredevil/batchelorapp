@@ -1172,7 +1172,7 @@ router.post("/items/:id/lookup-barcode", async (req, res) => {
 // hookedonhallmark.com, saves the result, and returns the updated item.
 // ---------------------------------------------------------------------------
 
-router.post("/items/:id/lookup-book-value", aiLimiter, async (req, res) => {
+router.post("/items/:id/book-value-lookup", aiLimiter, async (req, res) => {
   const { id } = LookupOrnamentBookValueParams.parse(req.params);
 
   const [item] = await db
@@ -1365,7 +1365,17 @@ router.post("/items/:id/ebay-price-lookup", aiLimiter, async (req, res) => {
     year: item.year,
   });
 
-  const result = await lookupEbayMarketValue(query, { withAspects: true });
+  let result: Awaited<ReturnType<typeof lookupEbayMarketValue>>;
+  try {
+    result = await lookupEbayMarketValue(query, { withAspects: true });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    req.log.warn({ err }, "ornaments: eBay price lookup failed");
+    res.status(503).json({
+      error: `eBay lookup is temporarily unavailable. Please try again in a moment. (${msg.slice(0, 120)})`,
+    });
+    return;
+  }
   if (!result) {
     res
       .status(422)

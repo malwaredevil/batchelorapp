@@ -18,7 +18,7 @@ import {
   Maximize2,
   ImagePlus,
   Check,
-  Scissors,
+  Sparkles,
   ArrowLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -398,7 +398,7 @@ export function FabricCreaseRemoverModal({
             );
           } else {
             toast.success(
-              `Detected ${data.creasesFound} crease${data.creasesFound === 1 ? "" : "s"}. Adjust with the brush, then press Remove Creases.`,
+              `Detected ${data.creasesFound} crease${data.creasesFound === 1 ? "" : "s"}. Adjust with the brush, then press AI Enhance.`,
             );
           }
         },
@@ -537,9 +537,9 @@ export function FabricCreaseRemoverModal({
         {/* Header */}
         <div className="flex shrink-0 items-center justify-between border-b border-card-border px-5 py-3">
           <div className="flex items-center gap-2.5">
-            <Scissors className="h-4 w-4 text-primary" />
+            <Sparkles className="h-4 w-4 text-primary" />
             <span className="font-semibold text-sm">
-              {step === "draw" ? "Remove Creases" : "Results"} —{" "}
+              {step === "draw" ? "AI Enhance" : "Results"} —{" "}
               <span className="text-muted-foreground">{fabricName}</span>
             </span>
           </div>
@@ -709,7 +709,7 @@ export function FabricCreaseRemoverModal({
                 <p className="text-xs text-muted-foreground">
                   {hasMask
                     ? `${detectedCreases.length > 0 ? `${detectedCreases.length} crease${detectedCreases.length === 1 ? "" : "s"} detected — targeted removal` : "manual marks — ready for targeted removal"}`
-                    : "Ready — click Remove Creases to smooth the image, or use Detect Creases first to target specific fold lines"}
+                    : "Ready — click AI Enhance to smooth the image, or use Detect Creases first to target specific fold lines"}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -734,9 +734,9 @@ export function FabricCreaseRemoverModal({
                   {isRemoving ? (
                     <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                   ) : (
-                    <Scissors className="mr-1.5 h-3.5 w-3.5" />
+                    <Sparkles className="mr-1.5 h-3.5 w-3.5" />
                   )}
-                  {isRemoving ? "Removing…" : "Remove Creases →"}
+                  {isRemoving ? "Enhancing…" : "AI Enhance →"}
                 </Button>
               </div>
             </div>

@@ -15,7 +15,7 @@ import {
   Crown,
   Plus,
   Crop,
-  Scissors,
+  Sparkles,
 } from "lucide-react";
 import { LockButton } from "@/quilting/components/LockButton";
 import { Button } from "@/components/ui/button";
@@ -854,10 +854,10 @@ export default function FabricDetail() {
                       <Button
                         variant="outline"
                         size="icon"
-                        title="Remove creases with AI"
+                        title="AI Enhance"
                         onClick={() => setCreaseModalOpen(true)}
                       >
-                        <Scissors className="h-4 w-4" />
+                        <Sparkles className="h-4 w-4" />
                       </Button>
                       <Button
                         variant="outline"

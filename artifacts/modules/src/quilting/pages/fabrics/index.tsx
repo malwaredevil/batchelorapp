@@ -357,8 +357,8 @@ function FabricCard({
                   Download photo
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onCreaseRemover?.()}>
-                  <Scissors className="mr-2 h-3.5 w-3.5" />
-                  Remove creases
+                  <Sparkles className="mr-2 h-3.5 w-3.5" />
+                  AI Enhance
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onEditCategories?.()}>
                   <Tag className="mr-2 h-3.5 w-3.5" />
@@ -888,10 +888,9 @@ export default function Fabrics() {
 
       {isBulkMode && bulkCreaseProgress && (
         <div className="mb-4 flex items-center gap-2.5 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5">
-          <Scissors className="h-4 w-4 shrink-0 animate-pulse text-amber-600" />
+          <Sparkles className="h-4 w-4 shrink-0 animate-pulse text-amber-600" />
           <p className="flex-1 text-sm font-medium text-amber-800">
-            Fixing creases… {bulkCreaseProgress.done} /{" "}
-            {bulkCreaseProgress.total}
+            AI Enhancing… {bulkCreaseProgress.done} / {bulkCreaseProgress.total}
             {bulkCreaseProgress.failed > 0 &&
               ` (${bulkCreaseProgress.failed} failed)`}
           </p>
@@ -925,10 +924,10 @@ export default function Fabrics() {
                 onClick={runBulkCreaseFix}
                 disabled={bulkCreaseFixMutation.isPending}
               >
-                <Scissors
+                <Sparkles
                   className={`mr-2 h-3.5 w-3.5 ${bulkCreaseFixMutation.isPending ? "animate-pulse" : ""}`}
                 />
-                Fix Creases ({selectedIds.size})
+                AI Enhance ({selectedIds.size})
               </Button>
               <Button
                 size="sm"

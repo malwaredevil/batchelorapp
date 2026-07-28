@@ -22,6 +22,8 @@ import {
 
 const router: IRouter = Router();
 
+// Scope requireAuth + requireOwner to /lab/* only so other quilting routes
+// (e.g. /stats) are not affected by the owner check.
 router.use("/lab", requireAuth, requireOwner);
 
 // ---------------------------------------------------------------------------
@@ -74,23 +76,6 @@ async function getSourceBuffer(
     return buffer;
   }
   throw new Error("Either fabricId or sourceDataUrl is required.");
-}
-
-/**
- * Build an inpainting prompt enriched with the fabric's own name and AI
- * description so gpt-image-2 has enough context to preserve the original
- * print pattern rather than hallucinating a completely different fabric.
- */
-function buildEnrichedPrompt(
-  fabricMeta: { name: string; aiDescription: string | null } | undefined,
-  userPrompt?: string,
-): string {
-  if (userPrompt) return userPrompt;
-  if (!fabricMeta?.name) return DEFAULT_INPAINT_PROMPT;
-  const descPart = fabricMeta.aiDescription
-    ? `. Pattern: ${fabricMeta.aiDescription.slice(0, 300)}`
-    : "";
-  return `${DEFAULT_INPAINT_PROMPT}. This is a "${fabricMeta.name}" fabric${descPart}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -153,28 +138,11 @@ router.post("/lab/remove-creases", async (req, res) => {
   }
 
   let imgBuffer: Buffer;
-  let fabricMeta: { name: string; aiDescription: string | null } | undefined;
   try {
-    if (parsed.data.sourceDataUrl) {
-      imgBuffer = validateSourceDataUrl(parsed.data.sourceDataUrl);
-    } else {
-      const [row] = await db
-        .select({
-          imagePath: fabrics.imagePath,
-          name: fabrics.name,
-          aiDescription: fabrics.aiDescription,
-        })
-        .from(fabrics)
-        .where(eq(fabrics.id, parsed.data.fabricId!))
-        .limit(1);
-      if (!row) {
-        res.status(404).json({ error: "Fabric not found." });
-        return;
-      }
-      const { buffer } = await downloadImageBuffer(row.imagePath);
-      imgBuffer = buffer;
-      fabricMeta = { name: row.name, aiDescription: row.aiDescription };
-    }
+    imgBuffer = await getSourceBuffer(
+      parsed.data.fabricId,
+      parsed.data.sourceDataUrl,
+    );
   } catch (err: unknown) {
     const status = (err as { status?: number }).status ?? 500;
     res.status(status).json({ error: (err as Error).message });
@@ -182,28 +150,14 @@ router.post("/lab/remove-creases", async (req, res) => {
   }
 
   try {
-    // When no mask is supplied, auto-detect creases and use only those narrow
-    // bands. A full-coverage mask causes gpt-image-2 to regenerate the entire
-    // image from scratch (hallucination), because it has no pixel reference.
-    let maskDataUrl: string;
-    if (parsed.data.maskDataUrl) {
-      maskDataUrl = parsed.data.maskDataUrl;
-    } else {
-      const detected = await detectCreasesFromBuffer(imgBuffer);
-      if (detected.creasesFound === 0) {
-        res.status(422).json({
-          error:
-            "No creases detected automatically. Paint crease areas manually with the brush, then press Remove Creases.",
-        });
-        return;
-      }
-      maskDataUrl = detected.maskDataUrl;
-    }
-    const prompt = buildEnrichedPrompt(fabricMeta, parsed.data.prompt);
+    // When no mask is supplied, cover the whole image so the AI finds and
+    // removes any creases without requiring a prior detection step.
+    const maskDataUrl =
+      parsed.data.maskDataUrl ?? (await buildFullWhiteMaskDataUrl(imgBuffer));
     const dataUrl = await removeCreasesFromBuffer(
       imgBuffer,
       maskDataUrl,
-      prompt,
+      parsed.data.prompt,
     );
     res.json({ dataUrl });
   } catch (err) {
@@ -228,28 +182,11 @@ router.post("/lab/remove-creases/openai", async (req, res) => {
   }
 
   let imgBuffer: Buffer;
-  let fabricMeta: { name: string; aiDescription: string | null } | undefined;
   try {
-    if (parsed.data.sourceDataUrl) {
-      imgBuffer = validateSourceDataUrl(parsed.data.sourceDataUrl);
-    } else {
-      const [row] = await db
-        .select({
-          imagePath: fabrics.imagePath,
-          name: fabrics.name,
-          aiDescription: fabrics.aiDescription,
-        })
-        .from(fabrics)
-        .where(eq(fabrics.id, parsed.data.fabricId!))
-        .limit(1);
-      if (!row) {
-        res.status(404).json({ error: "Fabric not found." });
-        return;
-      }
-      const { buffer } = await downloadImageBuffer(row.imagePath);
-      imgBuffer = buffer;
-      fabricMeta = { name: row.name, aiDescription: row.aiDescription };
-    }
+    imgBuffer = await getSourceBuffer(
+      parsed.data.fabricId,
+      parsed.data.sourceDataUrl,
+    );
   } catch (err: unknown) {
     const status = (err as { status?: number }).status ?? 500;
     res.status(status).json({ error: (err as Error).message });
@@ -257,28 +194,14 @@ router.post("/lab/remove-creases/openai", async (req, res) => {
   }
 
   try {
-    // When no mask is supplied, auto-detect creases and use only those narrow
-    // bands. A full-coverage mask causes gpt-image-2 to regenerate the entire
-    // image from scratch (hallucination), because it has no pixel reference.
-    let maskDataUrl: string;
-    if (parsed.data.maskDataUrl) {
-      maskDataUrl = parsed.data.maskDataUrl;
-    } else {
-      const detected = await detectCreasesFromBuffer(imgBuffer);
-      if (detected.creasesFound === 0) {
-        res.status(422).json({
-          error:
-            "No creases detected automatically. Paint crease areas manually with the brush, then press Remove Creases.",
-        });
-        return;
-      }
-      maskDataUrl = detected.maskDataUrl;
-    }
-    const prompt = buildEnrichedPrompt(fabricMeta, parsed.data.prompt);
+    // When no mask is supplied, cover the whole image so the AI finds and
+    // removes any creases without requiring a prior detection step.
+    const maskDataUrl =
+      parsed.data.maskDataUrl ?? (await buildFullWhiteMaskDataUrl(imgBuffer));
     const dataUrl = await removeCreasesFromBuffer(
       imgBuffer,
       maskDataUrl,
-      prompt,
+      parsed.data.prompt,
     );
     res.json({ dataUrl });
   } catch (err) {
@@ -319,11 +242,7 @@ router.post("/lab/bulk-crease-fix", async (req, res) => {
   const results = await Promise.allSettled(
     ids.map(async (fabricId) => {
       const [row] = await db
-        .select({
-          imagePath: fabrics.imagePath,
-          name: fabrics.name,
-          aiDescription: fabrics.aiDescription,
-        })
+        .select({ imagePath: fabrics.imagePath })
         .from(fabrics)
         .where(eq(fabrics.id, fabricId))
         .limit(1);
@@ -332,15 +251,7 @@ router.post("/lab/bulk-crease-fix", async (req, res) => {
 
       const { buffer: imgBuffer } = await downloadImageBuffer(row.imagePath);
       const maskDataUrl = await buildFullWhiteMaskDataUrl(imgBuffer);
-      const prompt = buildEnrichedPrompt({
-        name: row.name,
-        aiDescription: row.aiDescription,
-      });
-      const dataUrl = await removeCreasesFromBuffer(
-        imgBuffer,
-        maskDataUrl,
-        prompt,
-      );
+      const dataUrl = await removeCreasesFromBuffer(imgBuffer, maskDataUrl);
 
       const b64 = dataUrl.replace(/^data:image\/[a-zA-Z+]+;base64,/, "");
       const resultBuf = Buffer.from(b64, "base64");

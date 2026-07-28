@@ -43,36 +43,14 @@ import { MarkdownMessage } from "./MarkdownMessage";
 import { ChatWidget } from "./ChatWidgets";
 import { LinkPreviewCard } from "./LinkPreviewCard";
 
-// ─── Response-complete chime (Replit-style ascending arpeggio) ───────────────
+// ─── Response-complete chime ──────────────────────────────────────────────────
 function playResponseChime(): void {
   try {
-    const AudioCtx =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext: typeof AudioContext })
-        .webkitAudioContext;
-    if (!AudioCtx) return;
-    const ctx = new AudioCtx();
-    const playTone = (freq: number, start: number, duration: number) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = "sine";
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0, start);
-      gain.gain.linearRampToValueAtTime(0.13, start + 0.008);
-      gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
-      osc.start(start);
-      osc.stop(start + duration);
-    };
-    const t = ctx.currentTime;
-    // A major arpeggio: A5 → C#6 → E6
-    playTone(880, t, 0.18);
-    playTone(1109, t + 0.09, 0.18);
-    playTone(1319, t + 0.18, 0.28);
-    setTimeout(() => ctx.close().catch(() => {}), 1200);
+    new Audio("https://replit.com/public/sounds/Achievement_Bell_Replit.wav")
+      .play()
+      .catch(() => {});
   } catch {
-    // AudioContext not available
+    // Audio not available
   }
 }
 

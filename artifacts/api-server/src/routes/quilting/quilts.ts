@@ -652,7 +652,12 @@ router.get("/quilts/:id/image", async (req, res) => {
   }
   const { buffer, contentType } = await downloadImageBuffer(row.imagePath);
   res.set("Content-Type", contentType);
-  res.set("Cache-Control", "private, max-age=3600");
+  res.set(
+    "Cache-Control",
+    req.query.v
+      ? "private, max-age=31536000, immutable"
+      : "private, max-age=3600",
+  );
   res.end(buffer);
 });
 
@@ -748,7 +753,12 @@ router.get("/quilts/:id/images/:imageId", async (req, res) => {
   }
   const { buffer, contentType } = await downloadImageBuffer(image.storagePath);
   res.set("Content-Type", contentType);
-  res.set("Cache-Control", "private, max-age=3600");
+  res.set(
+    "Cache-Control",
+    req.query.v
+      ? "private, max-age=31536000, immutable"
+      : "private, max-age=3600",
+  );
   res.end(buffer);
 });
 

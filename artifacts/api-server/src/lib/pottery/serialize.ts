@@ -1,4 +1,5 @@
 import { and, inArray, isNull } from "drizzle-orm";
+import { pathCacheBuster } from "../path-cache-buster";
 import { eq } from "drizzle-orm";
 import type { PotteryItemRow } from "@workspace/db";
 import {
@@ -79,7 +80,7 @@ const { serializeItem, serializeItems } = createCollectionSerializer<
     return rows.map((r) => ({
       itemId: r.itemId,
       id: r.id,
-      url: `/api/pottery/items/${r.itemId}/images/${r.id}`,
+      url: `/api/pottery/items/${r.itemId}/images/${r.id}?v=${pathCacheBuster(r.storagePath)}`,
       label: r.label,
       position: r.position,
     }));
@@ -106,7 +107,7 @@ const { serializeItem, serializeItems } = createCollectionSerializer<
       surfaceZones: row.surfaceZones ?? null,
       categories: cats,
       images: imgs,
-      imageUrl: `/api/pottery/items/${row.id}/image`,
+      imageUrl: `/api/pottery/items/${row.id}/image?v=${pathCacheBuster(row.imagePath)}`,
       createdAt: row.createdAt,
     };
   },

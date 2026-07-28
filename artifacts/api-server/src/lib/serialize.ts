@@ -1,4 +1,5 @@
 import { eq, inArray, and, isNotNull, isNull } from "drizzle-orm";
+import { pathCacheBuster } from "./path-cache-buster";
 import type {
   FabricRow,
   QuiltPatternRow,
@@ -210,7 +211,7 @@ async function fetchImagesForEntities(
     if (!map.has(row.entityId)) map.set(row.entityId, []);
     map.get(row.entityId)!.push({
       id: row.id,
-      url: `${routePrefix}/${row.entityId}/images/${row.id}`,
+      url: `${routePrefix}/${row.entityId}/images/${row.id}?v=${pathCacheBuster(row.storagePath)}`,
       label: row.label,
       position: row.position,
     });
@@ -253,7 +254,7 @@ function toFabric(
     lockedFields: row.lockedFields ?? [],
     categories: cats,
     images: imgs,
-    imageUrl: `/api/quilting/fabrics/${row.id}/image`,
+    imageUrl: `/api/quilting/fabrics/${row.id}/image?v=${pathCacheBuster(row.imagePath)}`,
     tileImageUrl: `/api/quilting/fabrics/${row.id}/tile-image`,
     hasEmbedding,
     createdAt: row.createdAt,
@@ -320,7 +321,9 @@ function toPattern(
     lockedFields: row.lockedFields ?? [],
     categories: cats,
     images: imgs,
-    imageUrl: row.imagePath ? `/api/quilting/patterns/${row.id}/image` : null,
+    imageUrl: row.imagePath
+      ? `/api/quilting/patterns/${row.id}/image?v=${pathCacheBuster(row.imagePath)}`
+      : null,
     designerBio: row.designerBio ?? null,
     designerWebsite: row.designerWebsite ?? null,
     publicationName: row.publicationName ?? null,
@@ -385,6 +388,7 @@ async function fetchFabricSummaries(
       name: fabrics.name,
       colorway: fabrics.colorway,
       dominantColors: fabrics.dominantColors,
+      imagePath: fabrics.imagePath,
     })
     .from(fabrics)
     .where(whereClause);
@@ -394,7 +398,7 @@ async function fetchFabricSummaries(
       id: row.id,
       name: row.name,
       colorway: row.colorway,
-      imageUrl: `/api/quilting/fabrics/${row.id}/image`,
+      imageUrl: `/api/quilting/fabrics/${row.id}/image?v=${pathCacheBuster(row.imagePath)}`,
       dominantColors: row.dominantColors ?? [],
     });
   }
@@ -459,7 +463,7 @@ function toQuilt(
     completionPercentage: row.completionPercentage ?? 0,
     categories: cats,
     images: imgs,
-    imageUrl: `/api/quilting/quilts/${row.id}/image`,
+    imageUrl: `/api/quilting/quilts/${row.id}/image?v=${pathCacheBuster(row.imagePath)}`,
     linkedFabricIds: fabricIds,
     linkedPatternIds: patternIds,
     linkedFabrics: fabricIds

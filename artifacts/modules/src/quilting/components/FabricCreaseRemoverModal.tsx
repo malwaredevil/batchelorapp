@@ -461,18 +461,33 @@ export function FabricCreaseRemoverModal({
       });
 
       if (setDefault) {
-        await setDefaultMutation.mutateAsync({
+        const updatedFabric = await setDefaultMutation.mutateAsync({
           id: fabricId,
           imageId: uploaded.id,
         });
+        // Pre-load the new default image into the browser cache before switching
+        // the React Query cache. This prevents the partial-load flash that occurs
+        // when the image hasn't finished downloading from Supabase yet.
+        await new Promise<void>((resolve) => {
+          const img = new window.Image();
+          img.onload = () => resolve();
+          img.onerror = () => resolve(); // Don't block on a fetch error
+          img.src = updatedFabric.imageUrl;
+        });
+        // Now the browser has the image cached — switching the data is instant.
+        queryClient.setQueryData(getGetFabricQueryKey(fabricId), updatedFabric);
+      } else {
+        // Image was added as supplemental only — refetch to get the updated
+        // images array (addFabricImage returns just the new image, not the full fabric).
+        await queryClient.invalidateQueries({
+          queryKey: getGetFabricQueryKey(fabricId),
+        });
       }
 
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: getGetFabricQueryKey(fabricId),
-        }),
-        queryClient.invalidateQueries({ queryKey: getListFabricsQueryKey() }),
-      ]);
+      // Refresh the fabrics list in the background so gallery thumbnails update.
+      void queryClient.invalidateQueries({
+        queryKey: getListFabricsQueryKey(),
+      });
 
       toast.success(
         setDefault

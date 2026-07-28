@@ -1,4 +1,5 @@
 import { and, inArray, isNull } from "drizzle-orm";
+import { pathCacheBuster } from "../path-cache-buster";
 import { eq } from "drizzle-orm";
 import type { OrnamentItemRow } from "@workspace/db";
 import {
@@ -81,7 +82,7 @@ const { serializeItem, serializeItems } = createCollectionSerializer<
     return rows.map((r) => ({
       itemId: r.itemId,
       id: r.id,
-      url: `/api/ornaments/items/${r.itemId}/images/${r.id}`,
+      url: `/api/ornaments/items/${r.itemId}/images/${r.id}?v=${pathCacheBuster(r.storagePath)}`,
       label: r.label,
       position: r.position,
     }));
@@ -110,7 +111,7 @@ const { serializeItem, serializeItems } = createCollectionSerializer<
       bookValueUpdatedAt: row.bookValueUpdatedAt,
       categories: cats,
       images: imgs,
-      imageUrl: `/api/ornaments/items/${row.id}/image`,
+      imageUrl: `/api/ornaments/items/${row.id}/image?v=${pathCacheBuster(row.imagePath)}`,
       createdAt: row.createdAt,
     };
   },

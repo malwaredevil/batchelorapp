@@ -3,7 +3,7 @@ import sharp from "sharp";
 export const MAX_SOURCE_DATA_URL_BYTES = 10 * 1024 * 1024;
 
 export const DEFAULT_INPAINT_PROMPT =
-  "flat, smooth fabric with no creases or folds, uniform surface texture, original print pattern preserved exactly";
+  "remove only the crease and fold lines from this fabric; preserve the exact print pattern, exact colors, and the natural woven fabric texture exactly as-is; do not smooth, brighten, or change anything except the fold shadows";
 
 export interface CropInfo {
   left: number;

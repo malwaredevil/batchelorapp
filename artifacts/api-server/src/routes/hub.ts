@@ -615,27 +615,11 @@ router.get("/hub/db-status", requireAuth, requireOwner, async (_req, res) => {
 
   const prodUrl = process.env.SUPABASE_URL ?? null;
   const prodKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? null;
-  const devUrl = process.env.DEV_SUPABASE_URL ?? null;
-  const devKey = process.env.DEV_SUPABASE_SERVICE_ROLE_KEY ?? null;
 
-  // Active tier: mirrors the combined dev/prod logic of both:
-  //   - lib/db/src/resolve-url.ts  → pg pool targets dev when DEV_DATABASE_URL is set
-  //   - artifacts/api-server/src/lib/env.ts devOrRequired() → REST/storage clients
-  //     target dev when DEV_SUPABASE_URL + DEV_SUPABASE_SERVICE_ROLE_KEY are set
-  // All three must be present for the environment to be truly "dev" end-to-end.
-  const activeTier: "prod" | "dev" =
-    !isDeployed &&
-    !!process.env.DEV_DATABASE_URL?.trim() &&
-    !!devUrl &&
-    !!devKey
-      ? "dev"
-      : "prod";
-  const activeSupabaseUrl = activeTier === "dev" ? devUrl : prodUrl;
+  const activeTier = "prod" as const;
+  const activeSupabaseUrl = prodUrl;
 
-  const [prodReachable, devReachable] = await Promise.all([
-    probeSupabase(prodUrl, prodKey),
-    probeSupabase(devUrl, devKey),
-  ]);
+  const prodReachable = await probeSupabase(prodUrl, prodKey);
 
   res.json({
     isDeployed,
@@ -643,9 +627,9 @@ router.get("/hub/db-status", requireAuth, requireOwner, async (_req, res) => {
     activeSupabaseUrl,
     prod: { url: prodUrl, reachable: prodReachable },
     dev: {
-      url: devUrl,
-      configured: !!(devUrl && devKey),
-      reachable: devReachable,
+      url: null,
+      configured: false,
+      reachable: false,
     },
   });
 });

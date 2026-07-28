@@ -10,31 +10,12 @@ function optional(name: string): string | undefined {
   return process.env[name]?.trim() || undefined;
 }
 
-/**
- * Returns the dev-environment value of `devName` when not deployed and the
- * dev value is configured; otherwise falls back to the prod `required(prodName)`.
- *
- * This is the single source of truth for the dev/prod credential split.
- * It mirrors the logic in `lib/db/src/resolve-url.ts` (which applies the same
- * pattern to DATABASE_URL vs DEV_DATABASE_URL for the pg pool).
- */
-function devOrRequired(devName: string, prodName: string): string {
-  const isDeployed = process.env.REPLIT_DEPLOYMENT === "1";
-  if (!isDeployed) {
-    const dev = process.env[devName]?.trim();
-    if (dev) return dev;
-  }
+function devOrRequired(_devName: string, prodName: string): string {
   return required(prodName);
 }
 
 export const env = {
   sessionSecret: required("SESSION_SECRET"),
-  // In non-deployed (dev) environments, prefer the DEV_SUPABASE_* credentials
-  // so storage operations target the dev Supabase project rather than prod.
-  // This mirrors lib/db/src/resolve-url.ts, which applies the same dev/prod
-  // split to DEV_DATABASE_URL for the pg pool — both always target the same
-  // Supabase project (either dev or prod) so schema and storage never split
-  // across environments.
   supabaseUrl: devOrRequired("DEV_SUPABASE_URL", "SUPABASE_URL"),
   supabaseServiceRoleKey: devOrRequired(
     "DEV_SUPABASE_SERVICE_ROLE_KEY",
@@ -51,15 +32,7 @@ export const env = {
   ),
   googleWalletIssuerId: optional("GOOGLE_WALLET_ISSUER_ID"),
   isProduction: process.env.NODE_ENV === "production",
-  // True when running in a Replit deployment (REPLIT_DEPLOYMENT=1). False in
-  // local dev. Used to select between prod/dev Supabase credentials.
   isDeployed: process.env.REPLIT_DEPLOYMENT === "1",
-  // Dev Supabase project URL and service-role key. When set and not deployed,
-  // the server uses these instead of SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY
-  // so local dev work never touches the production Supabase project.
-  devSupabaseUrl: process.env.DEV_SUPABASE_URL?.trim() || undefined,
-  devSupabaseServiceRoleKey:
-    process.env.DEV_SUPABASE_SERVICE_ROLE_KEY?.trim() || undefined,
   // Dev-only automation: lets the automated screenshot tool log in as a fixed
   // account (AGENT_LOGIN_EMAIL) without a browser-driven form submission, so
   // it can capture authenticated screenshots. Never usable in production even

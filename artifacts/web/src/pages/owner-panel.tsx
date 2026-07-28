@@ -1893,9 +1893,22 @@ function InfrastructureContent({
             <div className="flex items-start gap-2">
               <TriangleAlert className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
               <p className="text-xs text-amber-700 dark:text-amber-400">
-                This will run schema migrations on the connected database. It is
-                safe (additive-only), but confirm before proceeding in
-                production.
+                {status?.isDeployed ? (
+                  <>
+                    <strong>This modifies the production database.</strong> It
+                    runs additive-only migrations (
+                    <code className="font-mono">
+                      CREATE TABLE IF NOT EXISTS
+                    </code>
+                    ) — no existing data is touched — but you are about to
+                    change the live Supabase schema. Confirm before proceeding.
+                  </>
+                ) : (
+                  <>
+                    This will run schema migrations on the connected database.
+                    It is safe (additive-only), but confirm before proceeding.
+                  </>
+                )}
               </p>
             </div>
             <div className="flex gap-2">

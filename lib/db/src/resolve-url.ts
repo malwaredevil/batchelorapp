@@ -6,28 +6,15 @@
  * is unreachable (ENOTFOUND). The Supavisor connection pooler, however, is
  * reachable over IPv4.
  *
- * `resolveDatabaseUrl()` selects between the prod (DATABASE_URL) and dev
- * (DEV_DATABASE_URL) connection strings based on REPLIT_DEPLOYMENT, then
- * rewrites whichever is selected from the IPv6-only direct host to the pooler
+ * `resolveDatabaseUrl()` always uses DATABASE_URL (the production Supabase
+ * project) and rewrites the host from the IPv6-only direct host to the pooler
  * host when needed. The password is preserved untouched and never logged.
- *
- * Dev/prod split:
- *   - Deployed (REPLIT_DEPLOYMENT=1): always uses DATABASE_URL (production).
- *   - Editor (not deployed): prefers DEV_DATABASE_URL when set so that local
- *     work never touches the production database. Falls back to DATABASE_URL
- *     if DEV_DATABASE_URL is absent.
- *
- * Dev project pooler: the dev project (gdjrjnscygdmyaenrour) is hosted in
- * eu-central-1 (Frankfurt). Its direct host is IPv6-only like prod, so the
- * same pooler rewrite applies. Override via DEV_SUPABASE_POOLER_REGION.
  */
 
 const DIRECT_HOST_RE = /^db\.([a-z0-9]+)\.supabase\.co$/;
 
-// Region of the prod Supabase project's pooler.
+// Region of the Supabase project's pooler.
 const DEFAULT_POOLER_REGION = "eu-west-1";
-// Region of the dev Supabase project's pooler (eu-central-1 / Frankfurt).
-const DEV_POOLER_REGION = "eu-central-1";
 
 /**
  * Rewrite a raw Postgres URL to the Supavisor pooler host/port/username when
@@ -147,30 +134,6 @@ export function resolveProductionDatabaseUrl(): string {
 }
 
 export function resolveDatabaseUrl(): string {
-  const isDeployed = process.env.REPLIT_DEPLOYMENT === "1";
-
-  // In editor (non-deployed) environments, prefer DEV_DATABASE_URL so the pg
-  // pool targets the dev Supabase project rather than production. This mirrors
-  // the devOrRequired() logic in artifacts/api-server/src/lib/env.ts, which
-  // applies the same dev/prod split to the Supabase REST credentials.
-  //
-  // The dev project (gdjrjnscygdmyaenrour) is hosted in eu-central-1 and uses
-  // its own set of DEV_SUPABASE_POOLER_* env vars so the prod project's
-  // SUPABASE_POOLER_REGION (eu-west-1) does not accidentally override the
-  // dev pooler host (they are in different AWS regions).
-  if (!isDeployed) {
-    const devRaw = process.env.DEV_DATABASE_URL?.trim();
-    if (devRaw) {
-      const { host, port } = poolerParams(
-        "DEV_SUPABASE_POOLER_REGION",
-        "DEV_SUPABASE_POOLER_HOST",
-        "DEV_SUPABASE_POOLER_PORT",
-        DEV_POOLER_REGION,
-      );
-      return rewriteToPooler(devRaw, host, port);
-    }
-  }
-
   const raw = process.env.DATABASE_URL;
   if (!raw) {
     throw new Error(

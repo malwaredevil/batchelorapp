@@ -71,29 +71,36 @@ export function ElaineWidget({
 
   // Widget position — null means anchored bottom-right via CSS (default).
   // Once the user drags the widget (bubble or panel header), it switches to
-  // an explicit top/left position that persists across open/close.
+  // an explicit right/bottom position (distance from the viewport edges) so
+  // the bottom-right corner of the widget is always the anchor point,
+  // consistent with its default bottom-right corner placement.
   const containerRef = useRef<HTMLDivElement>(null);
-  const [position, setPosition] = useState<{ x: number; y: number } | null>(
-    null,
-  );
+  const [position, setPosition] = useState<{
+    right: number;
+    bottom: number;
+  } | null>(null);
   const moveRef = useRef<{
     startX: number;
     startY: number;
-    origX: number;
-    origY: number;
+    origRight: number;
+    origBottom: number;
     moved: boolean;
   } | null>(null);
   const justDraggedRef = useRef(false);
 
-  const clampPosition = useCallback((x: number, y: number) => {
+  const clampPosition = useCallback((right: number, bottom: number) => {
     const el = containerRef.current;
     const w = el?.offsetWidth ?? 60;
     const h = el?.offsetHeight ?? 60;
-    const maxX = Math.max(4, window.innerWidth - w - 4);
-    const maxY = Math.max(4, window.innerHeight - h - 4);
     return {
-      x: Math.min(Math.max(4, x), maxX),
-      y: Math.min(Math.max(4, y), maxY),
+      right: Math.min(
+        Math.max(4, right),
+        Math.max(4, window.innerWidth - w - 4),
+      ),
+      bottom: Math.min(
+        Math.max(4, bottom),
+        Math.max(4, window.innerHeight - h - 4),
+      ),
     };
   }, []);
 
@@ -111,8 +118,10 @@ export function ElaineWidget({
     moveRef.current = {
       startX: e.clientX,
       startY: e.clientY,
-      origX: rect.left,
-      origY: rect.top,
+      // Track distance from the right/bottom viewport edges so the
+      // bottom-right corner of the widget is the drag anchor.
+      origRight: window.innerWidth - rect.right,
+      origBottom: window.innerHeight - rect.bottom,
       moved: false,
     };
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -128,7 +137,9 @@ export function ElaineWidget({
         ms.moved = true;
       }
       if (!ms.moved) return;
-      setPosition(clampPosition(ms.origX + dx, ms.origY + dy));
+      // Moving right (dx > 0) → right edge distance decreases; moving down
+      // (dy > 0) → bottom edge distance decreases.
+      setPosition(clampPosition(ms.origRight - dx, ms.origBottom - dy));
     },
     [clampPosition],
   );
@@ -151,7 +162,9 @@ export function ElaineWidget({
   useEffect(() => {
     if (!position) return;
     const onResize = () => {
-      setPosition((prev) => (prev ? clampPosition(prev.x, prev.y) : prev));
+      setPosition((prev) =>
+        prev ? clampPosition(prev.right, prev.bottom) : prev,
+      );
     };
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
@@ -266,8 +279,8 @@ export function ElaineWidget({
           position
             ? {
                 position: "absolute",
-                top: `${position.y}px`,
-                left: `${position.x}px`,
+                right: `${position.right}px`,
+                bottom: `${position.bottom}px`,
                 pointerEvents: "auto",
               }
             : {

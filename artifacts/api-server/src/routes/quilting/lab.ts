@@ -22,7 +22,7 @@ import {
 
 const router: IRouter = Router();
 
-router.use(requireAuth, requireOwner);
+router.use("/lab", requireAuth, requireOwner);
 
 // ---------------------------------------------------------------------------
 // Schemas
@@ -74,6 +74,23 @@ async function getSourceBuffer(
     return buffer;
   }
   throw new Error("Either fabricId or sourceDataUrl is required.");
+}
+
+/**
+ * Build an inpainting prompt enriched with the fabric's own name and AI
+ * description so gpt-image-2 has enough context to preserve the original
+ * print pattern rather than hallucinating a completely different fabric.
+ */
+function buildEnrichedPrompt(
+  fabricMeta: { name: string; aiDescription: string | null } | undefined,
+  userPrompt?: string,
+): string {
+  if (userPrompt) return userPrompt;
+  if (!fabricMeta?.name) return DEFAULT_INPAINT_PROMPT;
+  const descPart = fabricMeta.aiDescription
+    ? `. Pattern: ${fabricMeta.aiDescription.slice(0, 300)}`
+    : "";
+  return `${DEFAULT_INPAINT_PROMPT}. This is a "${fabricMeta.name}" fabric${descPart}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -136,11 +153,28 @@ router.post("/lab/remove-creases", async (req, res) => {
   }
 
   let imgBuffer: Buffer;
+  let fabricMeta: { name: string; aiDescription: string | null } | undefined;
   try {
-    imgBuffer = await getSourceBuffer(
-      parsed.data.fabricId,
-      parsed.data.sourceDataUrl,
-    );
+    if (parsed.data.sourceDataUrl) {
+      imgBuffer = validateSourceDataUrl(parsed.data.sourceDataUrl);
+    } else {
+      const [row] = await db
+        .select({
+          imagePath: fabrics.imagePath,
+          name: fabrics.name,
+          aiDescription: fabrics.aiDescription,
+        })
+        .from(fabrics)
+        .where(eq(fabrics.id, parsed.data.fabricId!))
+        .limit(1);
+      if (!row) {
+        res.status(404).json({ error: "Fabric not found." });
+        return;
+      }
+      const { buffer } = await downloadImageBuffer(row.imagePath);
+      imgBuffer = buffer;
+      fabricMeta = { name: row.name, aiDescription: row.aiDescription };
+    }
   } catch (err: unknown) {
     const status = (err as { status?: number }).status ?? 500;
     res.status(status).json({ error: (err as Error).message });
@@ -152,10 +186,11 @@ router.post("/lab/remove-creases", async (req, res) => {
     // removes any creases without requiring a prior detection step.
     const maskDataUrl =
       parsed.data.maskDataUrl ?? (await buildFullWhiteMaskDataUrl(imgBuffer));
+    const prompt = buildEnrichedPrompt(fabricMeta, parsed.data.prompt);
     const dataUrl = await removeCreasesFromBuffer(
       imgBuffer,
       maskDataUrl,
-      parsed.data.prompt,
+      prompt,
     );
     res.json({ dataUrl });
   } catch (err) {
@@ -180,11 +215,28 @@ router.post("/lab/remove-creases/openai", async (req, res) => {
   }
 
   let imgBuffer: Buffer;
+  let fabricMeta: { name: string; aiDescription: string | null } | undefined;
   try {
-    imgBuffer = await getSourceBuffer(
-      parsed.data.fabricId,
-      parsed.data.sourceDataUrl,
-    );
+    if (parsed.data.sourceDataUrl) {
+      imgBuffer = validateSourceDataUrl(parsed.data.sourceDataUrl);
+    } else {
+      const [row] = await db
+        .select({
+          imagePath: fabrics.imagePath,
+          name: fabrics.name,
+          aiDescription: fabrics.aiDescription,
+        })
+        .from(fabrics)
+        .where(eq(fabrics.id, parsed.data.fabricId!))
+        .limit(1);
+      if (!row) {
+        res.status(404).json({ error: "Fabric not found." });
+        return;
+      }
+      const { buffer } = await downloadImageBuffer(row.imagePath);
+      imgBuffer = buffer;
+      fabricMeta = { name: row.name, aiDescription: row.aiDescription };
+    }
   } catch (err: unknown) {
     const status = (err as { status?: number }).status ?? 500;
     res.status(status).json({ error: (err as Error).message });
@@ -196,10 +248,11 @@ router.post("/lab/remove-creases/openai", async (req, res) => {
     // removes any creases without requiring a prior detection step.
     const maskDataUrl =
       parsed.data.maskDataUrl ?? (await buildFullWhiteMaskDataUrl(imgBuffer));
+    const prompt = buildEnrichedPrompt(fabricMeta, parsed.data.prompt);
     const dataUrl = await removeCreasesFromBuffer(
       imgBuffer,
       maskDataUrl,
-      parsed.data.prompt,
+      prompt,
     );
     res.json({ dataUrl });
   } catch (err) {
@@ -240,7 +293,11 @@ router.post("/lab/bulk-crease-fix", async (req, res) => {
   const results = await Promise.allSettled(
     ids.map(async (fabricId) => {
       const [row] = await db
-        .select({ imagePath: fabrics.imagePath })
+        .select({
+          imagePath: fabrics.imagePath,
+          name: fabrics.name,
+          aiDescription: fabrics.aiDescription,
+        })
         .from(fabrics)
         .where(eq(fabrics.id, fabricId))
         .limit(1);
@@ -249,7 +306,15 @@ router.post("/lab/bulk-crease-fix", async (req, res) => {
 
       const { buffer: imgBuffer } = await downloadImageBuffer(row.imagePath);
       const maskDataUrl = await buildFullWhiteMaskDataUrl(imgBuffer);
-      const dataUrl = await removeCreasesFromBuffer(imgBuffer, maskDataUrl);
+      const prompt = buildEnrichedPrompt({
+        name: row.name,
+        aiDescription: row.aiDescription,
+      });
+      const dataUrl = await removeCreasesFromBuffer(
+        imgBuffer,
+        maskDataUrl,
+        prompt,
+      );
 
       const b64 = dataUrl.replace(/^data:image\/[a-zA-Z+]+;base64,/, "");
       const resultBuf = Buffer.from(b64, "base64");

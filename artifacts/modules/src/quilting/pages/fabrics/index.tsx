@@ -420,6 +420,7 @@ export default function Fabrics() {
   });
   const [page, setPage] = useState(() => loadListState()?.page ?? 1);
   const scrollRestored = useRef(false);
+  const filterMounted = useRef(false);
   const queryClient = useQueryClient();
   const { pendingItems } = useBulkAdd();
   const uploadingItems = pendingItems.filter((i) => i.status === "uploading");
@@ -688,6 +689,10 @@ export default function Fabrics() {
     : null;
 
   useEffect(() => {
+    if (!filterMounted.current) {
+      filterMounted.current = true;
+      return;
+    }
     setPage(1);
   }, [
     search,

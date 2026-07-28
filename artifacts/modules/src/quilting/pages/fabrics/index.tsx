@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import {
   PlusCircle,
@@ -71,6 +71,35 @@ import {
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
 import { useAppConfigSummary } from "@workspace/elaine-ui";
 
+const FABRICS_LIST_SS_KEY = "quilting-fabrics-list-state";
+
+type ListState = {
+  search: string;
+  sort: "newest" | "oldest" | "az" | "za";
+  printTypeFilter: string | null;
+  categoryFilter: number | null;
+  colorFilter: string[];
+  stashBustMode: boolean;
+  page: number;
+  pageSize: number;
+  scrollY: number;
+};
+
+function saveListState(state: ListState) {
+  try {
+    sessionStorage.setItem(FABRICS_LIST_SS_KEY, JSON.stringify(state));
+  } catch {}
+}
+
+function loadListState(): ListState | null {
+  try {
+    const raw = sessionStorage.getItem(FABRICS_LIST_SS_KEY);
+    return raw ? (JSON.parse(raw) as ListState) : null;
+  } catch {
+    return null;
+  }
+}
+
 type SortOption = "newest" | "oldest" | "az" | "za";
 
 const SORT_LABELS: Record<SortOption, string> = {
@@ -112,6 +141,7 @@ function FabricCard({
   activeColor,
   onEditCategories,
   onQuickEdit,
+  onNavigate,
 }: {
   fabric: FabricSummary;
   onDelete: (id: number) => void;
@@ -125,6 +155,7 @@ function FabricCard({
   activeColor?: string[];
   onEditCategories?: () => void;
   onQuickEdit?: () => void;
+  onNavigate?: () => void;
 }) {
   const [, navigate] = useLocation();
   const [zoomOpen, setZoomOpen] = useState(false);
@@ -150,6 +181,7 @@ function FabricCard({
         )}
         <Link
           href={`/quilting/fabrics/${fabric.id}`}
+          onClick={() => onNavigate?.()}
           className={`block ${isBulkMode ? "pointer-events-none" : ""}`}
         >
           <div className="relative aspect-square overflow-hidden bg-muted">
@@ -264,15 +296,19 @@ function FabricCard({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem
-                  onClick={() => navigate(`/quilting/fabrics/${fabric.id}`)}
+                  onClick={() => {
+                    onNavigate?.();
+                    navigate(`/quilting/fabrics/${fabric.id}`);
+                  }}
                 >
                   <ExternalLink className="mr-2 h-3.5 w-3.5" />
                   Open
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onClick={() =>
-                    navigate(`/quilting/fabrics/${fabric.id}?edit=1`)
-                  }
+                  onClick={() => {
+                    onNavigate?.();
+                    navigate(`/quilting/fabrics/${fabric.id}?edit=1`);
+                  }}
                 >
                   <Pencil className="mr-2 h-3.5 w-3.5" />
                   Edit
@@ -327,19 +363,32 @@ function FabricCard({
 }
 
 export default function Fabrics() {
-  const [search, setSearch] = useState("");
-  const [printTypeFilter, setPrintTypeFilter] = useState<string | null>(null);
-  const [categoryFilter, setCategoryFilter] = useState<number | null>(null);
-  const [colorFilter, setColorFilter] = useState<string[]>([]);
-  const [sort, setSort] = useState<SortOption>("newest");
+  const [search, setSearch] = useState(() => loadListState()?.search ?? "");
+  const [printTypeFilter, setPrintTypeFilter] = useState<string | null>(
+    () => loadListState()?.printTypeFilter ?? null,
+  );
+  const [categoryFilter, setCategoryFilter] = useState<number | null>(
+    () => loadListState()?.categoryFilter ?? null,
+  );
+  const [colorFilter, setColorFilter] = useState<string[]>(
+    () => loadListState()?.colorFilter ?? [],
+  );
+  const [sort, setSort] = useState<SortOption>(
+    () => loadListState()?.sort ?? "newest",
+  );
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const [stashBustMode, setStashBustMode] = useState(false);
+  const [stashBustMode, setStashBustMode] = useState(
+    () => loadListState()?.stashBustMode ?? false,
+  );
   const [pageSize, setPageSize] = useState<number>(() => {
+    const saved = loadListState();
+    if (saved) return saved.pageSize;
     const s = localStorage.getItem("quilting-fabrics-page-size");
     return s ? parseInt(s, 10) : 20;
   });
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(() => loadListState()?.page ?? 1);
+  const scrollRestored = useRef(false);
   const queryClient = useQueryClient();
   const { pendingItems } = useBulkAdd();
   const uploadingItems = pendingItems.filter((i) => i.status === "uploading");
@@ -586,6 +635,53 @@ export default function Fabrics() {
     stashBustMode,
     sort,
   ]);
+
+  useEffect(() => {
+    saveListState({
+      search,
+      sort,
+      printTypeFilter,
+      categoryFilter,
+      colorFilter,
+      stashBustMode,
+      page,
+      pageSize,
+      scrollY: 0,
+    });
+  }, [
+    search,
+    sort,
+    printTypeFilter,
+    categoryFilter,
+    colorFilter,
+    stashBustMode,
+    page,
+    pageSize,
+  ]);
+
+  useEffect(() => {
+    if (!scrollRestored.current && paged !== null) {
+      const saved = loadListState();
+      if (saved?.scrollY) {
+        window.scrollTo({ top: saved.scrollY, behavior: "instant" });
+      }
+      scrollRestored.current = true;
+    }
+  }, [paged]);
+
+  function handleFabricNavigate() {
+    saveListState({
+      search,
+      sort,
+      printTypeFilter,
+      categoryFilter,
+      colorFilter,
+      stashBustMode,
+      page,
+      pageSize,
+      scrollY: window.scrollY,
+    });
+  }
 
   const hasFilter =
     search.trim().length > 0 ||
@@ -1064,6 +1160,7 @@ export default function Fabrics() {
                   setCategoryEditItem(fabric as FabricSummary)
                 }
                 onQuickEdit={() => setQuickEditItem(fabric as FabricSummary)}
+                onNavigate={handleFabricNavigate}
               />
             ))}
         </div>

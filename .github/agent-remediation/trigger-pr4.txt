@@ -1,1 +1,1 @@
-Trigger the one-shot PR 4 remediation workflow.
+Trigger the focused PR 4 validation repair workflow.

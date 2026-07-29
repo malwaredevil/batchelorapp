@@ -37,8 +37,6 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { CategorySelector } from "@/ornaments/components/category-selector";
 import { generateInsurancePdf } from "@/ornaments/lib/pdf-export";
-import { IdentityResearchPanel } from "@/ornaments/components/IdentityResearchPanel";
-import { SeriesLinkPanel } from "@/ornaments/components/SeriesLinkPanel";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -994,9 +992,6 @@ export default function OrnamentDetail() {
                   ))}
                 </div>
               )}
-
-            <IdentityResearchPanel itemId={ornament.id} />
-            <SeriesLinkPanel itemId={ornament.id} />
           </>
         }
       />

@@ -284,10 +284,6 @@ async function main() {
   // ── Ornaments ─────────────────────────────────────────────────────────────
   await dest.query("TRUNCATE ornaments_item_categories CASCADE");
   await dest.query("TRUNCATE ornaments_images CASCADE");
-  await dest.query("TRUNCATE ornament_item_series_links CASCADE");
-  await dest.query("TRUNCATE ornament_identity_research CASCADE");
-  await dest.query("TRUNCATE ornament_series_entries CASCADE");
-  await dest.query("TRUNCATE ornament_series CASCADE");
   await dest.query("TRUNCATE ornaments_items CASCADE");
   await dest.query("TRUNCATE ornaments_categories CASCADE");
   await dest.query("TRUNCATE ornaments_barcode_cache CASCADE");
@@ -422,82 +418,6 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "ornaments_hallmark_events", "id");
-
-  await copyTable(source, dest, {
-    table: "ornament_series",
-    columns: [
-      "id",
-      "name",
-      "brand",
-      "description",
-      "start_year",
-      "end_year",
-      "is_active",
-      "total_known_entries",
-      "source_url",
-      "source_authority",
-      "is_provisional",
-      "last_confirmed_at",
-      "created_at",
-      "updated_at",
-    ],
-    orderBy: "id",
-  });
-  await resetSequence(dest, "ornament_series", "id");
-
-  await copyTable(source, dest, {
-    table: "ornament_series_entries",
-    columns: [
-      "id",
-      "series_id",
-      "sequence_number",
-      "year",
-      "official_name",
-      "catalog_number",
-      "upc",
-      "artist",
-      "retail_price_usd",
-      "release_type",
-      "is_exclusive",
-      "notes",
-      "source_url",
-      "is_provisional",
-      "created_at",
-    ],
-    orderBy: "id",
-  });
-  await resetSequence(dest, "ornament_series_entries", "id");
-
-  await copyTable(source, dest, {
-    table: "ornament_item_series_links",
-    columns: [
-      "item_id",
-      "series_entry_id",
-      "confirmed_by_user_id",
-      "confirmed_at",
-      "confidence",
-      "created_at",
-    ],
-    orderBy: "item_id",
-  });
-
-  await copyTable(source, dest, {
-    table: "ornament_identity_research",
-    columns: [
-      "id",
-      "item_id",
-      "status",
-      "candidates",
-      "selected_candidate_index",
-      "decided_by_user_id",
-      "decided_at",
-      "created_at",
-      "updated_at",
-    ],
-    orderBy: "id",
-    jsonbColumns: ["candidates"],
-  });
-  await resetSequence(dest, "ornament_identity_research", "id");
 
   // ── Office ────────────────────────────────────────────────────────────────
   await dest.query("TRUNCATE office_notes CASCADE");

@@ -2427,64 +2427,6 @@ export interface OrnamentsStatsResponse {
   bySeriesOrCollection: OrnamentsSeriesValueBreakdown[];
 }
 
-export type OrnamentsOrnamentIdentityResearchStatus = typeof OrnamentsOrnamentIdentityResearchStatus[keyof typeof OrnamentsOrnamentIdentityResearchStatus];
-
-
-export const OrnamentsOrnamentIdentityResearchStatus = {
-  running: 'running',
-  done: 'done',
-  failed: 'failed',
-} as const;
-
-export type OrnamentsOrnamentIdentityResearchCandidatesItem = { [key: string]: unknown };
-
-export interface OrnamentsOrnamentIdentityResearch {
-  id: number;
-  itemId: number;
-  status: OrnamentsOrnamentIdentityResearchStatus;
-  candidates?: OrnamentsOrnamentIdentityResearchCandidatesItem[] | null;
-  selectedCandidateIndex?: number | null;
-  error?: string | null;
-  createdAt?: string;
-}
-
-export interface OrnamentsApplyOrnamentResearchInput {
-  /** @minimum 0 */
-  candidateIndex: number;
-  /** Specific fields to apply (defaults to all non-locked fields) */
-  fields?: string[];
-}
-
-export interface OrnamentsOrnamentSeries {
-  id: number;
-  name: string;
-  brand?: string | null;
-  description?: string | null;
-  startYear?: number | null;
-  endYear?: number | null;
-  entryCount?: number;
-}
-
-export type OrnamentsOrnamentSeriesDetailEntriesItem = { [key: string]: unknown };
-
-export type OrnamentsOrnamentSeriesDetailLinkedOrnamentsItem = { [key: string]: unknown };
-
-export interface OrnamentsOrnamentSeriesDetail {
-  id: number;
-  name: string;
-  brand?: string | null;
-  description?: string | null;
-  startYear?: number | null;
-  endYear?: number | null;
-  entries: OrnamentsOrnamentSeriesDetailEntriesItem[];
-  linkedOrnaments?: OrnamentsOrnamentSeriesDetailLinkedOrnamentsItem[];
-}
-
-export interface OrnamentsOrnamentSeriesLinkInput {
-  seriesEntryId: number;
-  notes?: string | null;
-}
-
 export interface OfficeNote {
   id: number;
   title: string;
@@ -3201,12 +3143,6 @@ pageSize?: number;
 export type DeleteOrnamentUnusedCategories200 = {
   deleted: number;
 };
-
-export type ApplyOrnamentIdentityResearch200 = { [key: string]: unknown };
-
-export type GetOrnamentSeriesLink200 = { [key: string]: unknown } | null;
-
-export type LinkOrnamentToSeries200 = { [key: string]: unknown };
 
 export type GetConversationMessagesParams = {
 since?: string;

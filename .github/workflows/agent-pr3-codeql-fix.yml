@@ -6,9 +6,20 @@ on:
       - agent/platform-security-and-readiness
     paths:
       - .github/workflows/agent-pr3-codeql-fix.yml
+  pull_request:
+    branches:
+      - main
+    types:
+      - synchronize
+    paths:
+      - .github/workflows/agent-pr3-codeql-fix.yml
 
 permissions:
   contents: write
+
+concurrency:
+  group: agent-pr3-codeql-fix
+  cancel-in-progress: true
 
 jobs:
   fix-and-validate:

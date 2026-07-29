@@ -26,34 +26,48 @@ const EXT_BY_TYPE: Record<SupportedImageType, string> = {
 // at once, not just quilting fabrics.
 // ---------------------------------------------------------------------------
 
-// Byte-capped LRU image cache: max 256 MB or 500 entries, whichever is reached
-// first. sizeCalculation charges each entry the actual buffer byte length, so
-// one 10 MB TIFF doesn't silently crowd out hundreds of thumbnails. The built-in
-// TTL (5 min) and updateAgeOnGet (LRU promotion) replace the manual Map-delete-
-// reinsert pattern that was previously used to simulate LRU ordering.
-const downloadCache = new LRUCache<
+// Bucket-partitioned byte-capped caches prevent a burst in one domain from
+// evicting hot objects belonging to every other domain.
+const PER_BUCKET_CACHE_BYTES = 64 * 1024 * 1024;
+const MAX_CACHE_ENTRIES_PER_BUCKET = 250;
+const downloadCaches = new Map<
   string,
-  { buffer: Buffer; contentType: string }
->({
-  max: 500,
-  maxSize: 256 * 1024 * 1024, // 256 MB hard ceiling
-  sizeCalculation: (v) => v.buffer.length,
-  ttl: 5 * 60 * 1000, // 5 minutes
-  allowStale: false,
-  updateAgeOnGet: true,
-});
+  LRUCache<string, { buffer: Buffer; contentType: string }>
+>();
+
+function cacheScope(key: string): string {
+  const separator = key.indexOf(":");
+  return separator > 0 ? key.slice(0, separator) : "shared";
+}
+
+function cacheFor(key: string) {
+  const scope = cacheScope(key);
+  let cache = downloadCaches.get(scope);
+  if (!cache) {
+    cache = new LRUCache({
+      max: MAX_CACHE_ENTRIES_PER_BUCKET,
+      maxSize: PER_BUCKET_CACHE_BYTES,
+      sizeCalculation: (value) => value.buffer.length,
+      ttl: 5 * 60 * 1000,
+      allowStale: false,
+      updateAgeOnGet: true,
+    });
+    downloadCaches.set(scope, cache);
+  }
+  return cache;
+}
 
 function cacheGet(
   key: string,
 ): { buffer: Buffer; contentType: string } | undefined {
-  return downloadCache.get(key);
+  return cacheFor(key).get(key);
 }
 
 function cacheSet(
   key: string,
   value: { buffer: Buffer; contentType: string },
 ): void {
-  downloadCache.set(key, value);
+  cacheFor(key).set(key, value);
 }
 
 const DOWNLOAD_CONCURRENCY = 8;
@@ -106,7 +120,7 @@ export async function withCachedDownload(
 }
 
 export function invalidateCachedDownload(key: string): void {
-  downloadCache.delete(key);
+  cacheFor(key).delete(key);
 }
 
 // ---------------------------------------------------------------------------

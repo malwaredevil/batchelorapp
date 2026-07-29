@@ -2841,4 +2841,10 @@ BEGIN
     END;
   END LOOP;
 END $$`,
+
+  `ALTER TABLE messenger_conversations ADD COLUMN IF NOT EXISTS direct_pair_key TEXT`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS messenger_conversations_direct_pair_idx
+     ON messenger_conversations (direct_pair_key) WHERE direct_pair_key IS NOT NULL`,
+  `ALTER TABLE agentphone_conversations ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE elaine_email_conversations ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 0`,
 ];

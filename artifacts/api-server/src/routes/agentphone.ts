@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { webhookLimiter } from "../middleware/rateLimit";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
   db,
   appUsers,
@@ -151,27 +151,49 @@ async function runRestrictedTurnAndPersist(
   userId: number,
   inputText: string,
 ): Promise<string> {
-  const history =
-    (conversation.messages as AgentphoneChatMessage[] | null) ?? [];
-  let replyText: string;
-  let updatedHistory: AgentphoneChatMessage[];
-  try {
-    const result = await runAgentphoneTurn({ userId, inputText, history });
-    replyText = result.replyText;
-    updatedHistory = result.history;
-  } catch (err) {
-    logger.error({ err }, "agentphone: restricted Elaine turn failed");
-    replyText =
-      "Sorry, something went wrong on our end — please try again or use the app.";
-    updatedHistory = history;
+  let current = conversation;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const history = (current.messages as AgentphoneChatMessage[] | null) ?? [];
+    let replyText: string;
+    let updatedHistory: AgentphoneChatMessage[];
+    try {
+      const result = await runAgentphoneTurn({ userId, inputText, history });
+      replyText = result.replyText;
+      updatedHistory = result.history;
+    } catch (err) {
+      logger.error({ err }, "agentphone: restricted Elaine turn failed");
+      replyText =
+        "Sorry, something went wrong on our end — please try again or use the app.";
+      updatedHistory = history;
+    }
+
+    const [saved] = await db
+      .update(agentphoneConversations)
+      .set({
+        messages: updatedHistory,
+        version: current.version + 1,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(agentphoneConversations.id, current.id),
+          eq(agentphoneConversations.version, current.version),
+        ),
+      )
+      .returning({ id: agentphoneConversations.id });
+    if (saved) return replyText;
+
+    const [latest] = await db
+      .select()
+      .from(agentphoneConversations)
+      .where(eq(agentphoneConversations.id, current.id))
+      .limit(1);
+    if (!latest) throw new Error("AgentPhone conversation disappeared");
+    current = latest;
   }
-
-  await db
-    .update(agentphoneConversations)
-    .set({ messages: updatedHistory, updatedAt: new Date() })
-    .where(eq(agentphoneConversations.id, conversation.id));
-
-  return replyText;
+  throw new Error(
+    "AgentPhone conversation changed too many times; retry delivery",
+  );
 }
 
 async function handleSms(req: Request, res: Response): Promise<void> {

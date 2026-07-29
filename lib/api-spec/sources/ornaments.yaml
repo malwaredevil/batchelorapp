@@ -31,6 +31,42 @@ paths:
           required: false
           schema:
             type: integer
+        - name: categoryIds
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: integer
+        - name: uncategorized
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: color
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              [
+                newest,
+                oldest,
+                year-desc,
+                year-asc,
+                name-asc,
+                name-desc,
+                value-desc,
+              ]
+            default: newest
         - name: page
           in: query
           required: false
@@ -902,6 +938,9 @@ components:
         - page
         - pageSize
         - searchMode
+        - totalPages
+        - facets
+        - stats
       properties:
         items:
           type: array
@@ -917,6 +956,32 @@ components:
         searchMode:
           type: string
           enum: [semantic, keyword]
+        totalPages:
+          type: integer
+        facets:
+          $ref: "#/components/schemas/OrnamentListFacets"
+        stats:
+          $ref: "#/components/schemas/OrnamentListStats"
+    OrnamentListFacets:
+      type: object
+      required: [colors]
+      properties:
+        colors:
+          type: array
+          items:
+            type: string
+    OrnamentListStats:
+      type: object
+      required: [categoryCount, brandCount]
+      properties:
+        categoryCount:
+          type: integer
+        brandCount:
+          type: integer
+        minYear:
+          type: [integer, "null"]
+        maxYear:
+          type: [integer, "null"]
     OrnamentItem:
       type: object
       required:

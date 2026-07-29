@@ -39,3 +39,7 @@ export type {
 } from "./collection-detail-field";
 
 export { PreviewZoomModal } from "./preview-zoom-modal";
+export {
+  readValidatedPageSize,
+  useValidatedCollectionPageSize,
+} from "./collection-state";

@@ -29,6 +29,7 @@ export const elaineEmailConversations = pgTable("elaine_email_conversations", {
   messages: jsonb("messages")
     .notNull()
     .default(sql`'[]'::jsonb`),
+  version: integer("version").notNull().default(0),
   // Message-ID header of the most recent inbound/outbound message, so the
   // reply can be threaded with In-Reply-To/References.
   lastMessageId: text("last_message_id"),

@@ -50,13 +50,14 @@ import {
   CollectionList,
   CollectionSearchBar,
   CollectionStatBar,
+  useValidatedCollectionPageSize,
   type SortOption,
 } from "@workspace/collection-ui";
 import { GalleryPaginator } from "@/components/GalleryPaginator";
 import { cn } from "@/lib/utils";
 
 const ORNAMENTS_PAGE_SIZE_KEY = "ornaments-collection-page-size";
-const PAGE_SIZE_OPTIONS = [20, 50, 100, 0];
+const PAGE_SIZE_OPTIONS = [20, 50, 100, 200];
 
 type OrnamentSortKey =
   | "newest"
@@ -188,10 +189,11 @@ export default function Collection() {
   >(new Set());
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [activeColor, setActiveColor] = useState<string | null>(null);
-  const [displayPageSize, setDisplayPageSize] = useState<number>(() => {
-    const saved = localStorage.getItem(ORNAMENTS_PAGE_SIZE_KEY);
-    return saved !== null ? Number(saved) : 50;
-  });
+  const [displayPageSize, setDisplayPageSize] = useValidatedCollectionPageSize(
+    ORNAMENTS_PAGE_SIZE_KEY,
+    PAGE_SIZE_OPTIONS,
+    50,
+  );
   const [currentPage, setCurrentPage] = useState(1);
   const [cachedYears, setCachedYears] = useState<number[]>([]);
   const [quickEditItem, setQuickEditItem] =
@@ -231,10 +233,22 @@ export default function Collection() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Fetch with search + year filter; category filtering is done client-side
-  const queryParams: Record<string, unknown> = { pageSize: 200 };
+  // Filtering, sorting, facets, and pagination are performed against the
+  // complete matching set by the API rather than the first client-loaded page.
+  const queryParams: Record<string, unknown> = {
+    page: currentPage,
+    pageSize: displayPageSize,
+    sort,
+  };
   if (debouncedSearch) queryParams.q = debouncedSearch;
   if (selectedYear) queryParams.year = selectedYear;
+  if (activeColor) queryParams.color = activeColor;
+  const numericCategoryIds = [...filterCategoryIds].filter(
+    (id): id is number => typeof id === "number",
+  );
+  if (numericCategoryIds.length > 0)
+    queryParams.categoryIds = numericCategoryIds;
+  if (filterCategoryIds.has("none")) queryParams.uncategorized = true;
 
   const { data, isLoading, isError, refetch } = useListOrnaments(queryParams);
   const items = data?.items || [];
@@ -254,77 +268,16 @@ export default function Collection() {
     }
   }, [data?.items, selectedYear, debouncedSearch]);
 
-  // Local sort
-  const sortedItems = useMemo(() => {
-    const copy = [...items];
-    switch (sort) {
-      case "newest":
-        return copy.sort(
-          (a, b) =>
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-        );
-      case "oldest":
-        return copy.sort(
-          (a, b) =>
-            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-        );
-      case "year-desc":
-        return copy.sort((a, b) => (b.year || 0) - (a.year || 0));
-      case "year-asc":
-        return copy.sort((a, b) => (a.year || 0) - (b.year || 0));
-      case "name-asc":
-        return copy.sort((a, b) => a.name.localeCompare(b.name));
-      case "name-desc":
-        return copy.sort((a, b) => b.name.localeCompare(a.name));
-      case "value-desc":
-        return copy.sort((a, b) => (b.bookValue || 0) - (a.bookValue || 0));
-      default:
-        return copy;
-    }
-  }, [items, sort]);
+  // The server returns a globally sorted and filtered page.
+  const sortedItems = items;
+  const filteredItems = items;
 
-  // Unique colors extracted from all loaded items (for the filter swatch row)
-  const uniqueColors = useMemo(() => {
-    const seen = new Set<string>();
-    const out: string[] = [];
-    for (const item of items) {
-      for (const c of item.dominantColors ?? []) {
-        if (!seen.has(c)) {
-          seen.add(c);
-          out.push(c);
-        }
-      }
-    }
-    return out;
-  }, [items]);
+  const uniqueColors = data?.facets.colors ?? [];
 
-  // Client-side category + color filter
-  const filteredItems = useMemo(() => {
-    let result = sortedItems;
-    if (filterCategoryIds.size > 0) {
-      result = result.filter((item) => {
-        if (filterCategoryIds.has("none") && item.categories.length === 0)
-          return true;
-        return item.categories.some((c) => filterCategoryIds.has(c.id));
-      });
-    }
-    if (activeColor !== null) {
-      result = result.filter((item) =>
-        (item.dominantColors ?? []).includes(activeColor),
-      );
-    }
-    return result;
-  }, [sortedItems, filterCategoryIds, activeColor]);
-
-  // Stat bar data (computed from all loaded items, not the filtered slice)
+  // Stat bar data is computed by the API over the complete matching set.
   const statBarStats = useMemo(() => {
-    const categoryCount = (categories ?? []).length;
-    const brands = [...new Set(items.map((i) => i.brand).filter(Boolean))];
-    const years = items
-      .map((i) => i.year)
-      .filter((y): y is number => y != null);
-    const minYear = years.length ? Math.min(...years) : null;
-    const maxYear = years.length ? Math.max(...years) : null;
+    const minYear = data?.stats.minYear ?? null;
+    const maxYear = data?.stats.maxYear ?? null;
     const yearRange =
       minYear !== null && maxYear !== null
         ? minYear === maxYear
@@ -332,25 +285,16 @@ export default function Collection() {
           : `${minYear}–${maxYear}`
         : "—";
     return [
-      { value: data?.total ?? 0, label: "Total ornaments" },
-      { value: categoryCount, label: "Categories" },
-      { value: brands.length, label: "Brands" },
+      { value: data?.total ?? 0, label: "Matching ornaments" },
+      { value: data?.stats.categoryCount ?? 0, label: "Categories" },
+      { value: data?.stats.brandCount ?? 0, label: "Brands" },
       { value: yearRange, label: "Year range" },
     ];
-  }, [items, categories, data?.total]);
+  }, [data]);
 
-  // Pagination
-  const effectivePageSize =
-    displayPageSize === 0 ? filteredItems.length : displayPageSize;
-  const totalPages =
-    effectivePageSize > 0
-      ? Math.ceil(filteredItems.length / effectivePageSize)
-      : 1;
-  const pagedItems = useMemo(() => {
-    if (displayPageSize === 0) return filteredItems;
-    const start = (currentPage - 1) * displayPageSize;
-    return filteredItems.slice(start, start + displayPageSize);
-  }, [filteredItems, currentPage, displayPageSize]);
+  // Pagination metadata is authoritative from the server.
+  const totalPages = data?.totalPages ?? 1;
+  const pagedItems = filteredItems;
 
   // Reset to page 1 whenever any filter changes
   useEffect(() => {
@@ -373,7 +317,6 @@ export default function Collection() {
   function handlePageSizeChange(n: number) {
     setDisplayPageSize(n);
     setCurrentPage(1);
-    localStorage.setItem(ORNAMENTS_PAGE_SIZE_KEY, String(n));
   }
 
   const configSummary = useAppConfigSummary();

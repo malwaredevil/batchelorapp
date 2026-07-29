@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   pgTable,
   serial,
@@ -6,19 +7,29 @@ import {
   timestamp,
   boolean,
   unique,
+  uniqueIndex,
   jsonb,
 } from "drizzle-orm/pg-core";
 import { appUsers } from "./users";
 
-export const messengerConversations = pgTable("messenger_conversations", {
-  id: serial("id").primaryKey(),
-  name: text("name"),
-  isDirect: boolean("is_direct").notNull().default(false),
-  archivedAt: timestamp("archived_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-}).enableRLS();
+export const messengerConversations = pgTable(
+  "messenger_conversations",
+  {
+    id: serial("id").primaryKey(),
+    name: text("name"),
+    isDirect: boolean("is_direct").notNull().default(false),
+    directPairKey: text("direct_pair_key"),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("messenger_conversations_direct_pair_idx")
+      .on(table.directPairKey)
+      .where(sql`${table.directPairKey} is not null`),
+  ],
+).enableRLS();
 
 export const messengerConversationParticipants = pgTable(
   "messenger_conversation_participants",

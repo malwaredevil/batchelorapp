@@ -30,9 +30,39 @@ function normalizePathForDocs(filePath: string): string {
   return filePath.split(path.sep).join("/");
 }
 
+export function isWorkspaceManifest(file: string): boolean {
+  const relative = normalizePathForDocs(path.relative(ROOT, file));
+  const segments = relative.split("/");
+  if (!relative.endsWith("package.json")) return false;
+  if (segments.some((segment) => segment.startsWith("."))) return false;
+  if (
+    segments.some((segment) =>
+      ["node_modules", "dist", "build", "coverage"].includes(segment),
+    )
+  )
+    return false;
+  return (
+    relative === "package.json" ||
+    relative.startsWith("artifacts/") ||
+    relative.startsWith("lib/") ||
+    relative.startsWith("scripts/")
+  );
+}
+
+export const OPENAPI_HTTP_METHODS = new Set([
+  "get",
+  "put",
+  "post",
+  "delete",
+  "options",
+  "head",
+  "patch",
+  "trace",
+]);
+
 function generateDependencies(): void {
   const packages = listFiles(ROOT, (file) => file.endsWith("package.json"))
-    .filter((file) => !file.includes(`${path.sep}node_modules${path.sep}`))
+    .filter(isWorkspaceManifest)
     .map((file) => ({
       relative: normalizePathForDocs(path.relative(ROOT, file)),
       pkg: JSON.parse(fs.readFileSync(file, "utf8")) as PackageJson,
@@ -53,6 +83,7 @@ function generateRoutes(): void {
   const rows: string[] = [];
   for (const [route, item] of Object.entries(spec.paths ?? {}).sort()) {
     for (const [method, op] of Object.entries(item).sort()) {
+      if (!OPENAPI_HTTP_METHODS.has(method.toLowerCase())) continue;
       rows.push(
         `| ${method.toUpperCase()} | /api${route} | ${op.operationId ?? ""} | ${(op.tags ?? []).join(", ")} |`,
       );

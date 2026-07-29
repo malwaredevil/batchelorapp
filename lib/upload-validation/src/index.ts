@@ -8,27 +8,27 @@ export type SupportedDocMimeType = SupportedMimeType | "application/pdf";
  * Must match the server's multer `limits.fileSize` on those routes.
  * Client-side forms mirror this value to warn users immediately on selection.
  */
-export const MAX_UPLOAD_BYTES = 100 * 1024 * 1024; // 100 MB
+export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024; // 25 MB
 
 /**
  * Maximum file size for large uploads (travels photos and Elaine attachments).
  * Must match the server's multer `limits.fileSize` on those routes.
  * Client-side forms mirror this value to warn users immediately on selection.
  */
-export const MAX_LARGE_UPLOAD_BYTES = 100 * 1024 * 1024; // 100 MB
+export const MAX_LARGE_UPLOAD_BYTES = 50 * 1024 * 1024; // 50 MB
 
 /**
  * Hard ceiling on the number of pixels Sharp will decode from any input. Rejects
  * decompression-bomb uploads before they can exhaust CPU or memory. 200 MP covers
  * high-resolution camera photos while blocking pathological inputs.
  */
-const MAX_INPUT_PIXELS = 200_000_000;
+export const MAX_INPUT_PIXELS = 50_000_000;
 
 /**
  * Longest-edge cap for images persisted to storage. Set high enough to preserve
  * full-resolution uploads from modern cameras and scanners.
  */
-const MAX_STORAGE_DIMENSION = 16000;
+export const MAX_STORAGE_DIMENSION = 4096;
 
 /**
  * Structured error thrown when an uploaded file fails format validation.
@@ -168,25 +168,56 @@ export function isImageMimeType(
  *
  * Only valid for image types (JPEG, PNG, WebP). PDFs must be stored raw.
  */
+const MAX_CONCURRENT_IMAGE_TRANSFORMS = 2;
+let activeImageTransforms = 0;
+const imageTransformQueue: Array<() => void> = [];
+
+async function withImageTransformSlot<T>(work: () => Promise<T>): Promise<T> {
+  if (activeImageTransforms >= MAX_CONCURRENT_IMAGE_TRANSFORMS) {
+    await new Promise<void>((resolve) => imageTransformQueue.push(resolve));
+  }
+  activeImageTransforms++;
+  try {
+    return await work();
+  } finally {
+    activeImageTransforms--;
+    imageTransformQueue.shift()?.();
+  }
+}
+
 export async function stripMetadata(
   buffer: Buffer,
   mimeType: SupportedMimeType,
 ): Promise<Buffer> {
-  const pipeline = sharp(buffer, { limitInputPixels: MAX_INPUT_PIXELS })
-    .rotate()
-    .resize({
-      width: MAX_STORAGE_DIMENSION,
-      height: MAX_STORAGE_DIMENSION,
-      fit: "inside",
-      withoutEnlargement: true,
-    });
+  return withImageTransformSlot(async () => {
+    const metadata = await sharp(buffer, {
+      limitInputPixels: MAX_INPUT_PIXELS,
+    }).metadata();
+    if (metadata.width && metadata.height) {
+      const pixels = metadata.width * metadata.height;
+      if (pixels > MAX_INPUT_PIXELS) {
+        throw new UploadValidationError(
+          `Image dimensions exceed the ${MAX_INPUT_PIXELS.toLocaleString()} pixel limit`,
+        );
+      }
+    }
 
-  switch (mimeType) {
-    case "image/jpeg":
-      return pipeline.jpeg().toBuffer();
-    case "image/png":
-      return pipeline.png().toBuffer();
-    case "image/webp":
-      return pipeline.webp().toBuffer();
-  }
+    const pipeline = sharp(buffer, { limitInputPixels: MAX_INPUT_PIXELS })
+      .rotate()
+      .resize({
+        width: MAX_STORAGE_DIMENSION,
+        height: MAX_STORAGE_DIMENSION,
+        fit: "inside",
+        withoutEnlargement: true,
+      });
+
+    switch (mimeType) {
+      case "image/jpeg":
+        return pipeline.jpeg({ quality: 90 }).toBuffer();
+      case "image/png":
+        return pipeline.png({ compressionLevel: 9 }).toBuffer();
+      case "image/webp":
+        return pipeline.webp({ quality: 90 }).toBuffer();
+    }
+  });
 }

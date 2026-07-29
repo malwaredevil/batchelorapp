@@ -14,7 +14,7 @@
  * ## Single-source-of-truth for high-cap routes
  *
  * HIGH_UPLOAD_PREFIXES is the canonical list of route path prefixes that are
- * permitted to receive files up to HIGH_MULTER_FILE_BYTES (100 MB).  Both the
+ * permitted to receive files up to HIGH_MULTER_FILE_BYTES (50 MB).  Both the
  * global upload-size guard middleware (uploadSizeGuard.ts) and each individual
  * route's multer configuration consult this list via multerLimitForPrefix():
  *
@@ -26,7 +26,7 @@
  * Adding a new high-cap route therefore requires only ONE change: add its
  * prefix here.  Both the guard threshold and the per-route multer cap update
  * automatically.  Forgetting to add the prefix means the route silently gets
- * the default 100 MB cap, which is the safe (under-permissive) failure mode
+ * the default 25 MB cap, which is the safe (under-permissive) failure mode
  * rather than a silent security gap.
  */
 
@@ -35,7 +35,7 @@
  * ornaments, quilting). Must stay at least 1 MB below DEFAULT_UPLOAD_BYTES
  * (101 MB) so the global guard is always the primary rejection point.
  */
-export const DEFAULT_MULTER_FILE_BYTES = 100 * 1024 * 1024; // 100 MB
+export const DEFAULT_MULTER_FILE_BYTES = 25 * 1024 * 1024; // 25 MB
 
 /**
  * Maximum fileSizeLimit that can be set on a Supabase Storage bucket policy.
@@ -60,22 +60,22 @@ export const SUPABASE_BUCKET_FILE_BYTES = 50 * 1024 * 1024; // 50 MB (Supabase f
  * HIGH_UPLOAD_BYTES (101 MB) so the global guard is always the primary
  * rejection point.
  */
-export const HIGH_MULTER_FILE_BYTES = 100 * 1024 * 1024; // 100 MB
+export const HIGH_MULTER_FILE_BYTES = 50 * 1024 * 1024; // 50 MB
 
 /**
  * Elaine attachment uploads cap.
  */
-export const ELAINE_ATTACHMENT_FILE_BYTES = 100 * 1024 * 1024; // 100 MB
+export const ELAINE_ATTACHMENT_FILE_BYTES = 50 * 1024 * 1024; // 50 MB
 
 /**
  * Route path prefixes whose uploads are allowed up to HIGH_MULTER_FILE_BYTES
- * (100 MB) through the global upload-size guard.
+ * (50 MB) through the global upload-size guard.
  *
  * This is the single authoritative list.  The guard middleware reads it to set
  * its per-request threshold, and route files call multerLimitForPrefix() to
  * derive their per-route multer limit from it.  A prefix that is absent from
  * this list causes both the guard AND the per-route multer config to use the
- * default 100 MB cap — the safe, under-permissive failure mode.
+ * default 25 MB cap — the safe, under-permissive failure mode.
  *
  * Rules for adding a new high-cap route:
  *  1. Add its full API path prefix here (must start with "/api/").
@@ -94,8 +94,8 @@ export const HIGH_UPLOAD_PREFIXES: readonly string[] = [
  * Return the appropriate multer fileSize limit for the given route prefix.
  *
  * If the prefix (or any leading sub-path of a request that starts with it)
- * appears in HIGH_UPLOAD_PREFIXES, returns HIGH_MULTER_FILE_BYTES (100 MB).
- * Otherwise returns DEFAULT_MULTER_FILE_BYTES (100 MB).
+ * appears in HIGH_UPLOAD_PREFIXES, returns HIGH_MULTER_FILE_BYTES (50 MB).
+ * Otherwise returns DEFAULT_MULTER_FILE_BYTES (50 MB).
  *
  * Route files should use this instead of importing HIGH_MULTER_FILE_BYTES
  * directly so that the prefix list remains the single source of truth.

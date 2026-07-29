@@ -14,8 +14,8 @@
  *
  * Limits are route-aware so the global guard is the PRIMARY rejection point
  * and per-route multer fileSize limits remain a secondary backstop:
- *   • default  11 MB  → routes with a 10 MB multer limit (pottery, ornaments…)
- *   • high cap 21 MB  → routes with a 20 MB multer limit (travels, elaine, messenger)
+ *   • default  26 MB  → routes with a 10 MB multer limit (pottery, ornaments…)
+ *   • high cap 51 MB  → routes with a 20 MB multer limit (travels, elaine, messenger)
  *
  * Path prefixes for the high cap are matched against req.path, which includes
  * the full "/api/…" prefix at app.use() level.
@@ -44,10 +44,10 @@ export {
 import { HIGH_UPLOAD_PREFIXES } from "../lib/upload-limits";
 
 /** Guard threshold for standard routes — 1 MB above DEFAULT_MULTER_FILE_BYTES. */
-export const DEFAULT_UPLOAD_BYTES = 101 * 1024 * 1024; // 101 MB
+export const DEFAULT_UPLOAD_BYTES = 26 * 1024 * 1024; // 26 MB
 
 /** Guard threshold for high-cap routes — 1 MB above HIGH_MULTER_FILE_BYTES. */
-export const HIGH_UPLOAD_BYTES = 101 * 1024 * 1024; // 101 MB
+export const HIGH_UPLOAD_BYTES = 51 * 1024 * 1024; // 51 MB
 
 export function uploadSizeGuard(
   req: Request,

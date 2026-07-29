@@ -315,49 +315,16 @@ router.post("/conversations", async (req, res) => {
     }
     const otherId = allParticipantIds.find((id) => id !== userId)!;
 
-    // Check if a DM between these two already exists
-    const existingRows = await db
-      .select({
-        conversationId: messengerConversationParticipants.conversationId,
-      })
-      .from(messengerConversationParticipants)
-      .where(eq(messengerConversationParticipants.userId, userId));
-
-    for (const row of existingRows) {
-      const convRow = await db
-        .select()
-        .from(messengerConversations)
-        .where(
-          and(
-            eq(messengerConversations.id, row.conversationId),
-            eq(messengerConversations.isDirect, true),
-          ),
-        )
-        .limit(1);
-      if (!convRow[0]) continue;
-
-      const otherParticipants = await db
-        .select({ userId: messengerConversationParticipants.userId })
-        .from(messengerConversationParticipants)
-        .where(
-          and(
-            eq(
-              messengerConversationParticipants.conversationId,
-              row.conversationId,
-            ),
-            ne(messengerConversationParticipants.userId, userId),
-          ),
-        );
-
-      if (
-        otherParticipants.length === 1 &&
-        otherParticipants[0].userId === otherId
-      ) {
-        // Existing DM found — return it
-        const summary = await buildConversationSummary(convRow[0], userId);
-        res.status(200).json(summary);
-        return;
-      }
+    const pairKey = [userId, otherId].sort((a, b) => a - b).join(":");
+    const [existing] = await db
+      .select()
+      .from(messengerConversations)
+      .where(eq(messengerConversations.directPairKey, pairKey))
+      .limit(1);
+    if (existing) {
+      const summary = await buildConversationSummary(existing, userId);
+      res.status(200).json(summary);
+      return;
     }
   } else {
     if (!name || !name.trim()) {
@@ -366,19 +333,43 @@ router.post("/conversations", async (req, res) => {
     }
   }
 
-  // Create conversation
-  const [conv] = await db
-    .insert(messengerConversations)
-    .values({ name: isDirect ? null : name!.trim(), isDirect })
-    .returning();
-
-  // Add participants
-  await db.insert(messengerConversationParticipants).values(
-    allParticipantIds.map((uid) => ({
-      conversationId: conv.id,
-      userId: uid,
-    })),
-  );
+  const pairKey = isDirect
+    ? allParticipantIds
+        .slice()
+        .sort((a, b) => a - b)
+        .join(":")
+    : null;
+  const conv = await db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(messengerConversations)
+      .values({
+        name: isDirect ? null : name!.trim(),
+        isDirect,
+        directPairKey: pairKey,
+      })
+      .onConflictDoNothing()
+      .returning();
+    const row =
+      created ??
+      (
+        await tx
+          .select()
+          .from(messengerConversations)
+          .where(eq(messengerConversations.directPairKey, pairKey!))
+          .limit(1)
+      )[0];
+    if (!row) throw new Error("Could not create conversation");
+    await tx
+      .insert(messengerConversationParticipants)
+      .values(
+        allParticipantIds.map((uid) => ({
+          conversationId: row.id,
+          userId: uid,
+        })),
+      )
+      .onConflictDoNothing();
+    return row;
+  });
 
   const summary = await buildConversationSummary(conv, userId);
   res.status(201).json(summary);
@@ -495,15 +486,17 @@ router.delete("/conversations/:id", async (req, res) => {
     return;
   }
 
-  await db
-    .delete(messengerMessages)
-    .where(eq(messengerMessages.conversationId, convId));
-  await db
-    .delete(messengerConversationParticipants)
-    .where(eq(messengerConversationParticipants.conversationId, convId));
-  await db
-    .delete(messengerConversations)
-    .where(eq(messengerConversations.id, convId));
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(messengerMessages)
+      .where(eq(messengerMessages.conversationId, convId));
+    await tx
+      .delete(messengerConversationParticipants)
+      .where(eq(messengerConversationParticipants.conversationId, convId));
+    await tx
+      .delete(messengerConversations)
+      .where(eq(messengerConversations.id, convId));
+  });
 
   logger.info({ conversationId: convId }, "messenger: conversation deleted");
   res.status(204).send();
@@ -601,9 +594,7 @@ router.get("/conversations/:id/messages", async (req, res) => {
     db
       .select()
       .from(messengerAttachments)
-      .where(
-        sql`${messengerAttachments.messageId} = ANY(${sql.raw(`ARRAY[${msgIds.join(",")}]::integer[]`)})`,
-      ),
+      .where(inArray(messengerAttachments.messageId, msgIds)),
     db
       .select({
         messageId: messengerReactions.messageId,
@@ -611,9 +602,7 @@ router.get("/conversations/:id/messages", async (req, res) => {
         emoji: messengerReactions.emoji,
       })
       .from(messengerReactions)
-      .where(
-        sql`${messengerReactions.messageId} = ANY(${sql.raw(`ARRAY[${msgIds.join(",")}]::integer[]`)})`,
-      ),
+      .where(inArray(messengerReactions.messageId, msgIds)),
   ]);
 
   const currentUserId = (req.session?.userId as number) ?? 0;
@@ -652,22 +641,24 @@ router.post("/conversations/:id/messages", async (req, res) => {
 
   const { body, attachments: attachmentInputs = [] } = parsed.data;
 
-  const [msg] = await db
-    .insert(messengerMessages)
-    .values({ conversationId: convId, senderId: userId, body })
-    .returning();
-
-  if (attachmentInputs.length > 0) {
-    await db.insert(messengerAttachments).values(
-      attachmentInputs.map((a) => ({
-        messageId: msg.id,
-        storagePath: a.storagePath,
-        mimeType: a.mimeType,
-        fileName: a.fileName,
-        sizeBytes: a.sizeBytes,
-      })),
-    );
-  }
+  const msg = await db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(messengerMessages)
+      .values({ conversationId: convId, senderId: userId, body })
+      .returning();
+    if (attachmentInputs.length > 0) {
+      await tx.insert(messengerAttachments).values(
+        attachmentInputs.map((attachment) => ({
+          messageId: created.id,
+          storagePath: attachment.storagePath,
+          mimeType: attachment.mimeType,
+          fileName: attachment.fileName,
+          sizeBytes: attachment.sizeBytes,
+        })),
+      );
+    }
+    return created;
+  });
 
   const [attRows, senderRow] = await Promise.all([
     db

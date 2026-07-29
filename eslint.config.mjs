@@ -7,9 +7,15 @@ export default [
       "**/dist/**",
       "**/node_modules/**",
       "**/generated/**",
+      "**/*.config.ts",
       "docs/generated/**",
       ".local/**",
       ".cache/**",
+      // These executable/test files are intentionally outside their package
+      // TypeScript projects, so type-aware rules cannot safely inspect them.
+      "lib/api-spec/build-spec.ts",
+      "artifacts/modules/src/quilting/lib/cell-parser.test.ts",
+      "lib/api-client-react/src/custom-fetch.test.ts",
     ],
   },
   {

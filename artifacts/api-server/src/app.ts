@@ -19,6 +19,7 @@ import { sessionMiddleware } from "./lib/session";
 import { csrfGuard } from "./middleware/csrf";
 import { recordResponseStatus } from "./lib/error-tracker";
 import { uploadSizeGuard } from "./middleware/uploadSizeGuard";
+import { apiLimiter } from "./middleware/rateLimit";
 import { getStartupState, isStartupReady } from "./lib/startup-state";
 const SLOW_REQUEST_THRESHOLD_MS = 2_000;
 
@@ -207,6 +208,7 @@ app.use("/api", (req: Request, res: Response, next: NextFunction) => {
   }
   next();
 });
+app.use("/api", apiLimiter);
 app.use("/api", router);
 
 // Sentry error handler must come before the custom error handler.

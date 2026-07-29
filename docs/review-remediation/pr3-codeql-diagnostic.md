@@ -9,7 +9,7 @@ Exact check-run metadata and annotations captured from GitHub.
 - conclusion: failure
 - details: https://github.com/malwaredevil/batchelorapp/runs/90549060948
 - title: 15 new alerts including 15 high severity security vulnerabilities
-- summary: ### New alerts in code changed by this pull request  Security Alerts:  * 15 high   See annotations below for details.  [View all branch alerts](/malwaredevil/batchelorapp/security/code-scanning?query=pr%3A348+tool%3ACodeQL+is%3Aopen).
+- summary: ### New alerts in code changed by this pull request Security Alerts: \* 15 high See annotations below for details. [View all branch alerts](/malwaredevil/batchelorapp/security/code-scanning?query=pr%3A348+tool%3ACodeQL+is%3Aopen).
 
 ## Annotations
 
@@ -28,3 +28,10 @@ Exact check-run metadata and annotations captured from GitHub.
 - level=failure path=artifacts/api-server/src/routes/travels/document-evidence.ts lines=17-17 title=Missing rate limiting message=This route handler performs [authorization](1), but is not rate-limited. details=
 - level=failure path=artifacts/api-server/src/routes/travels/monitoring-preferences.ts lines=8-8 title=Missing rate limiting message=This route handler performs [authorization](1), but is not rate-limited. details=
 - level=failure path=artifacts/api-server/src/routes/travels/reservations.ts lines=23-23 title=Missing rate limiting message=This route handler performs [authorization](1), but is not rate-limited. details=
+
+## Remediation
+
+- Added a PostgreSQL-backed, fail-closed API safety-net limiter.
+- Mounted it after startup readiness and before the API router.
+- Preserved stricter endpoint-specific limiters and skipped health probes.
+- Added a source invariant test for middleware ordering and store policy.

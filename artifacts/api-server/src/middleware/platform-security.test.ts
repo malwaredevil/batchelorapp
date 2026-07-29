@@ -22,4 +22,14 @@ describe("platform security invariants", () => {
     expect(csrf).toContain("Origin header required");
     expect(csrf).toContain("env.replitDomains");
   });
+  it("mounts a fail-closed API limiter before the router", () => {
+    const app = source("../app.ts");
+    const limiter = source("./rateLimit.ts");
+    expect(app.indexOf('app.use("/api", apiLimiter)')).toBeGreaterThan(-1);
+    expect(app.indexOf('app.use("/api", apiLimiter)')).toBeLessThan(
+      app.indexOf('app.use("/api", router)'),
+    );
+    expect(limiter).toContain('new PostgresRateLimitStore("api")');
+    expect(limiter).toContain("passOnStoreError: false");
+  });
 });

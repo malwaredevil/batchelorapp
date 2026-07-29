@@ -1,1 +1,1 @@
-Trigger the one-shot PR 3 remediation workflow.
+Trigger the PR 3 implementation workflow after opening draft PR #348.

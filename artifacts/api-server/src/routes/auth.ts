@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request } from "express";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
-import { eq, and, gt, isNull, desc, sql } from "drizzle-orm";
+import { eq, and, gt, lt, isNull, desc, sql } from "drizzle-orm";
 import {
   db,
   pool,
@@ -433,7 +433,10 @@ router.post(
     }
 
     const code = crypto.randomInt(0, 1_000_000).toString().padStart(6, "0");
-    const codeHash = crypto.createHash("sha256").update(code).digest("hex");
+    const codeHash = crypto
+      .createHmac("sha256", env.sessionSecret)
+      .update(code)
+      .digest("hex");
     const expiresAt = new Date(Date.now() + PHONE_CODE_EXPIRY_MS);
 
     try {
@@ -509,7 +512,7 @@ router.post("/auth/phone/verify", requireAuth, async (req, res) => {
   }
 
   const providedHash = crypto
-    .createHash("sha256")
+    .createHmac("sha256", env.sessionSecret)
     .update(parsed.data.code)
     .digest("hex");
 
@@ -522,14 +525,14 @@ router.post("/auth/phone/verify", requireAuth, async (req, res) => {
     );
 
   if (!matches) {
-    const attempts = record.attempts + 1;
-    await db
-      .update(phoneVerificationCodes)
-      .set({
-        attempts,
-        used: attempts >= MAX_PHONE_CODE_ATTEMPTS,
-      })
-      .where(eq(phoneVerificationCodes.id, record.id));
+    await db.execute(sql`
+      UPDATE phone_verification_codes
+      SET attempts = attempts + 1,
+          used = (attempts + 1) >= ${MAX_PHONE_CODE_ATTEMPTS}
+      WHERE id = ${record.id}
+        AND used = false
+        AND attempts < ${MAX_PHONE_CODE_ATTEMPTS}
+    `);
     res.status(400).json({
       error: "This code is invalid or has expired. Request a new one.",
     });
@@ -537,10 +540,19 @@ router.post("/auth/phone/verify", requireAuth, async (req, res) => {
   }
 
   const [user] = await db.transaction(async (tx) => {
-    await tx
+    const [claimedCode] = await tx
       .update(phoneVerificationCodes)
       .set({ used: true })
-      .where(eq(phoneVerificationCodes.id, record.id));
+      .where(
+        and(
+          eq(phoneVerificationCodes.id, record.id),
+          eq(phoneVerificationCodes.used, false),
+          lt(phoneVerificationCodes.attempts, MAX_PHONE_CODE_ATTEMPTS),
+          gt(phoneVerificationCodes.expiresAt, now),
+        ),
+      )
+      .returning({ id: phoneVerificationCodes.id });
+    if (!claimedCode) return [];
     return tx
       .update(appUsers)
       .set({

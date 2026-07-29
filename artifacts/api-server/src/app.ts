@@ -19,6 +19,8 @@ import { sessionMiddleware } from "./lib/session";
 import { csrfGuard } from "./middleware/csrf";
 import { recordResponseStatus } from "./lib/error-tracker";
 import { uploadSizeGuard } from "./middleware/uploadSizeGuard";
+import { apiLimiter } from "./middleware/rateLimit";
+import { getStartupState, isStartupReady } from "./lib/startup-state";
 const SLOW_REQUEST_THRESHOLD_MS = 2_000;
 
 const app: Express = express();
@@ -188,6 +190,25 @@ app.use(cookieParser(env.sessionSecret));
 app.use(sessionMiddleware);
 
 app.use("/api", csrfGuard);
+app.use("/api", (req: Request, res: Response, next: NextFunction) => {
+  if (
+    req.path === "/healthz" ||
+    req.path === "/health/live" ||
+    req.path === "/health/ready"
+  ) {
+    next();
+    return;
+  }
+  if (!isStartupReady()) {
+    res.status(503).json({
+      error: "Service is not ready",
+      startup: getStartupState(),
+    });
+    return;
+  }
+  next();
+});
+app.use("/api", apiLimiter);
 app.use("/api", router);
 
 // Sentry error handler must come before the custom error handler.

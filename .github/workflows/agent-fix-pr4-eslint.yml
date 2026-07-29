@@ -1,0 +1,78 @@
+name: Agent PR4 ESLint compatibility fix
+
+on:
+  push:
+    branches:
+      - agent/shared-core-and-collection-quality
+    paths:
+      - pnpm-workspace.yaml
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-validate:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: agent/shared-core-and-collection-quality
+          fetch-depth: 0
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          version: 10
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Regenerate lockfile
+        run: pnpm install --no-frozen-lockfile
+      - name: Validate
+        shell: bash
+        env:
+          PORT: "3001"
+          BASE_PATH: "/modules/"
+          NODE_ENV: production
+        run: |
+          set +e
+          pnpm run lint
+          lint_status=$?
+          pnpm run typecheck
+          typecheck_status=$?
+          pnpm --filter @workspace/api-server run test
+          api_test_status=$?
+          pnpm --filter @workspace/scripts run docs:test
+          docs_test_status=$?
+          pnpm --filter @workspace/api-server run build
+          api_build_status=$?
+          pnpm --filter @workspace/modules run build
+          modules_build_status=$?
+          cat > docs/review-remediation/pr4-validation.md <<EOF
+          # PR 4 validation
+
+          Validation ran after scoping the ESLint compatibility override.
+
+          - Semantic and formatting lint exit code: ${lint_status}.
+          - Workspace typecheck exit code: ${typecheck_status}.
+          - API-server test exit code: ${api_test_status}.
+          - Documentation-generator test exit code: ${docs_test_status}.
+          - API-server build exit code: ${api_build_status}.
+          - Modules build exit code: ${modules_build_status}.
+
+          Normal pull-request CI remains authoritative after rebasing this branch
+          in programme order.
+          EOF
+          pnpm exec prettier --write docs/review-remediation/pr4-validation.md
+          if [ "$lint_status" -ne 0 ] || [ "$typecheck_status" -ne 0 ] || [ "$api_test_status" -ne 0 ] || [ "$docs_test_status" -ne 0 ] || [ "$api_build_status" -ne 0 ] || [ "$modules_build_status" -ne 0 ]; then
+            exit 1
+          fi
+      - name: Remove one-shot workflow and commit
+        run: |
+          rm .github/workflows/agent-fix-pr4-eslint.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: scope ESLint p-limit compatibility [skip ci]"
+          git pull --rebase origin agent/shared-core-and-collection-quality
+          git push origin HEAD:agent/shared-core-and-collection-quality

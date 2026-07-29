@@ -2841,4 +2841,11 @@ BEGIN
     END;
   END LOOP;
 END $$`,
+  // Slack webhook inbox state used to atomically pair delivery claims with jobs.
+  `ALTER TABLE slack_webhook_deliveries ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'processing'`,
+  `ALTER TABLE slack_webhook_deliveries ADD COLUMN IF NOT EXISTS job_id INTEGER REFERENCES app_jobs(id) ON DELETE SET NULL`,
+  `ALTER TABLE slack_webhook_deliveries ADD COLUMN IF NOT EXISTS last_error TEXT`,
+  `ALTER TABLE slack_webhook_deliveries ADD COLUMN IF NOT EXISTS processed_at TIMESTAMPTZ`,
+  `CREATE INDEX IF NOT EXISTS slack_webhook_deliveries_status_received_idx
+     ON slack_webhook_deliveries (status, received_at)`,
 ];

@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { appJobs } from "./operations";
 import {
   pgTable,
   serial,
@@ -46,9 +47,15 @@ export const slackWebhookDeliveries = pgTable(
   "slack_webhook_deliveries",
   {
     id: text("id").primaryKey(),
+    status: text("status").notNull().default("processing"),
+    jobId: integer("job_id").references(() => appJobs.id, {
+      onDelete: "set null",
+    }),
+    lastError: text("last_error"),
     receivedAt: timestamp("received_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
   },
   (table) => [
     index("slack_webhook_deliveries_received_at_idx").on(table.receivedAt),

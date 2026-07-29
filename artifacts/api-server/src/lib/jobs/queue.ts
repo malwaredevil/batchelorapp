@@ -1,7 +1,7 @@
 import { pool } from "@workspace/db";
 import { JOB_REGISTRY_BY_TYPE, type JobStatus } from "./registry";
 
-type EnqueueInput = {
+export type EnqueueInput = {
   type: string;
   payload: unknown;
   idempotencyKey?: string;
@@ -12,11 +12,19 @@ type EnqueueInput = {
   domain?: string;
 };
 
-export async function enqueueJob(input: EnqueueInput): Promise<number> {
+type JobInsertQuery = (
+  text: string,
+  values: unknown[],
+) => Promise<{ rows: Array<{ id: number }> }>;
+
+export async function enqueueJobWithQuery(
+  query: JobInsertQuery,
+  input: EnqueueInput,
+): Promise<number> {
   const definition = JOB_REGISTRY_BY_TYPE.get(input.type);
   if (!definition) throw new Error(`Unknown job type: ${input.type}`);
   const payload = definition.payloadSchema.parse(input.payload);
-  const result = await pool.query<{ id: number }>(
+  const result = await query(
     `
       INSERT INTO app_jobs
         (type, queue, status, priority, payload, payload_schema_version,
@@ -46,6 +54,13 @@ export async function enqueueJob(input: EnqueueInput): Promise<number> {
     ],
   );
   return result.rows[0].id;
+}
+
+export async function enqueueJob(input: EnqueueInput): Promise<number> {
+  return enqueueJobWithQuery(
+    (text, values) => pool.query<{ id: number }>(text, values),
+    input,
+  );
 }
 
 export async function listJobs(filters: {
@@ -110,14 +125,20 @@ export async function getJob(id: number): Promise<unknown | null> {
 
 export async function updateProgress(
   jobId: number,
+  leaseOwner: string,
   progressPercent: number,
   message: string,
 ): Promise<void> {
+  const boundedProgress = Number.isFinite(progressPercent)
+    ? Math.max(0, Math.min(100, Math.round(progressPercent)))
+    : 0;
   await pool.query(
     `UPDATE app_jobs
-     SET progress_percent = $2, progress_message = $3, updated_at = now()
-     WHERE id = $1`,
-    [jobId, progressPercent, message],
+     SET progress_percent = $3, progress_message = $4, updated_at = now()
+     WHERE id = $1
+       AND status = 'running'
+       AND lease_owner = $2`,
+    [jobId, leaseOwner, boundedProgress, message.slice(0, 500)],
   );
 }
 

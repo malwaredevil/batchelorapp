@@ -10,11 +10,15 @@ type ClaimedJob = {
   payload: unknown;
   attempt_count: number;
   max_attempts: number;
+  lease_owner?: string;
 };
 
 type ActiveWorker = {
   controller: AbortController;
 };
+
+const LEASE_DURATION_SQL = "5 minutes";
+const HEARTBEAT_INTERVAL_MS = 60_000;
 
 // Keyed by queue name ("__all__" when no queue filter is set).
 const activeWorkers = new Map<string, ActiveWorker>();
@@ -30,7 +34,7 @@ async function claimJob(
       UPDATE app_jobs
       SET status = 'running',
           lease_owner = $1,
-          lease_expires_at = now() + interval '5 minutes',
+          lease_expires_at = now() + interval '${LEASE_DURATION_SQL}',
           started_at = COALESCE(started_at, now()),
           attempt_count = attempt_count + 1,
           updated_at = now()
@@ -38,15 +42,10 @@ async function claimJob(
         SELECT id
         FROM app_jobs
         WHERE (
-          -- Normal claim: ready jobs that have never been leased or whose
-          -- retry backoff has elapsed.
           (status IN ('queued', 'scheduled', 'retry_wait')
            AND scheduled_for <= now()
            AND (lease_expires_at IS NULL OR lease_expires_at < now()))
           OR
-          -- Stale-lease recovery: a running job whose lease expired means the
-          -- worker process died mid-turn.  Re-claim it so the job is retried
-          -- automatically rather than stuck in 'running' forever.
           (status = 'running' AND lease_expires_at < now())
         )
           ${queueFilter}
@@ -54,27 +53,91 @@ async function claimJob(
         FOR UPDATE SKIP LOCKED
         LIMIT 1
       )
-      RETURNING id, type, payload, attempt_count, max_attempts
+      RETURNING id, type, payload, attempt_count, max_attempts, lease_owner
     `,
     params,
   );
   return result.rows[0] ?? null;
 }
 
-async function markSucceeded(jobId: number): Promise<void> {
+async function beginAttempt(
+  job: ClaimedJob,
+  leaseOwner: string,
+): Promise<number | null> {
+  const result = await pool.query<{ id: number }>(
+    `INSERT INTO app_job_attempts
+       (job_id, attempt_number, status, metadata)
+     VALUES ($1, $2, 'running', jsonb_build_object('leaseOwner', $3::text))
+     RETURNING id`,
+    [job.id, job.attempt_count, leaseOwner],
+  );
+  return result.rows[0]?.id ?? null;
+}
+
+async function finishAttempt(
+  attemptId: number | null,
+  status: "succeeded" | "retry_wait" | "dead_letter" | "lease_lost",
+  err?: unknown,
+): Promise<void> {
+  if (attemptId == null) return;
+  const message =
+    err instanceof Error ? err.message : err == null ? null : String(err);
   await pool.query(
-    `UPDATE app_jobs
-     SET status = 'succeeded', completed_at = now(), lease_owner = NULL,
-         lease_expires_at = NULL, progress_percent = 100, updated_at = now()
+    `UPDATE app_job_attempts
+     SET status = $2,
+         completed_at = now(),
+         error_code = $3,
+         error_message = $4
      WHERE id = $1`,
-    [jobId],
+    [
+      attemptId,
+      status,
+      err instanceof Error ? err.name : err == null ? null : "JobError",
+      message?.slice(0, 500) ?? null,
+    ],
   );
 }
 
-async function markFailed(job: ClaimedJob, err: unknown): Promise<void> {
+async function renewLease(jobId: number, leaseOwner: string): Promise<boolean> {
+  const result = await pool.query(
+    `UPDATE app_jobs
+     SET lease_expires_at = now() + interval '${LEASE_DURATION_SQL}',
+         updated_at = now()
+     WHERE id = $1
+       AND status = 'running'
+       AND lease_owner = $2
+     RETURNING id`,
+    [jobId, leaseOwner],
+  );
+  return (result.rowCount ?? result.rows.length) > 0;
+}
+
+async function markSucceeded(
+  jobId: number,
+  leaseOwner: string,
+): Promise<boolean> {
+  const result = await pool.query(
+    `UPDATE app_jobs
+     SET status = 'succeeded', completed_at = now(), lease_owner = NULL,
+         lease_expires_at = NULL, progress_percent = 100, updated_at = now()
+     WHERE id = $1
+       AND status = 'running'
+       AND lease_owner = $2
+     RETURNING id`,
+    [jobId, leaseOwner],
+  );
+  return (result.rowCount ?? result.rows.length) > 0;
+}
+
+async function markFailed(
+  job: ClaimedJob,
+  leaseOwner: string,
+  err: unknown,
+): Promise<"retry_wait" | "dead_letter" | "lease_lost"> {
   const retryable = job.attempt_count < job.max_attempts;
+  const nextStatus = retryable ? "retry_wait" : "dead_letter";
   const message = err instanceof Error ? err.message : String(err);
-  await pool.query(
+  const result = await pool.query(
     `UPDATE app_jobs
      SET status = $2,
          scheduled_for = CASE WHEN $2 = 'retry_wait'
@@ -87,43 +150,110 @@ async function markFailed(job: ClaimedJob, err: unknown): Promise<void> {
          last_error_code = $4,
          last_error_message = $5,
          updated_at = now()
-     WHERE id = $1`,
+     WHERE id = $1
+       AND status = 'running'
+       AND lease_owner = $6
+     RETURNING id`,
     [
       job.id,
-      retryable ? "retry_wait" : "dead_letter",
+      nextStatus,
       job.attempt_count,
       err instanceof Error ? err.name : "JobError",
       message.slice(0, 500),
+      leaseOwner,
     ],
   );
+  return (result.rowCount ?? result.rows.length) > 0
+    ? nextStatus
+    : "lease_lost";
 }
 
 async function processOne(
   workerId: string,
-  signal: AbortSignal,
+  workerSignal: AbortSignal,
   queue?: string,
 ): Promise<void> {
   const job = await claimJob(workerId, queue);
   if (!job) return;
+  const leaseOwner = job.lease_owner ?? workerId;
   const definition = JOB_REGISTRY_BY_TYPE.get(job.type);
+  const attemptId = await beginAttempt(job, leaseOwner);
   if (!definition) {
-    await markFailed(job, new Error(`No handler registered for ${job.type}`));
+    const status = await markFailed(
+      job,
+      leaseOwner,
+      new Error(`No handler registered for ${job.type}`),
+    );
+    await finishAttempt(
+      attemptId,
+      status,
+      new Error(`No handler registered for ${job.type}`),
+    );
     return;
   }
+
+  const jobController = new AbortController();
+  const abortForShutdown = () => jobController.abort(workerSignal.reason);
+  workerSignal.addEventListener("abort", abortForShutdown, { once: true });
+  let heartbeatInFlight = false;
+  let leaseLost = false;
+  const heartbeat = setInterval(() => {
+    if (heartbeatInFlight || jobController.signal.aborted) return;
+    heartbeatInFlight = true;
+    void renewLease(job.id, leaseOwner)
+      .then((owned) => {
+        if (!owned) {
+          leaseLost = true;
+          jobController.abort(new Error("Job lease lost"));
+        }
+      })
+      .catch((err) => {
+        logger.warn(
+          { err, jobId: job.id },
+          "job-worker: lease heartbeat failed",
+        );
+      })
+      .finally(() => {
+        heartbeatInFlight = false;
+      });
+  }, HEARTBEAT_INTERVAL_MS);
+  heartbeat.unref();
 
   try {
     const payload = definition.payloadSchema.parse(job.payload);
     await definition.handler(payload, {
       jobId: job.id,
       attempt: job.attempt_count,
-      signal,
+      signal: jobController.signal,
       updateProgress: (progressPercent, message) =>
-        updateProgress(job.id, progressPercent, message),
+        updateProgress(job.id, leaseOwner, progressPercent, message),
     });
-    await markSucceeded(job.id);
+    const succeeded = await markSucceeded(job.id, leaseOwner);
+    if (!succeeded) {
+      leaseLost = true;
+      logger.warn(
+        { jobId: job.id, leaseOwner },
+        "job-worker: success write rejected after lease loss",
+      );
+      await finishAttempt(attemptId, "lease_lost");
+      return;
+    }
+    await finishAttempt(attemptId, "succeeded");
   } catch (err) {
+    if (leaseLost) {
+      logger.warn(
+        { err, jobId: job.id, type: job.type },
+        "job-worker: handler stopped after lease loss",
+      );
+      await finishAttempt(attemptId, "lease_lost", err);
+      return;
+    }
     logger.warn({ err, jobId: job.id, type: job.type }, "job failed");
-    await markFailed(job, err);
+    const status = await markFailed(job, leaseOwner, err);
+    await finishAttempt(attemptId, status, err);
+  } finally {
+    clearInterval(heartbeat);
+    workerSignal.removeEventListener("abort", abortForShutdown);
   }
 }
 
@@ -137,9 +267,6 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-// Async poll loop — awaits each processOne before sleeping, so only one
-// query per worker is in-flight at a time. This prevents setInterval
-// tick pile-up which exhausted the Supabase session-mode connection pool.
 async function pollLoop(
   workerId: string,
   signal: AbortSignal,
@@ -149,10 +276,6 @@ async function pollLoop(
     try {
       await processOne(workerId, signal, queue);
     } catch (err) {
-      // Transient DB errors (e.g. "Connection terminated unexpectedly" when
-      // Supabase drops an idle connection) must not crash the server process.
-      // Log and continue — the pool will establish a fresh connection on the
-      // next poll tick.
       logger.warn(
         { err },
         "job-worker: transient error in poll loop, retrying",
@@ -162,9 +285,6 @@ async function pollLoop(
   }
 }
 
-// Starts a polling worker for the given queue (or all queues when omitted).
-// Multiple independent workers can be started for different queues.
-// Calling startJobWorker with the same queue argument a second time is a no-op.
 export function startJobWorker(queue?: string): void {
   const key = queue ?? "__all__";
   if (activeWorkers.has(key)) return;
@@ -175,7 +295,6 @@ export function startJobWorker(queue?: string): void {
   logger.info({ workerId, queue: queue ?? "(all)" }, "job-worker: started");
 }
 
-// Stops the worker for the given queue (or all queues when omitted).
 export async function stopJobWorker(queue?: string): Promise<void> {
   const key = queue ?? "__all__";
   const worker = activeWorkers.get(key);
@@ -185,7 +304,6 @@ export async function stopJobWorker(queue?: string): Promise<void> {
   logger.info({ queue: queue ?? "(all)" }, "job-worker: stopped");
 }
 
-// Stops all active workers (used during graceful shutdown).
 export async function stopAllJobWorkers(): Promise<void> {
   for (const [key, worker] of activeWorkers) {
     worker.controller.abort();

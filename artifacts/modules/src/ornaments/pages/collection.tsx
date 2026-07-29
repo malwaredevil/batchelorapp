@@ -49,9 +49,14 @@ import {
   CollectionListRow,
   CollectionList,
   CollectionSearchBar,
+  CollectionStatBar,
   type SortOption,
 } from "@workspace/collection-ui";
+import { GalleryPaginator } from "@/components/GalleryPaginator";
 import { cn } from "@/lib/utils";
+
+const ORNAMENTS_PAGE_SIZE_KEY = "ornaments-collection-page-size";
+const PAGE_SIZE_OPTIONS = [20, 50, 100, 0];
 
 type OrnamentSortKey =
   | "newest"
@@ -182,6 +187,12 @@ export default function Collection() {
     Set<number | "none">
   >(new Set());
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
+  const [activeColor, setActiveColor] = useState<string | null>(null);
+  const [displayPageSize, setDisplayPageSize] = useState<number>(() => {
+    const saved = localStorage.getItem(ORNAMENTS_PAGE_SIZE_KEY);
+    return saved !== null ? Number(saved) : 50;
+  });
+  const [currentPage, setCurrentPage] = useState(1);
   const [cachedYears, setCachedYears] = useState<number[]>([]);
   const [quickEditItem, setQuickEditItem] =
     useState<OrnamentsOrnamentItem | null>(null);
@@ -272,15 +283,79 @@ export default function Collection() {
     }
   }, [items, sort]);
 
-  // Client-side category filter (matches pottery pattern)
+  // Unique colors extracted from all loaded items (for the filter swatch row)
+  const uniqueColors = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const item of items) {
+      for (const c of item.dominantColors ?? []) {
+        if (!seen.has(c)) {
+          seen.add(c);
+          out.push(c);
+        }
+      }
+    }
+    return out;
+  }, [items]);
+
+  // Client-side category + color filter
   const filteredItems = useMemo(() => {
-    if (filterCategoryIds.size === 0) return sortedItems;
-    return sortedItems.filter((item) => {
-      if (filterCategoryIds.has("none") && item.categories.length === 0)
-        return true;
-      return item.categories.some((c) => filterCategoryIds.has(c.id));
-    });
-  }, [sortedItems, filterCategoryIds]);
+    let result = sortedItems;
+    if (filterCategoryIds.size > 0) {
+      result = result.filter((item) => {
+        if (filterCategoryIds.has("none") && item.categories.length === 0)
+          return true;
+        return item.categories.some((c) => filterCategoryIds.has(c.id));
+      });
+    }
+    if (activeColor !== null) {
+      result = result.filter((item) =>
+        (item.dominantColors ?? []).includes(activeColor),
+      );
+    }
+    return result;
+  }, [sortedItems, filterCategoryIds, activeColor]);
+
+  // Stat bar data (computed from all loaded items, not the filtered slice)
+  const statBarStats = useMemo(() => {
+    const categoryCount = (categories ?? []).length;
+    const brands = [...new Set(items.map((i) => i.brand).filter(Boolean))];
+    const years = items
+      .map((i) => i.year)
+      .filter((y): y is number => y != null);
+    const minYear = years.length ? Math.min(...years) : null;
+    const maxYear = years.length ? Math.max(...years) : null;
+    const yearRange =
+      minYear !== null && maxYear !== null
+        ? minYear === maxYear
+          ? String(minYear)
+          : `${minYear}–${maxYear}`
+        : "—";
+    return [
+      { value: data?.total ?? 0, label: "Total ornaments" },
+      { value: categoryCount, label: "Categories" },
+      { value: brands.length, label: "Brands" },
+      { value: yearRange, label: "Year range" },
+    ];
+  }, [items, categories, data?.total]);
+
+  // Pagination
+  const effectivePageSize =
+    displayPageSize === 0 ? filteredItems.length : displayPageSize;
+  const totalPages =
+    effectivePageSize > 0
+      ? Math.ceil(filteredItems.length / effectivePageSize)
+      : 1;
+  const pagedItems = useMemo(() => {
+    if (displayPageSize === 0) return filteredItems;
+    const start = (currentPage - 1) * displayPageSize;
+    return filteredItems.slice(start, start + displayPageSize);
+  }, [filteredItems, currentPage, displayPageSize]);
+
+  // Reset to page 1 whenever any filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, filterCategoryIds, activeColor, selectedYear, sort]);
 
   function handleCategoryToggle(id: number | "none") {
     setFilterCategoryIds((prev) => {
@@ -291,11 +366,21 @@ export default function Collection() {
     });
   }
 
+  function handleColorToggle(color: string) {
+    setActiveColor((prev) => (prev === color ? null : color));
+  }
+
+  function handlePageSizeChange(n: number) {
+    setDisplayPageSize(n);
+    setCurrentPage(1);
+    localStorage.setItem(ORNAMENTS_PAGE_SIZE_KEY, String(n));
+  }
+
   const configSummary = useAppConfigSummary();
 
   usePageAssistantContext(
     "ornaments-collection",
-    `Main collection page showing ${items.length} ornaments. Search: "${debouncedSearch}". Category filter: ${filterCategoryIds.size > 0 ? [...filterCategoryIds].join(", ") : "none"}.${configSummary ? `\n\n${configSummary}` : ""}`,
+    `Main collection page showing ${filteredItems.length} of ${items.length} ornaments. Search: "${debouncedSearch}". Category filter: ${filterCategoryIds.size > 0 ? [...filterCategoryIds].join(", ") : "none"}. Color filter: ${activeColor ?? "none"}.${configSummary ? `\n\n${configSummary}` : ""}`,
   );
 
   // Year filter dropdown (passed as extraControls to the search bar)
@@ -381,6 +466,9 @@ export default function Collection() {
 
       <NextHallmarkEventCard />
 
+      {/* Stat bar */}
+      <CollectionStatBar stats={statBarStats} loading={isLoading} />
+
       {/* Unified search/sort/filter bar */}
       <CollectionSearchBar
         search={search}
@@ -399,13 +487,21 @@ export default function Collection() {
         }))}
         activeCategoryIds={filterCategoryIds}
         onCategoryToggle={handleCategoryToggle}
+        colors={uniqueColors}
+        activeColor={activeColor}
+        onColorToggle={handleColorToggle}
+        colorToHex={colorToHex}
+        pageSize={displayPageSize}
+        onPageSizeChange={handlePageSizeChange}
+        pageSizeOptions={PAGE_SIZE_OPTIONS}
+        pageSizeStorageKey={ORNAMENTS_PAGE_SIZE_KEY}
         extraControls={yearFilter}
       />
 
       {/* Grid View */}
       {viewMode === "grid" && (
         <CollectionGrid>
-          {filteredItems.map((item) => (
+          {pagedItems.map((item) => (
             <CollectionCard
               key={item.id}
               id={item.id}
@@ -458,11 +554,19 @@ export default function Collection() {
           ))}
         </CollectionGrid>
       )}
+      {viewMode === "grid" && totalPages > 1 && (
+        <GalleryPaginator
+          page={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+          className="mt-4"
+        />
+      )}
 
       {/* List View */}
       {viewMode === "list" && (
         <CollectionList>
-          {filteredItems.map((item) => (
+          {pagedItems.map((item) => (
             <CollectionListRow
               key={item.id}
               id={item.id}
@@ -541,6 +645,14 @@ export default function Collection() {
             />
           ))}
         </CollectionList>
+      )}
+      {viewMode === "list" && totalPages > 1 && (
+        <GalleryPaginator
+          page={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+          className="mt-4"
+        />
       )}
 
       {/* Quick edit sheet */}

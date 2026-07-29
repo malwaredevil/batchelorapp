@@ -2277,6 +2277,19 @@ export interface OrnamentsOrnamentItem {
   createdAt: string;
 }
 
+export interface OrnamentsOrnamentListFacets {
+  colors: string[];
+}
+
+export interface OrnamentsOrnamentListStats {
+  categoryCount: number;
+  brandCount: number;
+  /** @nullable */
+  minYear?: number | null;
+  /** @nullable */
+  maxYear?: number | null;
+}
+
 export interface OrnamentsOrnamentListResponse {
   items: OrnamentsOrnamentItem[];
   /** Total number of items matching the query (before pagination) */
@@ -2284,6 +2297,9 @@ export interface OrnamentsOrnamentListResponse {
   page: number;
   pageSize: number;
   searchMode: OrnamentsOrnamentListResponseSearchMode;
+  totalPages: number;
+  facets: OrnamentsOrnamentListFacets;
+  stats: OrnamentsOrnamentListStats;
 }
 
 export interface OrnamentsOrnamentUpdate {
@@ -3129,6 +3145,10 @@ q?: string;
 categoryId?: number;
 seriesOrCollection?: string;
 year?: number;
+categoryIds?: number[];
+uncategorized?: boolean;
+color?: string;
+sort?: ListOrnamentsSort;
 /**
  * @minimum 1
  */
@@ -3139,6 +3159,19 @@ page?: number;
  */
 pageSize?: number;
 };
+
+export type ListOrnamentsSort = typeof ListOrnamentsSort[keyof typeof ListOrnamentsSort];
+
+
+export const ListOrnamentsSort = {
+  newest: 'newest',
+  oldest: 'oldest',
+  'year-desc': 'year-desc',
+  'year-asc': 'year-asc',
+  'name-asc': 'name-asc',
+  'name-desc': 'name-desc',
+  'value-desc': 'value-desc',
+} as const;
 
 export type DeleteOrnamentUnusedCategories200 = {
   deleted: number;

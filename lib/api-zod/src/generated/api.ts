@@ -4631,6 +4631,8 @@ export const CheckWishlistFlightsResponse = zod.object({
 /**
  * @summary List ornaments
  */
+export const listOrnamentsQueryUncategorizedDefault = false;
+export const listOrnamentsQuerySortDefault = `newest`;
 export const listOrnamentsQueryPageDefault = 1;
 
 export const listOrnamentsQueryPageSizeDefault = 60;
@@ -4643,6 +4645,10 @@ export const ListOrnamentsQueryParams = zod.object({
   "categoryId": zod.coerce.number().optional(),
   "seriesOrCollection": zod.coerce.string().optional(),
   "year": zod.coerce.number().optional(),
+  "categoryIds": zod.array(zod.coerce.number()).optional(),
+  "uncategorized": zod.coerce.boolean().default(listOrnamentsQueryUncategorizedDefault),
+  "color": zod.coerce.string().optional(),
+  "sort": zod.enum(['newest', 'oldest', 'year-desc', 'year-asc', 'name-asc', 'name-desc', 'value-desc']).default(listOrnamentsQuerySortDefault),
   "page": zod.coerce.number().min(1).default(listOrnamentsQueryPageDefault),
   "pageSize": zod.coerce.number().min(1).max(listOrnamentsQueryPageSizeMax).default(listOrnamentsQueryPageSizeDefault)
 })
@@ -4697,7 +4703,17 @@ export const ListOrnamentsResponse = zod.object({
   "total": zod.number().describe('Total number of items matching the query (before pagination)'),
   "page": zod.number(),
   "pageSize": zod.number(),
-  "searchMode": zod.enum(['semantic', 'keyword'])
+  "searchMode": zod.enum(['semantic', 'keyword']),
+  "totalPages": zod.number(),
+  "facets": zod.object({
+  "colors": zod.array(zod.string())
+}),
+  "stats": zod.object({
+  "categoryCount": zod.number(),
+  "brandCount": zod.number(),
+  "minYear": zod.number().nullish(),
+  "maxYear": zod.number().nullish()
+})
 })
 
 

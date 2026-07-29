@@ -2848,4 +2848,20 @@ END $$`,
   `ALTER TABLE slack_webhook_deliveries ADD COLUMN IF NOT EXISTS processed_at TIMESTAMPTZ`,
   `CREATE INDEX IF NOT EXISTS slack_webhook_deliveries_status_received_idx
      ON slack_webhook_deliveries (status, received_at)`,
+
+  // ── #349: ornaments_categories name uniqueness (ORM .unique() → SQL) ───────
+  // Note: pottery_categories.name and quilting_categories.name already have
+  // UNIQUE in their original CREATE TABLE statements above (see lines ~156, ~190).
+  // The ORM .unique() annotations in pottery.ts/quilting.ts are a DB-sync fix —
+  // no additive migration is needed for those two tables.
+  // ornaments_categories was the only table whose CREATE TABLE omitted UNIQUE:
+  `CREATE UNIQUE INDEX IF NOT EXISTS ornaments_categories_name_unique
+     ON ornaments_categories (name)`,
+
+  // ── #349: Messenger direct_pair_key + conversation version columns ─────────
+  `ALTER TABLE messenger_conversations ADD COLUMN IF NOT EXISTS direct_pair_key TEXT`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS messenger_conversations_direct_pair_idx
+     ON messenger_conversations (direct_pair_key) WHERE direct_pair_key IS NOT NULL`,
+  `ALTER TABLE agentphone_conversations ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE elaine_email_conversations ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 0`,
 ];

@@ -134,134 +134,204 @@ router.use(requireAuth);
 // Collection
 // ---------------------------------------------------------------------------
 
+type OrnamentSort =
+  | "newest"
+  | "oldest"
+  | "year-desc"
+  | "year-asc"
+  | "name-asc"
+  | "name-desc"
+  | "value-desc";
+
+function ornamentOrder(sort: OrnamentSort) {
+  switch (sort) {
+    case "oldest":
+      return [asc(ornamentsItems.createdAt)];
+    case "year-desc":
+      return [desc(ornamentsItems.year), asc(ornamentsItems.name)];
+    case "year-asc":
+      return [asc(ornamentsItems.year), asc(ornamentsItems.name)];
+    case "name-asc":
+      return [asc(ornamentsItems.name)];
+    case "name-desc":
+      return [desc(ornamentsItems.name)];
+    case "value-desc":
+      return [desc(ornamentsItems.bookValue), asc(ornamentsItems.name)];
+    case "newest":
+    default:
+      return [desc(ornamentsItems.createdAt)];
+  }
+}
+
+async function ornamentListMeta(
+  where: SQL<unknown>,
+  total: number,
+  pageSize: number,
+) {
+  const [colorsResult, statsResult, categoryResult] = await Promise.all([
+    db.execute<{ color: string }>(sql`
+      select distinct unnest(dominant_colors) as color
+      from ornaments_items
+      where ${where}
+      order by color
+    `),
+    db.execute<{
+      brand_count: number;
+      min_year: number | null;
+      max_year: number | null;
+    }>(sql`
+      select count(distinct brand)::int as brand_count,
+             min(year)::int as min_year,
+             max(year)::int as max_year
+      from ornaments_items
+      where ${where}
+    `),
+    db.select({ value: count() }).from(categories),
+  ]);
+  const stats = statsResult.rows[0];
+  return {
+    totalPages: total === 0 ? 1 : Math.ceil(total / pageSize),
+    facets: {
+      colors: colorsResult.rows.map((row) => row.color).filter(Boolean),
+    },
+    stats: {
+      categoryCount: Number(categoryResult[0]?.value ?? 0),
+      brandCount: Number(stats?.brand_count ?? 0),
+      minYear: stats?.min_year ?? null,
+      maxYear: stats?.max_year ?? null,
+    },
+  };
+}
+
 router.get("/items", async (req, res) => {
-  const parsed = ListOrnamentsQueryParams.safeParse(req.query);
+  // Normalize categoryIds: Express parses a single query value as a scalar
+  // string; Zod array validation rejects that. Wrap scalar in array first.
+  const rawQuery = {
+    ...req.query,
+    ...(req.query.categoryIds !== undefined && {
+      categoryIds: Array.isArray(req.query.categoryIds)
+        ? req.query.categoryIds
+        : [req.query.categoryIds],
+    }),
+  };
+  const parsed = ListOrnamentsQueryParams.safeParse(rawQuery);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid query parameters." });
     return;
   }
-  const { q, categoryId, seriesOrCollection, year, page, pageSize } =
-    parsed.data;
+  const {
+    q,
+    categoryId,
+    categoryIds = [],
+    uncategorized = false,
+    color,
+    seriesOrCollection,
+    year,
+    sort = "newest",
+    page,
+    pageSize,
+  } = parsed.data;
 
-  // When a text query is provided, try hybrid semantic search first.
-  // Uses vector embeddings + Voyage reranking for ranked relevance ordering.
-  // Falls back to ILIKE when embeddings are unavailable or the result set is empty.
+  const conditions: SQL<unknown>[] = [isNull(ornamentsItems.deletedAt)];
+  if (seriesOrCollection) {
+    conditions.push(eq(ornamentsItems.seriesOrCollection, seriesOrCollection));
+  }
+  if (year !== undefined) conditions.push(eq(ornamentsItems.year, year));
+  if (color)
+    conditions.push(sql`${color} = any(${ornamentsItems.dominantColors})`);
+
+  const selectedCategoryIds = Array.from(
+    new Set([
+      ...(categoryId !== undefined ? [categoryId] : []),
+      ...categoryIds,
+    ]),
+  );
+  if (selectedCategoryIds.length > 0 || uncategorized) {
+    const categoryClauses: SQL<unknown>[] = [];
+    if (selectedCategoryIds.length > 0) {
+      categoryClauses.push(sql`exists (
+        select 1 from ornaments_item_categories oic
+        where oic.item_id = ${ornamentsItems.id}
+          and oic.category_id in (${sql.join(
+            selectedCategoryIds.map((id) => sql`${id}`),
+            sql`, `,
+          )})
+      )`);
+    }
+    if (uncategorized) {
+      categoryClauses.push(sql`not exists (
+        select 1 from ornaments_item_categories oic
+        where oic.item_id = ${ornamentsItems.id}
+      )`);
+    }
+    conditions.push(or(...(categoryClauses as [SQL, ...SQL[]]))!);
+  }
+
+  const baseWhere = and(...(conditions as [SQL, ...SQL[]]))!;
+  const offset = (page - 1) * pageSize;
+
   if (q && q.trim()) {
     try {
-      let catItemIds: Set<number> | null = null;
-      if (categoryId !== undefined) {
-        const catRows = await db
-          .select({ itemId: itemCategories.itemId })
-          .from(itemCategories)
-          .where(eq(itemCategories.categoryId, categoryId));
-        catItemIds = new Set(catRows.map((r) => r.itemId));
-        if (catItemIds.size === 0) {
-          res.json(
-            ListOrnamentsResponse.parse({
-              items: [],
-              total: 0,
-              page,
-              pageSize,
-              searchMode: "semantic",
-            }),
-          );
-          return;
-        }
-      }
-
-      // Build extra WHERE for non-category filters (series, year).
-      const extraConditions: SQL<unknown>[] = [];
-      if (seriesOrCollection) {
-        extraConditions.push(
-          eq(ornamentsItems.seriesOrCollection, seriesOrCollection),
-        );
-      }
-      if (year !== undefined) {
-        extraConditions.push(eq(ornamentsItems.year, year));
-      }
-      extraConditions.push(isNull(ornamentsItems.deletedAt));
-      const visibilityWhere = and(...(extraConditions as [SQL, ...SQL[]]))!;
-
       const rankedIds = await semanticCollectionSearch({
         query: q.trim(),
         table: ornamentsItems,
         textEmbeddingCol: "embedding",
         visualEmbeddingCol: "visual_embedding",
+        limit: 500,
         db,
-        visibilityWhere,
+        visibilityWhere: baseWhere,
         fetchDocuments: async (ids) => {
           const rows = await db
             .select(itemColumns)
             .from(ornamentsItems)
-            .where(
-              and(
-                inArray(ornamentsItems.id, ids),
-                isNull(ornamentsItems.deletedAt),
-              ),
-            );
-          return rows.map((r) => ({
-            id: r.id,
-            text: buildOrnamentSearchDocument(r),
+            .where(and(inArray(ornamentsItems.id, ids), baseWhere));
+          return rows.map((row) => ({
+            id: row.id,
+            text: buildOrnamentSearchDocument(row),
           }));
         },
       });
-
       if (rankedIds.length > 0) {
-        const filteredIds = catItemIds
-          ? rankedIds.filter((id) => catItemIds!.has(id))
-          : rankedIds;
-
-        const total = filteredIds.length;
-        const offset = (page - 1) * pageSize;
-        const pageIds = filteredIds.slice(offset, offset + pageSize);
-
-        if (pageIds.length === 0) {
-          res.json(
-            ListOrnamentsResponse.parse({
-              items: [],
-              total,
-              page,
-              pageSize,
-              searchMode: "semantic",
-            }),
-          );
-          return;
-        }
-
-        const pageRows = await db
-          .select(itemColumns)
-          .from(ornamentsItems)
-          .where(
-            and(
-              inArray(ornamentsItems.id, pageIds),
-              isNull(ornamentsItems.deletedAt),
-            ),
-          );
-        const byId = new Map(pageRows.map((r) => [r.id, r]));
-        const orderedRows = pageIds
-          .filter((id) => byId.has(id))
-          .map((id) => byId.get(id)!);
+        const total = rankedIds.length;
+        const pageIds = rankedIds.slice(offset, offset + pageSize);
+        const rows = pageIds.length
+          ? await db
+              .select(itemColumns)
+              .from(ornamentsItems)
+              .where(and(inArray(ornamentsItems.id, pageIds), baseWhere))
+          : [];
+        const byId = new Map(rows.map((row) => [row.id, row]));
+        const orderedRows = pageIds.flatMap((id) => {
+          const row = byId.get(id);
+          return row ? [row] : [];
+        });
         const items = await serializeItems(orderedRows);
+        const metaWhere = rankedIds.length
+          ? and(inArray(ornamentsItems.id, rankedIds), baseWhere)!
+          : baseWhere;
+        const meta = await ornamentListMeta(metaWhere, total, pageSize);
         res.json(
           ListOrnamentsResponse.parse({
             items,
             total,
             page,
             pageSize,
+            totalPages: total === 0 ? 1 : Math.ceil(total / pageSize),
             searchMode: "semantic",
+            facets: meta.facets,
+            stats: meta.stats,
           }),
         );
         return;
       }
-    } catch {
-      // Semantic search unavailable (embeddings missing/AI down) — fall through to ILIKE.
+    } catch (err) {
+      logger.warn(
+        { err },
+        "ornaments: semantic search unavailable; using keyword search",
+      );
     }
-  }
 
-  // ILIKE fallback: plain text match on name/series/brand/notes.
-  const conditions: SQL<unknown>[] = [];
-  if (q && q.trim()) {
-    const term = `%${q.trim().toLowerCase()}%`;
+    const term = `%${q.trim()}%`;
     conditions.push(
       or(
         ilike(ornamentsItems.name, term),
@@ -271,60 +341,33 @@ router.get("/items", async (req, res) => {
       )!,
     );
   }
-  if (seriesOrCollection) {
-    conditions.push(eq(ornamentsItems.seriesOrCollection, seriesOrCollection));
-  }
-  if (year !== undefined) {
-    conditions.push(eq(ornamentsItems.year, year));
-  }
 
-  if (categoryId !== undefined) {
-    const catRows = await db
-      .select({ itemId: itemCategories.itemId })
-      .from(itemCategories)
-      .where(eq(itemCategories.categoryId, categoryId));
-    const itemIdsForCategory = catRows.map((r) => r.itemId);
-    if (itemIdsForCategory.length === 0) {
-      res.json(
-        ListOrnamentsResponse.parse({
-          items: [],
-          total: 0,
-          page,
-          pageSize,
-          searchMode: "keyword",
-        }),
-      );
-      return;
-    }
-    conditions.push(inArray(ornamentsItems.id, itemIdsForCategory));
-  }
-
-  // Always exclude soft-deleted items.
-  conditions.push(isNull(ornamentsItems.deletedAt));
-  const where = and(...(conditions as [SQL, ...SQL[]]));
-
+  const where = and(...(conditions as [SQL, ...SQL[]]))!;
   const [{ value: total }] = await db
     .select({ value: count() })
     .from(ornamentsItems)
     .where(where);
-
-  const offset = (page - 1) * pageSize;
   const rows = await db
     .select(itemColumns)
     .from(ornamentsItems)
     .where(where)
-    .orderBy(desc(ornamentsItems.createdAt))
+    .orderBy(...ornamentOrder(sort as OrnamentSort))
     .limit(pageSize)
     .offset(offset);
-
-  const items = await serializeItems(rows);
+  const [items, meta] = await Promise.all([
+    serializeItems(rows),
+    ornamentListMeta(where, Number(total), pageSize),
+  ]);
   res.json(
     ListOrnamentsResponse.parse({
       items,
-      total,
+      total: Number(total),
       page,
       pageSize,
+      totalPages: Number(total) === 0 ? 1 : Math.ceil(Number(total) / pageSize),
       searchMode: "keyword",
+      facets: meta.facets,
+      stats: meta.stats,
     }),
   );
 });

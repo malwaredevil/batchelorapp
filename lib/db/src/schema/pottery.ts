@@ -91,7 +91,7 @@ export type InsertPotteryItem = typeof potteryItems.$inferInsert;
 export const potteryCategories = pgTable("pottery_categories", {
   id: serial("id").primaryKey(),
   userId: integer("user_id"),
-  name: text("name").notNull(),
+  name: text("name").notNull().unique(),
   bgColor: text("bg_color"),
   textColor: text("text_color"),
   createdAt: timestamp("created_at", { withTimezone: true })

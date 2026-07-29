@@ -32,7 +32,8 @@
     "docs:route-audit": "tsx ./src/docs/route-audit.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "tsx ./src/pii-scan.test.ts",
-    "secret-audit": "python3 ../.local/secret-audit.py"
+    "secret-audit": "python3 ../.local/secret-audit.py",
+    "docs:test": "tsx ./src/docs/generate.test.ts"
   },
   "dependencies": {
     "@types/libsodium-wrappers": "^0.8.2",

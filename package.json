@@ -7,12 +7,14 @@
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
-    "lint": "prettier --check . && pnpm --filter @workspace/scripts run check-raw-fetch",
+    "lint": "pnpm run format:check && pnpm run lint:semantic && pnpm --filter @workspace/scripts run check-raw-fetch",
     "lint:fix": "prettier --write .",
     "prepare": "husky",
     "test:e2e": "playwright test --project=chromium-critical",
     "test:a11y": "playwright test --project=accessibility",
-    "test:visual": "playwright test --project=visual"
+    "test:visual": "playwright test --project=visual",
+    "format:check": "prettier --check .",
+    "lint:semantic": "eslint artifacts lib scripts --ext .ts,.tsx"
   },
   "private": true,
   "devDependencies": {
@@ -21,7 +23,10 @@
     "prettier": "^3.8.3",
     "typescript": "~5.9.3",
     "@axe-core/playwright": "^4.12.1",
-    "@playwright/test": "^1.61.1"
+    "@playwright/test": "^1.61.1",
+    "eslint": "^9.39.1",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "typescript-eslint": "^8.46.2"
   },
   "dependencies": {
     "@replit/connectors-sdk": "^0.4.1"

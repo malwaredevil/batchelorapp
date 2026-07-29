@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { webhookLimiter } from "../middleware/rateLimit";
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
   db,
   appUsers,
@@ -443,14 +443,26 @@ router.post(
       logger.error({ err }, "elaine-email: reply send failed");
     }
 
-    await db
+    const [saved] = await db
       .update(elaineEmailConversations)
       .set({
         messages: updatedHistory,
         lastMessageId: sentMessageId ?? conversation.lastMessageId,
+        version: conversation.version + 1,
         updatedAt: new Date(),
       })
-      .where(eq(elaineEmailConversations.id, conversation.id));
+      .where(
+        and(
+          eq(elaineEmailConversations.id, conversation.id),
+          eq(elaineEmailConversations.version, conversation.version),
+        ),
+      )
+      .returning({ id: elaineEmailConversations.id });
+    if (!saved) {
+      throw new Error(
+        "Email conversation changed during the turn; delivery will be retried",
+      );
+    }
 
     void markDeliveryProcessed(deliveryId);
     res.status(200).json({ ok: true });

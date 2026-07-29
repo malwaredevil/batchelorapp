@@ -45,6 +45,7 @@ import {
 } from "./uploadSizeGuard";
 import {
   ELAINE_ATTACHMENT_FILE_BYTES,
+  STANDARD_IMAGE_BUCKET_FILE_BYTES,
   SUPABASE_BUCKET_FILE_BYTES,
   HIGH_UPLOAD_PREFIXES,
   multerLimitForPrefix,
@@ -460,14 +461,14 @@ describe("uploadSizeGuard middleware", () => {
 // Kept in a separate describe so the server afterEach lifecycle does not affect them.
 
 describe("uploadSizeGuard constants", () => {
-  it("exports DEFAULT_UPLOAD_BYTES = 101 MB and HIGH_UPLOAD_BYTES = 101 MB", () => {
-    expect(DEFAULT_UPLOAD_BYTES).toBe(101 * 1024 * 1024);
-    expect(HIGH_UPLOAD_BYTES).toBe(101 * 1024 * 1024);
+  it("exports 26 MB and 51 MB route-aware guard ceilings", () => {
+    expect(DEFAULT_UPLOAD_BYTES).toBe(26 * 1024 * 1024);
+    expect(HIGH_UPLOAD_BYTES).toBe(51 * 1024 * 1024);
   });
 
-  it("exports DEFAULT_MULTER_FILE_BYTES = 100 MB and HIGH_MULTER_FILE_BYTES = 100 MB", () => {
-    expect(DEFAULT_MULTER_FILE_BYTES).toBe(100 * 1024 * 1024);
-    expect(HIGH_MULTER_FILE_BYTES).toBe(100 * 1024 * 1024);
+  it("exports 25 MB standard and 50 MB high-cap multer ceilings", () => {
+    expect(DEFAULT_MULTER_FILE_BYTES).toBe(25 * 1024 * 1024);
+    expect(HIGH_MULTER_FILE_BYTES).toBe(50 * 1024 * 1024);
   });
 
   it("guard thresholds are each at least 1 MB above their per-route multer limits", () => {
@@ -505,11 +506,11 @@ describe("Supabase Storage bucket policy limits are within upload guard threshol
   // higher causes updateBucket to return "The object exceeded the maximum allowed
   // size", leaving bucket policies stale on every server restart.
 
-  it("SUPABASE_BUCKET_FILE_BYTES (50 MB) is within the default Express guard", () => {
-    expect(SUPABASE_BUCKET_FILE_BYTES).toBeLessThanOrEqual(
+  it("the image-only bucket limit is within the default Express guard", () => {
+    expect(STANDARD_IMAGE_BUCKET_FILE_BYTES).toBeLessThanOrEqual(
       DEFAULT_MULTER_FILE_BYTES,
     );
-    expect(SUPABASE_BUCKET_FILE_BYTES).toBeLessThanOrEqual(
+    expect(STANDARD_IMAGE_BUCKET_FILE_BYTES).toBeLessThanOrEqual(
       DEFAULT_UPLOAD_BYTES,
     );
   });

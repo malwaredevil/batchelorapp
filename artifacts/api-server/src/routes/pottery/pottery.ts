@@ -179,12 +179,18 @@ router.get("/items", async (req, res) => {
         table: potteryItems,
         textEmbeddingCol: "embedding",
         visualEmbeddingCol: "visual_embedding",
+        visibilityWhere: isNull(potteryItems.deletedAt),
         db,
         fetchDocuments: async (ids) => {
           const rows = await db
             .select(itemColumns)
             .from(potteryItems)
-            .where(inArray(potteryItems.id, ids));
+            .where(
+              and(
+                inArray(potteryItems.id, ids),
+                isNull(potteryItems.deletedAt),
+              ),
+            );
           return rows.map((r) => ({
             id: r.id,
             text: buildPotterySearchDocument(r),
@@ -211,7 +217,12 @@ router.get("/items", async (req, res) => {
         const pageRows = await db
           .select(itemColumns)
           .from(potteryItems)
-          .where(inArray(potteryItems.id, pageIds));
+          .where(
+            and(
+              inArray(potteryItems.id, pageIds),
+              isNull(potteryItems.deletedAt),
+            ),
+          );
         const byId = new Map(pageRows.map((r) => [r.id, r]));
         const orderedRows = pageIds
           .filter((id) => byId.has(id))

@@ -423,12 +423,13 @@ router.get("/fabrics", async (req, res) => {
         table: fabrics,
         textEmbeddingCol: "embedding",
         visualEmbeddingCol: "visual_embedding",
+        visibilityWhere: isNull(fabrics.deletedAt),
         db,
         fetchDocuments: async (ids) => {
           const rows = await db
             .select(fabricColumns)
             .from(fabrics)
-            .where(inArray(fabrics.id, ids));
+            .where(and(inArray(fabrics.id, ids), isNull(fabrics.deletedAt)));
           return rows.map((r) => ({
             id: r.id,
             text: buildFabricSearchDocument(
@@ -452,7 +453,7 @@ router.get("/fabrics", async (req, res) => {
         const pageRows = await db
           .select(fabricColumns)
           .from(fabrics)
-          .where(inArray(fabrics.id, pageIds));
+          .where(and(inArray(fabrics.id, pageIds), isNull(fabrics.deletedAt)));
         const byId = new Map(pageRows.map((r) => [r.id, r]));
         const orderedRows = pageIds
           .filter((id) => byId.has(id))
@@ -533,7 +534,7 @@ router.get("/fabrics/:id/pairings", async (req, res) => {
     const rows = await db.execute<RankedRow>(sql`
       select id, 1 - (embedding <=> ${vec}::vector) as similarity
       from quilting_fabrics
-      where embedding is not null and id != ${id}
+      where embedding is not null and deleted_at is null and id != ${id}
       order by embedding <=> ${vec}::vector
       limit 20
     `);
@@ -550,7 +551,7 @@ router.get("/fabrics/:id/pairings", async (req, res) => {
     const rows = await db.execute<RankedRow>(sql`
       select id, 1 - (visual_embedding <=> ${vec}::vector) as similarity
       from quilting_fabrics
-      where visual_embedding is not null and id != ${id}
+      where visual_embedding is not null and deleted_at is null and id != ${id}
       order by visual_embedding <=> ${vec}::vector
       limit 20
     `);

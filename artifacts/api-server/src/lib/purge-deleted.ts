@@ -6,7 +6,7 @@
  * and DB in sync. If storage deletion fails for a row, that row is skipped and
  * logged — it will be retried on the next purge run.
  */
-import { and, isNotNull, lt, inArray } from "drizzle-orm";
+import { and, eq, isNotNull, lt, inArray } from "drizzle-orm";
 import {
   db,
   potteryItems,
@@ -52,9 +52,29 @@ async function removeStoragePaths(
   if (error) {
     logger.warn(
       { bucket, paths: valid, error },
-      "Storage removal partial failure",
+      "Storage removal failed; retaining database rows for retry",
+    );
+    throw new Error(
+      `Storage removal failed for ${bucket}: ${error.message ?? String(error)}`,
     );
   }
+}
+
+type QuiltingEntityType = "fabric" | "pattern" | "quilt";
+
+/**
+ * Polymorphic quilting images are identified by BOTH entity type and entity ID.
+ * Never query or delete these rows using entityId alone because independent
+ * sequences allow the same numeric ID to exist for a fabric, pattern, and quilt.
+ */
+function quiltingImagesWhere(
+  entityType: QuiltingEntityType,
+  entityIds: number[],
+) {
+  return and(
+    eq(quiltingImages.entityType, entityType),
+    inArray(quiltingImages.entityId, entityIds),
+  );
 }
 
 export type PurgeSummary = {
@@ -131,14 +151,12 @@ export async function purgeDeletedItems(): Promise<PurgeSummary> {
       const suppImages = await db
         .select({ storagePath: quiltingImages.storagePath })
         .from(quiltingImages)
-        .where(inArray(quiltingImages.entityId, ids));
+        .where(quiltingImagesWhere("fabric", ids));
       await removeStoragePaths("quilting", [
         ...rows.map((r) => r.imagePath),
         ...suppImages.map((i) => i.storagePath),
       ]);
-      await db
-        .delete(quiltingImages)
-        .where(inArray(quiltingImages.entityId, ids));
+      await db.delete(quiltingImages).where(quiltingImagesWhere("fabric", ids));
       await db.delete(fabrics).where(inArray(fabrics.id, ids));
       summary.fabrics = rows.length;
     }
@@ -160,10 +178,17 @@ export async function purgeDeletedItems(): Promise<PurgeSummary> {
       );
     if (rows.length > 0) {
       const ids = rows.map((r) => r.id);
-      await removeStoragePaths(
-        "quilting",
-        rows.map((r) => r.imagePath),
-      );
+      const suppImages = await db
+        .select({ storagePath: quiltingImages.storagePath })
+        .from(quiltingImages)
+        .where(quiltingImagesWhere("pattern", ids));
+      await removeStoragePaths("quilting", [
+        ...rows.map((r) => r.imagePath),
+        ...suppImages.map((i) => i.storagePath),
+      ]);
+      await db
+        .delete(quiltingImages)
+        .where(quiltingImagesWhere("pattern", ids));
       await db.delete(quiltPatterns).where(inArray(quiltPatterns.id, ids));
       summary.quiltPatterns = rows.length;
     }
@@ -188,14 +213,12 @@ export async function purgeDeletedItems(): Promise<PurgeSummary> {
       const suppImages = await db
         .select({ storagePath: quiltingImages.storagePath })
         .from(quiltingImages)
-        .where(inArray(quiltingImages.entityId, ids));
+        .where(quiltingImagesWhere("quilt", ids));
       await removeStoragePaths("quilting", [
         ...rows.map((r) => r.imagePath),
         ...suppImages.map((i) => i.storagePath),
       ]);
-      await db
-        .delete(quiltingImages)
-        .where(inArray(quiltingImages.entityId, ids));
+      await db.delete(quiltingImages).where(quiltingImagesWhere("quilt", ids));
       await db.delete(finishedQuilts).where(inArray(finishedQuilts.id, ids));
       summary.finishedQuilts = rows.length;
     }

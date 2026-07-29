@@ -1,0 +1,50 @@
+name: Agent PR1 remediation
+
+on:
+  push:
+    branches:
+      - agent/data-integrity-and-record-visibility
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: agent/data-integrity-and-record-visibility
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          version: 10
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Apply remediation patch
+        run: python .github/agent-remediation/pr1_apply.py
+      - name: Remove one-shot automation
+        run: rm .github/agent-remediation/pr1_apply.py .github/workflows/agent-remediation-pr1.yml
+      - run: pnpm install --frozen-lockfile
+      - name: Format changed files
+        run: |
+          pnpm exec prettier --write \
+            artifacts/api-server/src/lib/purge-deleted.ts \
+            artifacts/api-server/src/lib/purge-deleted.test.ts \
+            artifacts/api-server/src/lib/collection-search.ts \
+            artifacts/api-server/src/lib/collection-search-visibility.test.ts \
+            artifacts/api-server/src/routes/pottery/pottery.ts \
+            artifacts/api-server/src/routes/pottery/compare.ts \
+            artifacts/api-server/src/routes/ornaments/ornaments.ts \
+            artifacts/api-server/src/routes/quilting/fabrics.ts \
+            artifacts/api-server/src/routes/quilting/compare.ts
+      - run: pnpm run typecheck
+      - run: pnpm --filter @workspace/api-server run test
+      - name: Commit validated changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix data integrity and record visibility"
+          git push origin HEAD:agent/data-integrity-and-record-visibility

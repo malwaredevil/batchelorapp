@@ -37,9 +37,10 @@ const { capturedQueries, mockQueryFn, mockHandlerFn } = vi.hoisted(() => {
   const mockQueryFn = vi.fn(async (sql: string, params: unknown[] = []) => {
     capturedQueries.push({ sql, params });
     if (sql.includes("RETURNING id, type, payload")) {
-      return { rows: [defaultJob] };
+      return { rows: [{ ...defaultJob, lease_owner: "worker-test" }] };
     }
-    return { rows: [], rowCount: 0 };
+    if (sql.includes("RETURNING id")) return { rows: [{ id: 1 }], rowCount: 1 };
+    return { rows: [], rowCount: 1 };
   });
 
   const mockHandlerFn = vi.fn().mockResolvedValue(undefined);
@@ -131,9 +132,11 @@ describe("worker — stale running-job lease recovery", () => {
       async (sql: string, params: unknown[] = []) => {
         capturedQueries.push({ sql, params });
         if (sql.includes("RETURNING id, type, payload")) {
-          return { rows: [defaultJob] };
+          return { rows: [{ ...defaultJob, lease_owner: "worker-test" }] };
         }
-        return { rows: [], rowCount: 0 };
+        if (sql.includes("RETURNING id"))
+          return { rows: [{ id: 1 }], rowCount: 1 };
+        return { rows: [], rowCount: 1 };
       },
     );
 
@@ -193,9 +196,11 @@ describe("worker — stale running-job lease recovery", () => {
       async (sql: string, params: unknown[] = []) => {
         capturedQueries.push({ sql, params });
         if (sql.includes("RETURNING id, type, payload")) {
-          return { rows: [exhaustedJob] };
+          return { rows: [{ ...exhaustedJob, lease_owner: "worker-test" }] };
         }
-        return { rows: [], rowCount: 0 };
+        if (sql.includes("RETURNING id"))
+          return { rows: [{ id: 1 }], rowCount: 1 };
+        return { rows: [], rowCount: 1 };
       },
     );
     mockHandlerFn.mockRejectedValueOnce(new Error("final failure"));
@@ -210,5 +215,16 @@ describe("worker — stale running-job lease recovery", () => {
       deadLetterQuery,
       "markFailed must set status = dead_letter when attempts exhausted",
     ).toBeDefined();
+  });
+
+  it("fences progress and completion writes by lease owner", async () => {
+    await runOneWorkerCycle();
+    const ownedWrites = capturedQueries.filter((q) =>
+      q.sql.includes("lease_owner = $2"),
+    );
+    expect(ownedWrites.length).toBeGreaterThan(0);
+    expect(
+      capturedQueries.some((q) => q.sql.includes("app_job_attempts")),
+    ).toBe(true);
   });
 });

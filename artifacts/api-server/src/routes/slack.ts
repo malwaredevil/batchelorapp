@@ -1,7 +1,8 @@
+import { createHash } from "node:crypto";
 import { Router, type IRouter, type Request, type Response } from "express";
 import { webhookLimiter } from "../middleware/rateLimit";
 import { eq } from "drizzle-orm";
-import { db, appUsers, slackWebhookDeliveries } from "@workspace/db";
+import { db, pool, appUsers } from "@workspace/db";
 import { logger } from "../lib/logger";
 import {
   verifySlackSignature,
@@ -9,7 +10,7 @@ import {
   getSlackUserEmail,
   postSlashCommandResponse,
 } from "../lib/slack";
-import { enqueueJob } from "../lib/jobs/queue";
+import { enqueueJob, enqueueJobWithQuery } from "../lib/jobs/queue";
 import { env } from "../lib/env";
 
 // ---------------------------------------------------------------------------
@@ -30,35 +31,60 @@ import { env } from "../lib/env";
 
 const router: IRouter = Router();
 
-// Returns true when err looks like a PostgreSQL unique-constraint violation
-// or an equivalent ORM-level duplicate-key error.
-function isDuplicateKeyError(err: unknown): boolean {
-  if (!(err instanceof Error)) return false;
-  const pgErr = err as Error & { code?: string; cause?: unknown };
-  if (pgErr.code === "23505") return true;
-  const cause = pgErr.cause as { code?: string; message?: string } | undefined;
-  if (cause?.code === "23505") return true;
-  const msg = err.message.toLowerCase();
-  const causeMsg = (
-    typeof cause?.message === "string" ? cause.message : ""
-  ).toLowerCase();
-  return (
-    msg.includes("unique") ||
-    msg.includes("duplicate key") ||
-    causeMsg.includes("unique") ||
-    causeMsg.includes("duplicate key")
-  );
-}
-
-// Records the Slack event_id before any side effect so retried deliveries
-// (Slack retries up to 3 times via X-Slack-Retry-Num) are no-ops.
-async function claimDelivery(id: string): Promise<boolean> {
+// Atomically claim a Slack delivery and enqueue its job. A stale processing
+// claim can be recovered after five minutes; enqueued/processed deliveries are
+// permanent duplicates. The delivery row and app_jobs row commit together.
+async function enqueueSlackDelivery(input: {
+  eventId: string;
+  userId: number;
+  inputText: string;
+  channelId: string;
+}): Promise<"enqueued" | "duplicate"> {
+  const client = await pool.connect();
   try {
-    await db.insert(slackWebhookDeliveries).values({ id });
-    return true;
+    await client.query("BEGIN");
+    const claim = await client.query<{ id: string }>(
+      `INSERT INTO slack_webhook_deliveries (id, status, received_at)
+       VALUES ($1, 'processing', now())
+       ON CONFLICT (id) DO UPDATE
+         SET status = 'processing', received_at = now(), last_error = NULL
+         WHERE slack_webhook_deliveries.status = 'processing'
+           AND slack_webhook_deliveries.received_at < now() - interval '5 minutes'
+       RETURNING id`,
+      [input.eventId],
+    );
+    if (claim.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return "duplicate";
+    }
+
+    const jobId = await enqueueJobWithQuery(
+      (query, values) => client.query<{ id: number }>(query, values),
+      {
+        type: "slack.turn",
+        payload: {
+          userId: input.userId,
+          slackEventId: input.eventId,
+          inputText: input.inputText || "(empty message)",
+          channelId: input.channelId,
+        },
+        idempotencyKey: input.eventId,
+        createdByUserId: input.userId,
+      },
+    );
+    await client.query(
+      `UPDATE slack_webhook_deliveries
+       SET status = 'enqueued', job_id = $2, last_error = NULL
+       WHERE id = $1`,
+      [input.eventId, jobId],
+    );
+    await client.query("COMMIT");
+    return "enqueued";
   } catch (err) {
-    if (isDuplicateKeyError(err)) return false;
+    await client.query("ROLLBACK").catch(() => undefined);
     throw err;
+  } finally {
+    client.release();
   }
 }
 
@@ -138,21 +164,6 @@ router.post("/webhook", webhookLimiter, async (req: Request, res: Response) => {
     return;
   }
 
-  // Dedup before any side effect runs. Slack retries on slow/failed responses.
-  let claimed: boolean;
-  try {
-    claimed = await claimDelivery(eventId);
-  } catch (err) {
-    logger.error({ err, eventId }, "slack: dedup DB error — failing closed");
-    res.status(503).json({ error: "Service unavailable" });
-    return;
-  }
-  if (!claimed) {
-    logger.warn({ eventId }, "slack: duplicate event delivery rejected");
-    res.json({ ok: true });
-    return;
-  }
-
   const event = (body?.event ?? {}) as Record<string, unknown>;
   const evType = typeof event.type === "string" ? event.type : "";
   const channelType =
@@ -205,27 +216,31 @@ router.post("/webhook", webhookLimiter, async (req: Request, res: Response) => {
   // but we never reach here for duplicates because claimDelivery returned
   // false above and we already exited.
   try {
-    await enqueueJob({
-      type: "slack.turn",
-      payload: {
-        userId: user.id,
-        slackEventId: eventId,
-        inputText: messageText || "(empty message)",
-        channelId,
-      },
-      idempotencyKey: eventId,
-      createdByUserId: user.id,
+    const result = await enqueueSlackDelivery({
+      eventId,
+      userId: user.id,
+      inputText: messageText,
+      channelId,
     });
+    if (result === "duplicate") {
+      logger.warn({ eventId }, "slack: duplicate event delivery rejected");
+      res.json({ ok: true, duplicate: true });
+      return;
+    }
     logger.info(
       { eventId, slackUserId, channelId, userId: user.id },
       "slack: DM enqueued",
     );
+    res.json({ ok: true });
   } catch (err) {
-    logger.error({ err, eventId }, "slack: failed to enqueue turn job");
-    // Still ack 200 — Slack would retry otherwise and hit the dedup guard.
+    logger.error(
+      { err, eventId },
+      "slack: failed to atomically enqueue turn job",
+    );
+    // A 5xx lets Slack retry. The transaction rolled back the delivery claim,
+    // so the retry can safely claim and enqueue the same event.
+    res.status(503).json({ error: "Service unavailable" });
   }
-
-  res.json({ ok: true });
 });
 
 // ---------------------------------------------------------------------------
@@ -245,6 +260,7 @@ router.post("/slash", webhookLimiter, async (req: Request, res: Response) => {
     user_id?: string;
     response_url?: string;
     channel_id?: string;
+    trigger_id?: string;
   };
 
   const slackUserId = slashBody.user_id ?? "";
@@ -277,11 +293,15 @@ router.post("/slash", webhookLimiter, async (req: Request, res: Response) => {
     return;
   }
 
-  // Use a deterministic idempotency key so rapid double-submits don't fan out.
-  // Slash commands don't have a stable event_id, so we use slackUserId + a
-  // minute-bucketed timestamp to deduplicate within a 60-second window.
-  const minuteBucket = Math.floor(Date.now() / 60_000);
-  const idempotencyKey = `slash:${slackUserId}:${minuteBucket}`;
+  // Slack trigger_id uniquely identifies one slash-command invocation. For
+  // defensive compatibility, fall back to a hash of the authenticated raw body.
+  const rawBody = (req as Request & { rawBody?: Buffer }).rawBody;
+  const requestIdentity = slashBody.trigger_id
+    ? slashBody.trigger_id
+    : createHash("sha256")
+        .update(rawBody ?? Buffer.from(`${slackUserId}:${inputText}`))
+        .digest("hex");
+  const idempotencyKey = `slash:${requestIdentity}`;
 
   // Acknowledge immediately with a brief ephemeral message. The LLM turn
   // result is posted via response_url once the worker picks up the job.

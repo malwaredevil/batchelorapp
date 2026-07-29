@@ -52,6 +52,24 @@ jobs:
         run: |
           rm .github/agent-remediation/pr3_apply.py .github/workflows/agent-remediation-pr3.yml
           rm -f .github/agent-remediation/trigger-pr3.txt
+      - name: Repair generated test quoting
+        if: steps.apply.outputs.status == '0'
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("artifacts/api-server/src/lib/startup-readiness.test.ts")
+          text = path.read_text()
+          text = text.replace(
+              'indexOf("startJobWorker("slack")")',
+              "indexOf('startJobWorker(\"slack\")')",
+          )
+          text = text.replace(
+              'indexOf("startJobWorker("maintenance")")',
+              "indexOf('startJobWorker(\"maintenance\")')",
+          )
+          path.write_text(text)
+          PY
       - name: Install dependencies
         if: steps.apply.outputs.status == '0'
         run: pnpm install --frozen-lockfile

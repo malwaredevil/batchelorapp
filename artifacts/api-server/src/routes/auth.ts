@@ -1,7 +1,7 @@
 import { Router, type IRouter, type Request } from "express";
 import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
-import { eq, and, gt, isNull, desc, sql } from "drizzle-orm";
+import { eq, and, gt, lt, isNull, desc, sql } from "drizzle-orm";
 import {
   db,
   pool,

@@ -150,6 +150,7 @@ const ALLOWED_DOT_NAMES = new Set([
   ".prettierignore", // prettier exclusions
   ".lintstagedrc.json", // lint-staged config (pre-commit hook)
   ".editorconfig", // editor indent/whitespace config
+  ".generated", // Vite plugin generated stubs (e.g. mockup-sandbox component map)
 ]);
 // Dotfile directories that are Replit-internal and must never appear on GitHub.
 // These are skipped by collectFiles (dotfile guard) so they never appear in

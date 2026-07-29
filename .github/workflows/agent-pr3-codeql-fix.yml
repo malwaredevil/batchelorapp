@@ -72,12 +72,14 @@ jobs:
               report_path.write_text(report.rstrip() + '\n' + remediation)
           PY
 
-      - name: Install dependencies
+      - name: Install pnpm
         uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
+        with:
+          version: 10
       - name: Set up Node
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
         with:
-          node-version: 22
+          node-version: 24
           cache: pnpm
       - name: Validate fix
         run: |

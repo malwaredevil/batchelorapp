@@ -1,14 +1,24 @@
 import type { Request, Response, NextFunction } from "express";
+import { env } from "../lib/env";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
-/**
- * Because session cookies are SameSite=None (required for the embedded preview
- * iframe and cross-context use), we defend against CSRF by requiring that any
- * state-changing request whose browser sends an Origin header has an Origin
- * matching the request Host. Browsers always send Origin on cross-site POSTs,
- * so a forged cross-site request is rejected here.
- */
+function allowedOriginHosts(req: Request): Set<string> {
+  const hosts = new Set(env.replitDomains);
+  if (env.publicAppUrl) {
+    try {
+      hosts.add(new URL(env.publicAppUrl).host);
+    } catch {
+      // Environment validation reports malformed URLs separately.
+    }
+  }
+  if (!env.isProduction) {
+    const host = req.get("host");
+    if (host) hosts.add(host);
+  }
+  return hosts;
+}
+
 export function csrfGuard(
   req: Request,
   res: Response,
@@ -20,7 +30,16 @@ export function csrfGuard(
   }
 
   const origin = req.get("origin");
+  const hasSessionIdentity = Boolean(req.session?.userId);
+
+  // Signed non-browser webhooks do not carry the application session cookie and
+  // are authenticated by their own HMAC middleware. Session-authenticated state
+  // changes must always provide Origin because the cookie is SameSite=None.
   if (!origin) {
+    if (hasSessionIdentity) {
+      res.status(403).json({ error: "Origin header required" });
+      return;
+    }
     next();
     return;
   }
@@ -33,8 +52,7 @@ export function csrfGuard(
     return;
   }
 
-  const host = req.get("host");
-  if (originHost !== host) {
+  if (!allowedOriginHosts(req).has(originHost)) {
     res.status(403).json({ error: "Cross-origin request blocked" });
     return;
   }

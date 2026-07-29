@@ -10,91 +10,93 @@ import { startErrorRateSummary } from "./lib/error-tracker";
 import { startBirthdayScheduler } from "./lib/birthday-scheduler";
 import { startMonitoringScheduler } from "./lib/monitoring-scheduler";
 import { startJobWorker, stopAllJobWorkers } from "./lib/jobs/worker";
+import {
+  markBucketsReady,
+  markMigrationReady,
+  markStartupFailed,
+  markStartupReady,
+} from "./lib/startup-state";
 
 const rawPort = process.env["PORT"];
-
-if (!rawPort) {
+if (!rawPort)
   throw new Error(
     "PORT environment variable is required but was not provided.",
   );
-}
-
 const port = Number(rawPort);
-
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-function startListening(): void {
-  const server = app.listen(port, (err) => {
-    if (err) {
-      logger.error({ err }, "Error listening on port");
-      process.exit(1);
-    }
+const stopSchedulers: Array<() => void> = [];
+let shuttingDown = false;
 
-    logger.info({ port }, "Server listening");
-    const stopSchedulers = [
-      startReminderScheduler(),
-      startNudgeScheduler(),
-      startCalendarTripScanScheduler(),
-      startGmailScanScheduler(),
-      startErrorRateSummary(),
-      startBirthdayScheduler(),
-      startMonitoringScheduler(),
-    ];
-    // Dedicated worker for Slack AI turns — keeps Slack processing isolated
-    // from other job queues so a burst of DMs cannot starve other work.
-    startJobWorker("slack");
-    // Maintenance queue: low-priority housekeeping jobs (storage reconcile,
-    // retention aggregation, etc.) — separate from Slack so bulk scans don't
-    // starve chat responses.
-    startJobWorker("maintenance");
+const server = app.listen(port, () => {
+  logger.info({ port }, "Server listening; startup initialization in progress");
+  void initializeRuntime();
+});
 
-    function shutdown(signal: string): void {
-      logger.info({ signal }, "shutdown: stopping schedulers and workers...");
-      for (const stop of stopSchedulers) stop();
-      void stopAllJobWorkers().catch((err) =>
-        logger.warn({ err }, "shutdown: error stopping job workers"),
-      );
-      logger.info({ signal }, "shutdown: draining open connections...");
-      server.close(() => {
-        logger.info("shutdown: server closed, exiting cleanly");
-        process.exit(0);
-      });
-      // Force exit if connections don't drain within 15 s.
-      setTimeout(() => {
-        logger.warn(
-          "shutdown: force-exit after 15 s drain timeout (connections still open)",
-        );
-        process.exit(0);
-      }, 15_000).unref();
-    }
+server.on("error", (err) => {
+  logger.error({ err }, "Error listening on port");
+  process.exit(1);
+});
 
-    process.on("SIGTERM", () => shutdown("SIGTERM"));
-    process.on("SIGINT", () => shutdown("SIGINT"));
-  });
+async function initializeRuntime(): Promise<void> {
+  try {
+    await runStartupMigration();
+    markMigrationReady();
+  } catch (err) {
+    markStartupFailed("migration", "migration_failed");
+    logger.error(
+      { err },
+      "startup: migration failed; readiness remains unavailable",
+    );
+    return;
+  }
+
+  try {
+    await provisionAllBuckets();
+    markBucketsReady();
+  } catch (err) {
+    markStartupFailed("buckets", "bucket_provisioning_failed");
+    logger.error(
+      { err },
+      "startup: bucket provisioning failed; readiness remains unavailable",
+    );
+    return;
+  }
+
+  markStartupReady();
+  stopSchedulers.push(
+    startReminderScheduler(),
+    startNudgeScheduler(),
+    startCalendarTripScanScheduler(),
+    startGmailScanScheduler(),
+    startErrorRateSummary(),
+    startBirthdayScheduler(),
+    startMonitoringScheduler(),
+  );
+  startJobWorker("slack");
+  startJobWorker("maintenance");
+  logger.info("startup: runtime ready; schedulers and workers started");
 }
 
-// Open the port immediately so Replit's port-open watchdog does not kill the
-// process while startup work is in flight.  Both operations are explicitly
-// non-fatal: startup-migrate is idempotent (IF NOT EXISTS DDL) and tables
-// already exist after bootstrap; bucket provisioning only affects storage
-// write paths.  Running them after listen means a request arriving in the
-// first few seconds might hit a missing table, but in practice the scheduler
-// guard and job worker already handle that gracefully (they log and skip).
-// Waiting for them before listen caused ~30 s delays when connecting to a
-// remote Supabase (EU) over a high-latency Replit→EU pooler path, consistently
-// exceeding Replit's 60 s port-open watchdog timeout.
-startListening();
-runStartupMigration().catch((err) => {
-  logger.error(
-    { err },
-    "Startup migration threw unexpectedly — server already listening",
+function shutdown(signal: string): void {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logger.info({ signal }, "shutdown: stopping schedulers and workers...");
+  for (const stop of stopSchedulers) stop();
+  void stopAllJobWorkers().catch((err) =>
+    logger.warn({ err }, "shutdown: error stopping job workers"),
   );
-});
-provisionAllBuckets().catch((err) => {
-  logger.error(
-    { err },
-    "Bucket provisioning threw unexpectedly — server already listening without guaranteed bucket policies",
-  );
-});
+  server.close(() => {
+    logger.info("shutdown: server closed, exiting cleanly");
+    process.exit(0);
+  });
+  setTimeout(() => {
+    logger.warn("shutdown: force-exit after 15 s drain timeout");
+    process.exit(0);
+  }, 15_000).unref();
+}
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));

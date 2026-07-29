@@ -71,11 +71,7 @@ async function setupKeepaliveCron(): Promise<void> {
 }
 
 export async function runStartupMigration(): Promise<void> {
-  const client = await pool.connect().catch((err) => {
-    logger.warn({ err }, "startup-migrate: could not connect to DB — skipping");
-    return null;
-  });
-  if (!client) return;
+  const client = await pool.connect();
 
   logger.info("startup-migrate: running idempotent table check");
 
@@ -134,10 +130,8 @@ export async function runStartupMigration(): Promise<void> {
     );
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
-    logger.error(
-      { err },
-      "startup-migrate: migration failed — server will still start but some tables may be missing",
-    );
+    logger.error({ err }, "startup-migrate: migration failed");
+    throw err;
   } finally {
     client.release();
   }

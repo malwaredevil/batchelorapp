@@ -1,14 +1,17 @@
 import type { Request, Response, NextFunction } from "express";
 import { eq } from "drizzle-orm";
 import { appUsers, db } from "@workspace/db";
+import { getAuthenticatedUserId } from "../lib/auth-context";
 
 export async function requireOwner(
   req: Request,
   res: Response,
   next: NextFunction,
 ): Promise<void> {
-  const userId = req.session?.userId;
-  if (!userId) {
+  let userId: number;
+  try {
+    userId = getAuthenticatedUserId(req);
+  } catch {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }

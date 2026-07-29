@@ -85,30 +85,29 @@ Exit code: 2
 
 [1m[46m RUN [49m[22m [36mv3.2.6 [39m[90m/home/runner/work/batchelorapp/batchelorapp/artifacts/api-server[39m
 
- [32m✓[39m src/lib/app-config-bootstrap.test.ts [2m([22m[2m23 tests[22m[2m)[22m[33m 1044[2mms[22m[39m
-   [33m[2m✓[22m[39m rowNeedsLabelSync() — drift predicate[2m > [22mreturns true when the row's label differs from the default [33m 978[2mms[22m[39m
- [32m✓[39m src/lib/app-config-drift.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 240[2mms[22m[39m
- [32m✓[39m src/routes/config.test.ts [2m([22m[2m45 tests[22m[2m)[22m[33m 1197[2mms[22m[39m
-   [33m[2m✓[22m[39m bootstrapDefaults — step coverage and error classification[2m > [22mcalls db.delete, db.insert, and db.update during bootstrap [33m 877[2mms[22m[39m
- [32m✓[39m src/routes/agentphone.test.ts [2m([22m[2m29 tests[22m[2m)[22m[33m 1053[2mms[22m[39m
+ [32m✓[39m src/lib/app-config-bootstrap.test.ts [2m([22m[2m23 tests[22m[2m)[22m[33m 726[2mms[22m[39m
+   [33m[2m✓[22m[39m rowNeedsLabelSync() — drift predicate[2m > [22mreturns true when the row's label differs from the default [33m 664[2mms[22m[39m
+ [32m✓[39m src/lib/app-config-drift.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 135[2mms[22m[39m
+ [32m✓[39m src/routes/config.test.ts [2m([22m[2m45 tests[22m[2m)[22m[33m 815[2mms[22m[39m
+   [33m[2m✓[22m[39m bootstrapDefaults — step coverage and error classification[2m > [22mcalls db.delete, db.insert, and db.update during bootstrap [33m 587[2mms[22m[39m
+ [32m✓[39m src/routes/agentphone.test.ts [2m([22m[2m29 tests[22m[2m)[22m[33m 668[2mms[22m[39m
 [90mstdout[2m | src/routes/upload-rejection.test.ts[2m > [22m[2mTravels POST /api/travels/trips/:id/documents — upload rejection[2m > [22m[2maccepts a valid PDF and returns 201
 [22m[39mWarning: Indexing all PDF objects
 
- [32m✓[39m src/routes/upload-rejection.test.ts [2m([22m[2m32 tests[22m[2m | [22m[33m4 skipped[39m[2m)[22m[33m 1439[2mms[22m[39m
- [32m✓[39m src/routes/supplemental-upload-rejection.test.ts [2m([22m[2m31 tests[22m[2m)[22m[33m 1321[2mms[22m[39m
- [32m✓[39m src/middleware/uploadSizeGuard.test.ts [2m([22m[2m16 tests[22m[2m | [22m[33m1 skipped[39m[2m)[22m[32m 262[2mms[22m[39m
-{"level":50,"time":1785318961116,"pid":2939,"hostname":"runnervmvrwv9","err":{"type":"Error","message":"gmail api down","stack":"Error: gmail api down\n    at /home/runner/work/batchelorapp/batchelorapp/artifacts/api-server/src/routes/travels/gmail.test.ts:638:30\n    at file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:155:11\n    at file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:752:26\n    at file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:1897:20\n    at new Promise (<anonymous>)\n    at runWithTimeout (file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:1863:10)\n    at runTest (file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:1574:12)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at runSuite (file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:1729:8)\n    at runSuite (file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:1729:8)"},"userId":42,"messageId":"msg-3","msg":"gmail: bulk-link failed for message"}
-{"level":50,"time":1785318961137,"pid":2939,"hostname":"runnervmvrwv9","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at /home/runner/work/batchelorapp/batchelorapp/artifacts/api-server/src/routes/travels/gmail.test.ts:765:40\n    at file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:155:11\n    at file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:752:26\n    at file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:1897:20\n    at new Promise (<anonymous>)\n    at runWithTimeout (file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:1863:10)\n    at runTest (file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:1574:12)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at runSuite (file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:1729:8)\n    at runSuite (file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:1729:8)"},"userId":42,"msg":"gmail: manual scan failed"}
- [32m✓[39m src/routes/travels/gmail.test.ts [2m([22m[2m35 tests[22m[2m)[22m[33m 950[2mms[22m[39m
- [32m✓[39m src/routes/elaine-email.test.ts [2m([22m[2m20 tests[22m[2m)[22m[33m 929[2mms[22m[39m
+ [32m✓[39m src/routes/upload-rejection.test.ts [2m([22m[2m32 tests[22m[2m | [22m[33m4 skipped[39m[2m)[22m[33m 933[2mms[22m[39m
+ [32m✓[39m src/routes/supplemental-upload-rejection.test.ts [2m([22m[2m31 tests[22m[2m)[22m[33m 975[2mms[22m[39m
+ [32m✓[39m src/middleware/uploadSizeGuard.test.ts [2m([22m[2m16 tests[22m[2m | [22m[33m1 skipped[39m[2m)[22m[32m 169[2mms[22m[39m
+{"level":50,"time":1785319553042,"pid":2703,"hostname":"runnervmvrwv9","err":{"type":"Error","message":"gmail api down","stack":"Error: gmail api down\n    at /home/runner/work/batchelorapp/batchelorapp/artifacts/api-server/src/routes/travels/gmail.test.ts:638:30\n    at file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:155:11\n    at file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:752:26\n    at file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:1897:20\n    at new Promise (<anonymous>)\n    at runWithTimeout (file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:1863:10)\n    at runTest (file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:1574:12)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at runSuite (file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:1729:8)\n    at runSuite (file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:1729:8)"},"userId":42,"messageId":"msg-3","msg":"gmail: bulk-link failed for message"}
+{"level":50,"time":1785319553066,"pid":2703,"hostname":"runnervmvrwv9","err":{"type":"Error","message":"boom","stack":"Error: boom\n    at /home/runner/work/batchelorapp/batchelorapp/artifacts/api-server/src/routes/travels/gmail.test.ts:765:40\n    at file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:155:11\n    at file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:752:26\n    at file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:1897:20\n    at new Promise (<anonymous>)\n    at runWithTimeout (file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:1863:10)\n    at runTest (file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:1574:12)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at runSuite (file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:1729:8)\n    at runSuite (file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:1729:8)"},"userId":42,"msg":"gmail: manual scan failed"}
+ [32m✓[39m src/routes/travels/gmail.test.ts [2m([22m[2m35 tests[22m[2m)[22m[33m 809[2mms[22m[39m
+ [32m✓[39m src/routes/elaine-email.test.ts [2m([22m[2m20 tests[22m[2m)[22m[33m 681[2mms[22m[39m
 [90mstderr[2m | src/lib/storage-reconcile.test.ts
 [22m[39mUsing an object as a third argument is deprecated. Vitest 4 will throw an error if the third argument is not a timeout number. Please use the second argument for options. See more at https://vitest.dev/guide/migration
 
- [32m✓[39m src/lib/storage-reconcile.test.ts [2m([22m[2m25 tests[22m[2m)[22m[32m 20[2mms[22m[39m
- [32m✓[39m src/lib/reminder-scheduler.test.ts [2m([22m[2m38 tests[22m[2m)[22m[32m 48[2mms[22m[39m
- [32m✓[39m src/routes/slack.test.ts [2m([22m[2m12 tests[22m[2m)[22m[33m 527[2mms[22m[39m
-   [33m[2m✓[22m[39m Slack webhook — job-queue path (#308)[2m > [22menqueues a slack.turn job for a valid inbound DM and returns 200 [33m 459[2mms[22m[39m
- [32m✓[39m src/routes/travels/documents.test.ts [2m([22m[2m20 tests[22m[2m)[22m[33m 909[2mms[22m[39m
+ [32m✓[39m src/lib/storage-reconcile.test.ts [2m([22m[2m25 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m src/lib/reminder-scheduler.test.ts [2m([22m[2m38 tests[22m[2m)[22m[32m 29[2mms[22m[39m
+ [32m✓[39m src/routes/slack.test.ts [2m([22m[2m12 tests[22m[2m)[22m[33m 340[2mms[22m[39m
+ [32m✓[39m src/routes/travels/documents.test.ts [2m([22m[2m20 tests[22m[2m)[22m[33m 623[2mms[22m[39m
 [90mstderr[2m | src/routes/auth.test.ts[2m > [22m[2mPOST /auth/change-password — #313 session-persistence preservation[2m > [22m[2mpreserves userId on the regenerated session
 [22m[39mError: DB error during UPDATE
     at Object.<anonymous> (/home/runner/work/batchelorapp/batchelorapp/artifacts/api-server/src/routes/auth.test.ts:323:13)
@@ -117,13 +116,13 @@ Exit code: 2
     at /home/runner/work/batchelorapp/batchelorapp/artifacts/api-server/src/routes/auth.ts:364:20
     at processTicksAndRejections (node:internal/process/task_queues:104:5)
 
- [32m✓[39m src/routes/auth.test.ts [2m([22m[2m7 tests[22m[2m)[22m[33m 1402[2mms[22m[39m
- [32m✓[39m src/elaine/update-app-config-action.test.ts [2m([22m[2m7 tests[22m[2m)[22m[33m 1844[2mms[22m[39m
- [32m✓[39m src/routes/messenger/link-preview.test.ts [2m([22m[2m9 tests[22m[2m)[22m[33m 910[2mms[22m[39m
- [32m✓[39m src/routes/pool-concurrency.test.ts [2m([22m[2m7 tests[22m[2m)[22m[33m 1546[2mms[22m[39m
- [32m✓[39m src/lib/jobs/worker.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 51[2mms[22m[39m
-{"level":50,"time":1785318965706,"pid":3167,"hostname":"runnervmvrwv9","err":{"type":"Error","message":"Resend API error","stack":"Error: Resend API error\n    at /home/runner/work/batchelorapp/batchelorapp/artifacts/api-server/src/routes/travels/settings.test.ts:366:7\n    at file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:155:11\n    at file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:752:26\n    at file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:1897:20\n    at new Promise (<anonymous>)\n    at runWithTimeout (file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:1863:10)\n    at runTest (file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:1574:12)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at runSuite (file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:1729:8)\n    at runSuite (file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:1729:8)"},"userId":42,"msg":"settings: test reminder email failed"}
- [32m✓[39m src/routes/travels/settings.test.ts [2m([22m[2m22 tests[22m[2m)[22m[33m 888[2mms[22m[39m
+ [32m✓[39m src/routes/auth.test.ts [2m([22m[2m7 tests[22m[2m)[22m[33m 891[2mms[22m[39m
+ [32m✓[39m src/elaine/update-app-config-action.test.ts [2m([22m[2m7 tests[22m[2m)[22m[33m 1095[2mms[22m[39m
+ [32m✓[39m src/routes/messenger/link-preview.test.ts [2m([22m[2m9 tests[22m[2m)[22m[33m 549[2mms[22m[39m
+ [32m✓[39m src/routes/pool-concurrency.test.ts [2m([22m[2m7 tests[22m[2m)[22m[33m 1135[2mms[22m[39m
+ [32m✓[39m src/lib/jobs/worker.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 27[2mms[22m[39m
+{"level":50,"time":1785319556030,"pid":2931,"hostname":"runnervmvrwv9","err":{"type":"Error","message":"Resend API error","stack":"Error: Resend API error\n    at /home/runner/work/batchelorapp/batchelorapp/artifacts/api-server/src/routes/travels/settings.test.ts:366:7\n    at file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:155:11\n    at file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:752:26\n    at file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:1897:20\n    at new Promise (<anonymous>)\n    at runWithTimeout (file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:1863:10)\n    at runTest (file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:1574:12)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at runSuite (file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:1729:8)\n    at runSuite (file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/@vitest+runner@3.2.6/node_modules/@vitest/runner/dist/chunk-hooks.js:1729:8)"},"userId":42,"msg":"settings: test reminder email failed"}
+ [32m✓[39m src/routes/travels/settings.test.ts [2m([22m[2m22 tests[22m[2m)[22m[33m 668[2mms[22m[39m
 [90mstderr[2m | src/middleware/webhookLimiter.test.ts[2m > [22m[2mwebhookLimiter — store error handling (passOnStoreError: false)[2m > [22m[2mdoes not silently pass the request when the store throws
 [22m[39mError: DB connection refused
     at FakeStore.increment (/home/runner/work/batchelorapp/batchelorapp/artifacts/api-server/src/middleware/webhookLimiter.test.ts:30:29)
@@ -136,18 +135,18 @@ Exit code: 2
     at file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/express-rate-limit@8.5.2_express@5.2.1/node_modules/express-rate-limit/dist/index.mjs:868:52
     at file:///home/runner/work/batchelorapp/batchelorapp/node_modules/.pnpm/express-rate-limit@8.5.2_express@5.2.1/node_modules/express-rate-limit/dist/index.mjs:825:5
 
- [32m✓[39m src/routes/admin/storage-reconcile.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 57[2mms[22m[39m
+ [32m✓[39m src/routes/admin/storage-reconcile.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 42[2mms[22m[39m
  [32m✓[39m src/lib/review-remediation-quality.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 4[2mms[22m[39m
- [32m✓[39m src/middleware/webhookLimiter.test.ts [2m([22m[2m7 tests[22m[2m)[22m[33m 647[2mms[22m[39m
-   [33m[2m✓[22m[39m webhookLimiter — namespace / key prefix[2m > [22mPostgresRateLimitStore constructor is called with 'webhook' in production config [33m 594[2mms[22m[39m
- [32m✓[39m src/lib/jobs/registry.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 4[2mms[22m[39m
- [32m✓[39m src/lib/operations.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 3[2mms[22m[39m
- [32m✓[39m src/middleware/app-upload-guard.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 4049[2mms[22m[39m
+ [32m✓[39m src/middleware/webhookLimiter.test.ts [2m([22m[2m7 tests[22m[2m)[22m[33m 524[2mms[22m[39m
+   [33m[2m✓[22m[39m webhookLimiter — namespace / key prefix[2m > [22mPostgresRateLimitStore constructor is called with 'webhook' in production config [33m 485[2mms[22m[39m
+ [32m✓[39m src/lib/jobs/registry.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m src/lib/operations.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m src/middleware/app-upload-guard.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 4042[2mms[22m[39m
 
 [2m Test Files [22m [1m[32m25 passed[39m[22m[90m (25)[39m
 [2m      Tests [22m [1m[32m414 passed[39m[22m[2m | [22m[33m5 skipped[39m[90m (419)[39m
-[2m   Start at [22m 09:55:56
-[2m   Duration [22m 13.11s[2m (transform 2.42s, setup 0ms, collect 6.46s, tests 21.34s, environment 5ms, prepare 2.00s)[22m
+[2m   Start at [22m 10:05:49
+[2m   Duration [22m 10.05s[2m (transform 1.61s, setup 0ms, collect 4.36s, tests 15.90s, environment 3ms, prepare 1.26s)[22m
 
 ```
 
@@ -189,7 +188,7 @@ Exit code: 0
   dist/instrument.mjs.map                     17.4kb
   dist/thread-stream-worker.mjs.map           12.0kb
 
-⚡ Done in 1154ms
+⚡ Done in 823ms
 ```
 
 Exit code: 0
@@ -203,21 +202,21 @@ Exit code: 0
 
 [36mvite v7.3.5 [32mbuilding client environment for production...[36m[39m
 transforming...
-[33m../../lib/ui/src/sonner.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.[39m
 [33m../../lib/ui/src/tooltip.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.[39m
+[33m../../lib/ui/src/sonner.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.[39m
+[33m../../lib/ui/src/avatar.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.[39m
 [33m../../lib/ui/src/progress.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.[39m
 [33m../../lib/ui/src/label.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.[39m
 [33m../../lib/ui/src/sheet.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.[39m
 [33m../../lib/ui/src/dropdown-menu.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.[39m
-[33m../../lib/ui/src/avatar.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.[39m
 [33m../../lib/ui/src/select.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.[39m
 [33m../../lib/ui/src/command.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.[39m
-[33m../../lib/ui/src/toggle-group.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.[39m
 [33m../../lib/ui/src/calendar.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.[39m
+[33m../../lib/ui/src/toggle-group.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.[39m
 [33m../../lib/ui/src/collapsible.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.[39m
-[33m../../lib/ui/src/field.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.[39m
 [33m../../lib/ui/src/resizable.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.[39m
 [33m../../lib/ui/src/sidebar.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.[39m
+[33m../../lib/ui/src/field.tsx (2:0): Error when using sourcemap for reporting an error: Can't resolve original location of error.[39m
 [32m✓[39m 4941 modules transformed.
 rendering chunks...
 computing gzip size...
@@ -381,7 +380,7 @@ computing gzip size...
 - Using dynamic import() to code-split the application
 - Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
-[32m✓ built in 14.69s[39m
+[32m✓ built in 10.95s[39m
 ```
 
 Exit code: 0

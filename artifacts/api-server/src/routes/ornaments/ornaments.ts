@@ -179,10 +179,8 @@ router.get("/items", async (req, res) => {
       if (year !== undefined) {
         extraConditions.push(eq(ornamentsItems.year, year));
       }
-      const extraWhere =
-        extraConditions.length > 0
-          ? and(...(extraConditions as [SQL, ...SQL[]]))
-          : undefined;
+      extraConditions.push(isNull(ornamentsItems.deletedAt));
+      const visibilityWhere = and(...(extraConditions as [SQL, ...SQL[]]))!;
 
       const rankedIds = await semanticCollectionSearch({
         query: q.trim(),
@@ -190,12 +188,17 @@ router.get("/items", async (req, res) => {
         textEmbeddingCol: "embedding",
         visualEmbeddingCol: "visual_embedding",
         db,
-        extraWhere,
+        visibilityWhere,
         fetchDocuments: async (ids) => {
           const rows = await db
             .select(itemColumns)
             .from(ornamentsItems)
-            .where(inArray(ornamentsItems.id, ids));
+            .where(
+              and(
+                inArray(ornamentsItems.id, ids),
+                isNull(ornamentsItems.deletedAt),
+              ),
+            );
           return rows.map((r) => ({
             id: r.id,
             text: buildOrnamentSearchDocument(r),
@@ -228,7 +231,12 @@ router.get("/items", async (req, res) => {
         const pageRows = await db
           .select(itemColumns)
           .from(ornamentsItems)
-          .where(inArray(ornamentsItems.id, pageIds));
+          .where(
+            and(
+              inArray(ornamentsItems.id, pageIds),
+              isNull(ornamentsItems.deletedAt),
+            ),
+          );
         const byId = new Map(pageRows.map((r) => [r.id, r]));
         const orderedRows = pageIds
           .filter((id) => byId.has(id))

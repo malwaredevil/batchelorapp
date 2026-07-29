@@ -18,7 +18,7 @@ export interface CollectionSearchOptions {
   textEmbeddingCol: string;
   visualEmbeddingCol: string;
   limit?: number;
-  extraWhere?: SQL;
+  visibilityWhere: SQL;
   db: AppDb;
   fetchDocuments: (
     ids: number[],
@@ -34,7 +34,7 @@ export async function semanticCollectionSearch({
   textEmbeddingCol,
   visualEmbeddingCol,
   limit = 40,
-  extraWhere,
+  visibilityWhere,
   db,
   fetchDocuments,
 }: CollectionSearchOptions): Promise<number[]> {
@@ -49,7 +49,7 @@ export async function semanticCollectionSearch({
     select id, 1 - (${textColumn} <=> ${queryVec}::vector) as similarity
     from ${table}
     where ${textColumn} is not null
-      ${extraWhere ? sql`and ${extraWhere}` : sql``}
+      and ${visibilityWhere}
     order by ${textColumn} <=> ${queryVec}::vector
     limit ${SEARCH_POOL}
   `);
@@ -63,7 +63,7 @@ export async function semanticCollectionSearch({
         select id, 1 - (${visualColumn} <=> ${jinaVec}::vector) as similarity
         from ${table}
         where ${visualColumn} is not null
-          ${extraWhere ? sql`and ${extraWhere}` : sql``}
+          and ${visibilityWhere}
         order by ${visualColumn} <=> ${jinaVec}::vector
         limit ${SEARCH_POOL}
       `);
@@ -93,10 +93,14 @@ export async function semanticCollectionSearch({
   const candidateIds = merged.map((row) => row.id);
   const documents = await fetchDocuments(candidateIds);
   const byId = new Map(documents.map((doc) => [doc.id, doc]));
-  const rerankDocs = candidateIds.map((id) => ({
+  // A row can be deleted between candidate selection and hydration. Only pass
+  // documents that are still visible to the reranker and final result set.
+  const visibleCandidateIds = candidateIds.filter((id) => byId.has(id));
+  const rerankDocs = visibleCandidateIds.map((id) => ({
     id,
-    text: byId.get(id)?.text ?? "Unknown collection item",
+    text: byId.get(id)!.text,
   }));
+  if (rerankDocs.length === 0) return [];
   const rerankedIds = await rerankCandidates(query, rerankDocs, limit);
 
   return rerankedIds.slice(0, limit);

@@ -3,7 +3,10 @@ import { randomUUID } from "node:crypto";
 import { LRUCache } from "lru-cache";
 import { env } from "./env";
 import type { SupportedImageType } from "./image";
-import { SUPABASE_BUCKET_FILE_BYTES } from "./upload-limits";
+import {
+  STANDARD_IMAGE_BUCKET_FILE_BYTES,
+  SUPABASE_BUCKET_FILE_BYTES,
+} from "./upload-limits";
 
 const EXT_BY_TYPE: Record<SupportedImageType, string> = {
   "image/jpeg": "jpg",
@@ -198,10 +201,10 @@ export async function ensureBucketWithPolicy(
 // ---------------------------------------------------------------------------
 
 export const IMAGE_ONLY_POLICY: BucketPolicy = {
-  // Capped at SUPABASE_BUCKET_FILE_BYTES (50 MB) — Supabase enforces a
-  // plan-level ceiling on the bucket fileSizeLimit parameter.  Express/multer
-  // enforces its own (larger) 100 MB cap independently.
-  fileSizeLimit: SUPABASE_BUCKET_FILE_BYTES,
+  // Image-only buckets match the standard 25 MB inbound ceiling. The image
+  // pipeline normalizes accepted images before persistence, so storage never
+  // needs a broader limit than the request path that feeds it.
+  fileSizeLimit: STANDARD_IMAGE_BUCKET_FILE_BYTES,
   allowedMimeTypes: ["image/jpeg", "image/png", "image/webp"],
 };
 

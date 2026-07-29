@@ -80,7 +80,10 @@ function makeUpdateBuilder() {
       return builder;
     },
     where() {
-      return Promise.resolve([]);
+      return builder;
+    },
+    returning() {
+      return Promise.resolve([{ id: 1 }]);
     },
   };
   return builder;

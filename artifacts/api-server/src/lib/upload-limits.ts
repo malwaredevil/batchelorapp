@@ -37,6 +37,9 @@
  */
 export const DEFAULT_MULTER_FILE_BYTES = 25 * 1024 * 1024; // 25 MB
 
+/** Image-only buckets mirror the standard inbound upload ceiling. */
+export const STANDARD_IMAGE_BUCKET_FILE_BYTES = DEFAULT_MULTER_FILE_BYTES;
+
 /**
  * Maximum fileSizeLimit that can be set on a Supabase Storage bucket policy.
  *

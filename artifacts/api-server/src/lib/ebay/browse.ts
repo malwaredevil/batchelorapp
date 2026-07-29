@@ -26,6 +26,24 @@ export interface BrowseSearchResult {
   total: number;
 }
 
+export interface BrowseActiveListing {
+  itemId: string;
+  title: string;
+  price: number;
+  currency: string;
+  condition: string | null;
+  imageUrl: string | null;
+  itemUrl: string | null;
+}
+
+export interface BrowseActivePriceResult {
+  priceMinUsd: number;
+  priceMaxUsd: number;
+  listingCount: number;
+  /** Up to 10 sample listings (sorted cheapest-first). */
+  listings: BrowseActiveListing[];
+}
+
 /**
  * Search active eBay listings and return aspect refinement data — the
  * structured attribute distribution across matching items (e.g. Year: 2003 ×5,
@@ -98,6 +116,86 @@ export async function searchItemAspects(
   );
 
   return { aspects, total: data.total ?? 0 };
+}
+
+/**
+ * Search currently active (for-sale) eBay listings and return price range data.
+ * Unlike findCompletedItems this reflects asking prices, not sold prices.
+ */
+export async function searchActiveListingPrices(
+  query: string,
+  opts: { limit?: number } = {},
+): Promise<BrowseActivePriceResult | null> {
+  const token = await getEbayAppToken();
+
+  const params = new URLSearchParams({
+    q: query,
+    limit: String(Math.min(opts.limit ?? 50, 200)),
+  });
+
+  const url = `${BROWSE_BASE}/item_summary/search?${params.toString()}`;
+
+  const resp = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+    },
+    signal: AbortSignal.timeout(20_000),
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(
+      `eBay Browse active-listings error (${resp.status}): ${text.slice(0, 300)}`,
+    );
+  }
+
+  const data = (await resp.json()) as {
+    total?: number;
+    itemSummaries?: Array<{
+      itemId?: string;
+      title?: string;
+      price?: { value?: string; currency?: string };
+      condition?: string;
+      image?: { imageUrl?: string };
+      itemWebUrl?: string;
+    }>;
+  };
+
+  const summaries = data.itemSummaries ?? [];
+  if (summaries.length === 0) return null;
+
+  const listings: BrowseActiveListing[] = [];
+  for (const item of summaries) {
+    const priceVal = parseFloat(item.price?.value ?? "");
+    if (!Number.isFinite(priceVal) || priceVal <= 0) continue;
+    listings.push({
+      itemId: item.itemId ?? "",
+      title: item.title ?? "",
+      price: priceVal,
+      currency: item.price?.currency ?? "USD",
+      condition: item.condition ?? null,
+      imageUrl: item.image?.imageUrl ?? null,
+      itemUrl: item.itemWebUrl ?? null,
+    });
+  }
+
+  if (listings.length === 0) return null;
+
+  const prices = listings.map((l) => l.price);
+  listings.sort((a, b) => a.price - b.price);
+
+  logger.info(
+    { query, total: data.total ?? 0, found: listings.length },
+    "ebay browse: searchActiveListingPrices",
+  );
+
+  return {
+    priceMinUsd: Math.min(...prices),
+    priceMaxUsd: Math.max(...prices),
+    listingCount: listings.length,
+    listings: listings.slice(0, 10),
+  };
 }
 
 /**

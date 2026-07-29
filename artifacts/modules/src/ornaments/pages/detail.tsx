@@ -3,13 +3,14 @@ import { useRoute, useLocation } from "wouter";
 import {
   Loader2,
   Trash2,
-  Search,
-  ShoppingBag,
   RefreshCcw,
   Download,
   Pencil,
   Save,
   X,
+  TrendingDown,
+  TrendingUp,
+  Minus,
 } from "lucide-react";
 import { ImageLightbox } from "@/quilting/components/image-lightbox";
 import { ItemImageGallery } from "@workspace/image-capture";
@@ -17,9 +18,7 @@ import {
   useGetOrnament,
   useUpdateOrnament,
   useDeleteOrnament,
-  useLookupOrnamentBookValue,
-  useLookupOrnamentEbayPrice,
-  useReanalyzeOrnament,
+  useRefreshAllOrnamentData,
   getGetOrnamentQueryKey,
   getListOrnamentsQueryKey,
   useSetOrnamentPrimaryImage,
@@ -58,12 +57,19 @@ import {
   CollectionDetailSection,
 } from "@workspace/collection-ui";
 
-function formatCurrency(amount: number | null | undefined): string {
+function formatCurrency(amount: number | string | null | undefined): string {
   if (amount == null) return "—";
+  const n = typeof amount === "string" ? parseFloat(amount) : amount;
+  if (isNaN(n)) return "—";
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-  }).format(amount);
+  }).format(n);
+}
+
+function formatDate(d: string | Date | null | undefined): string {
+  if (!d) return "";
+  return new Date(d).toLocaleDateString();
 }
 
 export default function OrnamentDetail() {
@@ -90,17 +96,11 @@ export default function OrnamentDetail() {
     aiDesc: "",
     dimensions: "",
     condition: "",
+    barcode: "",
   });
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-  const [ebayResult, setEbayResult] = useState<{
-    priceMinUsd: number;
-    priceMaxUsd: number;
-    priceMedianUsd: number;
-    listingCount: number;
-    searchQuery?: string;
-  } | null>(null);
 
   const configSummary = useAppConfigSummary();
 
@@ -120,8 +120,11 @@ export default function OrnamentDetail() {
             : null,
           ornament.condition ? `Condition: ${ornament.condition}` : null,
           ornament.bookValue != null
-            ? `Book value on file: $${ornament.bookValue.toFixed(2)}${ornament.bookValueSource ? ` (source: ${ornament.bookValueSource})` : ""}`
+            ? `Book value on file: $${Number(ornament.bookValue).toFixed(2)}${ornament.bookValueSource ? ` (source: ${ornament.bookValueSource})` : ""}`
             : "No book value on file yet.",
+          ornament.aiAppraisal
+            ? `AI appraisal: "${ornament.aiAppraisal.slice(0, 200)}"`
+            : null,
           ornament.aiDescription
             ? `AI description: "${ornament.aiDescription.slice(0, 200)}"`
             : null,
@@ -155,9 +158,7 @@ export default function OrnamentDetail() {
     },
   });
 
-  const lookupBookValue = useLookupOrnamentBookValue();
-  const lookupEbay = useLookupOrnamentEbayPrice();
-  const reanalyze = useReanalyzeOrnament();
+  const refreshAll = useRefreshAllOrnamentData();
   const addImage = useUploadOrnamentImage(id);
   const setPrimaryImage = useSetOrnamentPrimaryImage();
   const deleteImage = useDeleteOrnamentImage();
@@ -173,6 +174,7 @@ export default function OrnamentDetail() {
       aiDesc: ornament.aiDescription || "",
       dimensions: ornament.dimensions || "",
       condition: ornament.condition || "",
+      barcode: ornament.barcodeValue || "",
     });
     setSelectedCategoryIds(ornament.categories?.map((c) => c.id) || []);
     setIsEditing(true);
@@ -198,6 +200,7 @@ export default function OrnamentDetail() {
         aiDescription: draft.aiDesc.trim() || undefined,
         dimensions: draft.dimensions.trim() || undefined,
         condition: draft.condition.trim() || undefined,
+        barcodeValue: draft.barcode.trim() || undefined,
         categoryIds: selectedCategoryIds,
       },
     });
@@ -212,56 +215,20 @@ export default function OrnamentDetail() {
     updateOrnament.mutate({ id, data: { lockedFields: next } });
   }
 
-  const handleLookupPrice = async () => {
-    if (!ornament?.name) return;
+  const handleRefreshAll = async () => {
     try {
-      toast.loading("Scraping for book value...", { id: "price" });
-      const result = await lookupBookValue.mutateAsync({ id });
-      toast.dismiss("price");
-      if (result.bookValue) {
-        toast.success(`Found estimate: ${formatCurrency(result.bookValue)}`);
-        queryClient.invalidateQueries({ queryKey: getGetOrnamentQueryKey(id) });
-      } else {
-        toast.error("No reliable price data found on Hallmark value sites.");
-      }
-    } catch {
-      toast.dismiss("price");
-      toast.error("Failed to lookup book value");
-    }
-  };
-
-  const handleLookupEbayPrice = async () => {
-    if (!ornament?.name) return;
-    try {
-      toast.loading("Searching eBay sold listings…", { id: "ebay" });
-      const result = await lookupEbay.mutateAsync({ id });
-      toast.dismiss("ebay");
-      if (result.listingCount > 0) {
-        setEbayResult(result);
-        toast.success(
-          `Found ${result.listingCount} sold listing${result.listingCount !== 1 ? "s" : ""} — median $${result.priceMedianUsd.toFixed(0)}`,
-        );
-        queryClient.invalidateQueries({ queryKey: getGetOrnamentQueryKey(id) });
-      } else {
-        toast.error("No eBay sold listings found for this ornament.");
-      }
-    } catch {
-      toast.dismiss("ebay");
-      toast.error("Failed to look up eBay price");
-    }
-  };
-
-  const handleReanalyze = async () => {
-    try {
-      toast.loading("Analyzing image...", { id: "analyze" });
-      const result = await reanalyze.mutateAsync({ id });
-      toast.dismiss("analyze");
-      toast.success("Analysis complete");
+      toast.loading(
+        "Refreshing AI analysis, book value, eBay prices, and appraisal…",
+        { id: "refresh-all" },
+      );
+      const result = await refreshAll.mutateAsync({ id });
+      toast.dismiss("refresh-all");
+      toast.success("All data refreshed");
       queryClient.setQueryData(getGetOrnamentQueryKey(id), result);
       queryClient.invalidateQueries({ queryKey: getListOrnamentsQueryKey() });
     } catch {
-      toast.dismiss("analyze");
-      toast.error("Analysis failed");
+      toast.dismiss("refresh-all");
+      toast.error("Refresh failed — check connection and try again");
     }
   };
 
@@ -327,6 +294,54 @@ export default function OrnamentDetail() {
 
   const lockedFields = ornament.lockedFields ?? [];
 
+  // eBay data from stored fields
+  const hasEbayData =
+    ornament.ebayPriceCachedAt != null || ornament.ebayLastSoldPriceUsd != null;
+  const hasEbayForSale =
+    ornament.ebayPriceMinUsd != null && ornament.ebayPriceMaxUsd != null;
+  const hasEbayLastSold = ornament.ebayLastSoldPriceUsd != null;
+
+  // Computed valuation values (all read-only, derived from stored data)
+  const ebayMid = hasEbayForSale
+    ? (Number(ornament.ebayPriceMinUsd) + Number(ornament.ebayPriceMaxUsd)) / 2
+    : null;
+
+  // Parse dollar range from AI appraisal prose (e.g. "appraises for $10–$18")
+  const aiRangeMatch = ornament.aiAppraisal
+    ? ornament.aiAppraisal.match(
+        /\$(\d+(?:\.\d+)?)\s*[-\u2013\u2014]\s*\$(\d+(?:\.\d+)?)/,
+      )
+    : null;
+  const aiAppraisalLow = aiRangeMatch ? parseFloat(aiRangeMatch[1]) : null;
+  const aiAppraisalHigh = aiRangeMatch ? parseFloat(aiRangeMatch[2]) : null;
+  const aiMid =
+    aiAppraisalLow != null && aiAppraisalHigh != null
+      ? (aiAppraisalLow + aiAppraisalHigh) / 2
+      : null;
+
+  const vsBook =
+    ebayMid != null && ornament.bookValue != null
+      ? ebayMid - Number(ornament.bookValue)
+      : null;
+  const vsBookPct =
+    vsBook != null && ornament.bookValue != null
+      ? (vsBook / Number(ornament.bookValue)) * 100
+      : null;
+
+  const consensusSources: number[] = [
+    ...(ebayMid != null ? [ebayMid] : []),
+    ...(aiMid != null ? [aiMid] : []),
+    ...(ornament.bookValue != null ? [Number(ornament.bookValue)] : []),
+  ];
+  const consensus =
+    consensusSources.length >= 2
+      ? consensusSources.reduce((a, b) => a + b, 0) / consensusSources.length
+      : null;
+
+  const hasValuationData =
+    ornament.bookValue != null || hasEbayData || !!ornament.aiAppraisal;
+  const hasCalcData = ebayMid != null || consensus != null;
+
   return (
     <>
       <CollectionDetailLayout
@@ -335,6 +350,7 @@ export default function OrnamentDetail() {
         gallery={
           <div className="space-y-4">
             <ItemImageGallery
+              mainImageClassName="aspect-[4/3] max-h-[55vh] w-full object-cover"
               images={[
                 {
                   id: -1,
@@ -405,65 +421,6 @@ export default function OrnamentDetail() {
               isUploading={addImage.isPending}
               maxImages={10}
             />
-
-            {/* Book value card */}
-            {ornament.bookValue != null && (
-              <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-center">
-                <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                  Estimated Value
-                </p>
-                <p className="text-3xl font-serif font-bold text-primary">
-                  {formatCurrency(ornament.bookValue)}
-                </p>
-                <p className="text-[10px] text-muted-foreground mt-2">
-                  Source: {ornament.bookValueSource} <br />
-                  Updated:{" "}
-                  {new Date(ornament.bookValueUpdatedAt!).toLocaleDateString()}
-                </p>
-              </div>
-            )}
-
-            {/* eBay results */}
-            {ebayResult && (
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm font-medium text-amber-900 uppercase tracking-wider">
-                    eBay Sold Listings
-                  </p>
-                  <button
-                    onClick={() => setEbayResult(null)}
-                    className="text-amber-500 hover:text-amber-700 text-xs"
-                  >
-                    ✕
-                  </button>
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  <div>
-                    <p className="text-lg font-bold text-amber-800">
-                      ${ebayResult.priceMinUsd.toFixed(0)}
-                    </p>
-                    <p className="text-[10px] text-amber-600">Low</p>
-                  </div>
-                  <div>
-                    <p className="text-lg font-bold text-amber-800">
-                      ${ebayResult.priceMedianUsd.toFixed(0)}
-                    </p>
-                    <p className="text-[10px] text-amber-600">Median</p>
-                  </div>
-                  <div>
-                    <p className="text-lg font-bold text-amber-800">
-                      ${ebayResult.priceMaxUsd.toFixed(0)}
-                    </p>
-                    <p className="text-[10px] text-amber-600">High</p>
-                  </div>
-                </div>
-                <p className="text-[10px] text-amber-600 mt-2 text-center">
-                  {ebayResult.listingCount} sold listing
-                  {ebayResult.listingCount !== 1 ? "s" : ""} ·{" "}
-                  {ebayResult.searchQuery && `"${ebayResult.searchQuery}"`}
-                </p>
-              </div>
-            )}
           </div>
         }
         titleSlot={
@@ -521,40 +478,12 @@ export default function OrnamentDetail() {
               <Button
                 variant="outline"
                 size="icon"
-                onClick={handleLookupPrice}
-                disabled={lookupBookValue.isPending}
-                title="Look up book value"
-                data-testid="button-book-value"
-              >
-                {lookupBookValue.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Search className="h-4 w-4" />
-                )}
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={handleLookupEbayPrice}
-                disabled={lookupEbay.isPending}
-                title="Look up eBay price"
-                data-testid="button-ebay-price"
-              >
-                {lookupEbay.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <ShoppingBag className="h-4 w-4" />
-                )}
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={handleReanalyze}
-                disabled={reanalyze.isPending}
-                title="Re-run AI analysis"
+                onClick={handleRefreshAll}
+                disabled={refreshAll.isPending}
+                title="Refresh all — AI analysis, book value, eBay prices, and AI appraisal"
                 data-testid="button-reanalyze"
               >
-                {reanalyze.isPending ? (
+                {refreshAll.isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <RefreshCcw className="h-4 w-4" />
@@ -719,6 +648,22 @@ export default function OrnamentDetail() {
               }
               empty={!ornament.dimensions}
             />
+            <CollectionDetailField
+              label="Barcode / UPC"
+              value={ornament.barcodeValue || "—"}
+              editing={isEditing}
+              editSlot={
+                <Input
+                  value={draft.barcode}
+                  onChange={(e) =>
+                    setDraft((d) => ({ ...d, barcode: e.target.value }))
+                  }
+                  placeholder="e.g. 661127022308"
+                  className="h-8 text-sm font-mono"
+                />
+              }
+              empty={!ornament.barcodeValue}
+            />
             {(isEditing || ornament.notes) && (
               <CollectionDetailField
                 label="Notes"
@@ -767,6 +712,211 @@ export default function OrnamentDetail() {
                 </div>
               </div>
             ) : null}
+
+            {/* ─── Market Valuations ─────────────────────────────────────── */}
+            {!isEditing && hasValuationData && (
+              <div className="flex items-center gap-2 pt-3 pb-0.5">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground/50 shrink-0">
+                  Market Valuations
+                </p>
+                <div className="flex-1 h-px bg-border/40" />
+              </div>
+            )}
+
+            {!isEditing && ornament.bookValue != null && (
+              <CollectionDetailField
+                label="Book Value"
+                value={
+                  <span>
+                    {formatCurrency(ornament.bookValue)}
+                    {ornament.bookValueSource && (
+                      <span className="text-xs text-muted-foreground font-normal ml-1.5">
+                        · {ornament.bookValueSource}
+                        {ornament.bookValueUpdatedAt
+                          ? ` · updated ${formatDate(ornament.bookValueUpdatedAt)}`
+                          : ""}
+                      </span>
+                    )}
+                  </span>
+                }
+              />
+            )}
+
+            {!isEditing && hasEbayForSale && (
+              <CollectionDetailField
+                label="eBay — For Sale Now"
+                value={
+                  <span>
+                    {formatCurrency(ornament.ebayPriceMinUsd)} –{" "}
+                    {formatCurrency(ornament.ebayPriceMaxUsd)}
+                    {ornament.ebayPriceCachedAt && (
+                      <span className="text-xs text-muted-foreground font-normal ml-1.5">
+                        · updated {formatDate(ornament.ebayPriceCachedAt)}
+                      </span>
+                    )}
+                  </span>
+                }
+              />
+            )}
+
+            {!isEditing && hasEbayLastSold && (
+              <CollectionDetailField
+                label="eBay — Last Sold"
+                value={
+                  <span>
+                    {formatCurrency(ornament.ebayLastSoldPriceUsd)}
+                    {ornament.ebayLastSoldDate && (
+                      <span className="text-xs text-muted-foreground font-normal ml-1.5">
+                        · {formatDate(ornament.ebayLastSoldDate)}
+                      </span>
+                    )}
+                  </span>
+                }
+              />
+            )}
+
+            {!isEditing &&
+              hasEbayData &&
+              !hasEbayForSale &&
+              !hasEbayLastSold && (
+                <CollectionDetailField
+                  label="eBay Market"
+                  value="No active listings found"
+                  empty
+                />
+              )}
+
+            {!isEditing && !!ornament.aiAppraisal && (
+              <CollectionDetailField
+                label="AI Collector Appraisal"
+                value={
+                  aiAppraisalLow != null && aiAppraisalHigh != null ? (
+                    <span>
+                      ~{formatCurrency(aiAppraisalLow)} –{" "}
+                      {formatCurrency(aiAppraisalHigh)} est.
+                      {ornament.aiAppraisalUpdatedAt && (
+                        <span className="text-xs text-muted-foreground font-normal ml-1.5">
+                          · updated {formatDate(ornament.aiAppraisalUpdatedAt)}
+                        </span>
+                      )}
+                    </span>
+                  ) : (
+                    ornament.aiAppraisal
+                  )
+                }
+              />
+            )}
+
+            {/* ─── Calculated ────────────────────────────────────────────── */}
+            {!isEditing && hasCalcData && (
+              <div className="flex items-center gap-2 pt-3 pb-0.5">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground/50 shrink-0">
+                  Calculated
+                </p>
+                <div className="flex-1 h-px bg-border/40" />
+              </div>
+            )}
+
+            {!isEditing && ebayMid != null && (
+              <div className="flex items-start gap-3 py-1.5 border-b border-border/60 last:border-0">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      eBay Midpoint
+                    </p>
+                    <span className="text-[9px] uppercase tracking-wider text-muted-foreground/40 border border-border/50 rounded px-1 leading-tight">
+                      calc
+                    </span>
+                  </div>
+                  <p className="text-sm">{formatCurrency(ebayMid)}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    ({formatCurrency(ornament.ebayPriceMinUsd)} +{" "}
+                    {formatCurrency(ornament.ebayPriceMaxUsd)}) ÷ 2
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {!isEditing && vsBook != null && vsBookPct != null && (
+              <div className="flex items-start gap-3 py-1.5 border-b border-border/60 last:border-0">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      vs. Book Value
+                    </p>
+                    <span className="text-[9px] uppercase tracking-wider text-muted-foreground/40 border border-border/50 rounded px-1 leading-tight">
+                      calc
+                    </span>
+                  </div>
+                  <p className="text-sm flex items-center gap-1.5">
+                    {vsBook < -0.5 && (
+                      <TrendingDown className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                    )}
+                    {vsBook > 0.5 && (
+                      <TrendingUp className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                    )}
+                    {Math.abs(vsBook) <= 0.5 && (
+                      <Minus className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    )}
+                    <span
+                      className={
+                        vsBook < -0.5
+                          ? "text-amber-600"
+                          : vsBook > 0.5
+                            ? "text-emerald-600"
+                            : "text-muted-foreground"
+                      }
+                    >
+                      {vsBook >= 0 ? "+" : ""}
+                      {formatCurrency(vsBook)} ({vsBookPct.toFixed(1)}%)
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {vsBook < -0.5
+                        ? "below book"
+                        : vsBook > 0.5
+                          ? "above book"
+                          : "at book"}
+                    </span>
+                  </p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    eBay mid {formatCurrency(ebayMid)} − book{" "}
+                    {formatCurrency(ornament.bookValue)}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {!isEditing && consensus != null && (
+              <div className="flex items-start gap-3 py-1.5 border-b border-border/60 last:border-0">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Consensus Est. Value
+                    </p>
+                    <span className="text-[9px] uppercase tracking-wider text-muted-foreground/40 border border-border/50 rounded px-1 leading-tight">
+                      calc
+                    </span>
+                  </div>
+                  <p className="text-sm font-medium">
+                    {formatCurrency(consensus)}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    avg of{" "}
+                    {[
+                      ebayMid != null
+                        ? `eBay mid ${formatCurrency(ebayMid)}`
+                        : null,
+                      aiMid != null ? `AI mid ${formatCurrency(aiMid)}` : null,
+                      ornament.bookValue != null
+                        ? `book ${formatCurrency(ornament.bookValue)}`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(", ")}
+                  </p>
+                </div>
+              </div>
+            )}
           </>
         }
         panels={

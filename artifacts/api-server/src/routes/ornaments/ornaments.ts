@@ -70,6 +70,7 @@ import {
 } from "../../lib/ornaments/storage";
 import {
   analyzeOrnamentImage,
+  appraiseOrnamentImage,
   buildEmbeddingText,
   embedText,
   extractBarcodeFromPhoto,
@@ -78,6 +79,7 @@ import { lookupBarcode } from "../../lib/ornaments/barcode";
 import { lookupBookValue } from "../../lib/ornaments/book-value";
 import {
   lookupEbayMarketValue,
+  lookupOrnamentEbayData,
   buildEbayQuery,
 } from "../../lib/pottery/ebay-market-value";
 import { env } from "../../lib/env";
@@ -1185,11 +1187,37 @@ router.post("/items/:id/book-value-lookup", aiLimiter, async (req, res) => {
     return;
   }
 
-  const result = await lookupBookValue({
-    name: item.name,
-    seriesOrCollection: item.seriesOrCollection,
-    year: item.year,
-  });
+  // If the item has a stored UPC, check the barcode cache first — lookupBarcode
+  // already fetched hallmarkCollectorPriceUsd (the HooH collector price) and
+  // cached it. Using it directly is faster and more precise than scraping.
+  let result: {
+    value: number;
+    source: "hallmarkornaments.com" | "hookedonhallmark.com";
+  } | null = null;
+  if (item.barcodeValue) {
+    try {
+      const cached = await lookupBarcode(item.barcodeValue);
+      if (cached.found && cached.hallmarkCollectorPriceUsd) {
+        const v = parseFloat(cached.hallmarkCollectorPriceUsd);
+        if (Number.isFinite(v) && v > 0) {
+          result = { value: v, source: "hookedonhallmark.com" };
+        }
+      }
+    } catch (err) {
+      req.log.warn(
+        { err },
+        "book-value: barcode cache lookup failed, falling through to scrape",
+      );
+    }
+  }
+
+  if (!result) {
+    result = await lookupBookValue({
+      name: item.name,
+      seriesOrCollection: item.seriesOrCollection,
+      year: item.year,
+    });
+  }
 
   if (!result) {
     res.status(422).json({
@@ -1328,6 +1356,13 @@ export async function runItemAnalysis(id: number): Promise<unknown> {
       .values(newCatIds.map((catId) => ({ itemId: id, categoryId: catId })));
   }
 
+  // If we now have a barcode value (either newly detected by AI or already stored),
+  // fire the barcode enrichment pipeline in the background so Hallmark catalog
+  // data (series, artist, collector price, SKU) is back-patched onto the item.
+  if (merged.barcodeValue) {
+    void lookupBarcode(merged.barcodeValue);
+  }
+
   return GetOrnamentResponse.parse(await serializeItem(updated));
 }
 
@@ -1350,6 +1385,7 @@ router.post("/items/:id/ebay-price-lookup", aiLimiter, async (req, res) => {
       brand: ornamentsItems.brand,
       seriesOrCollection: ornamentsItems.seriesOrCollection,
       year: ornamentsItems.year,
+      barcodeValue: ornamentsItems.barcodeValue,
     })
     .from(ornamentsItems)
     .where(eq(ornamentsItems.id, id));
@@ -1365,9 +1401,11 @@ router.post("/items/:id/ebay-price-lookup", aiLimiter, async (req, res) => {
     year: item.year,
   });
 
-  let result: Awaited<ReturnType<typeof lookupEbayMarketValue>>;
+  let result: Awaited<ReturnType<typeof lookupOrnamentEbayData>>;
   try {
-    result = await lookupEbayMarketValue(query, { withAspects: true });
+    result = await lookupOrnamentEbayData(query, {
+      upc: item.barcodeValue ?? undefined,
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     req.log.warn({ err }, "ornaments: eBay price lookup failed");
@@ -1377,44 +1415,54 @@ router.post("/items/:id/ebay-price-lookup", aiLimiter, async (req, res) => {
     return;
   }
   if (!result) {
-    res
-      .status(422)
-      .json({ error: "No eBay sold listings found for this ornament." });
+    res.status(422).json({
+      error: "No eBay listings found for this ornament.",
+    });
     return;
   }
 
-  const [updated] = await db
+  // Store for-sale range (priceMin/Max) and last-sold data in DB
+  await db
     .update(ornamentsItems)
     .set({
-      ebayPriceMinUsd: String(result.priceMinUsd),
-      ebayPriceMaxUsd: String(result.priceMaxUsd),
-      ebayPriceMedianUsd: String(result.priceMedianUsd),
+      ebayPriceMinUsd: result.forSale
+        ? String(result.forSale.priceMinUsd)
+        : null,
+      ebayPriceMaxUsd: result.forSale
+        ? String(result.forSale.priceMaxUsd)
+        : null,
+      ebayPriceMedianUsd: null,
       ebayPriceCachedAt: new Date(),
-      ebayPriceListings: result.listings as unknown as Record<string, unknown>,
+      ebayPriceListings: result.forSale
+        ? (result.forSale.listings as unknown as Record<string, unknown>[])
+        : null,
+      ebayLastSoldPriceUsd: result.lastSold
+        ? String(result.lastSold.priceUsd)
+        : null,
+      ebayLastSoldDate: result.lastSold?.soldDate
+        ? new Date(result.lastSold.soldDate)
+        : null,
     })
-    .where(eq(ornamentsItems.id, id))
-    .returning({
-      ebayPriceMinUsd: ornamentsItems.ebayPriceMinUsd,
-      ebayPriceMaxUsd: ornamentsItems.ebayPriceMaxUsd,
-      ebayPriceMedianUsd: ornamentsItems.ebayPriceMedianUsd,
-      ebayPriceCachedAt: ornamentsItems.ebayPriceCachedAt,
-    });
+    .where(eq(ornamentsItems.id, id));
 
   res.json({
-    priceMinUsd: updated.ebayPriceMinUsd
-      ? Number(updated.ebayPriceMinUsd)
+    forSale: result.forSale
+      ? {
+          priceMinUsd: result.forSale.priceMinUsd,
+          priceMaxUsd: result.forSale.priceMaxUsd,
+          listingCount: result.forSale.listingCount,
+          listings: result.forSale.listings,
+        }
       : null,
-    priceMaxUsd: updated.ebayPriceMaxUsd
-      ? Number(updated.ebayPriceMaxUsd)
+    lastSold: result.lastSold
+      ? {
+          priceUsd: result.lastSold.priceUsd,
+          soldDate: result.lastSold.soldDate,
+          listingCount: result.lastSold.listingCount,
+        }
       : null,
-    priceMedianUsd: updated.ebayPriceMedianUsd
-      ? Number(updated.ebayPriceMedianUsd)
-      : null,
-    cachedAt: updated.ebayPriceCachedAt?.toISOString() ?? null,
-    listingCount: result.listingCount,
-    listings: result.listings,
-    searchQuery: query,
-    itemSpecifics: result.itemSpecifics ?? null,
+    searchQuery: result.searchQuery,
+    cachedAt: result.cachedAt,
   });
 });
 
@@ -1427,6 +1475,197 @@ router.post("/items/:id/reanalyze", aiLimiter, async (req, res) => {
     const message = err instanceof Error ? err.message : "Unknown error.";
     res.status(status).json({ error: message });
   }
+});
+
+// ---------------------------------------------------------------------------
+// AI appraisal — sends photos + metadata to AI for a collector value estimate
+// ---------------------------------------------------------------------------
+
+async function runItemAppraisal(id: number): Promise<void> {
+  const [item] = await db
+    .select(itemColumns)
+    .from(ornamentsItems)
+    .where(eq(ornamentsItems.id, id))
+    .limit(1);
+  if (!item)
+    throw Object.assign(new Error("Ornament not found."), { status: 404 });
+
+  const suppRows = (
+    await db
+      .select({ storagePath: ornamentsImages.storagePath })
+      .from(ornamentsImages)
+      .where(eq(ornamentsImages.itemId, id))
+      .orderBy(asc(ornamentsImages.position))
+  ).slice(0, MAX_AI_SUPPLEMENTAL);
+
+  const [primaryResult, ...suppResults] = await Promise.all([
+    downloadImageBuffer(item.imagePath),
+    ...suppRows.map((r) => downloadImageBuffer(r.storagePath)),
+  ]);
+
+  const primaryContentType =
+    sniffImageType(primaryResult.buffer) ?? "image/jpeg";
+  const dataUrls = [
+    toDataUrl(primaryResult.buffer, primaryContentType),
+    ...suppResults.map((r) =>
+      toDataUrl(r.buffer, sniffImageType(r.buffer) ?? "image/jpeg"),
+    ),
+  ];
+
+  const appraisal = await appraiseOrnamentImage(dataUrls, {
+    name: item.name,
+    brand: item.brand,
+    seriesOrCollection: item.seriesOrCollection,
+    year: item.year,
+    condition: item.condition,
+    aiDescription: item.aiDescription,
+    barcodeValue: item.barcodeValue,
+  });
+
+  await db
+    .update(ornamentsItems)
+    .set({ aiAppraisal: appraisal, aiAppraisalUpdatedAt: new Date() })
+    .where(eq(ornamentsItems.id, id));
+}
+
+router.post("/items/:id/ai-appraisal", aiLimiter, async (req, res) => {
+  const { id } = GetOrnamentParams.parse(req.params);
+  try {
+    await runItemAppraisal(id);
+    const [updated] = await db
+      .select(itemColumns)
+      .from(ornamentsItems)
+      .where(eq(ornamentsItems.id, id))
+      .limit(1);
+    res.json(GetOrnamentResponse.parse(await serializeItem(updated)));
+  } catch (err: unknown) {
+    const status = (err as { status?: number }).status ?? 500;
+    const message = err instanceof Error ? err.message : "Unknown error.";
+    res.status(status).json({ error: message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Refresh all — reanalyze + book value + eBay + AI appraisal in parallel
+// ---------------------------------------------------------------------------
+
+router.post("/items/:id/refresh-all", aiLimiter, async (req, res) => {
+  const { id } = GetOrnamentParams.parse(req.params);
+
+  const [item] = await db
+    .select(itemColumns)
+    .from(ornamentsItems)
+    .where(eq(ornamentsItems.id, id))
+    .limit(1);
+  if (!item) {
+    res.status(404).json({ error: "Ornament not found." });
+    return;
+  }
+
+  // Run all 4 in parallel — each independently stores its result.
+  // Non-fatal: a failure in book-value/eBay/appraisal doesn't abort the whole refresh.
+  await Promise.allSettled([
+    // 1. AI vision reanalysis (description, colors, motifs, name, barcode)
+    runItemAnalysis(id),
+    // 2. Book value — barcode cache first (hallmarkCollectorPriceUsd), then scrape
+    (async () => {
+      let result: {
+        value: number;
+        source: "hallmarkornaments.com" | "hookedonhallmark.com";
+      } | null = null;
+      if (item.barcodeValue) {
+        try {
+          const cached = await lookupBarcode(item.barcodeValue);
+          if (cached.found && cached.hallmarkCollectorPriceUsd) {
+            const v = parseFloat(cached.hallmarkCollectorPriceUsd);
+            if (Number.isFinite(v) && v > 0) {
+              result = { value: v, source: "hookedonhallmark.com" };
+            }
+          }
+        } catch (err) {
+          req.log.warn(
+            { err },
+            "refresh-all: barcode cache lookup failed, falling through to scrape",
+          );
+        }
+      }
+      if (!result) {
+        result = await lookupBookValue({
+          name: item.name,
+          seriesOrCollection: item.seriesOrCollection,
+          year: item.year,
+        }).catch((err) => {
+          req.log.warn({ err }, "refresh-all: book-value lookup failed");
+          return null;
+        });
+      }
+      if (result) {
+        await db
+          .update(ornamentsItems)
+          .set({
+            bookValue: String(result.value),
+            bookValueSource: result.source,
+            bookValueUpdatedAt: new Date(),
+          })
+          .where(eq(ornamentsItems.id, id));
+      }
+    })(),
+    // 3. eBay market data
+    env.ebayAppId
+      ? (async () => {
+          const query = buildEbayQuery(item.name, {
+            brand: item.brand,
+            seriesOrCollection: item.seriesOrCollection,
+            year: item.year,
+          });
+          const ebayResult = await lookupOrnamentEbayData(query, {
+            upc: item.barcodeValue ?? undefined,
+          }).catch((err) => {
+            req.log.warn({ err }, "refresh-all: eBay lookup failed");
+            return null;
+          });
+          if (ebayResult) {
+            await db
+              .update(ornamentsItems)
+              .set({
+                ebayPriceMinUsd: ebayResult.forSale
+                  ? String(ebayResult.forSale.priceMinUsd)
+                  : null,
+                ebayPriceMaxUsd: ebayResult.forSale
+                  ? String(ebayResult.forSale.priceMaxUsd)
+                  : null,
+                ebayPriceMedianUsd: null,
+                ebayPriceCachedAt: new Date(),
+                ebayPriceListings: ebayResult.forSale
+                  ? (ebayResult.forSale.listings as unknown as Record<
+                      string,
+                      unknown
+                    >[])
+                  : null,
+                ebayLastSoldPriceUsd: ebayResult.lastSold
+                  ? String(ebayResult.lastSold.priceUsd)
+                  : null,
+                ebayLastSoldDate: ebayResult.lastSold?.soldDate
+                  ? new Date(ebayResult.lastSold.soldDate)
+                  : null,
+              })
+              .where(eq(ornamentsItems.id, id));
+          }
+        })()
+      : Promise.resolve(),
+    // 4. AI collector appraisal
+    runItemAppraisal(id).catch((err) => {
+      req.log.warn({ err }, "refresh-all: AI appraisal failed");
+    }),
+  ]);
+
+  // Return the fully updated ornament (re-fetch after all 4 have stored)
+  const [final] = await db
+    .select(itemColumns)
+    .from(ornamentsItems)
+    .where(eq(ornamentsItems.id, id))
+    .limit(1);
+  res.json(GetOrnamentResponse.parse(await serializeItem(final)));
 });
 
 export async function bulkReanalyzeOrnamentItems(

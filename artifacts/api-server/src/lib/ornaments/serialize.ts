@@ -40,9 +40,16 @@ export interface SerializedItem {
   acquiredAt: string | null;
   dominantColors: string[];
   motifs: string[];
-  bookValue: string | null;
+  bookValue: number | null;
   bookValueSource: string | null;
   bookValueUpdatedAt: Date | null;
+  ebayPriceMinUsd: number | null;
+  ebayPriceMaxUsd: number | null;
+  ebayLastSoldPriceUsd: number | null;
+  ebayLastSoldDate: Date | null;
+  ebayPriceCachedAt: Date | null;
+  aiAppraisal: string | null;
+  aiAppraisalUpdatedAt: Date | null;
   categories: CategoryResult[];
   images: OrnamentImageResult[];
   imageUrl: string;
@@ -106,9 +113,21 @@ const { serializeItem, serializeItems } = createCollectionSerializer<
       acquiredAt: row.acquiredAt,
       dominantColors: row.dominantColors ?? [],
       motifs: row.motifs ?? [],
-      bookValue: row.bookValue,
+      bookValue: row.bookValue != null ? parseFloat(row.bookValue) : null,
       bookValueSource: row.bookValueSource,
       bookValueUpdatedAt: row.bookValueUpdatedAt,
+      ebayPriceMinUsd:
+        row.ebayPriceMinUsd != null ? parseFloat(row.ebayPriceMinUsd) : null,
+      ebayPriceMaxUsd:
+        row.ebayPriceMaxUsd != null ? parseFloat(row.ebayPriceMaxUsd) : null,
+      ebayLastSoldPriceUsd:
+        row.ebayLastSoldPriceUsd != null
+          ? parseFloat(row.ebayLastSoldPriceUsd)
+          : null,
+      ebayLastSoldDate: row.ebayLastSoldDate,
+      ebayPriceCachedAt: row.ebayPriceCachedAt,
+      aiAppraisal: row.aiAppraisal,
+      aiAppraisalUpdatedAt: row.aiAppraisalUpdatedAt,
       categories: cats,
       images: imgs,
       imageUrl: `/api/ornaments/items/${row.id}/image?v=${pathCacheBuster(row.imagePath)}`,

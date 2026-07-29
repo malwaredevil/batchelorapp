@@ -90,6 +90,7 @@ const GROUP_META: Record<
   ornaments: {
     collection: { label: "Collection", icon: LayoutGrid },
     add: { label: "Add Ornament", icon: PlusCircle },
+    scan: { label: "Scan Barcode", icon: Camera },
     "hallmark-events": { label: "Hallmark Events", icon: CalendarHeart },
     settings: { label: "Settings", icon: Settings2 },
   },
@@ -112,7 +113,7 @@ const GROUP_ORDER: Record<string, string[]> = {
   pottery: ["collection", "add", "compare", "scan", "settings"],
   quilting: ["collection", "shopping", "design", "settings"],
   office: ["inbox", "calendar", "notes", "messenger"],
-  ornaments: ["collection", "add", "hallmark-events", "settings"],
+  ornaments: ["collection", "add", "scan", "hallmark-events", "settings"],
   travels: ["home", "trips", "discover", "plan", "settings"],
 };
 

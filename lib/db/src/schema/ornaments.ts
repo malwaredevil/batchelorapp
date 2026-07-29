@@ -59,6 +59,15 @@ export const ornamentsItems = pgTable(
       withTimezone: true,
     }),
     ebayPriceListings: jsonb("ebay_price_listings"),
+    ebayLastSoldPriceUsd: numeric("ebay_last_sold_price_usd", {
+      precision: 10,
+      scale: 2,
+    }),
+    ebayLastSoldDate: timestamp("ebay_last_sold_date", { withTimezone: true }),
+    aiAppraisal: text("ai_appraisal"),
+    aiAppraisalUpdatedAt: timestamp("ai_appraisal_updated_at", {
+      withTimezone: true,
+    }),
     embedding: vector("embedding", { dimensions: 1536 }),
     visualEmbedding: vector("visual_embedding", { dimensions: 1024 }),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),

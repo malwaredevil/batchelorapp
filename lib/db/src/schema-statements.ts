@@ -2423,6 +2423,10 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE ornaments_items ADD COLUMN IF NOT EXISTS ebay_price_median_usd NUMERIC(10,2)`,
   `ALTER TABLE ornaments_items ADD COLUMN IF NOT EXISTS ebay_price_cached_at  TIMESTAMPTZ`,
   `ALTER TABLE ornaments_items ADD COLUMN IF NOT EXISTS ebay_price_listings   JSONB`,
+  `ALTER TABLE ornaments_items ADD COLUMN IF NOT EXISTS ebay_last_sold_price_usd NUMERIC(10,2)`,
+  `ALTER TABLE ornaments_items ADD COLUMN IF NOT EXISTS ebay_last_sold_date       TIMESTAMPTZ`,
+  `ALTER TABLE ornaments_items ADD COLUMN IF NOT EXISTS ai_appraisal             TEXT`,
+  `ALTER TABLE ornaments_items ADD COLUMN IF NOT EXISTS ai_appraisal_updated_at  TIMESTAMPTZ`,
 
   // ---------------------------------------------------------------------------
   // #215 — Etsy price-suggestion cache on quilting_shopping_items

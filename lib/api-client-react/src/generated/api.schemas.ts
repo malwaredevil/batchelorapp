@@ -2109,12 +2109,11 @@ export interface TravelsTravelsMonitoringPreferences {
   scheduleChangeThresholdMinutes?: number;
 }
 
-export interface OrnamentsEbayListing {
+export interface OrnamentsEbayActiveListing {
+  itemId: string;
   title: string;
-  soldPrice: number;
+  price: number;
   currency: string;
-  /** @nullable */
-  soldDate?: string | null;
   /** @nullable */
   condition?: string | null;
   /** @nullable */
@@ -2123,15 +2122,25 @@ export interface OrnamentsEbayListing {
   itemUrl?: string | null;
 }
 
-export interface OrnamentsEbayPriceResult {
+export interface OrnamentsEbayForSaleResult {
   priceMinUsd: number;
   priceMaxUsd: number;
-  priceMedianUsd: number;
   listingCount: number;
-  listings: OrnamentsEbayListing[];
+  listings: OrnamentsEbayActiveListing[];
+}
+
+export interface OrnamentsEbayLastSoldResult {
+  priceUsd: number;
   /** @nullable */
-  cachedAt?: string | null;
+  soldDate?: string | null;
+  listingCount: number;
+}
+
+export interface OrnamentsEbayPriceResult {
+  forSale?: OrnamentsEbayForSaleResult | null;
+  lastSold?: OrnamentsEbayLastSoldResult | null;
   searchQuery?: string;
+  cachedAt?: string;
 }
 
 export interface OrnamentsCategory {
@@ -2233,6 +2242,35 @@ export interface OrnamentsOrnamentItem {
   bookValueSource?: string | null;
   /** @nullable */
   bookValueUpdatedAt?: string | null;
+  /**
+     * Current active eBay listing minimum price USD (for-sale)
+     * @nullable
+     */
+  ebayPriceMinUsd?: number | null;
+  /**
+     * Current active eBay listing maximum price USD (for-sale)
+     * @nullable
+     */
+  ebayPriceMaxUsd?: number | null;
+  /**
+     * Most recent sold price on eBay (past 2 years)
+     * @nullable
+     */
+  ebayLastSoldPriceUsd?: number | null;
+  /** @nullable */
+  ebayLastSoldDate?: string | null;
+  /**
+     * When the eBay data was last refreshed
+     * @nullable
+     */
+  ebayPriceCachedAt?: string | null;
+  /**
+     * AI-generated collector appraisal text including estimated value range
+     * @nullable
+     */
+  aiAppraisal?: string | null;
+  /** @nullable */
+  aiAppraisalUpdatedAt?: string | null;
   categories: OrnamentsCategory[];
   images: OrnamentsOrnamentImage[];
   imageUrl: string;

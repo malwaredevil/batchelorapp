@@ -4671,6 +4671,13 @@ export const ListOrnamentsResponse = zod.object({
   "bookValue": zod.number().nullish(),
   "bookValueSource": zod.string().nullish().describe('Which site the value came from: hallmarkornaments.com or hookedonhallmark.com'),
   "bookValueUpdatedAt": zod.coerce.date().nullish(),
+  "ebayPriceMinUsd": zod.number().nullish().describe('Current active eBay listing minimum price USD (for-sale)'),
+  "ebayPriceMaxUsd": zod.number().nullish().describe('Current active eBay listing maximum price USD (for-sale)'),
+  "ebayLastSoldPriceUsd": zod.number().nullish().describe('Most recent sold price on eBay (past 2 years)'),
+  "ebayLastSoldDate": zod.coerce.date().nullish(),
+  "ebayPriceCachedAt": zod.coerce.date().nullish().describe('When the eBay data was last refreshed'),
+  "aiAppraisal": zod.string().nullish().describe('AI-generated collector appraisal text including estimated value range'),
+  "aiAppraisalUpdatedAt": zod.coerce.date().nullish(),
   "categories": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -4757,6 +4764,13 @@ export const GetOrnamentResponse = zod.object({
   "bookValue": zod.number().nullish(),
   "bookValueSource": zod.string().nullish().describe('Which site the value came from: hallmarkornaments.com or hookedonhallmark.com'),
   "bookValueUpdatedAt": zod.coerce.date().nullish(),
+  "ebayPriceMinUsd": zod.number().nullish().describe('Current active eBay listing minimum price USD (for-sale)'),
+  "ebayPriceMaxUsd": zod.number().nullish().describe('Current active eBay listing maximum price USD (for-sale)'),
+  "ebayLastSoldPriceUsd": zod.number().nullish().describe('Most recent sold price on eBay (past 2 years)'),
+  "ebayLastSoldDate": zod.coerce.date().nullish(),
+  "ebayPriceCachedAt": zod.coerce.date().nullish().describe('When the eBay data was last refreshed'),
+  "aiAppraisal": zod.string().nullish().describe('AI-generated collector appraisal text including estimated value range'),
+  "aiAppraisalUpdatedAt": zod.coerce.date().nullish(),
   "categories": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -4829,6 +4843,13 @@ export const UpdateOrnamentResponse = zod.object({
   "bookValue": zod.number().nullish(),
   "bookValueSource": zod.string().nullish().describe('Which site the value came from: hallmarkornaments.com or hookedonhallmark.com'),
   "bookValueUpdatedAt": zod.coerce.date().nullish(),
+  "ebayPriceMinUsd": zod.number().nullish().describe('Current active eBay listing minimum price USD (for-sale)'),
+  "ebayPriceMaxUsd": zod.number().nullish().describe('Current active eBay listing maximum price USD (for-sale)'),
+  "ebayLastSoldPriceUsd": zod.number().nullish().describe('Most recent sold price on eBay (past 2 years)'),
+  "ebayLastSoldDate": zod.coerce.date().nullish(),
+  "ebayPriceCachedAt": zod.coerce.date().nullish().describe('When the eBay data was last refreshed'),
+  "aiAppraisal": zod.string().nullish().describe('AI-generated collector appraisal text including estimated value range'),
+  "aiAppraisalUpdatedAt": zod.coerce.date().nullish(),
   "categories": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -4885,6 +4906,13 @@ export const ReanalyzeOrnamentResponse = zod.object({
   "bookValue": zod.number().nullish(),
   "bookValueSource": zod.string().nullish().describe('Which site the value came from: hallmarkornaments.com or hookedonhallmark.com'),
   "bookValueUpdatedAt": zod.coerce.date().nullish(),
+  "ebayPriceMinUsd": zod.number().nullish().describe('Current active eBay listing minimum price USD (for-sale)'),
+  "ebayPriceMaxUsd": zod.number().nullish().describe('Current active eBay listing maximum price USD (for-sale)'),
+  "ebayLastSoldPriceUsd": zod.number().nullish().describe('Most recent sold price on eBay (past 2 years)'),
+  "ebayLastSoldDate": zod.coerce.date().nullish(),
+  "ebayPriceCachedAt": zod.coerce.date().nullish().describe('When the eBay data was last refreshed'),
+  "aiAppraisal": zod.string().nullish().describe('AI-generated collector appraisal text including estimated value range'),
+  "aiAppraisalUpdatedAt": zod.coerce.date().nullish(),
   "categories": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -4937,6 +4965,13 @@ export const SetOrnamentPrimaryImageResponse = zod.object({
   "bookValue": zod.number().nullish(),
   "bookValueSource": zod.string().nullish().describe('Which site the value came from: hallmarkornaments.com or hookedonhallmark.com'),
   "bookValueUpdatedAt": zod.coerce.date().nullish(),
+  "ebayPriceMinUsd": zod.number().nullish().describe('Current active eBay listing minimum price USD (for-sale)'),
+  "ebayPriceMaxUsd": zod.number().nullish().describe('Current active eBay listing maximum price USD (for-sale)'),
+  "ebayLastSoldPriceUsd": zod.number().nullish().describe('Most recent sold price on eBay (past 2 years)'),
+  "ebayLastSoldDate": zod.coerce.date().nullish(),
+  "ebayPriceCachedAt": zod.coerce.date().nullish().describe('When the eBay data was last refreshed'),
+  "aiAppraisal": zod.string().nullish().describe('AI-generated collector appraisal text including estimated value range'),
+  "aiAppraisalUpdatedAt": zod.coerce.date().nullish(),
   "categories": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),
@@ -5074,6 +5109,116 @@ export const ExtractOrnamentBarcodePhotoResponse = zod.object({
 
 
 /**
+ * @summary Refresh all AI and market data — reanalyze images, book value, eBay price, and AI appraisal all at once
+ */
+export const RefreshAllOrnamentDataParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+
+
+export const RefreshAllOrnamentDataResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "brand": zod.string(),
+  "seriesOrCollection": zod.string().nullish(),
+  "year": zod.number().nullish().describe('Release\/edition year printed on the ornament'),
+  "barcodeValue": zod.string().nullish(),
+  "quantity": zod.number().min(1),
+  "lockedFields": zod.array(zod.string()),
+  "notes": zod.string().nullish(),
+  "dimensions": zod.string().nullish(),
+  "condition": zod.string().nullish(),
+  "origin": zod.string().nullish(),
+  "aiDescription": zod.string().nullish(),
+  "acquiredAt": zod.string().nullish(),
+  "dominantColors": zod.array(zod.string()).optional(),
+  "motifs": zod.array(zod.string()).optional(),
+  "bookValue": zod.number().nullish(),
+  "bookValueSource": zod.string().nullish().describe('Which site the value came from: hallmarkornaments.com or hookedonhallmark.com'),
+  "bookValueUpdatedAt": zod.coerce.date().nullish(),
+  "ebayPriceMinUsd": zod.number().nullish().describe('Current active eBay listing minimum price USD (for-sale)'),
+  "ebayPriceMaxUsd": zod.number().nullish().describe('Current active eBay listing maximum price USD (for-sale)'),
+  "ebayLastSoldPriceUsd": zod.number().nullish().describe('Most recent sold price on eBay (past 2 years)'),
+  "ebayLastSoldDate": zod.coerce.date().nullish(),
+  "ebayPriceCachedAt": zod.coerce.date().nullish().describe('When the eBay data was last refreshed'),
+  "aiAppraisal": zod.string().nullish().describe('AI-generated collector appraisal text including estimated value range'),
+  "aiAppraisalUpdatedAt": zod.coerce.date().nullish(),
+  "categories": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "bgColor": zod.string().nullish(),
+  "textColor": zod.string().nullish(),
+  "count": zod.number().optional().describe('Number of ornaments assigned this category (only present on the category-list endpoint)')
+})),
+  "images": zod.array(zod.object({
+  "id": zod.number(),
+  "url": zod.string(),
+  "label": zod.string().nullish(),
+  "position": zod.number()
+})),
+  "imageUrl": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Run AI collector appraisal on an ornament and save the result
+ */
+export const RunOrnamentAiAppraisalParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+
+
+export const RunOrnamentAiAppraisalResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "brand": zod.string(),
+  "seriesOrCollection": zod.string().nullish(),
+  "year": zod.number().nullish().describe('Release\/edition year printed on the ornament'),
+  "barcodeValue": zod.string().nullish(),
+  "quantity": zod.number().min(1),
+  "lockedFields": zod.array(zod.string()),
+  "notes": zod.string().nullish(),
+  "dimensions": zod.string().nullish(),
+  "condition": zod.string().nullish(),
+  "origin": zod.string().nullish(),
+  "aiDescription": zod.string().nullish(),
+  "acquiredAt": zod.string().nullish(),
+  "dominantColors": zod.array(zod.string()).optional(),
+  "motifs": zod.array(zod.string()).optional(),
+  "bookValue": zod.number().nullish(),
+  "bookValueSource": zod.string().nullish().describe('Which site the value came from: hallmarkornaments.com or hookedonhallmark.com'),
+  "bookValueUpdatedAt": zod.coerce.date().nullish(),
+  "ebayPriceMinUsd": zod.number().nullish().describe('Current active eBay listing minimum price USD (for-sale)'),
+  "ebayPriceMaxUsd": zod.number().nullish().describe('Current active eBay listing maximum price USD (for-sale)'),
+  "ebayLastSoldPriceUsd": zod.number().nullish().describe('Most recent sold price on eBay (past 2 years)'),
+  "ebayLastSoldDate": zod.coerce.date().nullish(),
+  "ebayPriceCachedAt": zod.coerce.date().nullish().describe('When the eBay data was last refreshed'),
+  "aiAppraisal": zod.string().nullish().describe('AI-generated collector appraisal text including estimated value range'),
+  "aiAppraisalUpdatedAt": zod.coerce.date().nullish(),
+  "categories": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "bgColor": zod.string().nullish(),
+  "textColor": zod.string().nullish(),
+  "count": zod.number().optional().describe('Number of ornaments assigned this category (only present on the category-list endpoint)')
+})),
+  "images": zod.array(zod.object({
+  "id": zod.number(),
+  "url": zod.string(),
+  "label": zod.string().nullish(),
+  "position": zod.number()
+})),
+  "imageUrl": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
  * @summary Look up eBay sold-listing prices and cache them on the ornament
  */
 export const LookupOrnamentEbayPriceParams = zod.object({
@@ -5081,21 +5226,27 @@ export const LookupOrnamentEbayPriceParams = zod.object({
 })
 
 export const LookupOrnamentEbayPriceResponse = zod.object({
+  "forSale": zod.union([zod.object({
   "priceMinUsd": zod.number(),
   "priceMaxUsd": zod.number(),
-  "priceMedianUsd": zod.number(),
   "listingCount": zod.number(),
   "listings": zod.array(zod.object({
+  "itemId": zod.string(),
   "title": zod.string(),
-  "soldPrice": zod.number(),
+  "price": zod.number(),
   "currency": zod.string(),
-  "soldDate": zod.string().nullish(),
   "condition": zod.string().nullish(),
   "imageUrl": zod.string().nullish(),
   "itemUrl": zod.string().nullish()
-})),
-  "cachedAt": zod.string().nullish(),
-  "searchQuery": zod.string().optional()
+}))
+}),zod.null()]).optional(),
+  "lastSold": zod.union([zod.object({
+  "priceUsd": zod.number(),
+  "soldDate": zod.string().nullish(),
+  "listingCount": zod.number()
+}),zod.null()]).optional(),
+  "searchQuery": zod.string().optional(),
+  "cachedAt": zod.string().optional()
 })
 
 
@@ -5129,6 +5280,13 @@ export const LookupOrnamentBookValueResponse = zod.object({
   "bookValue": zod.number().nullish(),
   "bookValueSource": zod.string().nullish().describe('Which site the value came from: hallmarkornaments.com or hookedonhallmark.com'),
   "bookValueUpdatedAt": zod.coerce.date().nullish(),
+  "ebayPriceMinUsd": zod.number().nullish().describe('Current active eBay listing minimum price USD (for-sale)'),
+  "ebayPriceMaxUsd": zod.number().nullish().describe('Current active eBay listing maximum price USD (for-sale)'),
+  "ebayLastSoldPriceUsd": zod.number().nullish().describe('Most recent sold price on eBay (past 2 years)'),
+  "ebayLastSoldDate": zod.coerce.date().nullish(),
+  "ebayPriceCachedAt": zod.coerce.date().nullish().describe('When the eBay data was last refreshed'),
+  "aiAppraisal": zod.string().nullish().describe('AI-generated collector appraisal text including estimated value range'),
+  "aiAppraisalUpdatedAt": zod.coerce.date().nullish(),
   "categories": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),

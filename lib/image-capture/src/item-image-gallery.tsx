@@ -49,6 +49,12 @@ export interface ItemImageGalleryProps {
   /** External uploading state (e.g. from a mutation). */
   isUploading?: boolean;
   className?: string;
+  /**
+   * Override the main image's aspect/size classes.
+   * Default: "aspect-square w-full object-cover"
+   * Use to cap height on mobile, e.g. "aspect-[4/3] max-h-[55vh] w-full object-cover"
+   */
+  mainImageClassName?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -65,6 +71,7 @@ export function ItemImageGallery({
   maxImages,
   isUploading = false,
   className,
+  mainImageClassName,
 }: ItemImageGalleryProps) {
   const [activeIdx, setActiveIdx] = useState(0);
 
@@ -231,7 +238,9 @@ export function ItemImageGallery({
             <img
               src={active.url}
               alt={active.label ?? "Photo"}
-              className="aspect-square w-full object-cover"
+              className={
+                mainImageClassName ?? "aspect-square w-full object-cover"
+              }
             />
 
             {/* Label badge on selected supplemental image */}

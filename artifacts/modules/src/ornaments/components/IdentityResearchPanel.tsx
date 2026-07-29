@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Loader2, Search, ChevronDown, ChevronUp, Check } from "lucide-react";
+import { Loader2, ChevronDown, ChevronUp, Check, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
@@ -63,7 +63,7 @@ export function IdentityResearchPanel({ itemId }: { itemId: number }) {
         }, 3000);
         setTimeout(() => clearInterval(poll), 60_000);
       },
-      onError: () => toast.error("Failed to start identity research"),
+      onError: () => toast.error("Failed to start catalog research"),
     },
   });
 
@@ -76,7 +76,7 @@ export function IdentityResearchPanel({ itemId }: { itemId: number }) {
         void queryClient.invalidateQueries({
           queryKey: getGetOrnamentIdentityResearchQueryKey(itemId),
         });
-        toast.success("Applied to ornament");
+        toast.success("Fields updated from catalog research");
       },
       onError: () => toast.error("Failed to apply"),
     },
@@ -93,12 +93,18 @@ export function IdentityResearchPanel({ itemId }: { itemId: number }) {
       : [];
 
   return (
-    <section className="rounded-xl border border-card-border bg-card p-4">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Identity Research
-        </p>
-        <div className="flex items-center gap-2">
+    <section className="rounded-xl border border-border bg-muted/30 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            AI Catalog Research
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Find official catalog numbers and confirm series details — applying
+            a result updates the fields above.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
           <Button
             variant="outline"
             size="sm"
@@ -109,9 +115,9 @@ export function IdentityResearchPanel({ itemId }: { itemId: number }) {
             {isRunning ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
             ) : (
-              <Search className="h-3.5 w-3.5 mr-1" />
+              <Sparkles className="h-3.5 w-3.5 mr-1" />
             )}
-            {isRunning ? "Researching…" : "Research"}
+            {isRunning ? "Researching…" : latestJob ? "Re-run" : "Run"}
           </Button>
           {latestJob && (
             <button
@@ -128,30 +134,25 @@ export function IdentityResearchPanel({ itemId }: { itemId: number }) {
         </div>
       </div>
 
-      {!latestJob && !isRunning && (
-        <p className="mt-2 text-xs text-muted-foreground italic">
-          Run AI research to identify series, year, and catalog details.
-        </p>
-      )}
-
       {isRunning && (
         <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin text-primary" />
-          Researching identity… this may take up to 30 seconds.
+          Searching Hallmark catalogs… up to 30 seconds.
         </div>
       )}
 
       {expanded && latestJob?.status === "failed" && (
         <p className="mt-2 text-xs text-destructive">
-          Research failed. Try again.
+          Research failed. Try running again.
         </p>
       )}
 
       {expanded && candidates.length > 0 && latestJob && (
         <div className="mt-3 space-y-2">
           <p className="text-xs text-muted-foreground">
-            {candidates.length} candidate
-            {candidates.length !== 1 ? "s" : ""} — click to apply
+            {candidates.length} match
+            {candidates.length !== 1 ? "es" : ""} found — tap one to update the
+            fields above
           </p>
           {candidates.map((c, i) => (
             <button
@@ -164,7 +165,7 @@ export function IdentityResearchPanel({ itemId }: { itemId: number }) {
                 })
               }
               disabled={applyResearch.isPending}
-              className="w-full text-left rounded-lg border border-card-border bg-background p-3 hover:border-primary/50 hover:bg-primary/5 transition-colors group"
+              className="w-full text-left rounded-lg border border-border bg-background p-3 hover:border-primary/50 hover:bg-primary/5 transition-colors group"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
@@ -193,7 +194,8 @@ export function IdentityResearchPanel({ itemId }: { itemId: number }) {
 
       {latestJob?.status === "done" && candidates.length === 0 && expanded && (
         <p className="mt-2 text-xs text-muted-foreground italic">
-          No candidates found. Try running again.
+          No catalog matches found. Try running again or edit the fields
+          manually.
         </p>
       )}
 
@@ -208,8 +210,8 @@ export function IdentityResearchPanel({ itemId }: { itemId: number }) {
               onClick={() => setExpanded(true)}
               className="text-xs text-primary underline-offset-2 hover:underline"
             >
-              View {candidates.length} result
-              {candidates.length !== 1 ? "s" : ""}
+              View {candidates.length} match
+              {candidates.length !== 1 ? "es" : ""}
             </button>
           )}
         </div>

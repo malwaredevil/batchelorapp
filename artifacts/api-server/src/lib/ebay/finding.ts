@@ -113,13 +113,21 @@ function parseActiveListing(item: FindingItem): FindingActiveListing | null {
 /**
  * Search eBay completed/sold listings by keyword query.
  * Returns up to `maxItems` sold listings sorted by most-recently-ended.
+ *
+ * @param daysBack  When provided, restricts results to listings that ended
+ *   within the past N days (e.g. 730 = 2 years). Omit for all-time results.
  */
 export async function findCompletedItems(
   query: string,
   maxItems = 20,
+  daysBack?: number,
 ): Promise<FindingListing[]> {
   const appId = env.ebayAppId;
   if (!appId) throw new Error("EBAY_APP_ID not configured");
+
+  const endTimeFrom = daysBack
+    ? new Date(Date.now() - daysBack * 86_400_000).toISOString()
+    : null;
 
   const params = new URLSearchParams({
     "OPERATION-NAME": "findCompletedItems",
@@ -132,6 +140,10 @@ export async function findCompletedItems(
     sortOrder: "EndTimeSoonest",
     "paginationInput.entriesPerPage": String(Math.min(maxItems, 100)),
   });
+  if (endTimeFrom) {
+    params.set("itemFilter(1).name", "EndTimeFrom");
+    params.set("itemFilter(1).value", endTimeFrom);
+  }
 
   const url = `${FINDING_BASE}?${params.toString()}`;
   const resp = await fetch(url, {

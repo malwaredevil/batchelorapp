@@ -144,6 +144,72 @@ Rules:
   return digits && digits.length >= 4 ? digits : null;
 }
 
+const APPRAISAL_PROMPT = `You are an expert Hallmark Keepsake ornament appraiser with deep knowledge of the collector market.
+
+Given the photos and metadata provided, write a concise 2–3 sentence collector's appraisal. You MUST include:
+- A specific estimated current market value range in USD (e.g. "$25–$45")
+- The key factors driving that estimate (series position, year, condition, demand)
+- A brief note on how value may change over time
+
+Be direct and specific. Do not hedge with "it depends" — give your best estimate based on what you can see.
+Do not use markdown formatting (no bold, no asterisks, no bullet points). Plain prose only.`;
+
+export interface OrnamentMeta {
+  name: string;
+  brand: string | null;
+  seriesOrCollection: string | null;
+  year: number | null;
+  condition: string | null;
+  aiDescription: string | null;
+  barcodeValue?: string | null;
+}
+
+export async function appraiseOrnamentImage(
+  dataUrls: string[],
+  meta: OrnamentMeta,
+): Promise<string> {
+  const metaText = [
+    `Name: ${meta.name}`,
+    meta.brand ? `Brand: ${meta.brand}` : null,
+    meta.seriesOrCollection ? `Series: ${meta.seriesOrCollection}` : null,
+    meta.year ? `Year: ${meta.year}` : null,
+    meta.condition ? `Condition: ${meta.condition}` : null,
+    meta.aiDescription ? `Description: ${meta.aiDescription}` : null,
+    meta.barcodeValue ? `UPC/Barcode: ${meta.barcodeValue}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const models = await getModels();
+  const completion = await callModel(models.fastVision, (c, model) =>
+    c.chat.completions.create({
+      model,
+      messages: [
+        { role: "system", content: APPRAISAL_PROMPT },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text" as const,
+              text: `Appraise this ornament:\n\n${metaText}`,
+            },
+            ...dataUrls.map((url) => ({
+              type: "image_url" as const,
+              image_url: { url },
+            })),
+          ],
+        },
+      ],
+      max_tokens: 300,
+    }),
+  );
+
+  return (
+    completion.choices[0]?.message?.content?.trim() ??
+    "Unable to generate appraisal."
+  );
+}
+
 export function buildEmbeddingText(analysis: OrnamentAnalysis): string {
   return [
     analysis.name,

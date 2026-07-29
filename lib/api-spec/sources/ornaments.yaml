@@ -413,6 +413,58 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /items/{id}/refresh-all:
+    post:
+      operationId: refreshAllOrnamentData
+      tags:
+        - ornaments
+      summary: Refresh all AI and market data — reanalyze images, book value, eBay price, and AI appraisal all at once
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Fully updated ornament after all refreshes complete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrnamentItem"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /items/{id}/ai-appraisal:
+    post:
+      operationId: runOrnamentAiAppraisal
+      tags:
+        - ornaments
+      summary: Run AI collector appraisal on an ornament and save the result
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated ornament with fresh AI appraisal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrnamentItem"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   # #214 — eBay sold-listings fallback
   /items/{id}/ebay-price-lookup:
     post:
@@ -860,18 +912,18 @@ paths:
 
 components:
   schemas:
-    EbayListing:
+    EbayActiveListing:
       type: object
-      required: [title, soldPrice, currency]
+      required: [itemId, title, price, currency]
       properties:
+        itemId:
+          type: string
         title:
           type: string
-        soldPrice:
+        price:
           type: number
         currency:
           type: string
-        soldDate:
-          type: ["string", "null"]
         condition:
           type: ["string", "null"]
         imageUrl:
@@ -879,26 +931,46 @@ components:
         itemUrl:
           type: ["string", "null"]
 
-    EbayPriceResult:
+    EbayForSaleResult:
       type: object
-      required:
-        [priceMinUsd, priceMaxUsd, priceMedianUsd, listingCount, listings]
+      required: [priceMinUsd, priceMaxUsd, listingCount, listings]
       properties:
         priceMinUsd:
           type: number
         priceMaxUsd:
-          type: number
-        priceMedianUsd:
           type: number
         listingCount:
           type: integer
         listings:
           type: array
           items:
-            $ref: "#/components/schemas/EbayListing"
-        cachedAt:
+            $ref: "#/components/schemas/EbayActiveListing"
+
+    EbayLastSoldResult:
+      type: object
+      required: [priceUsd, listingCount]
+      properties:
+        priceUsd:
+          type: number
+        soldDate:
           type: ["string", "null"]
+        listingCount:
+          type: integer
+
+    EbayPriceResult:
+      type: object
+      properties:
+        forSale:
+          oneOf:
+            - $ref: "#/components/schemas/EbayForSaleResult"
+            - type: "null"
+        lastSold:
+          oneOf:
+            - $ref: "#/components/schemas/EbayLastSoldResult"
+            - type: "null"
         searchQuery:
+          type: string
+        cachedAt:
           type: string
 
     Category:
@@ -1094,6 +1166,42 @@ components:
             - "null"
           description: "Which site the value came from: hallmarkornaments.com or hookedonhallmark.com"
         bookValueUpdatedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        ebayPriceMinUsd:
+          type:
+            - number
+            - "null"
+          description: Current active eBay listing minimum price USD (for-sale)
+        ebayPriceMaxUsd:
+          type:
+            - number
+            - "null"
+          description: Current active eBay listing maximum price USD (for-sale)
+        ebayLastSoldPriceUsd:
+          type:
+            - number
+            - "null"
+          description: Most recent sold price on eBay (past 2 years)
+        ebayLastSoldDate:
+          type:
+            - string
+            - "null"
+          format: date-time
+        ebayPriceCachedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+          description: When the eBay data was last refreshed
+        aiAppraisal:
+          type:
+            - string
+            - "null"
+          description: AI-generated collector appraisal text including estimated value range
+        aiAppraisalUpdatedAt:
           type:
             - string
             - "null"

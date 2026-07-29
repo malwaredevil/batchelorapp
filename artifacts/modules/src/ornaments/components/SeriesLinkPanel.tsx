@@ -107,12 +107,19 @@ export function SeriesLinkPanel({ itemId }: { itemId: number }) {
   );
 
   return (
-    <section className="rounded-xl border border-card-border bg-card p-4">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Series Link
-        </p>
-        <div className="flex items-center gap-2">
+    <section className="rounded-xl border border-border bg-muted/30 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Collector Series Database
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {isLinked
+              ? "Linked to a numbered entry in the catalog series database."
+              : "Link to a specific numbered entry in the Hallmark series catalog (with catalog numbers, yearly editions)."}
+          </p>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
           {isLinked && (
             <Button
               variant="ghost"
@@ -120,6 +127,7 @@ export function SeriesLinkPanel({ itemId }: { itemId: number }) {
               onClick={() => unlinkMutation.mutate({ id: itemId })}
               disabled={unlinkMutation.isPending}
               className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
+              title="Unlink from series"
             >
               {unlinkMutation.isPending ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -130,7 +138,7 @@ export function SeriesLinkPanel({ itemId }: { itemId: number }) {
           )}
           <button
             onClick={() => setExpanded((v) => !v)}
-            className="text-muted-foreground hover:text-foreground transition-colors"
+            className="text-muted-foreground hover:text-foreground transition-colors p-1"
           >
             {expanded ? (
               <ChevronUp className="h-4 w-4" />
@@ -163,16 +171,29 @@ export function SeriesLinkPanel({ itemId }: { itemId: number }) {
                 navigate(`/ornaments/canonical-series/${linkData.seriesId}`)
               }
               className="text-primary hover:text-primary/80 transition-colors"
-              title="View series"
+              title="View full series"
             >
               <ExternalLink className="h-4 w-4" />
             </button>
           )}
         </div>
       ) : (
-        <p className="mt-2 text-xs text-muted-foreground italic">
-          Not linked to a canonical series.
-        </p>
+        !expanded && (
+          <div className="mt-2 flex items-center gap-2">
+            <Badge
+              variant="outline"
+              className="text-[10px] h-5 font-normal text-muted-foreground"
+            >
+              Not linked
+            </Badge>
+            <button
+              onClick={() => setExpanded(true)}
+              className="text-xs text-primary underline-offset-2 hover:underline"
+            >
+              Browse catalog
+            </button>
+          </div>
+        )
       )}
 
       {expanded && (
@@ -283,7 +304,7 @@ function SeriesEntryPicker({
   return (
     <div className="space-y-1">
       <p className="text-xs text-muted-foreground font-medium">
-        Select entry to link:
+        Select the specific yearly entry to link:
       </p>
       <div className="max-h-36 overflow-y-auto space-y-1">
         {entries.map((e) => (

@@ -15401,6 +15401,146 @@ export const useExtractOrnamentBarcodePhoto = <TError = ErrorType<Error>,
       return useMutation(getExtractOrnamentBarcodePhotoMutationOptions(options));
     }
 
+export const getRefreshAllOrnamentDataUrl = (id: number,) => {
+
+
+
+
+  return `/api/ornaments/items/${id}/refresh-all`
+}
+
+/**
+ * @summary Refresh all AI and market data — reanalyze images, book value, eBay price, and AI appraisal all at once
+ */
+export const refreshAllOrnamentData = async (id: number, options?: RequestInit): Promise<OrnamentsOrnamentItem> => {
+
+  return customFetch<OrnamentsOrnamentItem>(getRefreshAllOrnamentDataUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRefreshAllOrnamentDataMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refreshAllOrnamentData>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof refreshAllOrnamentData>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['refreshAllOrnamentData'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof refreshAllOrnamentData>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  refreshAllOrnamentData(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RefreshAllOrnamentDataMutationResult = NonNullable<Awaited<ReturnType<typeof refreshAllOrnamentData>>>
+
+    export type RefreshAllOrnamentDataMutationError = ErrorType<Error>
+
+    /**
+ * @summary Refresh all AI and market data — reanalyze images, book value, eBay price, and AI appraisal all at once
+ */
+export const useRefreshAllOrnamentData = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refreshAllOrnamentData>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof refreshAllOrnamentData>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getRefreshAllOrnamentDataMutationOptions(options));
+    }
+
+export const getRunOrnamentAiAppraisalUrl = (id: number,) => {
+
+
+
+
+  return `/api/ornaments/items/${id}/ai-appraisal`
+}
+
+/**
+ * @summary Run AI collector appraisal on an ornament and save the result
+ */
+export const runOrnamentAiAppraisal = async (id: number, options?: RequestInit): Promise<OrnamentsOrnamentItem> => {
+
+  return customFetch<OrnamentsOrnamentItem>(getRunOrnamentAiAppraisalUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getRunOrnamentAiAppraisalMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runOrnamentAiAppraisal>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof runOrnamentAiAppraisal>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['runOrnamentAiAppraisal'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof runOrnamentAiAppraisal>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  runOrnamentAiAppraisal(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RunOrnamentAiAppraisalMutationResult = NonNullable<Awaited<ReturnType<typeof runOrnamentAiAppraisal>>>
+
+    export type RunOrnamentAiAppraisalMutationError = ErrorType<Error>
+
+    /**
+ * @summary Run AI collector appraisal on an ornament and save the result
+ */
+export const useRunOrnamentAiAppraisal = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runOrnamentAiAppraisal>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof runOrnamentAiAppraisal>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getRunOrnamentAiAppraisalMutationOptions(options));
+    }
+
 export const getLookupOrnamentEbayPriceUrl = (id: number,) => {
 
 

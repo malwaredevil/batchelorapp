@@ -1,0 +1,30 @@
+@import url("https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Inter:wght@400;500;600&display=swap");
+
+.wide-canvas-container {
+  --ornament-bg: #f8f7f5;
+  --ornament-card-border: #e5e3de;
+  --ornament-text: #2d2a26;
+  --ornament-muted: #7b7771;
+  --ornament-accent: #c2714a;
+  --ebay-gold: #d4af37;
+  --ai-purple: #8b5cf6;
+  --ai-amber: #f59e0b;
+
+  background-color: var(--ornament-bg);
+  color: var(--ornament-text);
+  font-family: "Inter", sans-serif;
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+.wide-canvas-container .font-serif-orn {
+  font-family: "Playfair Display", serif;
+}
+
+.wide-canvas-container .label-field {
+  border-bottom: 1px solid var(--ornament-card-border);
+}
+
+.wide-canvas-container .label-field:last-child {
+  border-bottom: none;
+}

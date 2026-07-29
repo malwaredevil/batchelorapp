@@ -99,6 +99,8 @@ vi.mock("../middleware/rateLimit", () => ({
 
 vi.mock("../lib/jobs/queue", () => ({
   enqueueJob: (...args: unknown[]) => mockEnqueueJob(...args),
+  enqueueJobWithQuery: (_query: unknown, input: unknown) =>
+    mockEnqueueJob(input),
 }));
 
 vi.mock("../elaine", () => ({
@@ -236,6 +238,15 @@ describe("Slack webhook — job-queue path (#308)", () => {
     selectQueue.length = 0;
     mockVerify.mockReturnValue(true);
     mockEnqueueJob.mockResolvedValue(42);
+    mockPoolClientQuery.mockImplementation(async (sql: unknown) => {
+      const query = String(sql);
+      if (query.includes("INSERT INTO slack_webhook_deliveries")) {
+        return insertShouldDuplicate.value
+          ? { rows: [] }
+          : { rows: [{ id: "Ev001" }] };
+      }
+      return { rows: [] };
+    });
     // Pre-seed: appUsers lookup returns one matched user.
     selectQueue.push([{ id: 7, email: "user@example.com" }]);
   });

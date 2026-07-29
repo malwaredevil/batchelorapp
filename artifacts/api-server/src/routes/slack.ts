@@ -224,7 +224,9 @@ router.post("/webhook", webhookLimiter, async (req: Request, res: Response) => {
     });
     if (result === "duplicate") {
       logger.warn({ eventId }, "slack: duplicate event delivery rejected");
-      res.json({ ok: true, duplicate: true });
+      // Preserve the public Slack acknowledgement contract: callers should not
+      // need to distinguish a first delivery from an idempotent retry.
+      res.json({ ok: true });
       return;
     }
     logger.info(

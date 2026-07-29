@@ -119,6 +119,25 @@ export const webhookLimiter = rateLimit({
   passOnStoreError: false,
 });
 
+// Broad API safety net. Endpoint-specific limiters remain authoritative for
+// expensive or abuse-sensitive operations; this generous ceiling ensures that
+// every API route is bounded even when a router does not declare a narrower
+// policy. Health probes are skipped because they must remain available while
+// the database-backed limiter store is unavailable during startup or incidents.
+export const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 2_000,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: jsonLimitMessage,
+  store: new PostgresRateLimitStore("api"),
+  passOnStoreError: false,
+  skip: (req) =>
+    req.path === "/healthz" ||
+    req.path === "/health/live" ||
+    req.path === "/health/ready",
+});
+
 // Admin/owner-only operational routes (jobs dashboard, operations telemetry).
 // Generous cap since they are already gated behind requireOwner, but still
 // bounded to prevent accidental tight-loop polling from saturating the DB.

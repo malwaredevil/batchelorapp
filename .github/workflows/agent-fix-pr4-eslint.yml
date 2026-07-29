@@ -6,6 +6,9 @@ on:
       - agent/shared-core-and-collection-quality
     paths:
       - pnpm-workspace.yaml
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write

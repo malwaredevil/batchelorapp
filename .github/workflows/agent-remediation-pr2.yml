@@ -1,0 +1,46 @@
+name: Agent PR2 remediation
+
+on:
+  push:
+    branches:
+      - agent/job-and-webhook-reliability
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: agent/job-and-webhook-reliability
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          version: 10
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: python .github/agent-remediation/pr2_apply.py
+      - run: rm .github/agent-remediation/pr2_apply.py .github/workflows/agent-remediation-pr2.yml
+      - run: pnpm install --frozen-lockfile
+      - name: Format changed files
+        run: |
+          pnpm exec prettier --write \
+            artifacts/api-server/src/lib/jobs/worker.ts \
+            artifacts/api-server/src/lib/jobs/worker.test.ts \
+            artifacts/api-server/src/lib/jobs/queue.ts \
+            artifacts/api-server/src/routes/slack.ts \
+            artifacts/api-server/src/routes/slack-reliability.test.ts \
+            lib/db/src/schema/slack.ts \
+            lib/db/src/schema-statements.ts
+      - run: pnpm run typecheck
+      - run: pnpm --filter @workspace/api-server run test
+      - name: Commit validated changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix job and webhook reliability"
+          git push origin HEAD:agent/job-and-webhook-reliability

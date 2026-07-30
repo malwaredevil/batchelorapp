@@ -9,6 +9,7 @@ import {
   jsonb,
   index,
   uniqueIndex,
+  uuid,
 } from "drizzle-orm/pg-core";
 
 // ── Elaine — shared AI assistant, used identically across Pottery, Quilting,
@@ -250,6 +251,63 @@ export const elaineHistoryMessages = pgTable(
 export type ElaineHistoryMessageRow = typeof elaineHistoryMessages.$inferSelect;
 export type InsertElaineHistoryMessage =
   typeof elaineHistoryMessages.$inferInsert;
+
+// Sanitized, structured runtime telemetry for one Elaine turn. The plan and
+// events contain concise user-safe labels/status/evidence summaries only —
+// never raw prompts, chain-of-thought, unrestricted tool payloads, provider
+// errors, or secrets. The row is optional at runtime so chat remains usable if
+// trace persistence is temporarily unavailable during a rolling deployment.
+export const elaineTurnTraces = pgTable(
+  "elaine_turn_traces",
+  {
+    id: uuid("id").primaryKey(),
+    userId: integer("user_id").notNull(),
+    conversationId: integer("conversation_id").references(
+      () => elaineHistoryConversations.id,
+      { onDelete: "cascade" },
+    ),
+    assistantMessageId: integer("assistant_message_id").references(
+      () => elaineHistoryMessages.id,
+      { onDelete: "cascade" },
+    ),
+    channel: text("channel").notNull(),
+    schemaVersion: integer("schema_version").notNull().default(1),
+    requestClass: jsonb("request_class")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    goal: text("goal").notNull().default(""),
+    plan: jsonb("plan")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    events: jsonb("events")
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    verification: jsonb("verification"),
+    status: text("status").notNull().default("running"),
+    model: text("model"),
+    traceAvailable: boolean("trace_available").notNull().default(true),
+    startedAt: timestamp("started_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("elaine_turn_traces_user_started_idx").on(
+      table.userId,
+      table.startedAt,
+    ),
+    index("elaine_turn_traces_conversation_started_idx").on(
+      table.conversationId,
+      table.startedAt,
+    ),
+    uniqueIndex("elaine_turn_traces_assistant_message_idx").on(
+      table.assistantMessageId,
+    ),
+  ],
+).enableRLS();
+
+export type ElaineTurnTraceRow = typeof elaineTurnTraces.$inferSelect;
+export type InsertElaineTurnTrace = typeof elaineTurnTraces.$inferInsert;
 
 // Daily morning brief — one personalised summary per user per UTC day.
 // Cached in this table; dismissed flag hides the card until regenerated.

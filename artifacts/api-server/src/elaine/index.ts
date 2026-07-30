@@ -125,6 +125,24 @@ import {
   ornamentActionTools,
   type OrnamentActionType,
 } from "./ornaments-actions";
+import {
+  assertElaineToolFamilyCoverage,
+  classifyElaineRequest,
+  createElaineTurnTrace,
+  createFallbackPlan,
+  ELAINE_READ_CONCURRENCY,
+  ElaineTurnRuntime,
+  evaluateForecastDateCoverage,
+  finishElaineTurnTrace,
+  generateElainePlan,
+  loadElaineTurnTracesForMessages,
+  mapWithConcurrency,
+  persistElaineTraceBestEffort,
+  requestNeedsStructuredPlan,
+  sanitizeRuntimeText,
+  type ElainePlannerTool,
+  type ElaineRuntimeTrace,
+} from "./runtime";
 import multer from "multer";
 import { createClient } from "@supabase/supabase-js";
 import { multerLimitForPrefix } from "../lib/upload-limits";
@@ -165,6 +183,7 @@ type ChatMessage = {
   role: "user" | "assistant";
   content: string;
   attachmentUrls?: AttachmentRef[];
+  runtimeTrace?: ElaineRuntimeTrace;
 };
 
 // A single image/PDF attachment stored alongside a user message. `name` is
@@ -3036,6 +3055,11 @@ const GetWeatherToolPayload = z.object({
   lat: z.number().min(-90).max(90).optional(),
   lng: z.number().min(-180).max(180).optional(),
   locationName: z.string().max(200),
+  // Required by the prompt for date-specific questions. The executor compares
+  // these dates to the provider's actual returned coverage before displaying a
+  // widget, preventing a near-term forecast from being mislabeled as trip weather.
+  requestedStartDate: z.iso.date().optional(),
+  requestedEndDate: z.iso.date().optional(),
 });
 
 const FIND_NEARBY_PLACES_TOOL_NAME = "find_nearby_places";
@@ -3404,7 +3428,7 @@ const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: GET_WEATHER_TOOL_NAME,
       description:
-        "Get a live multi-day weather forecast for a specific place using Google's Weather API — call this whenever the user asks about weather, what to pack for the climate, or whether a planned day might be rained out, instead of guessing or using web_search for this. lat/lng are optional: provide them if you have real coordinates from the screen (e.g. a trip's destination); if not, omit them and just provide locationName — the server will geocode automatically. Never invent coordinates.",
+        "Get a live near-term weather forecast for a specific place using Google's Weather API. For a date-specific or trip question you MUST provide requestedStartDate/requestedEndDate from grounded trip/context data; the server rejects mismatched forecast coverage. Use web_search for seasonal context when the trip is outside the near-term horizon. lat/lng are optional: provide real coordinates when available, otherwise the server geocodes locationName. Never invent dates or coordinates.",
       parameters: {
         type: "object",
         properties: {
@@ -3422,6 +3446,18 @@ const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
             type: "string",
             description:
               "Human-readable place name (required). Used to geocode when lat/lng not provided, and shown in the widget.",
+          },
+          requestedStartDate: {
+            type: "string",
+            format: "date",
+            description:
+              "Requested/trip start date in YYYY-MM-DD. Include for every date-specific weather question.",
+          },
+          requestedEndDate: {
+            type: "string",
+            format: "date",
+            description:
+              "Requested/trip end date in YYYY-MM-DD. Include when the request covers a range.",
           },
         },
         required: ["locationName"],
@@ -3927,6 +3963,47 @@ const ACTION_TOOL_NAMES = new Set<string>(
   ),
 );
 
+function buildElainePlannerToolCatalog(): ElainePlannerTool[] {
+  const seen = new Set<string>();
+  const catalog: ElainePlannerTool[] = [];
+  for (const tool of [...ACTION_TOOLS, ...SOFT_TOOLS, ...SOFT_TOOLS_EXTRA]) {
+    if (tool.type !== "function") continue;
+    const { name, description } = tool.function;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    catalog.push({
+      name,
+      description: description ?? "Elaine capability",
+      consequential: ACTION_TOOL_NAMES.has(name),
+    });
+  }
+  assertElaineToolFamilyCoverage(catalog.map((tool) => tool.name));
+  return catalog;
+}
+
+const ELAINE_PLANNER_TOOL_CATALOG = buildElainePlannerToolCatalog();
+
+function formatPlanForModel(trace: ElaineRuntimeTrace): string {
+  const steps = trace.plan.steps
+    .map(
+      (step) =>
+        `${step.id}: ${step.label}` +
+        (step.toolName ? ` [tool: ${step.toolName}]` : "") +
+        (step.dependsOn.length > 0
+          ? ` [after: ${step.dependsOn.join(", ")}]`
+          : ""),
+    )
+    .join("\n");
+  return `[SERVER-VALIDATED TURN PLAN]
+Goal: ${trace.goal}
+Steps:
+${steps}
+Completion criteria:
+${trace.plan.completionCriteria.map((criterion) => `- ${criterion}`).join("\n")}
+
+Follow dependency order. Do not invent ids, dates, locations, or consent. If an observation invalidates the plan, choose a grounded alternative; the server will verify completion. This is a concise execution plan, not permission to reveal hidden reasoning.`;
+}
+
 async function getOrCreateConversation(userId: number) {
   const [existing] = await db
     .select()
@@ -4317,12 +4394,27 @@ router.get("/conversations/:id/messages", async (req, res) => {
     .from(elaineHistoryMessages)
     .where(eq(elaineHistoryMessages.conversationId, convId))
     .orderBy(elaineHistoryMessages.createdAt);
+  let tracesByMessage = new Map<number, ElaineRuntimeTrace>();
+  try {
+    tracesByMessage = await loadElaineTurnTracesForMessages(
+      userId,
+      msgs.filter((message) => message.role === "assistant").map((m) => m.id),
+    );
+  } catch (err) {
+    // Trace storage is diagnostic and intentionally non-fatal. This also keeps
+    // history readable during a rolling deployment if the additive trace table
+    // has not been applied yet.
+    req.log.warn({ err }, "elaine trace history unavailable");
+  }
   res.json(
     msgs.map((m) => ({
       id: m.id,
       role: m.role,
       content: m.content,
       attachmentUrls: normalizeAttachmentRefs(m.attachmentUrls),
+      ...(tracesByMessage.has(m.id)
+        ? { runtimeTrace: tracesByMessage.get(m.id) }
+        : {}),
       createdAt: m.createdAt.toISOString(),
     })),
   );
@@ -5149,6 +5241,96 @@ router.post("/chat", async (req, res) => {
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   }
 
+  const requestClass = classifyElaineRequest({
+    message,
+    hasAttachment: hasImages || hasPdfs || hasPageScreenshot,
+  });
+  const plannerTools = ELAINE_PLANNER_TOOL_CATALOG;
+  let plan = createFallbackPlan(requestClass);
+  if (requestNeedsStructuredPlan(requestClass)) {
+    sendEvent("status", { message: "Planning the best route…" });
+    const generated = await generateElainePlan({
+      message,
+      pageContext,
+      requestClass,
+      tools: plannerTools,
+      generate: async (prompt) =>
+        callModel(
+          elaineConfig.subagentModel || elaineConfig.chatModel,
+          async (client, model) => {
+            const completion = await client.chat.completions.create(
+              {
+                model,
+                messages: [
+                  {
+                    role: "system",
+                    content:
+                      "Return concise, user-safe JSON plans only. Never reveal chain-of-thought or private scratch reasoning.",
+                  },
+                  { role: "user", content: prompt },
+                ],
+                response_format: { type: "json_object" },
+                max_tokens: 900,
+              },
+              { timeout: elaineConfig.requestTimeoutMs },
+            );
+            return completion.choices[0]?.message?.content ?? null;
+          },
+        ).catch((err) => {
+          req.log.warn({ err }, "elaine planner unavailable; using fallback");
+          return null;
+        }),
+    });
+    plan = generated.plan;
+    if (generated.source === "fallback") {
+      req.log.warn(
+        { reason: generated.error },
+        "elaine planner produced no valid plan; using guarded fallback",
+      );
+    }
+  }
+
+  const traceId = randomUUID();
+  const runtime = new ElaineTurnRuntime({
+    traceId,
+    requestClass,
+    plan,
+    budget: {
+      maxModelRounds: 4,
+      maxToolCalls: 16,
+      maxReplans: 2,
+      maxElapsedMs: Math.max(30_000, elaineConfig.requestTimeoutMs * 4),
+    },
+    eventSink: (event, trace) => sendEvent("runtime", { event, trace }),
+  });
+  let tracePersisted = await persistElaineTraceBestEffort(
+    () =>
+      createElaineTurnTrace({
+        trace: runtime.snapshot(),
+        userId,
+        conversationId: histConvId,
+        channel: appId,
+        model: elaineConfig.chatModel,
+      }),
+    (err) => req.log.warn({ err }, "elaine trace persistence unavailable"),
+  );
+  if (!tracePersisted) {
+    runtime.setTraceAvailable(false);
+    const snapshot = runtime.snapshot();
+    sendEvent("runtime", {
+      event: snapshot.events.at(-1),
+      trace: snapshot,
+    });
+  }
+
+  // Put the server-validated plan immediately before the user turn. The model
+  // sees dependency order and completion criteria without receiving any
+  // hidden reasoning, and the server still independently enforces them.
+  messages.splice(messages.length - 1, 0, {
+    role: "system",
+    content: formatPlanForModel(runtime.snapshot()),
+  });
+
   let rawContent = "";
   // Citation URLs collected from web_search calls, in tool-call order.
   // Embedded into the final assistant message content so they survive refresh.
@@ -5174,6 +5356,10 @@ router.post("/chat", async (req, res) => {
   const MAX_ROUNDS = 4;
 
   for (let round = 0; round < MAX_ROUNDS; round++) {
+    if (!runtime.recordModelRound()) {
+      req.log.warn({ traceId }, "elaine runtime model budget exhausted");
+      break;
+    }
     // Indices already turned into a proposed action, so the post-stream pass
     // doesn't double-send one already caught mid-stream. Scoped per round —
     // OpenAI/OpenRouter restart tool-call indices at 0 on every response, so
@@ -5231,21 +5417,9 @@ router.post("/chat", async (req, res) => {
               if (tc.function?.arguments) acc.args += tc.function.arguments;
               toolCallAcc.set(tc.index, acc);
 
-              // auto_run never proposes mid-stream — every action is executed
-              // together in one pass once the full turn (and its arguments)
-              // have finished streaming, see below.
-              if (
-                actionConfirmationMode !== "auto_run" &&
-                !sentActionIndices.has(tc.index) &&
-                ACTION_TOOL_NAMES.has(acc.name)
-              ) {
-                const early = await tryBuildAction(acc.name, acc.args);
-                if (early) {
-                  sendEvent("action", early);
-                  sentActionIndices.add(tc.index);
-                  resolvedActions.push(early);
-                }
-              }
+              // Action proposals are intentionally emitted only after the
+              // full model response has been accumulated and checked against
+              // the server-owned plan/dependency runtime below.
             }
           }
         },
@@ -5253,6 +5427,15 @@ router.post("/chat", async (req, res) => {
       );
     } catch (err) {
       req.log.error({ err }, "elAIne assistant stream failed");
+      const failedTrace = runtime.complete("failed");
+      if (tracePersisted) {
+        await finishElaineTurnTrace({ trace: failedTrace }).catch((traceErr) =>
+          req.log.warn(
+            { err: traceErr, traceId },
+            "elaine failed trace finalization unavailable",
+          ),
+        );
+      }
       sendEvent("error", { message: "elAIne couldn't respond just now." });
       res.end();
       return;
@@ -5282,13 +5465,53 @@ router.post("/chat", async (req, res) => {
       QUERY_HOUSEHOLD_TOOL_NAME,
       LOOKUP_BARCODE_TOOL_NAME,
     ]);
-    const hardToolCalls: Array<{ id: string; name: string; args: string }> = [];
+    const runtimeCandidates = [...toolCallAcc.entries()];
+    const runtimeSchedules = runtime.registerToolCalls(
+      runtimeCandidates.map(([index, call]) => ({
+        id: call.id || `round-${round}-call-${index}`,
+        name: call.name,
+        consequential: ACTION_TOOL_NAMES.has(call.name),
+        ...(ACTION_TOOL_NAMES.has(call.name)
+          ? {
+              dedupeKey: createHash("sha256")
+                .update(`${call.name}:${call.args}`)
+                .digest("hex"),
+            }
+          : {}),
+      })),
+    );
+    const runtimeScheduleByIndex = new Map(
+      runtimeCandidates.map(([index], candidateIndex) => [
+        index,
+        runtimeSchedules[candidateIndex]!,
+      ]),
+    );
+    const hardToolCalls: Array<{
+      id: string;
+      name: string;
+      args: string;
+      runtimeCallId: string;
+      runtimeAllowed: boolean;
+      runtimeReason?: string;
+    }> = [];
 
     for (const [index, { id, name, args }] of toolCallAcc.entries()) {
+      const schedule = runtimeScheduleByIndex.get(index);
       if (HARD_TOOL_NAMES.has(name)) {
-        if (id) hardToolCalls.push({ id, name, args });
+        if (id && schedule) {
+          hardToolCalls.push({
+            id,
+            name,
+            args,
+            runtimeCallId: schedule.id,
+            runtimeAllowed: schedule.allowed,
+            ...(schedule.reason ? { runtimeReason: schedule.reason } : {}),
+          });
+        }
         continue;
       }
+
+      if (!schedule?.allowed) continue;
 
       if (name === REMEMBER_TOOL_NAME) {
         try {
@@ -5308,6 +5531,12 @@ router.post("/chat", async (req, res) => {
               ownerUserId: scope === "personal" ? userId : null,
               expiresAt,
               createdByUserId: userId,
+            });
+            runtime.recordObservation({
+              callId: schedule.id,
+              toolName: name,
+              success: true,
+              summary: "Requested memory was saved",
             });
           }
         } catch {
@@ -5331,6 +5560,12 @@ router.post("/chat", async (req, res) => {
                   updatedAt: new Date(),
                 },
               });
+            runtime.recordObservation({
+              callId: schedule.id,
+              toolName: name,
+              success: true,
+              summary: "Action confirmation preference was updated",
+            });
           }
         } catch {
           // Malformed JSON from the model — drop it.
@@ -5347,6 +5582,12 @@ router.post("/chat", async (req, res) => {
               title: parsed.data.title,
               rows: parsed.data.rows,
             });
+            runtime.recordObservation({
+              callId: schedule.id,
+              toolName: name,
+              success: true,
+              summary: "Structured fact card was displayed",
+            });
           }
         } catch {
           // Malformed JSON from the model — drop it, keep the reply text.
@@ -5360,7 +5601,15 @@ router.post("/chat", async (req, res) => {
           const parsed = navigatePayloadSchemaFor(appId).safeParse(
             JSON.parse(args),
           );
-          if (parsed.success) navigate = parsed.data;
+          if (parsed.success) {
+            navigate = parsed.data;
+            runtime.recordObservation({
+              callId: schedule.id,
+              toolName: name,
+              success: true,
+              summary: "Navigation suggestion was prepared",
+            });
+          }
         } catch {
           // Malformed JSON from the model — drop it.
         }
@@ -5381,6 +5630,16 @@ router.post("/chat", async (req, res) => {
           userId,
         );
         executedActions.push({ ...finalAction, status, result: body });
+        runtime.recordObservation({
+          callId: schedule.id,
+          toolName: name,
+          success: status >= 200 && status < 400,
+          summary:
+            status >= 200 && status < 400
+              ? "Action executed successfully"
+              : "Action executor returned an error",
+          ...(status >= 400 ? { errorCategory: `http_${status}` } : {}),
+        });
         continue;
       }
 
@@ -5390,10 +5649,36 @@ router.post("/chat", async (req, res) => {
         sendEvent("action", finalAction);
         sentActionIndices.add(index);
         resolvedActions.push(finalAction);
+        runtime.recordObservation({
+          callId: schedule.id,
+          toolName: name,
+          success: true,
+          waitingConfirmation: true,
+          summary: finalAction.label,
+        });
       }
     }
 
-    if (hardToolCalls.length === 0 || round === MAX_ROUNDS - 1) break;
+    if (hardToolCalls.length === 0 || round === MAX_ROUNDS - 1) {
+      const decision = runtime.verify({
+        finalContent: rawContent,
+        hasPendingConfirmation: resolvedActions.length > 0,
+      });
+      if (
+        decision.shouldReplan &&
+        decision.instruction &&
+        round < MAX_ROUNDS - 1
+      ) {
+        if (rawContent.trim()) {
+          messages.push({ role: "assistant", content: rawContent });
+          sendEvent("response_reset", {});
+        }
+        messages.push({ role: "system", content: decision.instruction });
+        rawContent = "";
+        continue;
+      }
+      break;
+    }
 
     // Let the user know why the reply is taking longer than usual instead of
     // leaving them wondering if elAIne is hung — this round can involve
@@ -5439,15 +5724,40 @@ router.post("/chat", async (req, res) => {
         function: { name: c.name, arguments: c.args },
       })),
     });
+    if (rawContent) sendEvent("response_reset", {});
     rawContent = "";
 
     const webSearchCitations = new Map<string, string[]>();
 
-    await Promise.all(
-      hardToolCalls.map(async (call) => {
+    const hardToolResults = await mapWithConcurrency(
+      hardToolCalls,
+      ELAINE_READ_CONCURRENCY,
+      async (call) => {
         const _toolT0 = Date.now();
         let _toolOk = false;
+        let _toolEvidenceComplete = true;
+        let runtimeSummary = "Tool returned an observation";
+        let runtimeErrorCategory: string | undefined;
         let resultText: string;
+        if (!call.runtimeAllowed) {
+          resultText =
+            `The server plan blocked this tool call: ${call.runtimeReason ?? "a prerequisite has not completed"}. ` +
+            "Use the prerequisite result first, then retry only if the information is still needed.";
+          runtimeSummary =
+            call.runtimeReason ?? "Tool call blocked by plan dependencies";
+          runtimeErrorCategory = "dependency_blocked";
+          req.log.info(
+            { tool: call.name, traceId },
+            "elaine: tool-call blocked by runtime",
+          );
+          return {
+            call,
+            resultText,
+            success: false,
+            runtimeSummary,
+            runtimeErrorCategory,
+          };
+        }
         try {
           if (call.name === WEB_SEARCH_TOOL_NAME) {
             const parsed = WebSearchToolPayload.safeParse(
@@ -5675,27 +5985,58 @@ router.post("/chat", async (req, res) => {
               if (lat != null && lng != null) {
                 const forecast = await getWeatherForecast(lat, lng);
                 if (forecast.length > 0) {
-                  resultText =
-                    `Forecast for ${locationName}:\n` +
-                    forecast
-                      .map(
-                        (d) =>
-                          `${d.date}: ${d.conditionDescription}, ${d.minTempC ?? "?"}–${d.maxTempC ?? "?"}°C` +
-                          (d.precipitationChancePercent != null
-                            ? `, ${d.precipitationChancePercent}% chance of rain`
-                            : ""),
-                      )
-                      .join("\n");
-                  sendEvent("widget", {
-                    type: "weather",
-                    locationName,
-                    days: forecast,
+                  const coverage = evaluateForecastDateCoverage({
+                    forecastDates: forecast.map((day) => day.date),
+                    requestedStartDate: parsed.data.requestedStartDate,
+                    requestedEndDate: parsed.data.requestedEndDate,
                   });
+                  runtimeSummary = coverage.summary;
+                  if (coverage.status === "outside") {
+                    _toolEvidenceComplete = false;
+                    runtimeErrorCategory = "forecast_coverage_mismatch";
+                    resultText =
+                      `${coverage.summary}. Do not present these near-term forecast days as weather for the requested dates. ` +
+                      "Use web_search for clearly labelled seasonal/historical context, or explain that a reliable forecast is not available yet.";
+                  } else {
+                    const displayForecast =
+                      coverage.status === "partial"
+                        ? forecast.filter((day) =>
+                            coverage.matchingDates.includes(day.date),
+                          )
+                        : forecast;
+                    if (coverage.status === "partial") {
+                      _toolEvidenceComplete = false;
+                      runtimeErrorCategory = "forecast_coverage_partial";
+                    }
+                    resultText =
+                      `${coverage.summary}.\nForecast for ${locationName}:\n` +
+                      displayForecast
+                        .map(
+                          (d) =>
+                            `${d.date}: ${d.conditionDescription}, ${d.minTempC ?? "?"}–${d.maxTempC ?? "?"}°C` +
+                            (d.precipitationChancePercent != null
+                              ? `, ${d.precipitationChancePercent}% chance of rain`
+                              : ""),
+                        )
+                        .join("\n");
+                    sendEvent("widget", {
+                      type: "weather",
+                      locationName,
+                      days: displayForecast,
+                      coverage,
+                    });
+                  }
                 } else {
                   resultText = `No forecast data available for ${locationName}.`;
+                  _toolEvidenceComplete = false;
+                  runtimeSummary = "No forecast data was returned";
+                  runtimeErrorCategory = "no_forecast_data";
                 }
               } else {
                 resultText = `Couldn't find coordinates for "${locationName}" — tell the user to try a more specific place name.`;
+                _toolEvidenceComplete = false;
+                runtimeSummary = "The location could not be resolved";
+                runtimeErrorCategory = "location_not_found";
               }
             }
           } else if (call.name === FIND_NEARBY_PLACES_TOOL_NAME) {
@@ -6488,7 +6829,7 @@ router.post("/chat", async (req, res) => {
           } else {
             resultText = "Unsupported tool.";
           }
-          _toolOk = true;
+          _toolOk = _toolEvidenceComplete;
         } catch (err) {
           req.log.error(
             { err, tool: call.name },
@@ -6496,6 +6837,8 @@ router.post("/chat", async (req, res) => {
           );
           resultText =
             "That lookup failed — tell the user you couldn't get that information right now.";
+          runtimeSummary = "Tool call failed";
+          runtimeErrorCategory = "tool_error";
         }
         req.log.info(
           {
@@ -6505,13 +6848,34 @@ router.post("/chat", async (req, res) => {
           },
           "elaine: tool-call",
         );
-        messages.push({
-          role: "tool",
-          tool_call_id: call.id,
-          content: resultText,
-        });
-      }),
+        return {
+          call,
+          resultText,
+          success: _toolOk,
+          runtimeSummary,
+          runtimeErrorCategory,
+        };
+      },
     );
+
+    // Append tool messages deterministically even though independent reads
+    // executed within the configured concurrency bound.
+    for (const result of hardToolResults) {
+      runtime.recordObservation({
+        callId: result.call.runtimeCallId,
+        toolName: result.call.name,
+        success: result.success,
+        summary: result.runtimeSummary,
+        ...(result.runtimeErrorCategory
+          ? { errorCategory: result.runtimeErrorCategory }
+          : {}),
+      });
+      messages.push({
+        role: "tool",
+        tool_call_id: result.call.id,
+        content: result.resultText,
+      });
+    }
 
     // Collect citations from this round's web searches, in tool-call order,
     // into the outer allCitations array so they survive the loop.
@@ -6521,6 +6885,25 @@ router.post("/chat", async (req, res) => {
       }
     }
   }
+
+  // One final deterministic verification covers budget exhaustion and a model
+  // that stopped without satisfying a planned step. It never asks for hidden
+  // reasoning; it compares only typed plan state and normalized observations.
+  const finalVerification = runtime.verify({
+    finalContent: rawContent,
+    hasPendingConfirmation: resolvedActions.length > 0,
+  });
+  if (
+    !rawContent.trim() &&
+    finalVerification.verification.status === "blocked"
+  ) {
+    rawContent =
+      "I couldn't complete every required step. " +
+      finalVerification.verification.summary +
+      ".";
+    sendEvent("delta", { text: rawContent });
+  }
+  const finalTrace = runtime.complete();
 
   // \x1f (ASCII unit separator) is the delimiter before the citation list.
   // \x00 (null byte) is rejected by PostgreSQL JSONB — \x1f is safe and
@@ -6539,28 +6922,38 @@ router.post("/chat", async (req, res) => {
           ? { attachmentUrls: allAttachmentUrls }
           : {}),
       },
-      { role: "assistant" as const, content },
+      { role: "assistant" as const, content, runtimeTrace: finalTrace },
     ] satisfies ChatMessage[]
   ).slice(-50);
 
   // Save turn to the named history conversation.
+  let assistantMessageId: number | null = null;
   if (histConvId !== null) {
-    await db.insert(elaineHistoryMessages).values([
-      {
-        conversationId: histConvId,
-        userId,
-        role: "user",
-        content: message,
-        attachmentUrls: allAttachmentUrls,
-      },
-      {
-        conversationId: histConvId,
-        userId,
-        role: "assistant",
-        content,
-        attachmentUrls: [],
-      },
-    ]);
+    const insertedMessages = await db
+      .insert(elaineHistoryMessages)
+      .values([
+        {
+          conversationId: histConvId,
+          userId,
+          role: "user",
+          content: message,
+          attachmentUrls: allAttachmentUrls,
+        },
+        {
+          conversationId: histConvId,
+          userId,
+          role: "assistant",
+          content,
+          attachmentUrls: [],
+        },
+      ])
+      .returning({
+        id: elaineHistoryMessages.id,
+        role: elaineHistoryMessages.role,
+      });
+    assistantMessageId =
+      insertedMessages.find((inserted) => inserted.role === "assistant")?.id ??
+      null;
 
     // Auto-title from the first user message (first 60 chars), then just
     // bump updatedAt on subsequent turns.
@@ -6576,6 +6969,17 @@ router.post("/chat", async (req, res) => {
         .update(elaineHistoryConversations)
         .set({ updatedAt: new Date() })
         .where(eq(elaineHistoryConversations.id, histConvId));
+    }
+  }
+
+  if (tracePersisted) {
+    tracePersisted = await persistElaineTraceBestEffort(
+      () => finishElaineTurnTrace({ trace: finalTrace, assistantMessageId }),
+      (err) =>
+        req.log.warn({ err, traceId }, "elaine trace finalization unavailable"),
+    );
+    if (!tracePersisted) {
+      finalTrace.traceAvailable = false;
     }
   }
 
@@ -6596,6 +7000,7 @@ router.post("/chat", async (req, res) => {
       updatedActionConfirmationMode ?? actionConfirmationMode,
     messages: updatedHistory,
     conversationId: histConvId,
+    runtimeTrace: finalTrace,
   });
   res.end();
 

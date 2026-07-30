@@ -1037,6 +1037,46 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE elaine_history_messages ENABLE ROW LEVEL SECURITY`,
   `CREATE INDEX IF NOT EXISTS elaine_history_messages_conversation_id_idx ON elaine_history_messages (conversation_id)`,
 
+  // Sanitized planner/executor/verifier trace for one Elaine turn. This is
+  // deliberately separate from message history: it stores concise plan and
+  // status metadata, never raw chain-of-thought or unrestricted tool payloads.
+  `CREATE TABLE IF NOT EXISTS elaine_turn_traces (
+    id                   UUID PRIMARY KEY,
+    user_id              INTEGER NOT NULL,
+    conversation_id      INTEGER REFERENCES elaine_history_conversations(id) ON DELETE CASCADE,
+    assistant_message_id INTEGER REFERENCES elaine_history_messages(id) ON DELETE CASCADE,
+    channel              TEXT NOT NULL,
+    schema_version       INTEGER NOT NULL DEFAULT 1,
+    request_class        JSONB NOT NULL DEFAULT '{}'::jsonb,
+    goal                 TEXT NOT NULL DEFAULT '',
+    plan                 JSONB NOT NULL DEFAULT '{}'::jsonb,
+    events               JSONB NOT NULL DEFAULT '[]'::jsonb,
+    verification         JSONB,
+    status               TEXT NOT NULL DEFAULT 'running',
+    model                TEXT,
+    trace_available      BOOLEAN NOT NULL DEFAULT TRUE,
+    started_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    completed_at         TIMESTAMPTZ
+  )`,
+  `ALTER TABLE elaine_turn_traces ENABLE ROW LEVEL SECURITY`,
+  // Trace rows are server diagnostics, not a Supabase Data API resource.
+  // Supabase installs broad default table grants; revoke them when those
+  // roles exist while keeping fresh vanilla-Postgres bootstrap compatible.
+  `DO $$ BEGIN
+     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+       REVOKE ALL ON TABLE elaine_turn_traces FROM anon;
+     END IF;
+     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+       REVOKE ALL ON TABLE elaine_turn_traces FROM authenticated;
+     END IF;
+   END $$`,
+  `CREATE INDEX IF NOT EXISTS elaine_turn_traces_user_started_idx
+     ON elaine_turn_traces (user_id, started_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS elaine_turn_traces_conversation_started_idx
+     ON elaine_turn_traces (conversation_id, started_at DESC)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS elaine_turn_traces_assistant_message_idx
+     ON elaine_turn_traces (assistant_message_id)`,
+
   // Daily morning brief — generated once per user per UTC day, cached until
   // midnight. The unique functional index prevents duplicate generation even
   // under concurrent requests; ON CONFLICT DO NOTHING is the safe insert path.

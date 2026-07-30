@@ -21,6 +21,7 @@ import {
   type ElaineAppId,
   type ConversationMessage,
   type ElaineAttachmentUploadResult,
+  type ElaineRuntimeTrace,
 } from "@workspace/api-client-react";
 import { ElaineName } from "./ElaineAvatar";
 import { type ChatWidget } from "./ChatWidgets";
@@ -75,6 +76,9 @@ export function useElaineChat({
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
+  const [runtimeTrace, setRuntimeTrace] = useState<ElaineRuntimeTrace | null>(
+    null,
+  );
   const endRef = useRef<HTMLDivElement | null>(null);
 
   // Active named conversation ID (null = use the rolling single-thread history)
@@ -208,6 +212,7 @@ export function useElaineChat({
     setActionDone(false);
     setMessageWidgets(new Map());
     setPendingAttachments([]);
+    setRuntimeTrace(null);
 
     newConversation.mutate(undefined, {
       onSuccess: (result) => {
@@ -234,12 +239,14 @@ export function useElaineChat({
     setExecutedActions([]);
     setActionDone(false);
     setMessageWidgets(new Map());
+    setRuntimeTrace(null);
     setMessages(
       msgs.map((m) => ({
         role: m.role as "user" | "assistant",
         content: m.content,
         attachmentUrls:
           m.attachmentUrls.length > 0 ? m.attachmentUrls : undefined,
+        ...(m.runtimeTrace ? { runtimeTrace: m.runtimeTrace } : {}),
       })) as AssistantMessage[],
     );
   }
@@ -359,6 +366,7 @@ export function useElaineChat({
     setActionDone(false);
     setStreamingContent("");
     setStatusMessage("");
+    setRuntimeTrace(null);
     const optimisticAttachmentRefs = [
       ...imageAttachments.map((a) => ({
         url: a.uploadedUrl!,
@@ -407,9 +415,11 @@ export function useElaineChat({
             setStatusMessage("");
             setStreamingContent((prev) => prev + text);
           },
+          onResponseReset: () => setStreamingContent(""),
           onAction: (action) => setPendingActions((prev) => [...prev, action]),
           onStatus: (msg) => setStatusMessage(msg),
           onWidget: (widget) => pendingWidgets.push(widget as ChatWidget),
+          onRuntime: ({ trace }) => setRuntimeTrace(trace),
           onDone: (res) => {
             setMessages(res.messages);
             // attach widgets to the last assistant message index
@@ -442,6 +452,7 @@ export function useElaineChat({
                 queryKey: getListElaineConversationsQueryKey(),
               });
             }
+            setRuntimeTrace(null);
           },
         },
       );
@@ -454,9 +465,11 @@ export function useElaineChat({
       );
       setMessages((prev) => prev.slice(0, -1));
       setPendingActions([]);
+      setRuntimeTrace(null);
     } finally {
       setStreamingContent("");
       setStatusMessage("");
+      setRuntimeTrace(null);
       setIsStreaming(false);
     }
   }
@@ -584,6 +597,7 @@ export function useElaineChat({
     isStreaming,
     streamingContent,
     statusMessage,
+    runtimeTrace,
     endRef,
     executeAction,
     conversationId,

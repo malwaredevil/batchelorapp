@@ -5512,6 +5512,7 @@ router.post("/chat", async (req, res) => {
       runtimeCallId: string;
       runtimeAllowed: boolean;
       runtimeReason?: string;
+      consequential: boolean;
     }> = [];
 
     for (const [index, { id, name, args }] of toolCallAcc.entries()) {
@@ -5525,6 +5526,7 @@ router.post("/chat", async (req, res) => {
             runtimeCallId: schedule.id,
             runtimeAllowed: schedule.allowed,
             ...(schedule.reason ? { runtimeReason: schedule.reason } : {}),
+            consequential: ACTION_TOOL_NAMES.has(name),
           });
         }
         continue;
@@ -6921,6 +6923,7 @@ router.post("/chat", async (req, res) => {
         summary: result.runtimeSummary,
         provenance: provenanceForTool({
           toolName: result.call.name,
+          kind: result.call.consequential ? "action" : "read",
           sourceUrl:
             result.call.name === WEB_SEARCH_TOOL_NAME
               ? webSearchCitations.get(result.call.id)?.[0]

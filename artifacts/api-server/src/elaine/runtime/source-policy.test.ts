@@ -133,6 +133,39 @@ describe("Elaine source policy", () => {
     ).toBe(true);
   });
 
+  it("does not count successful action tool calls as current retrieved evidence", () => {
+    // Regression: action tools (write mutations like remember_fact, update_trip)
+    // must not satisfy requiresRetrievedEvidence — they mutate state, they do not
+    // retrieve current world data.  They get evidenceKind: "inference" which is
+    // already excluded from hasCurrentRetrievedEvidence.
+    const actionToolObservation = {
+      success: true,
+      provenance: provenanceForTool({
+        toolName: "remember_fact",
+        kind: "action" as const,
+        coverageStatus: "matched",
+      }),
+    };
+
+    expect(actionToolObservation.provenance.evidenceKind).toBe("inference");
+    expect(hasCurrentRetrievedEvidence([actionToolObservation])).toBe(false);
+
+    // A read tool alongside it still satisfies the gate.
+    expect(
+      hasCurrentRetrievedEvidence([
+        actionToolObservation,
+        {
+          success: true,
+          provenance: provenanceForTool({
+            toolName: "web_search",
+            kind: "read" as const,
+            coverageStatus: "matched",
+          }),
+        },
+      ]),
+    ).toBe(true);
+  });
+
   it("does not count inference or out-of-coverage data as current evidence", () => {
     expect(
       hasCurrentRetrievedEvidence([

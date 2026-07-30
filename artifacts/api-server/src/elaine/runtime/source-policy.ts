@@ -145,6 +145,8 @@ export function sourcePolicyPrompt(route: ElaineSourceRoute): string {
 
 export function provenanceForTool(input: {
   toolName: string;
+  /** Capability kind — action tools produce inference evidence, not retrieved_fact. */
+  kind?: "read" | "action" | "utility";
   observedAt?: Date;
   sourceUrl?: string;
   internalReference?: string;
@@ -154,6 +156,9 @@ export function provenanceForTool(input: {
   coverageStatus?: "matched" | "partial" | "outside" | "unknown";
   confidence?: "high" | "medium" | "low";
 }): ElaineObservationProvenance {
+  const resolvedKind: "read" | "action" | "utility" =
+    input.kind ?? (input.toolName.startsWith("show_") ? "utility" : "read");
+
   const policy: Pick<
     ElaineCapabilityPolicy,
     "toolName" | "domain" | "auth" | "kind"
@@ -166,7 +171,7 @@ export function provenanceForTool(input: {
     auth: FIRST_PARTY_TOOL_NAMES.has(input.toolName)
       ? "session_and_user_oauth"
       : "session",
-    kind: input.toolName.startsWith("show_") ? "utility" : "read",
+    kind: resolvedKind,
   };
 
   return {
@@ -174,7 +179,9 @@ export function provenanceForTool(input: {
     sourceName: input.toolName.replace(/_/g, " "),
     observedAt: (input.observedAt ?? new Date()).toISOString(),
     evidenceKind:
-      input.toolName === "consult_experts" ? "inference" : "retrieved_fact",
+      resolvedKind === "action" || input.toolName === "consult_experts"
+        ? "inference"
+        : "retrieved_fact",
     confidence: input.confidence ?? "medium",
     ...(input.sourceUrl
       ? { sourceUrl: sanitizeRuntimeText(input.sourceUrl, 500) }

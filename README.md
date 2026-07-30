@@ -12,7 +12,7 @@ A personal household app combining pottery and quilting collection management, t
 
 ## Stack
 
-Node.js 24 · TypeScript 5.9 · Express 5 · PostgreSQL (Supabase) · React 19 · Vite 7 · Drizzle ORM · OpenRouter · pnpm workspaces
+Node.js 24 · TypeScript 5.9 · Express 5 · PostgreSQL (Supabase) · React 19 · Vite 7 · Drizzle ORM · OpenAI Responses + OpenRouter · pnpm workspaces
 
 ## Status
 

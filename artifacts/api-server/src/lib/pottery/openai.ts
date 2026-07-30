@@ -16,6 +16,11 @@ import {
   parseJson,
   type Verdict,
 } from "../ai-parse";
+import {
+  chatUserContentToResponseInput,
+  createOpenAIStableIdentifier,
+  generateOpenAIResponseTextWithFallback,
+} from "../openai-responses";
 
 export const EMBEDDING_DIMENSIONS = 1536;
 
@@ -212,29 +217,50 @@ export async function analyzeImage(
 
   const glazeIsLocked = context?.lockedFields.includes("glazeType") ?? false;
 
-  const [completion, clipGlazeType] = await Promise.all([
+  const [analysisText, clipGlazeType] = await Promise.all([
     (async () => {
       const models = await getModels();
-      return callModel(models.fastVision, (c, model) =>
-        c.chat.completions.create({
-          model,
-          response_format: { type: "json_object" },
-          messages: [
-            { role: "system", content: ANALYSIS_PROMPT },
-            {
-              role: "user",
-              content: [{ type: "text", text: userText }, ...imageContent],
-            },
-          ],
-        }),
-      );
+      const content: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [
+        { type: "text", text: userText },
+        ...imageContent,
+      ];
+      return (
+        await generateOpenAIResponseTextWithFallback(
+          {
+            scope: "app",
+            role: "balanced",
+            instructions: ANALYSIS_PROMPT,
+            input: chatUserContentToResponseInput(content, "high"),
+            reasoningEffort: "low",
+            verbosity: "low",
+            maxOutputTokens: 4_000,
+            promptCacheKey: createOpenAIStableIdentifier(
+              "cache",
+              "pottery-catalogue",
+            ),
+          },
+          async () => {
+            const completion = await callModel(models.fastVision, (c, model) =>
+              c.chat.completions.create({
+                model,
+                response_format: { type: "json_object" },
+                messages: [
+                  { role: "system", content: ANALYSIS_PROMPT },
+                  { role: "user", content },
+                ],
+              }),
+            );
+            return completion.choices[0]?.message?.content ?? "{}";
+          },
+        )
+      ).text;
     })(),
     glazeIsLocked
       ? Promise.resolve(null)
       : classifyGlazeType(dataUrls[0] ?? "").catch(() => null),
   ]);
 
-  const raw = parseJson(completion.choices[0]?.message?.content ?? null);
+  const raw = parseJson(analysisText);
   return {
     name: addMetricToName(asString(raw.name) ?? "Untitled piece"),
     patternDescription: asString(raw.patternDescription),
@@ -321,28 +347,49 @@ export async function analyzePotteryZones(
   try {
     const models = await getModels();
     const thresholds = await getThresholds();
-    const completion = await callModel(models.smartVision, (c, model) =>
-      c.chat.completions.create({
-        model,
-        response_format: { type: "json_object" },
-        max_tokens: thresholds.potteryZoneAnalysisMaxTokens,
-        messages: [
-          { role: "system", content: ZONE_ANALYSIS_PROMPT },
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: "Analyse the decorative zones of this pottery piece. Respond with JSON only.",
-              },
-              ...imageContent,
-            ],
-          },
-        ],
-      }),
-    );
+    const content: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [
+      {
+        type: "text",
+        text: "Analyse the decorative zones of this pottery piece. Respond with JSON only.",
+      },
+      ...imageContent,
+    ];
+    const analysisText = (
+      await generateOpenAIResponseTextWithFallback(
+        {
+          scope: "app",
+          role: "balanced",
+          instructions: ZONE_ANALYSIS_PROMPT,
+          input: chatUserContentToResponseInput(content, "high"),
+          reasoningEffort: "low",
+          verbosity: "low",
+          maxOutputTokens: Math.max(
+            3_000,
+            thresholds.potteryZoneAnalysisMaxTokens * 3,
+          ),
+          promptCacheKey: createOpenAIStableIdentifier(
+            "cache",
+            "pottery-zone-analysis",
+          ),
+        },
+        async () => {
+          const completion = await callModel(models.smartVision, (c, model) =>
+            c.chat.completions.create({
+              model,
+              response_format: { type: "json_object" },
+              max_tokens: thresholds.potteryZoneAnalysisMaxTokens,
+              messages: [
+                { role: "system", content: ZONE_ANALYSIS_PROMPT },
+                { role: "user", content },
+              ],
+            }),
+          );
+          return completion.choices[0]?.message?.content ?? "{}";
+        },
+      )
+    ).text;
 
-    const raw = parseJson(completion.choices[0]?.message?.content ?? null);
+    const raw = parseJson(analysisText);
     if (!raw || typeof raw !== "object") return null;
 
     const rawZones = Array.isArray(raw.zones) ? raw.zones : [];
@@ -430,28 +477,54 @@ export async function locateBackstampAndEnhanceMaker(
   try {
     const models = await getModels();
     const thresholds = await getThresholds();
-    const completion = await callModelWithAdvisor(
-      models.smartVision,
-      "You are a ceramics/pottery maker's-mark expert. You will be asked to double-check an ambiguous or partially-legible backstamp/maker's mark from an image description or partial reading. Give your best identification of the maker and a one-line reason, or say clearly if it's genuinely unidentifiable.",
-      (c, model, tools) =>
-        c.chat.completions.create({
-          model,
-          ...(tools
-            ? {
-                tools:
-                  tools as unknown as OpenAI.Chat.Completions.ChatCompletionTool[],
-              }
-            : {}),
-          response_format: { type: "json_object" },
-          max_tokens: thresholds.potteryBackstampMaxTokens,
-          messages: [
-            { role: "system", content: BACKSTAMP_PROMPT },
-            { role: "user", content: backstampUserContent },
-          ],
-        }),
-    );
+    const backstampText = (
+      await generateOpenAIResponseTextWithFallback(
+        {
+          scope: "app",
+          role: "reasoning",
+          instructions: BACKSTAMP_PROMPT,
+          input: chatUserContentToResponseInput(
+            backstampUserContent,
+            "original",
+          ),
+          reasoningEffort: "medium",
+          verbosity: "low",
+          maxOutputTokens: Math.max(
+            3_000,
+            thresholds.potteryBackstampMaxTokens * 4,
+          ),
+          promptCacheKey: createOpenAIStableIdentifier(
+            "cache",
+            "pottery-backstamp",
+          ),
+        },
+        async () => {
+          const completion = await callModelWithAdvisor(
+            models.smartVision,
+            "You are a ceramics/pottery maker's-mark expert. You will be asked to double-check an ambiguous or partially-legible backstamp/maker's mark from an image description or partial reading. Give your best identification of the maker and a one-line reason, or say clearly if it's genuinely unidentifiable.",
+            (c, model, tools) =>
+              c.chat.completions.create({
+                model,
+                ...(tools
+                  ? {
+                      tools:
+                        tools as unknown as OpenAI.Chat.Completions.ChatCompletionTool[],
+                    }
+                  : {}),
+                response_format: { type: "json_object" },
+                max_tokens: thresholds.potteryBackstampMaxTokens,
+                messages: [
+                  { role: "system", content: BACKSTAMP_PROMPT },
+                  { role: "user", content: backstampUserContent },
+                ],
+              }),
+          );
+          return completion.choices[0]?.message?.content ?? "{}";
+        },
+      )
+    ).text;
 
-    let raw = parseJson(completion.choices[0]?.message?.content ?? null);
+    let raw = parseJson(backstampText);
 
     // Fusion escalation: when the primary pass (already backed by the
     // advisor tool) still can't identify a maker, and the feature is
@@ -592,18 +665,38 @@ export async function compareWithMatches(params: {
   }
 
   const models = await getModels();
-  const completion = await callModel(models.smartVision, (c, model) =>
-    c.chat.completions.create({
-      model,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: COMPARE_PROMPT },
-        { role: "user", content },
-      ],
-    }),
-  );
+  const comparisonText = (
+    await generateOpenAIResponseTextWithFallback(
+      {
+        scope: "app",
+        role: "reasoning",
+        instructions: COMPARE_PROMPT,
+        input: chatUserContentToResponseInput(content, "high"),
+        reasoningEffort: "medium",
+        verbosity: "low",
+        maxOutputTokens: 5_000,
+        promptCacheKey: createOpenAIStableIdentifier(
+          "cache",
+          "pottery-collection-comparison",
+        ),
+      },
+      async () => {
+        const completion = await callModel(models.smartVision, (c, model) =>
+          c.chat.completions.create({
+            model,
+            response_format: { type: "json_object" },
+            messages: [
+              { role: "system", content: COMPARE_PROMPT },
+              { role: "user", content },
+            ],
+          }),
+        );
+        return completion.choices[0]?.message?.content ?? "{}";
+      },
+    )
+  ).text;
 
-  const raw = parseJson(completion.choices[0]?.message?.content ?? null);
+  const raw = parseJson(comparisonText);
   const rawMatches =
     typeof raw.matches === "object" && raw.matches !== null
       ? (raw.matches as Record<string, unknown>)

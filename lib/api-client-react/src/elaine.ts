@@ -1115,6 +1115,9 @@ export interface ElaineExtraModelsConfig {
   research: string;
   expertPanelAlt: string;
   embedding: string;
+  openAIReasoning: string;
+  openAIBalanced: string;
+  openAIFast: string;
   rerank: string;
   visualEmbed: string;
   fusionModels: string[];
@@ -1126,6 +1129,7 @@ export interface ElaineTimeoutsConfig {
   rerankerMs: number;
   geocodingMs: number;
   fusionMs: number;
+  openAIResponsesMs: number;
 }
 
 export interface ElaineFeaturesConfig {
@@ -1133,6 +1137,9 @@ export interface ElaineFeaturesConfig {
   enableSubagent: boolean;
   enableFusionPotteryExpert: boolean;
   enableFusionTravelDocFallback: boolean;
+  enableOpenAIResponses: boolean;
+  enableOpenAIAppWorkflows: boolean;
+  enableOpenAIResponsesFallback: boolean;
 }
 
 export interface ElaineThresholdsConfig {
@@ -1145,6 +1152,9 @@ export interface ElaineThresholdsConfig {
   potteryZoneAnalysisMaxTokens: number;
   potteryBackstampMaxTokens: number;
   travelDocExtractionMaxTokens: number;
+  openAIResponsesMaxOutputTokens: number;
+  openAICompactionThresholdTokens: number;
+  openAIStateMaxAgeDays: number;
 }
 
 export interface ElaineGlobalConfig {

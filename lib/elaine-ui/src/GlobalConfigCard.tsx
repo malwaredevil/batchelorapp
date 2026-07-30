@@ -279,6 +279,116 @@ export function GlobalConfigCard() {
       </Section>
 
       <Section
+        title="OpenAI Responses"
+        description="Direct OpenAI model roles and state controls for Elaine and selected high-value app reasoning. Disable either scope for an immediate OpenRouter rollback."
+      >
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium text-foreground">
+              Reasoning model
+            </Label>
+            <Input
+              value={models.openAIReasoning}
+              onChange={(e) =>
+                setModels({ ...models, openAIReasoning: e.target.value })
+              }
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium text-foreground">
+              Balanced model
+            </Label>
+            <Input
+              value={models.openAIBalanced}
+              onChange={(e) =>
+                setModels({ ...models, openAIBalanced: e.target.value })
+              }
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium text-foreground">
+              Fast model
+            </Label>
+            <Input
+              value={models.openAIFast}
+              onChange={(e) =>
+                setModels({ ...models, openAIFast: e.target.value })
+              }
+            />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <NumberField
+            label="Responses timeout (ms)"
+            min={5000}
+            max={180000}
+            value={timeouts.openAIResponsesMs}
+            onChange={(v) => setTimeouts({ ...timeouts, openAIResponsesMs: v })}
+          />
+          <NumberField
+            label="Max output + reasoning tokens"
+            min={1000}
+            max={30000}
+            value={thresholds.openAIResponsesMaxOutputTokens}
+            onChange={(v) =>
+              setThresholds({
+                ...thresholds,
+                openAIResponsesMaxOutputTokens: v,
+              })
+            }
+          />
+          <NumberField
+            label="Compaction threshold (tokens)"
+            min={10000}
+            max={900000}
+            step={1000}
+            value={thresholds.openAICompactionThresholdTokens}
+            onChange={(v) =>
+              setThresholds({
+                ...thresholds,
+                openAICompactionThresholdTokens: v,
+              })
+            }
+          />
+          <NumberField
+            label="Retained state max age (days)"
+            min={1}
+            max={29}
+            value={thresholds.openAIStateMaxAgeDays}
+            onChange={(v) =>
+              setThresholds({ ...thresholds, openAIStateMaxAgeDays: v })
+            }
+          />
+        </div>
+        <div className="space-y-2">
+          <ToggleField
+            label="Enable Responses for Elaine"
+            hint="Uses retained reasoning context and durable local history."
+            checked={features.enableOpenAIResponses}
+            onChange={(v) =>
+              setFeatures({ ...features, enableOpenAIResponses: v })
+            }
+          />
+          <ToggleField
+            label="Enable Responses for app workflows"
+            hint="Uses GPT-5.6 for selected research, document, pottery, and quilting tasks."
+            checked={features.enableOpenAIAppWorkflows}
+            onChange={(v) =>
+              setFeatures({ ...features, enableOpenAIAppWorkflows: v })
+            }
+          />
+          <ToggleField
+            label="Allow automatic OpenRouter fallback"
+            hint="Keeps working abilities available when direct OpenAI is unavailable."
+            checked={features.enableOpenAIResponsesFallback}
+            onChange={(v) =>
+              setFeatures({ ...features, enableOpenAIResponsesFallback: v })
+            }
+          />
+        </div>
+      </Section>
+
+      <Section
         title="Other model slots"
         description="Every other OpenRouter/Voyage/Jina model used across Pottery, Quilting, and Travels."
       >

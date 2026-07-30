@@ -42,10 +42,13 @@ const REQUIRED_GITHUB_SECRETS: Array<{ name: string; purpose: string }> = [
     name: "GOOGLE_WALLET_SERVICE_ACCOUNT_JSON",
     purpose: "Google Wallet service account",
   },
-  { name: "OPENAI_API_KEY", purpose: "OpenAI API key (kept for future use)" },
+  {
+    name: "OPENAI_API_KEY",
+    purpose: "OpenAI Responses API and owner AI Lab image editing",
+  },
   {
     name: "OPENROUTER_API_KEY",
-    purpose: "OpenRouter — all LLM/AI calls route here",
+    purpose: "OpenRouter fallback and broad model gateway",
   },
   { name: "JINA_API_KEY", purpose: "Jina embeddings + reader" },
   { name: "VOYAGE_API_KEY", purpose: "Voyage reranking" },

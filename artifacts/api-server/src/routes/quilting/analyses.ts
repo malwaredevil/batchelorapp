@@ -30,6 +30,10 @@ import { aiLimiter } from "../../middleware/rateLimit";
 import { callModel, getModels } from "../../lib/ai-client";
 import { logger } from "../../lib/logger";
 import { z } from "zod/v4";
+import {
+  createOpenAIStableIdentifier,
+  generateOpenAIResponseTextWithFallback,
+} from "../../lib/openai-responses";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -288,16 +292,41 @@ router.post(
       .filter(Boolean)
       .join("\n");
 
-    const completion = await callModel(models.fastVision, (client, model) =>
-      client.chat.completions.create({
-        model,
-        messages: [{ role: "user", content: prompt }],
-        max_tokens: 1500,
-        temperature: 0.1,
-      }),
-    );
-
-    const raw = completion.choices[0]?.message?.content ?? "[]";
+    const raw = (
+      await generateOpenAIResponseTextWithFallback(
+        {
+          scope: "app",
+          role: "balanced",
+          instructions:
+            "Extract quilt-pattern fabric requirements precisely. Preserve unknowns instead of guessing. Return only the requested JSON array.",
+          input: prompt,
+          reasoningEffort: "low",
+          verbosity: "low",
+          maxOutputTokens: 4_000,
+          safetyIdentifier: createOpenAIStableIdentifier(
+            "safety",
+            req.session.userId!,
+          ),
+          promptCacheKey: createOpenAIStableIdentifier(
+            "cache",
+            "quilting-requirement-extraction",
+          ),
+        },
+        async () => {
+          const completion = await callModel(
+            models.fastVision,
+            (client, model) =>
+              client.chat.completions.create({
+                model,
+                messages: [{ role: "user", content: prompt }],
+                max_tokens: 1500,
+                temperature: 0.1,
+              }),
+          );
+          return completion.choices[0]?.message?.content ?? "[]";
+        },
+      )
+    ).text;
     let requirements: unknown[] = [];
     try {
       const trimmed = raw
@@ -478,16 +507,41 @@ router.post("/patterns/:id/analyses", aiLimiter, async (req, res) => {
         .filter(Boolean)
         .join("\n");
 
-      const completion = await callModel(models.smartVision, (client, model) =>
-        client.chat.completions.create({
-          model,
-          messages: [{ role: "user", content: prompt }],
-          max_tokens: 3000,
-          temperature: 0.1,
-        }),
-      );
-
-      const raw = completion.choices[0]?.message?.content ?? "{}";
+      const raw = (
+        await generateOpenAIResponseTextWithFallback(
+          {
+            scope: "app",
+            role: "reasoning",
+            instructions:
+              "Act as a careful quilting planner. Compare numeric fabric requirements with the supplied stash, call out assumptions and shortages, and return only the requested JSON object. Never claim a fabric covers a requirement unless its recorded quantity supports that conclusion.",
+            input: prompt,
+            reasoningEffort: "medium",
+            verbosity: "low",
+            maxOutputTokens: 6_000,
+            safetyIdentifier: createOpenAIStableIdentifier(
+              "safety",
+              req.session.userId!,
+            ),
+            promptCacheKey: createOpenAIStableIdentifier(
+              "cache",
+              "quilting-stash-analysis",
+            ),
+          },
+          async () => {
+            const completion = await callModel(
+              models.smartVision,
+              (client, model) =>
+                client.chat.completions.create({
+                  model,
+                  messages: [{ role: "user", content: prompt }],
+                  max_tokens: 3000,
+                  temperature: 0.1,
+                }),
+            );
+            return completion.choices[0]?.message?.content ?? "{}";
+          },
+        )
+      ).text;
       let result: {
         readiness?: string;
         requirementRows?: unknown[];

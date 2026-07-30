@@ -6,6 +6,7 @@ Do not edit by hand.
 
 | Job type                       |
 | ------------------------------ |
+| elaine.research                |
 | slack.turn                     |
 | scheduler.trip-reminder-alerts |
 | travels.gmail-scan             |

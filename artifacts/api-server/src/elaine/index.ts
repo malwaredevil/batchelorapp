@@ -13,6 +13,11 @@ import {
   or,
 } from "drizzle-orm";
 import type OpenAI from "openai";
+import type {
+  EasyInputMessage,
+  ResponseInput,
+  ResponseInputContent,
+} from "openai/resources/responses/responses";
 import {
   db,
   pool,
@@ -54,6 +59,17 @@ import {
   getElaineGlobalConfig,
   invalidateElaineGlobalConfigCache,
 } from "../lib/elaine-config";
+import {
+  createOpenAIStableIdentifier,
+  generateOpenAIResponseText,
+  getOpenAIResponsesMetrics,
+  isOpenAIResponsesConfigured,
+  isRecoverableOpenAIStateError,
+  OpenAIResponsesUnavailableError,
+  recordOpenAIResponsesFallback,
+  resolveOpenAIResponsesModel,
+  streamOpenAIResponseRound,
+} from "../lib/openai-responses";
 import {
   APP_CONFIG_DEFAULTS,
   getAllConfig,
@@ -196,6 +212,9 @@ import {
   requestNeedsStructuredPlan,
   sanitizeRuntimeText,
   selectElaineReplanTool,
+  isReusableElaineResponseState,
+  selectElaineOpenAIRole,
+  stripElaineCitationMetadata,
   type ElainePlannerTool,
   type ElaineRuntimeTrace,
 } from "./runtime";
@@ -5042,6 +5061,11 @@ router.post("/chat", async (req, res) => {
   // new messages have been added since the last summarisation.
   let history: ChatMessage[] = [];
   let summaryPrefixBlock: string | null = null;
+  let storedOpenAIState: {
+    responseId: string | null;
+    model: string | null;
+    updatedAt: Date | null;
+  } | null = null;
 
   if (histConvId !== null) {
     // Load with IDs so we can detect whether the cached summary is stale.
@@ -5050,6 +5074,9 @@ router.post("/chat", async (req, res) => {
         .select({
           summary: elaineHistoryConversations.summary,
           summarizedUpToId: elaineHistoryConversations.summarizedUpToId,
+          openaiLastResponseId: elaineHistoryConversations.openaiLastResponseId,
+          openaiStateModel: elaineHistoryConversations.openaiStateModel,
+          openaiStateUpdatedAt: elaineHistoryConversations.openaiStateUpdatedAt,
         })
         .from(elaineHistoryConversations)
         .where(eq(elaineHistoryConversations.id, histConvId))
@@ -5064,6 +5091,14 @@ router.post("/chat", async (req, res) => {
         .where(eq(elaineHistoryMessages.conversationId, histConvId))
         .orderBy(elaineHistoryMessages.createdAt),
     ]);
+
+    storedOpenAIState = convRow
+      ? {
+          responseId: convRow.openaiLastResponseId,
+          model: convRow.openaiStateModel,
+          updatedAt: convRow.openaiStateUpdatedAt,
+        }
+      : null;
 
     if (histMsgsRaw.length > 40) {
       // Everything except the last 20 messages will be summarised.
@@ -5225,7 +5260,10 @@ router.post("/chat", async (req, res) => {
           },
         ]
       : []),
-    ...history.map((m) => ({ role: m.role, content: m.content })),
+    ...history.map((m) => ({
+      role: m.role,
+      content: stripElaineCitationMetadata(m.content),
+    })),
     { role: "user", content: userTurnContent },
   ];
 
@@ -5262,19 +5300,47 @@ router.post("/chat", async (req, res) => {
       requestClass,
       sourceRoute,
       tools: plannerTools,
-      generate: async (prompt) =>
-        callModel(
+      generate: async (prompt) => {
+        const plannerInstructions =
+          "Return concise, user-safe JSON plans only. Never reveal chain-of-thought or private scratch reasoning.";
+        if (isOpenAIResponsesConfigured(elaineConfig, "elaine")) {
+          try {
+            const planned = await generateOpenAIResponseText({
+              scope: "elaine",
+              role: "balanced",
+              instructions: plannerInstructions,
+              input: prompt,
+              reasoningEffort: "low",
+              verbosity: "low",
+              maxOutputTokens: 2_500,
+              safetyIdentifier: createOpenAIStableIdentifier("safety", userId),
+              promptCacheKey: createOpenAIStableIdentifier(
+                "cache",
+                `elaine-planner:${appId}`,
+              ),
+              config: elaineConfig,
+            });
+            return planned.text || null;
+          } catch (err) {
+            const category =
+              err instanceof OpenAIResponsesUnavailableError
+                ? err.category
+                : "provider_error";
+            recordOpenAIResponsesFallback(category);
+            req.log.warn(
+              { err, category },
+              "OpenAI Elaine planner unavailable; using OpenRouter",
+            );
+          }
+        }
+        return callModel(
           elaineConfig.subagentModel || elaineConfig.chatModel,
           async (client, model) => {
             const completion = await client.chat.completions.create(
               {
                 model,
                 messages: [
-                  {
-                    role: "system",
-                    content:
-                      "Return concise, user-safe JSON plans only. Never reveal chain-of-thought or private scratch reasoning.",
-                  },
+                  { role: "system", content: plannerInstructions },
                   { role: "user", content: prompt },
                 ],
                 response_format: { type: "json_object" },
@@ -5287,7 +5353,8 @@ router.post("/chat", async (req, res) => {
         ).catch((err) => {
           req.log.warn({ err }, "elaine planner unavailable; using fallback");
           return null;
-        }),
+        });
+      },
     });
     plan = generated.plan;
     if (generated.source === "fallback") {
@@ -5298,6 +5365,61 @@ router.post("/chat", async (req, res) => {
     }
   }
 
+  const openAIResponsesRole = selectElaineOpenAIRole(requestClass);
+  const openAIResponsesModel = resolveOpenAIResponsesModel(
+    elaineConfig,
+    openAIResponsesRole,
+  );
+  let useOpenAIResponses = isOpenAIResponsesConfigured(elaineConfig, "elaine");
+  const reusableOpenAIState =
+    useOpenAIResponses &&
+    isReusableElaineResponseState({
+      state: storedOpenAIState,
+      expectedModel: openAIResponsesModel,
+      maxAgeDays: elaineConfig.thresholds.openAIStateMaxAgeDays,
+    });
+  let openAIPreviousResponseId = reusableOpenAIState
+    ? storedOpenAIState!.responseId
+    : null;
+  let finalOpenAIResponseId: string | null = null;
+
+  const responseUserContent: string | ResponseInputContent[] =
+    hasImages || hasPdfs || hasPageScreenshot
+      ? [
+          ...(hasPdfs
+            ? attachmentPdfs!.map(
+                (pdf): ResponseInputContent => ({
+                  type: "input_text",
+                  text: `[Attached PDF: ${pdf.name}]\n${pdf.extractedText ?? "(no text extracted)"}`,
+                }),
+              )
+            : []),
+          { type: "input_text", text: message },
+          ...(hasImages
+            ? attachmentUrls!.map(
+                (url): ResponseInputContent => ({
+                  type: "input_image",
+                  image_url: url,
+                  detail: "high",
+                }),
+              )
+            : []),
+          ...(hasPageScreenshot
+            ? [
+                {
+                  type: "input_image" as const,
+                  image_url: pageScreenshotUrl!,
+                  detail: "high" as const,
+                },
+              ]
+            : []),
+        ]
+      : message;
+  const responseUserMessage: EasyInputMessage = {
+    type: "message",
+    role: "user",
+    content: responseUserContent,
+  };
   const traceId = randomUUID();
   const runtime = new ElaineTurnRuntime({
     traceId,
@@ -5308,7 +5430,9 @@ router.post("/chat", async (req, res) => {
       maxModelRounds: 4,
       maxToolCalls: 16,
       maxReplans: 2,
-      maxElapsedMs: Math.max(30_000, elaineConfig.requestTimeoutMs * 4),
+      maxElapsedMs: useOpenAIResponses
+        ? Math.max(120_000, elaineConfig.timeouts.openAIResponsesMs * 4)
+        : Math.max(30_000, elaineConfig.requestTimeoutMs * 4),
     },
     eventSink: (event, trace) => sendEvent("runtime", { event, trace }),
   });
@@ -5329,6 +5453,37 @@ router.post("/chat", async (req, res) => {
       },
     });
   }
+  const planForModel = formatPlanForModel(runtime.snapshot());
+  const statelessOpenAIInput: ResponseInput = [
+    ...(summaryPrefixBlock
+      ? [
+          {
+            type: "message" as const,
+            role: "developer" as const,
+            content: `[EARLIER CONVERSATION — SUMMARISED]\n${summaryPrefixBlock}`,
+          },
+        ]
+      : []),
+    ...history.map(
+      (historyMessage): EasyInputMessage => ({
+        type: "message",
+        role: historyMessage.role,
+        content: stripElaineCitationMetadata(historyMessage.content),
+        ...(historyMessage.role === "assistant"
+          ? { phase: "final_answer" as const }
+          : {}),
+      }),
+    ),
+    { type: "message", role: "developer", content: planForModel },
+    responseUserMessage,
+  ];
+  let nextOpenAIInput: ResponseInput = reusableOpenAIState
+    ? [
+        { type: "message", role: "developer", content: planForModel },
+        responseUserMessage,
+      ]
+    : statelessOpenAIInput;
+
   let tracePersisted = await persistElaineTraceBestEffort(
     () =>
       createElaineTurnTrace({
@@ -5336,7 +5491,9 @@ router.post("/chat", async (req, res) => {
         userId,
         conversationId: histConvId,
         channel: appId,
-        model: elaineConfig.chatModel,
+        model: useOpenAIResponses
+          ? `openai:${openAIResponsesModel}`
+          : `openrouter:${elaineConfig.chatModel}`,
       }),
     (err) => req.log.warn({ err }, "elaine trace persistence unavailable"),
   );
@@ -5354,7 +5511,7 @@ router.post("/chat", async (req, res) => {
   // hidden reasoning, and the server still independently enforces them.
   messages.splice(messages.length - 1, 0, {
     role: "system",
-    content: formatPlanForModel(runtime.snapshot()),
+    content: planForModel,
   });
 
   let rawContent = "";
@@ -5377,6 +5534,11 @@ router.post("/chat", async (req, res) => {
   // appended as `tool` messages. Capped at MAX_ROUNDS so a confused model
   // cannot loop indefinitely on AI spend.
   const MAX_ROUNDS = 4;
+  const allAssistantTools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+    ...ACTION_TOOLS,
+    ...SOFT_TOOLS,
+    ...SOFT_TOOLS_EXTRA,
+  ];
   let nextForcedToolName: string | null = null;
   let suppressToolsNextRound = false;
 
@@ -5405,8 +5567,8 @@ router.post("/chat", async (req, res) => {
     const suppressTools = suppressToolsNextRound;
     suppressToolsNextRound = false;
 
-    try {
-      await callModelWithSubagent(
+    const runOpenRouterRound = async () =>
+      callModelWithSubagent(
         elaineConfig.chatModel,
         ASSISTANT_SUBAGENT_INSTRUCTIONS,
         async (client, model, serverTools) => {
@@ -5415,9 +5577,7 @@ router.post("/chat", async (req, res) => {
               model,
               tools: [
                 ...(serverTools as unknown as OpenAI.Chat.Completions.ChatCompletionTool[]),
-                ...ACTION_TOOLS,
-                ...SOFT_TOOLS,
-                ...SOFT_TOOLS_EXTRA,
+                ...allAssistantTools,
               ],
               messages,
               max_tokens: elaineConfig.maxResponseTokens,
@@ -5455,49 +5615,160 @@ router.post("/chat", async (req, res) => {
               if (tc.function?.name) acc.name = tc.function.name;
               if (tc.function?.arguments) acc.args += tc.function.arguments;
               toolCallAcc.set(tc.index, acc);
-
-              // Action proposals are intentionally emitted only after the
-              // full model response has been accumulated and checked against
-              // the server-owned plan/dependency runtime below.
             }
           }
         },
         { subagentModel: elaineConfig.subagentModel },
       );
-    } catch (err) {
-      const recovery = decideElaineModelStreamRecovery({
-        canRetry: runtime.canAttemptAnotherModelRound(),
-        hasPartialContent: rawContent.trim().length > 0,
-        hasSuccessfulObservation: (runtime.snapshot().observations ?? []).some(
-          (observation) => observation.success,
-        ),
-      });
-      if (recovery.retry && recovery.instruction) {
-        req.log.warn(
-          { err, traceId, suppressTools: recovery.suppressTools },
-          "elAIne assistant stream failed; retrying within turn budget",
-        );
-        if (recovery.resetPartialContent) {
-          sendEvent("response_reset", {});
+
+    try {
+      if (useOpenAIResponses) {
+        const callDirectRound = () =>
+          streamOpenAIResponseRound({
+            role: openAIResponsesRole,
+            instructions: systemPrompt,
+            input: nextOpenAIInput,
+            previousResponseId: openAIPreviousResponseId,
+            reasoningEffort: "medium",
+            verbosity: "medium",
+            safetyIdentifier: createOpenAIStableIdentifier("safety", userId),
+            promptCacheKey: createOpenAIStableIdentifier(
+              "cache",
+              `elaine:${histConvId ?? userId}`,
+            ),
+            tools: allAssistantTools,
+            toolChoice: suppressTools
+              ? "none"
+              : forcedToolName
+                ? { type: "function", name: forcedToolName }
+                : "auto",
+            config: elaineConfig,
+            onTextDelta: (delta) => {
+              rawContent += delta;
+              sendEvent("delta", { text: delta });
+            },
+          });
+
+        let directResult;
+        try {
+          directResult = await callDirectRound();
+        } catch (err) {
+          // A retained response can expire or be removed independently of
+          // local conversation history. Rebuild once from durable local
+          // history before considering a provider fallback.
+          if (
+            round === 0 &&
+            reusableOpenAIState &&
+            openAIPreviousResponseId &&
+            isRecoverableOpenAIStateError(err)
+          ) {
+            recordOpenAIResponsesFallback("invalid_state");
+            if (rawContent) sendEvent("response_reset", {});
+            rawContent = "";
+            openAIPreviousResponseId = null;
+            nextOpenAIInput = statelessOpenAIInput;
+            directResult = await callDirectRound();
+          } else {
+            throw err;
+          }
         }
-        rawContent = "";
-        messages.push({ role: "system", content: recovery.instruction });
-        suppressToolsNextRound = recovery.suppressTools;
-        continue;
+
+        openAIPreviousResponseId = directResult.responseId;
+        finalOpenAIResponseId = directResult.responseId;
+        nextOpenAIInput = [];
+        directResult.functionCalls.forEach((toolCall, index) => {
+          toolCallAcc.set(index, {
+            id: toolCall.callId,
+            name: toolCall.name,
+            args: toolCall.arguments,
+          });
+        });
+      } else {
+        await runOpenRouterRound();
       }
-      req.log.error({ err }, "elAIne assistant stream failed");
-      const failedTrace = runtime.complete("failed");
-      if (tracePersisted) {
-        await finishElaineTurnTrace({ trace: failedTrace }).catch((traceErr) =>
-          req.log.warn(
-            { err: traceErr, traceId },
-            "elaine failed trace finalization unavailable",
-          ),
+    } catch (err) {
+      let unresolvedModelError: unknown = err;
+      if (
+        useOpenAIResponses &&
+        elaineConfig.features.enableOpenAIResponsesFallback
+      ) {
+        const category =
+          err instanceof OpenAIResponsesUnavailableError
+            ? err.category
+            : "provider_error";
+        recordOpenAIResponsesFallback(category);
+        req.log.warn(
+          { err, traceId, category },
+          "OpenAI Elaine round unavailable; falling back to OpenRouter",
         );
+        if (rawContent) sendEvent("response_reset", {});
+        rawContent = "";
+        toolCallAcc.clear();
+        useOpenAIResponses = false;
+        openAIPreviousResponseId = null;
+        finalOpenAIResponseId = null;
+        try {
+          await runOpenRouterRound();
+          unresolvedModelError = null;
+        } catch (fallbackErr) {
+          req.log.warn(
+            { err: fallbackErr, traceId },
+            "OpenRouter fallback round failed",
+          );
+          unresolvedModelError = fallbackErr;
+        }
       }
-      sendEvent("error", { message: "elAIne couldn't respond just now." });
-      res.end();
-      return;
+
+      if (unresolvedModelError) {
+        const recovery = decideElaineModelStreamRecovery({
+          canRetry: runtime.canAttemptAnotherModelRound(),
+          hasPartialContent: rawContent.trim().length > 0,
+          hasSuccessfulObservation: (
+            runtime.snapshot().observations ?? []
+          ).some((observation) => observation.success),
+        });
+        if (recovery.retry && recovery.instruction) {
+          req.log.warn(
+            {
+              err: unresolvedModelError,
+              traceId,
+              suppressTools: recovery.suppressTools,
+            },
+            "elAIne assistant stream failed; retrying within turn budget",
+          );
+          if (recovery.resetPartialContent) {
+            sendEvent("response_reset", {});
+          }
+          rawContent = "";
+          messages.push({ role: "system", content: recovery.instruction });
+          nextOpenAIInput = [
+            {
+              type: "message",
+              role: "developer",
+              content: recovery.instruction,
+            },
+          ];
+          suppressToolsNextRound = recovery.suppressTools;
+          continue;
+        }
+        req.log.error(
+          { err: unresolvedModelError },
+          "elAIne assistant stream failed",
+        );
+        const failedTrace = runtime.complete("failed");
+        if (tracePersisted) {
+          await finishElaineTurnTrace({ trace: failedTrace }).catch(
+            (traceErr) =>
+              req.log.warn(
+                { err: traceErr, traceId },
+                "elaine failed trace finalization unavailable",
+              ),
+          );
+        }
+        sendEvent("error", { message: "elAIne couldn't respond just now." });
+        res.end();
+        return;
+      }
     }
 
     // Resolve any tool calls not already handled mid-stream. Content no
@@ -5666,6 +5937,17 @@ router.post("/chat", async (req, res) => {
       }
     }
 
+    const immediateOpenAIToolOutputs: ResponseInput = [...toolCallAcc.values()]
+      .filter(
+        (call) => call.id && !MODEL_VISIBLE_HARD_TOOL_NAMES.has(call.name),
+      )
+      .map((call) => ({
+        type: "function_call_output" as const,
+        call_id: call.id,
+        output:
+          "The Batchelor app server handled this UI/action tool according to its validated plan, confirmation policy, and deterministic executor. Use the server-provided turn events as authoritative.",
+      }));
+
     if (hardToolCalls.length === 0 || round === MAX_ROUNDS - 1) {
       const satisfiedFallback = findElaineSatisfiedFallback(runtime.snapshot());
       if (satisfiedFallback) {
@@ -5720,8 +6002,28 @@ router.post("/chat", async (req, res) => {
               ? ` SERVER ROUTE: Call ${selectedTool.toolName} next as the one bounded safe lookup.`
               : ""),
         });
+        nextOpenAIInput = [
+          ...immediateOpenAIToolOutputs,
+          {
+            type: "message",
+            role: "developer",
+            content:
+              decision.instruction +
+              (selectedTool
+                ? ` SERVER ROUTE: Call ${selectedTool.toolName} next as the one bounded safe lookup.`
+                : ""),
+          },
+        ];
         rawContent = "";
         continue;
+      }
+      // A Responses function call must receive a function_call_output before
+      // its response can be continued. This branch deliberately ends the
+      // model loop after UI/action-only calls, so do not persist an unresolved
+      // provider pointer; the next turn will rebuild from durable local
+      // history instead.
+      if (useOpenAIResponses && toolCallAcc.size > 0) {
+        finalOpenAIResponseId = null;
       }
       break;
     }
@@ -6991,6 +7293,14 @@ router.post("/chat", async (req, res) => {
         content: result.resultText,
       });
     }
+    nextOpenAIInput = [
+      ...immediateOpenAIToolOutputs,
+      ...hardToolResults.map((result) => ({
+        type: "function_call_output" as const,
+        call_id: result.call.id,
+        output: result.resultText,
+      })),
+    ];
 
     // Collect citations from this round's web searches, in tool-call order,
     // into the outer allCitations array so they survive the loop.
@@ -7077,19 +7387,39 @@ router.post("/chat", async (req, res) => {
       insertedMessages.find((inserted) => inserted.role === "assistant")?.id ??
       null;
 
+    const stateUpdatedAt = new Date();
+    const responseStateUpdate =
+      useOpenAIResponses && finalOpenAIResponseId
+        ? {
+            openaiLastResponseId: finalOpenAIResponseId,
+            openaiStateModel: openAIResponsesModel,
+            openaiStateUpdatedAt: stateUpdatedAt,
+          }
+        : {
+            openaiLastResponseId: null,
+            openaiStateModel: null,
+            openaiStateUpdatedAt: null,
+          };
+
     // Auto-title from the first user message (first 60 chars), then just
-    // bump updatedAt on subsequent turns.
+    // bump updatedAt on subsequent turns. Provider state is updated in the
+    // same write; OpenRouter fallback deliberately clears an incompatible
+    // retained-response pointer while durable local history remains intact.
     if (history.length === 0) {
       const autoTitle =
         message.length > 60 ? message.slice(0, 60) + "…" : message;
       await db
         .update(elaineHistoryConversations)
-        .set({ title: autoTitle, updatedAt: new Date() })
+        .set({
+          title: autoTitle,
+          updatedAt: stateUpdatedAt,
+          ...responseStateUpdate,
+        })
         .where(eq(elaineHistoryConversations.id, histConvId));
     } else {
       await db
         .update(elaineHistoryConversations)
-        .set({ updatedAt: new Date() })
+        .set({ updatedAt: stateUpdatedAt, ...responseStateUpdate })
         .where(eq(elaineHistoryConversations.id, histConvId));
     }
   }
@@ -7208,7 +7538,8 @@ router.post("/tasks/:id/cancel", async (req, res) => {
 
 router.get("/diagnostics", async (req, res) => {
   if (!(await requireOwner(req, res))) return;
-  const [traceResult, taskResult] = await Promise.all([
+  const config = await getElaineGlobalConfig();
+  const [traceResult, taskResult, responseStateResult] = await Promise.all([
     pool.query<{
       turns: string;
       completed: string;
@@ -7255,6 +7586,34 @@ router.get("/diagnostics", async (req, res) => {
       WHERE type = 'elaine.research'
         AND created_at >= now() - interval '30 days'
     `),
+    pool.query<{
+      conversations: string;
+      with_state: string;
+      fresh_state: string;
+      stale_state: string;
+    }>(
+      `
+        SELECT
+          count(*)::text AS conversations,
+          count(*) FILTER (WHERE openai_last_response_id IS NOT NULL)::text
+            AS with_state,
+          count(*) FILTER (
+            WHERE openai_last_response_id IS NOT NULL
+              AND openai_state_updated_at >=
+                now() - ($1::int * interval '1 day')
+          )::text AS fresh_state,
+          count(*) FILTER (
+            WHERE openai_last_response_id IS NOT NULL
+              AND (
+                openai_state_updated_at IS NULL OR
+                openai_state_updated_at <
+                  now() - ($1::int * interval '1 day')
+              )
+          )::text AS stale_state
+        FROM elaine_history_conversations
+      `,
+      [config.thresholds.openAIStateMaxAgeDays],
+    ),
   ]);
   const parseMetrics = (row: Record<string, string> | undefined) =>
     Object.fromEntries(
@@ -7268,8 +7627,10 @@ router.get("/diagnostics", async (req, res) => {
     periodDays: 30,
     traces: parseMetrics(traceResult.rows[0]),
     researchTasks: parseMetrics(taskResult.rows[0]),
+    responseState: parseMetrics(responseStateResult.rows[0]),
+    responseRuntime: getOpenAIResponsesMetrics(),
     privacy:
-      "Counts only. No prompts, memory contents, tool payloads, or provider errors are included.",
+      "Counts only. No prompts, memory contents, tool payloads, response IDs, or provider error messages are included.",
   });
 });
 
@@ -7734,6 +8095,9 @@ const AdminConfigBody = z.object({
       research: z.string().min(1).max(200).optional(),
       expertPanelAlt: z.string().min(1).max(200).optional(),
       embedding: z.string().min(1).max(200).optional(),
+      openAIReasoning: z.string().min(1).max(200).optional(),
+      openAIBalanced: z.string().min(1).max(200).optional(),
+      openAIFast: z.string().min(1).max(200).optional(),
       rerank: z.string().min(1).max(200).optional(),
       visualEmbed: z.string().min(1).max(200).optional(),
       fusionModels: z
@@ -7751,6 +8115,7 @@ const AdminConfigBody = z.object({
       rerankerMs: z.number().int().min(1000).max(60000).optional(),
       geocodingMs: z.number().int().min(1000).max(30000).optional(),
       fusionMs: z.number().int().min(1000).max(120000).optional(),
+      openAIResponsesMs: z.number().int().min(5000).max(180000).optional(),
     })
     .partial()
     .optional(),
@@ -7760,6 +8125,9 @@ const AdminConfigBody = z.object({
       enableSubagent: z.boolean().optional(),
       enableFusionPotteryExpert: z.boolean().optional(),
       enableFusionTravelDocFallback: z.boolean().optional(),
+      enableOpenAIResponses: z.boolean().optional(),
+      enableOpenAIAppWorkflows: z.boolean().optional(),
+      enableOpenAIResponsesFallback: z.boolean().optional(),
     })
     .partial()
     .optional(),
@@ -7784,6 +8152,19 @@ const AdminConfigBody = z.object({
         .min(50)
         .max(4000)
         .optional(),
+      openAIResponsesMaxOutputTokens: z
+        .number()
+        .int()
+        .min(1000)
+        .max(30000)
+        .optional(),
+      openAICompactionThresholdTokens: z
+        .number()
+        .int()
+        .min(10000)
+        .max(900000)
+        .optional(),
+      openAIStateMaxAgeDays: z.number().int().min(1).max(29).optional(),
     })
     .partial()
     .optional(),

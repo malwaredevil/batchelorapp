@@ -90,8 +90,9 @@ export const env = {
   //   node -e "require('crypto').randomBytes(32).toString('base64')"
   oauthTokenEncryptionKey: required("OAUTH_TOKEN_ENCRYPTION_KEY"),
   sentryDsn: optional("SENTRY_DSN"),
-  // Direct OpenAI API key — used only for image edit (inpainting) in the
-  // owner AI Lab. All other AI calls go through OpenRouter (openrouterApiKey).
+  // Direct OpenAI API key — used by the centralized Responses API provider
+  // and by image edit (inpainting) in the owner AI Lab. It remains optional
+  // so a missing key cleanly selects the existing OpenRouter path.
   openaiApiKey: optional("OPENAI_API_KEY"),
   // Canonical public URL of this deployment (e.g. "https://app.batchelor.app").
   // Used as a safe fallback for constructing OAuth redirect URIs and

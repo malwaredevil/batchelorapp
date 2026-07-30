@@ -176,6 +176,7 @@ import {
   assertElaineToolFamilyCoverage,
   buildElaineSourceRoute,
   classifyElaineRequest,
+  completedActionAcknowledgement,
   createElaineTurnTrace,
   createFallbackPlan,
   ELAINE_READ_CONCURRENCY,
@@ -186,6 +187,7 @@ import {
   loadElaineTurnTracesForMessages,
   mapWithConcurrency,
   persistElaineTraceBestEffort,
+  preparedActionAcknowledgement,
   provenanceForTool,
   requestNeedsStructuredPlan,
   sanitizeRuntimeText,
@@ -4055,6 +4057,17 @@ const ACTION_TOOL_NAMES = new Set<string>(
   ),
 );
 
+function isConsequentialToolName(name: string): boolean {
+  return name === REMEMBER_TOOL_NAME || ACTION_TOOL_NAMES.has(name);
+}
+
+function runtimeToolDedupeKey(name: string, args: string): string {
+  // One background research proposal per turn. A changed model-generated
+  // query list must not evade deduplication during a verifier re-plan.
+  if (name === "queue_research_task") return name;
+  return createHash("sha256").update(`${name}:${args}`).digest("hex");
+}
+
 function buildElainePlannerToolCatalog(): ElainePlannerTool[] {
   const registry = buildElaineCapabilityRegistry([
     ...ACTION_TOOLS,
@@ -5351,16 +5364,13 @@ router.post("/chat", async (req, res) => {
   const executedActions: Array<
     ProposedAction & { status: number; result: unknown }
   > = [];
+  const completedImmediateActionTypes = new Set<string>();
 
-  // web_search is the one tool whose result the model needs back before it
-  // can write its final reply — unlike the other "soft" tools (navigate,
-  // remember, set mode) which apply immediately with no further model input.
-  // That means a turn using it takes two model calls: one that emits the
-  // search tool_call(s), then a second with the results appended as `tool`
-  // messages so the model can answer using them. Capped at MAX_ROUNDS so a
-  // confused model can't loop indefinitely on our AI spend — one search
-  // round plus one mandatory final-answer round covers "look this up, then
-  // tell me" without unbounded cost.
+  // Read tools and the explicit immediate memory write feed their result back
+  // before the model writes its final reply. That normally takes two model
+  // calls: one that emits the tool call(s), then a second with results
+  // appended as `tool` messages. Capped at MAX_ROUNDS so a confused model
+  // cannot loop indefinitely on AI spend.
   const MAX_ROUNDS = 4;
 
   for (let round = 0; round < MAX_ROUNDS; round++) {
@@ -5483,18 +5493,18 @@ router.post("/chat", async (req, res) => {
       LIST_ELAINE_MEMORIES_TOOL_NAME,
       LIST_ELAINE_TASKS_TOOL_NAME,
       GET_ELAINE_TASK_TOOL_NAME,
+      REMEMBER_TOOL_NAME,
     ]);
     const runtimeCandidates = [...toolCallAcc.entries()];
     const runtimeSchedules = runtime.registerToolCalls(
       runtimeCandidates.map(([index, call]) => ({
         id: call.id || `round-${round}-call-${index}`,
         name: call.name,
-        consequential: ACTION_TOOL_NAMES.has(call.name),
-        ...(ACTION_TOOL_NAMES.has(call.name)
+        consequential: isConsequentialToolName(call.name),
+        confirmationRequired: ACTION_TOOL_NAMES.has(call.name),
+        ...(isConsequentialToolName(call.name)
           ? {
-              dedupeKey: createHash("sha256")
-                .update(`${call.name}:${call.args}`)
-                .digest("hex"),
+              dedupeKey: runtimeToolDedupeKey(call.name, call.args),
             }
           : {}),
       })),
@@ -5526,45 +5536,13 @@ router.post("/chat", async (req, res) => {
             runtimeCallId: schedule.id,
             runtimeAllowed: schedule.allowed,
             ...(schedule.reason ? { runtimeReason: schedule.reason } : {}),
-            consequential: ACTION_TOOL_NAMES.has(name),
+            consequential: isConsequentialToolName(name),
           });
         }
         continue;
       }
 
       if (!schedule?.allowed) continue;
-
-      if (name === REMEMBER_TOOL_NAME) {
-        try {
-          const parsed = RememberToolPayload.safeParse(JSON.parse(args));
-          if (parsed.success) {
-            const scope = parsed.data.scope ?? "household";
-            const expiresAt = parsed.data.expires_in_days
-              ? new Date(Date.now() + parsed.data.expires_in_days * 86400000)
-              : scope === "temporary"
-                ? new Date(Date.now() + 30 * 86400000)
-                : undefined;
-            await rememberElaineMemory({
-              userId,
-              content: parsed.data.content,
-              scope,
-              category: parsed.data.category ?? "fact",
-              sensitivity: parsed.data.sensitivity ?? "low",
-              expiresAt,
-              source: "explicit_assistant",
-            });
-            runtime.recordObservation({
-              callId: schedule.id,
-              toolName: name,
-              success: true,
-              summary: "Requested memory was saved",
-            });
-          }
-        } catch {
-          // Malformed JSON from the model — drop it, keep the reply text.
-        }
-        continue;
-      }
 
       if (name === SET_MODE_TOOL_NAME) {
         try {
@@ -5681,6 +5659,20 @@ router.post("/chat", async (req, res) => {
     }
 
     if (hardToolCalls.length === 0 || round === MAX_ROUNDS - 1) {
+      if (!rawContent.trim()) {
+        const acknowledgement =
+          preparedActionAcknowledgement(resolvedActions) ??
+          completedActionAcknowledgement([
+            ...[...completedImmediateActionTypes].map((type) => ({ type })),
+            ...executedActions
+              .filter(({ status }) => status >= 200 && status < 400)
+              .map(({ type }) => ({ type })),
+          ]);
+        if (acknowledgement) {
+          rawContent = acknowledgement;
+          sendEvent("delta", { text: acknowledgement });
+        }
+      }
       const decision = runtime.verify({
         finalContent: rawContent,
         hasPendingConfirmation: resolvedActions.length > 0,
@@ -5733,6 +5725,7 @@ router.post("/chat", async (req, res) => {
       [GET_NOTIFICATION_COUNTS_TOOL_NAME]: "counting your notifications",
       [GET_NOTIFICATION_PREFERENCES_TOOL_NAME]:
         "checking your notification preferences",
+      [REMEMBER_TOOL_NAME]: "saving that memory",
     };
     const statusMessage = [...distinctHardToolNames]
       .map((n) => STATUS_LABELS[n])
@@ -5789,7 +5782,37 @@ router.post("/chat", async (req, res) => {
           };
         }
         try {
-          if (call.name === WEB_SEARCH_TOOL_NAME) {
+          if (call.name === REMEMBER_TOOL_NAME) {
+            const parsed = RememberToolPayload.safeParse(JSON.parse(call.args));
+            if (!parsed.success) {
+              _toolEvidenceComplete = false;
+              runtimeSummary = "Memory request was invalid";
+              runtimeErrorCategory = "invalid_tool_arguments";
+              resultText =
+                "The memory request was invalid. Ask the user to rephrase what should be remembered.";
+            } else {
+              const scope = parsed.data.scope ?? "household";
+              const expiresAt = parsed.data.expires_in_days
+                ? new Date(
+                    Date.now() + parsed.data.expires_in_days * 86_400_000,
+                  )
+                : scope === "temporary"
+                  ? new Date(Date.now() + 30 * 86_400_000)
+                  : undefined;
+              await rememberElaineMemory({
+                userId,
+                content: parsed.data.content,
+                scope,
+                category: parsed.data.category ?? "fact",
+                sensitivity: parsed.data.sensitivity ?? "low",
+                expiresAt,
+                source: "explicit_assistant",
+              });
+              runtimeSummary = "Requested memory was saved";
+              resultText =
+                "The requested memory was saved successfully. Acknowledge that once without repeating the write.";
+            }
+          } else if (call.name === WEB_SEARCH_TOOL_NAME) {
             const parsed = WebSearchToolPayload.safeParse(
               JSON.parse(call.args),
             );
@@ -6916,6 +6939,9 @@ router.post("/chat", async (req, res) => {
     // Append tool messages deterministically even though independent reads
     // executed within the configured concurrency bound.
     for (const result of hardToolResults) {
+      if (result.success && result.call.name === REMEMBER_TOOL_NAME) {
+        completedImmediateActionTypes.add(result.call.name);
+      }
       runtime.recordObservation({
         callId: result.call.runtimeCallId,
         toolName: result.call.name,

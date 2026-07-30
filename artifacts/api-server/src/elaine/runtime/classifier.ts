@@ -2,6 +2,8 @@ import type { ElaineRequestClass } from "./contracts";
 
 const ACTION_RE =
   /\b(add|book|cancel|change|connect|create|delete|disconnect|draft|edit|email|generate|mark|merge|move|notify|remove|rename|restore|save|send|set|share|sync|text|toggle|update|upload)\b/i;
+const EXPLICIT_MEMORY_ACTION_RE =
+  /^(?:(?:can|could|will|would)\s+you\s+)?(?:please\s+)?(?:(?:correct|forget)\b|remember\b(?!\s+(?:how|what|when|where|whether|who|why)\b))/i;
 const EXPLANATION_RE =
   /^(?:why|what|who|when|where|how)\b|\bhow\s+to\b|\b(?:explain|describe)\b/i;
 const RESEARCH_RE =
@@ -20,7 +22,9 @@ export function classifyElaineRequest(input: {
   // Action verbs also occur in ordinary questions ("Why do leaves change
   // color?", "How do I delete a trip?"). Explanatory wording stays on the
   // answer path unless the user actually asks Elaine to perform the change.
-  const action = ACTION_RE.test(message) && !EXPLANATION_RE.test(message);
+  const action =
+    (ACTION_RE.test(message) || EXPLICIT_MEMORY_ACTION_RE.test(message)) &&
+    !EXPLANATION_RE.test(message);
   const research = RESEARCH_RE.test(message);
   const householdRead = HOUSEHOLD_READ_RE.test(message);
 

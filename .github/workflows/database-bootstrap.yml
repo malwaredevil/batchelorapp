@@ -67,10 +67,11 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Some schema statements intentionally name Supabase's Data API roles.
-      # Recreate only those role names in the disposable PostgreSQL service;
-      # they are NOLOGIN and receive no application privileges.
-      - name: Prepare Supabase-compatible roles
+      # Some schema statements intentionally name Supabase's Data API roles
+      # and Realtime publication. Recreate only those names in the disposable
+      # PostgreSQL service; the roles are NOLOGIN and receive no application
+      # privileges.
+      - name: Prepare Supabase-compatible fixtures
         run: |
           psql "$DATABASE_URL" --set ON_ERROR_STOP=1 <<'SQL'
           DO $roles$
@@ -83,6 +84,7 @@ jobs:
             END IF;
           END
           $roles$;
+          CREATE PUBLICATION supabase_realtime;
           SQL
 
       # bootstrap.ts deliberately pins the Supabase CA for production

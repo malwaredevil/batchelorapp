@@ -192,10 +192,11 @@ describe("resolveDatabaseUrl — non-Supabase URLs", () => {
     });
   });
 
-  it("returns an un-parseable URL string as-is without throwing", () => {
+  it("rejects an un-parseable URL with an actionable error", () => {
     withEnv({ DATABASE_URL: "not-a-url" }, () => {
-      expect(() => resolveDatabaseUrl()).not.toThrow();
-      expect(resolveDatabaseUrl()).toBe("not-a-url");
+      expect(() => resolveDatabaseUrl()).toThrow(
+        /Cannot parse database URL.*percent-encoded/,
+      );
     });
   });
 

@@ -20,6 +20,11 @@ import {
   TriangleAlert,
   ShieldAlert,
   Server,
+  Mail,
+  MessageSquare,
+  Slack,
+  RefreshCw,
+  Play,
 } from "lucide-react";
 import { GlobalConfigCard } from "@workspace/elaine-ui";
 import {
@@ -1786,6 +1791,373 @@ function DbRow({
   );
 }
 
+// ---------------------------------------------------------------------------
+// Daily Comms Check card — shows today's email/SMS/Slack send+verify status.
+// ---------------------------------------------------------------------------
+
+type CommStatus = "pending" | "sent" | "error" | "verified";
+
+interface CommCheckRow {
+  id: number;
+  checkDate: string;
+  emailStatus: CommStatus;
+  emailSentAt: string | null;
+  emailVerifiedAt: string | null;
+  emailError: string | null;
+  smsStatus: CommStatus;
+  smsSentAt: string | null;
+  smsVerifiedAt: string | null;
+  smsError: string | null;
+  slackStatus: CommStatus;
+  slackSentAt: string | null;
+  slackVerifiedAt: string | null;
+  slackError: string | null;
+  createdAt: string;
+}
+
+function statusBadge(status: CommStatus, error?: string | null) {
+  if (status === "verified") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-green-500/15 px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-400">
+        <CheckCircle2 className="h-3 w-3" />
+        Verified
+      </span>
+    );
+  }
+  if (status === "sent") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+        <Circle className="h-3 w-3" />
+        Sent — awaiting reply
+      </span>
+    );
+  }
+  if (status === "error") {
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded-full bg-red-500/15 px-2 py-0.5 text-xs font-medium text-red-700 dark:text-red-400"
+        title={error ?? undefined}
+      >
+        <AlertTriangle className="h-3 w-3" />
+        Error
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+      <Circle className="h-3 w-3" />
+      Pending
+    </span>
+  );
+}
+
+function CommCheckCard() {
+  const [rows, setRows] = useState<CommCheckRow[]>([]);
+  const [today, setToday] = useState<string>("");
+  const [loading, setLoading] = useState(true);
+  const [running, setRunning] = useState(false);
+  const [channelRunning, setChannelRunning] = useState<CommStatus | null>(null);
+  const [runMsg, setRunMsg] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  const load = useCallback(() => {
+    setLoading(true);
+    setRunMsg(null);
+    fetch("/api/hub/comm-checks")
+      .then((r) =>
+        r.ok
+          ? (r.json() as Promise<{ today: string; rows: CommCheckRow[] }>)
+          : Promise.reject(r.status),
+      )
+      .then((d) => {
+        setToday(d.today);
+        setRows(d.rows);
+      })
+      .catch(() =>
+        toast({ title: "Could not load comm checks", variant: "destructive" }),
+      )
+      .finally(() => setLoading(false));
+  }, [toast]);
+
+  const runAll = async () => {
+    setRunning(true);
+    setRunMsg(null);
+    try {
+      const r = await fetch("/api/hub/comm-checks/run", { method: "POST" });
+      const d = (await r.json()) as {
+        ok: boolean;
+        alreadyRan?: boolean;
+        email?: string;
+        sms?: string;
+        slack?: string;
+        error?: string;
+      };
+      if (d.alreadyRan) {
+        setRunMsg(
+          "Already ran today — use the per-channel Send buttons to resend individual channels.",
+        );
+      } else if (d.ok) {
+        setRunMsg(`Sent — email: ${d.email}, SMS: ${d.sms}, Slack: ${d.slack}`);
+        toast({ title: "All comms checks sent" });
+      } else {
+        setRunMsg(d.error ?? "Run failed.");
+        toast({
+          title: "Comms check failed",
+          description: d.error,
+          variant: "destructive",
+        });
+      }
+      load();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Network error.";
+      setRunMsg(msg);
+      toast({ title: "Error", description: msg, variant: "destructive" });
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const runChannel = async (channel: "email" | "sms" | "slack") => {
+    setChannelRunning(channel as unknown as CommStatus);
+    setRunMsg(null);
+    try {
+      const r = await fetch(`/api/hub/comm-checks/run/${channel}`, {
+        method: "POST",
+      });
+      const d = (await r.json()) as {
+        ok: boolean;
+        result?: string;
+        error?: string;
+      };
+      if (d.ok) {
+        toast({ title: `${channel} check sent` });
+        setRunMsg(`${channel}: ${d.result ?? "sent"}`);
+      } else {
+        const err = d.error ?? "Failed";
+        setRunMsg(`${channel}: ${err}`);
+        toast({
+          title: `${channel} failed`,
+          description: err,
+          variant: "destructive",
+        });
+      }
+      load();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Network error.";
+      setRunMsg(`${channel}: ${msg}`);
+      toast({ title: "Error", description: msg, variant: "destructive" });
+    } finally {
+      setChannelRunning(null);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const todayRow = rows.find((r) => r.checkDate === today);
+  const anyRunning = running || channelRunning !== null;
+
+  const channelRow = (
+    channel: "email" | "sms" | "slack",
+    icon: React.ReactNode,
+    label: string,
+    status: CommStatus,
+    error: string | null,
+    verifiedAt: string | null,
+  ) => (
+    <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+      <div className="flex items-center gap-2">
+        {icon}
+        <span className="text-sm font-medium">{label}</span>
+      </div>
+      <div className="flex items-center gap-2">
+        {statusBadge(status, error)}
+        {verifiedAt && (
+          <span className="text-xs text-muted-foreground">
+            {new Date(verifiedAt).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => void runChannel(channel)}
+          disabled={anyRunning}
+          title={`Send ${label} check now`}
+          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium text-muted-foreground border border-border hover:bg-muted hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          {channelRunning === (channel as unknown as CommStatus) ? (
+            <RefreshCw className="h-3 w-3 animate-spin" />
+          ) : (
+            <Play className="h-3 w-3" />
+          )}
+          Send
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Wifi className="h-4 w-4 text-muted-foreground" />
+          <h3 className="text-sm font-semibold">Daily Comms Check</h3>
+          {today && (
+            <span className="text-xs text-muted-foreground">{today}</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={load}
+            disabled={loading}
+            className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
+            title="Refresh"
+          >
+            <RefreshCw
+              className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
+            />
+          </button>
+          <button
+            type="button"
+            onClick={() => void runAll()}
+            disabled={anyRunning || loading}
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Play className="h-3 w-3" />
+            {running ? "Running…" : "Send All"}
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="space-y-2">
+          <div className="h-10 rounded-md border border-border bg-muted/20 animate-pulse" />
+          <div className="h-10 rounded-md border border-border bg-muted/20 animate-pulse" />
+          <div className="h-10 rounded-md border border-border bg-muted/20 animate-pulse" />
+        </div>
+      ) : !todayRow ? (
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">
+            No check has run for today yet. Use <strong>Send All</strong> or the
+            individual <strong>Send</strong> buttons below.
+          </p>
+          {channelRow(
+            "email",
+            <Mail className="h-4 w-4 text-muted-foreground" />,
+            "Email",
+            "pending",
+            null,
+            null,
+          )}
+          {channelRow(
+            "sms",
+            <MessageSquare className="h-4 w-4 text-muted-foreground" />,
+            "SMS",
+            "pending",
+            null,
+            null,
+          )}
+          {channelRow(
+            "slack",
+            <Slack className="h-4 w-4 text-muted-foreground" />,
+            "Slack",
+            "pending",
+            null,
+            null,
+          )}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {channelRow(
+            "email",
+            <Mail className="h-4 w-4 text-muted-foreground" />,
+            "Email",
+            todayRow.emailStatus,
+            todayRow.emailError,
+            todayRow.emailVerifiedAt,
+          )}
+          {channelRow(
+            "sms",
+            <MessageSquare className="h-4 w-4 text-muted-foreground" />,
+            "SMS",
+            todayRow.smsStatus,
+            todayRow.smsError,
+            todayRow.smsVerifiedAt,
+          )}
+          {channelRow(
+            "slack",
+            <Slack className="h-4 w-4 text-muted-foreground" />,
+            "Slack",
+            todayRow.slackStatus,
+            todayRow.slackError,
+            todayRow.slackVerifiedAt,
+          )}
+        </div>
+      )}
+
+      {runMsg && (
+        <p className="text-xs text-muted-foreground border-t border-border pt-2">
+          {runMsg}
+        </p>
+      )}
+
+      {/* Last 7 days history */}
+      {rows.length > 1 && (
+        <details className="group">
+          <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+            History (last {rows.length} days)
+          </summary>
+          <div className="mt-2 overflow-x-auto rounded border border-border">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-border bg-muted/40 text-left">
+                  <th className="px-2 py-1.5 font-medium text-muted-foreground">
+                    Date
+                  </th>
+                  <th className="px-2 py-1.5 font-medium text-muted-foreground">
+                    Email
+                  </th>
+                  <th className="px-2 py-1.5 font-medium text-muted-foreground">
+                    SMS
+                  </th>
+                  <th className="px-2 py-1.5 font-medium text-muted-foreground">
+                    Slack
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr
+                    key={row.id}
+                    className="border-b border-border last:border-0"
+                  >
+                    <td className="px-2 py-1.5 font-mono text-muted-foreground">
+                      {row.checkDate}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      {statusBadge(row.emailStatus)}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      {statusBadge(row.smsStatus)}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      {statusBadge(row.slackStatus)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      )}
+    </div>
+  );
+}
+
 function InfrastructureContent({
   status,
   loading,
@@ -1904,6 +2276,9 @@ function InfrastructureContent({
           </div>
         )}
       </div>
+
+      {/* Daily comms check card */}
+      <CommCheckCard />
 
       {/* Bootstrap card */}
       <div className="rounded-lg border border-border bg-card p-5 space-y-3">

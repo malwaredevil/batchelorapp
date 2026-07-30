@@ -13,6 +13,7 @@ import { env } from "../lib/env";
 import { logger } from "../lib/logger";
 import { sendElaineEmailReply } from "../lib/email";
 import { runElaineEmailTurn, type ElaineEmailChatMessage } from "../elaine";
+import { markCommCheckVerified } from "../lib/comm-check-scheduler";
 import {
   processEmailAttachments,
   processEmailBodyAsDocument,
@@ -319,6 +320,12 @@ router.post(
       res.status(200).json({ ok: true });
       return;
     }
+
+    // Any inbound email from a recognized user marks today's email comm check
+    // verified (fire-and-forget — never blocks the Elaine turn).
+    void markCommCheckVerified("email").catch((err) =>
+      logger.warn({ err }, "elaine-email: comm check mark-verified failed"),
+    );
 
     const rawText = typeof data.text === "string" ? data.text : "";
     const rawHtml = typeof data.html === "string" ? data.html : "";

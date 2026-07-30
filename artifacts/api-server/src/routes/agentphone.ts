@@ -12,6 +12,7 @@ import { env } from "../lib/env";
 import { logger } from "../lib/logger";
 import { sendSms, SmsOptedOutError } from "../lib/sms";
 import { runAgentphoneTurn, type AgentphoneChatMessage } from "../elaine";
+import { markCommCheckVerified } from "../lib/comm-check-scheduler";
 
 // ---------------------------------------------------------------------------
 // AgentPhone SMS/voice webhook (task #105). Handles three things:
@@ -283,6 +284,12 @@ async function handleSms(req: Request, res: Response): Promise<void> {
     res.status(200).json({ ok: true });
     return;
   }
+
+  // Any inbound SMS from a recognized user marks today's SMS comm check
+  // verified (fire-and-forget — never blocks the Elaine turn).
+  void markCommCheckVerified("sms").catch((err) =>
+    logger.warn({ err }, "agentphone: comm check mark-verified failed"),
+  );
 
   const conversation = await getOrCreateAgentphoneConversation(from, user.id);
   const replyText = await runRestrictedTurnAndPersist(

@@ -1,10 +1,15 @@
 import { Router, type IRouter } from "express";
-import { eq, sql } from "drizzle-orm";
-import { db, appUsers, STATEMENTS } from "@workspace/db";
+import { eq, sql, desc } from "drizzle-orm";
+import { db, appUsers, commChecks, STATEMENTS } from "@workspace/db";
 import { z } from "zod/v4";
 import { requireAuth } from "../middleware/auth";
 import { requireOwner } from "../middleware/owner";
 import { provisionAllBuckets } from "../lib/bucket-provisioning";
+import {
+  runDailyCommCheck,
+  runChannelCheck,
+  getStuttgartDateString,
+} from "../lib/comm-check-scheduler";
 import dns from "node:dns";
 import { isIP } from "node:net";
 import { Agent, fetch as undiciFetch } from "undici";
@@ -640,6 +645,71 @@ router.get("/hub/db-status", requireAuth, requireOwner, async (_req, res) => {
 // EXISTS) and provisions Supabase Storage buckets on the currently-connected
 // database. Safe to call repeatedly.
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// GET /hub/comm-checks — last 7 days of comm check rows (owner-only)
+// POST /hub/comm-checks/run — trigger today's check immediately (owner-only)
+// ---------------------------------------------------------------------------
+
+router.get("/hub/comm-checks", requireAuth, requireOwner, async (req, res) => {
+  try {
+    const rows = await db
+      .select()
+      .from(commChecks)
+      .orderBy(desc(commChecks.checkDate))
+      .limit(7);
+    const today = getStuttgartDateString();
+    res.json({ today, rows });
+  } catch (err) {
+    req.log.error({ err }, "hub/comm-checks: fetch failed");
+    res.status(500).json({ error: "Failed to fetch comm checks" });
+  }
+});
+
+router.post(
+  "/hub/comm-checks/run",
+  requireAuth,
+  requireOwner,
+  async (req, res) => {
+    try {
+      const result = await runDailyCommCheck();
+      res.json({ ok: true, ...result });
+    } catch (err) {
+      req.log.error({ err }, "hub/comm-checks/run: failed");
+      res.status(500).json({
+        ok: false,
+        error: err instanceof Error ? err.message : "Run failed",
+      });
+    }
+  },
+);
+
+// POST /hub/comm-checks/run/:channel — trigger a single channel (owner-only)
+const VALID_CHANNELS = ["email", "sms", "slack"] as const;
+type CommChannel = (typeof VALID_CHANNELS)[number];
+
+router.post(
+  "/hub/comm-checks/run/:channel",
+  requireAuth,
+  requireOwner,
+  async (req, res) => {
+    const channel = req.params["channel"] as CommChannel;
+    if (!VALID_CHANNELS.includes(channel)) {
+      res.status(400).json({ ok: false, error: `Unknown channel: ${channel}` });
+      return;
+    }
+    try {
+      const result = await runChannelCheck(channel);
+      res.json({ ok: true, ...result });
+    } catch (err) {
+      req.log.error({ err }, "hub/comm-checks/run/:channel: failed");
+      res.status(500).json({
+        ok: false,
+        error: err instanceof Error ? err.message : "Run failed",
+      });
+    }
+  },
+);
 
 router.post(
   "/hub/bootstrap-schema",

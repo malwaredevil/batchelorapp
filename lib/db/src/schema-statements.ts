@@ -2864,4 +2864,25 @@ END $$`,
      ON messenger_conversations (direct_pair_key) WHERE direct_pair_key IS NOT NULL`,
   `ALTER TABLE agentphone_conversations ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE elaine_email_conversations ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 0`,
+
+  // ── Daily comms check table ───────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS comm_checks (
+     id SERIAL PRIMARY KEY,
+     check_date TEXT NOT NULL,
+     email_status TEXT NOT NULL DEFAULT 'pending',
+     email_sent_at TIMESTAMPTZ,
+     email_verified_at TIMESTAMPTZ,
+     email_error TEXT,
+     sms_status TEXT NOT NULL DEFAULT 'pending',
+     sms_sent_at TIMESTAMPTZ,
+     sms_verified_at TIMESTAMPTZ,
+     sms_error TEXT,
+     slack_status TEXT NOT NULL DEFAULT 'pending',
+     slack_sent_at TIMESTAMPTZ,
+     slack_verified_at TIMESTAMPTZ,
+     slack_error TEXT,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS comm_checks_check_date_unique
+     ON comm_checks (check_date)`,
 ];

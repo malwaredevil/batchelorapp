@@ -372,6 +372,14 @@ export function ModuleShell({ children }: { children: ReactNode }) {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      window.location.href = "/account";
+                    }}
+                  >
+                    <Settings className="h-4 w-4 mr-2" />
+                    Account settings
+                  </DropdownMenuItem>
                   {currentUser?.isOwner && (
                     <DropdownMenuItem
                       onSelect={() => {
@@ -382,14 +390,6 @@ export function ModuleShell({ children }: { children: ReactNode }) {
                       Owner Panel
                     </DropdownMenuItem>
                   )}
-                  <DropdownMenuItem
-                    onSelect={() => {
-                      window.location.href = "/account";
-                    }}
-                  >
-                    <Settings className="h-4 w-4 mr-2" />
-                    Account settings
-                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onSelect={() => logout.mutate()}

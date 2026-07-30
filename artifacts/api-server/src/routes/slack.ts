@@ -11,6 +11,7 @@ import {
   postSlashCommandResponse,
 } from "../lib/slack";
 import { enqueueJob, enqueueJobWithQuery } from "../lib/jobs/queue";
+import { markCommCheckVerified } from "../lib/comm-check-scheduler";
 import { env } from "../lib/env";
 
 // ---------------------------------------------------------------------------
@@ -209,6 +210,12 @@ router.post("/webhook", webhookLimiter, async (req: Request, res: Response) => {
     );
     return;
   }
+
+  // Any inbound Slack DM from a recognized user marks today's Slack comm check
+  // verified (fire-and-forget — never blocks the Elaine turn).
+  void markCommCheckVerified("slack").catch((err) =>
+    logger.warn({ err }, "slack: comm check mark-verified failed"),
+  );
 
   // Enqueue the turn job — the worker will run the AI turn and post the reply.
   // Using the event_id as idempotency key means a retried delivery (same

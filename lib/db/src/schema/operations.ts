@@ -254,3 +254,29 @@ export const householdActivityLog = pgTable(
 export type HouseholdActivityLogRow = typeof householdActivityLog.$inferSelect;
 export type InsertHouseholdActivityLog =
   typeof householdActivityLog.$inferInsert;
+
+// ── Daily comms check ─────────────────────────────────────────────────────────
+// One row per Stuttgart calendar day (check_date = YYYY-MM-DD, Europe/Berlin).
+// Tracks send + verification status for email, SMS, and Slack independently.
+// Status values: 'pending' | 'sent' | 'error' | 'verified'
+export const commChecks = pgTable("comm_checks", {
+  id: serial("id").primaryKey(),
+  checkDate: text("check_date").notNull().unique(),
+  emailStatus: text("email_status").notNull().default("pending"),
+  emailSentAt: timestamp("email_sent_at", { withTimezone: true }),
+  emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
+  emailError: text("email_error"),
+  smsStatus: text("sms_status").notNull().default("pending"),
+  smsSentAt: timestamp("sms_sent_at", { withTimezone: true }),
+  smsVerifiedAt: timestamp("sms_verified_at", { withTimezone: true }),
+  smsError: text("sms_error"),
+  slackStatus: text("slack_status").notNull().default("pending"),
+  slackSentAt: timestamp("slack_sent_at", { withTimezone: true }),
+  slackVerifiedAt: timestamp("slack_verified_at", { withTimezone: true }),
+  slackError: text("slack_error"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export type CommCheckRow = typeof commChecks.$inferSelect;

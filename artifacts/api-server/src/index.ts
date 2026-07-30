@@ -9,6 +9,7 @@ import { startGmailScanScheduler } from "./lib/gmail-scan";
 import { startErrorRateSummary } from "./lib/error-tracker";
 import { startBirthdayScheduler } from "./lib/birthday-scheduler";
 import { startMonitoringScheduler } from "./lib/monitoring-scheduler";
+import { startCommCheckScheduler } from "./lib/comm-check-scheduler";
 import { startJobWorker, stopAllJobWorkers } from "./lib/jobs/worker";
 import {
   markBucketsReady,
@@ -74,6 +75,7 @@ async function initializeRuntime(): Promise<void> {
     startErrorRateSummary(),
     startBirthdayScheduler(),
     startMonitoringScheduler(),
+    startCommCheckScheduler(),
   );
   startJobWorker("slack");
   startJobWorker("maintenance");

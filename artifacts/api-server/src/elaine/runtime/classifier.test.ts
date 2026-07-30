@@ -43,4 +43,29 @@ describe("classifyElaineRequest", () => {
     expect(result.kind).toBe("read");
     expect(result.hasAttachment).toBe(true);
   });
+
+  it.each([
+    "Please remember that I prefer invented jasmine tea.",
+    "Correct memory 901 to an invented preference.",
+    "Forget the invented test memory.",
+  ])("classifies an explicit memory command as an action: %s", (message) => {
+    expect(classifyElaineRequest({ message })).toMatchObject({
+      kind: "action",
+      requiresFreshData: false,
+    });
+  });
+
+  it.each([
+    "What do you remember about my invented preference?",
+    "How do I correct a memory?",
+    "Remember when we discussed an invented trip?",
+  ])(
+    "keeps an explanatory memory question on the answer path: %s",
+    (message) => {
+      expect(classifyElaineRequest({ message })).toMatchObject({
+        kind: "answer",
+        requiresFreshData: false,
+      });
+    },
+  );
 });

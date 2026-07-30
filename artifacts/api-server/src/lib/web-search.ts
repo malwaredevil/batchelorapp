@@ -2,14 +2,15 @@ import { callModel, getModels } from "./ai-client";
 import { getConfig } from "./app-config";
 import { env } from "./env";
 import { withRetry } from "./retry";
+import { extractWebSearchCitations } from "./web-search-citations";
 
 /**
  * Live web search / current-events lookups for elAIne, backed by Perplexity
  * Sonar (accessed through OpenRouter, like every other model call in this
  * app — see ai-client.ts). Sonar performs its own web search and grounds its
- * answer in real results, returning source URLs as `citations` on the raw
- * OpenRouter response (a Perplexity-specific extension, not part of the
- * OpenAI response schema — hence the `as` cast below).
+ * answer in real results. OpenRouter standardizes returned source URLs as
+ * `url_citation` message annotations; the parser also retains the older
+ * Perplexity-specific top-level `citations` extension for compatibility.
  *
  * This is intentionally a single-shot Q&A call, not a scraper: we ask Sonar
  * a natural-language question and get back a synthesized, cited answer. We
@@ -105,8 +106,7 @@ export async function webSearch(query: string): Promise<WebSearchResult> {
         max_tokens: 600,
         // `return_images` is a Perplexity-specific request extension (not
         // part of the OpenAI chat-completions schema), passed through
-        // OpenRouter to the underlying Sonar model. Cast to bypass the SDK's
-        // strict param typing, mirroring the `citations` response cast below.
+        // OpenRouter to the underlying Sonar model.
         ...({ return_images: true } as Record<string, unknown>),
       },
       { timeout: await getConfig("web_search", "search_timeout_ms", 15_000) },
@@ -114,11 +114,7 @@ export async function webSearch(query: string): Promise<WebSearchResult> {
   });
 
   const answer = raw.choices[0]?.message?.content?.trim() ?? "";
-  const citations = Array.isArray((raw as { citations?: unknown }).citations)
-    ? ((raw as { citations?: unknown }).citations as unknown[]).filter(
-        (c): c is string => typeof c === "string",
-      )
-    : [];
+  const citations = extractWebSearchCitations(raw);
 
   // Best-effort: only present when Perplexity actually returns image results
   // for this query (not guaranteed), each shaped like

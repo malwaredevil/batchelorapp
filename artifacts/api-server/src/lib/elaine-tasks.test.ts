@@ -93,6 +93,11 @@ describe("Elaine durable research tasks", () => {
       state: "completed",
       completedQueryIndexes: [0, 1],
       answer: "final answer",
+      citations: ["https://example.test/first", "https://example.test/second"],
+      observations: [
+        { citations: ["https://example.test/first"] },
+        { citations: ["https://example.test/second"] },
+      ],
     });
   });
 

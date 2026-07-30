@@ -246,9 +246,196 @@ describe("ElaineTurnRuntime", () => {
     expect(first[0]?.allowed).toBe(true);
     expect(repeated[0]).toMatchObject({
       allowed: false,
+      stepId: null,
       reason:
         "The same consequential action was already attempted in this turn.",
     });
+    expect(runtime.snapshot().plan.steps).toHaveLength(1);
+  });
+
+  it("deduplicates an immediate consequential write without marking it as awaiting confirmation", () => {
+    const runtime = new ElaineTurnRuntime({
+      traceId: "trace-immediate-write-dedupe",
+      requestClass: {
+        ...requestClass,
+        kind: "action",
+        requiresFreshData: false,
+      },
+      plan: toRuntimePlan({
+        version: 1,
+        goal: "Remember an invented preference",
+        assumptions: [],
+        completionCriteria: ["The memory is saved exactly once"],
+        steps: [
+          {
+            id: "remember",
+            label: "Save the requested memory",
+            kind: "action",
+            toolName: "remember_household_fact",
+            dependsOn: [],
+            expectedEvidence: "One successful memory write",
+            required: true,
+          },
+          {
+            id: "respond",
+            label: "Acknowledge the saved memory",
+            kind: "respond",
+            toolName: null,
+            dependsOn: ["remember"],
+            expectedEvidence: "A truthful acknowledgement",
+            required: true,
+          },
+        ],
+      }),
+    });
+
+    const first = runtime.registerToolCalls([
+      {
+        id: "first",
+        name: "remember_household_fact",
+        consequential: true,
+        confirmationRequired: false,
+        dedupeKey: "same-memory",
+      },
+    ]);
+    const repeated = runtime.registerToolCalls([
+      {
+        id: "repeat",
+        name: "remember_household_fact",
+        consequential: true,
+        confirmationRequired: false,
+        dedupeKey: "same-memory",
+      },
+    ]);
+
+    expect(first[0]).toMatchObject({
+      allowed: true,
+      stepId: "remember",
+    });
+    expect(
+      runtime.snapshot().plan.steps.find((step) => step.id === "remember"),
+    ).toMatchObject({ status: "active" });
+    expect(repeated[0]).toMatchObject({
+      allowed: false,
+      stepId: null,
+      reason:
+        "The same consequential action was already attempted in this turn.",
+    });
+    expect(runtime.snapshot().plan.steps).toHaveLength(2);
+  });
+
+  it("allows a confirmed background-research proposal to defer current evidence", () => {
+    const runtime = new ElaineTurnRuntime({
+      traceId: "trace-research-confirmation",
+      requestClass,
+      sourceRoute: {
+        freshness: "current",
+        requiresRetrievedEvidence: true,
+        preferredKinds: ["web"],
+        fallbackKinds: ["model_synthesis"],
+        rationale: "The confirmed task will retrieve current evidence.",
+      },
+      plan: toRuntimePlan({
+        version: 1,
+        goal: "Prepare an invented background research task",
+        assumptions: [],
+        completionCriteria: ["The user can confirm the task"],
+        steps: [
+          {
+            id: "queue",
+            label: "Prepare the research task",
+            kind: "action",
+            toolName: "queue_research_task",
+            dependsOn: [],
+            expectedEvidence: "A valid confirmation proposal",
+            required: true,
+          },
+          {
+            id: "respond",
+            label: "Explain that confirmation is required",
+            kind: "respond",
+            toolName: null,
+            dependsOn: ["queue"],
+            expectedEvidence: "A truthful confirmation prompt",
+            required: true,
+          },
+        ],
+      }),
+    });
+
+    runtime.registerToolCalls([
+      {
+        id: "queue-call",
+        name: "queue_research_task",
+        consequential: true,
+        dedupeKey: "one-research-task",
+      },
+    ]);
+    runtime.recordObservation({
+      callId: "queue-call",
+      toolName: "queue_research_task",
+      success: true,
+      waitingConfirmation: true,
+      summary: "Research task is prepared for confirmation",
+    });
+
+    const decision = runtime.verify({
+      finalContent:
+        "I prepared the research task. Confirm it to start the searches.",
+      hasPendingConfirmation: true,
+    });
+
+    expect(decision.shouldReplan).toBe(false);
+    expect(decision.verification.status).toBe("awaiting_confirmation");
+    expect(runtime.complete().status).toBe("awaiting_confirmation");
+  });
+
+  it("still blocks a direct current answer without retrieved evidence", () => {
+    const runtime = new ElaineTurnRuntime({
+      traceId: "trace-current-no-evidence",
+      requestClass: {
+        kind: "research",
+        complexity: "simple",
+        requiresFreshData: true,
+        hasAttachment: false,
+      },
+      sourceRoute: {
+        freshness: "current",
+        requiresRetrievedEvidence: true,
+        preferredKinds: ["web"],
+        fallbackKinds: ["model_synthesis"],
+        rationale: "A current answer needs a live source.",
+      },
+      plan: toRuntimePlan({
+        version: 1,
+        goal: "Answer an invented current question",
+        assumptions: [],
+        completionCriteria: ["A current source supports the answer"],
+        steps: [
+          {
+            id: "respond",
+            label: "Answer the current question",
+            kind: "respond",
+            toolName: null,
+            dependsOn: [],
+            expectedEvidence: "A sourced current answer",
+            required: true,
+          },
+        ],
+      }),
+      budget: { maxReplans: 0 },
+    });
+
+    runtime.recordModelRound();
+    const decision = runtime.verify({
+      finalContent: "An unsupported current answer.",
+      hasPendingConfirmation: false,
+    });
+
+    expect(decision.verification).toMatchObject({ status: "blocked" });
+    expect(decision.verification.unsatisfiedCriteria).toContain(
+      "A successful current source observation with matching coverage",
+    );
   });
 
   it("terminates predictably for cancellation, failure, and budget exhaustion", () => {

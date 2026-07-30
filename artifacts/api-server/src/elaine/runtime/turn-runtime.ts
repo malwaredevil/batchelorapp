@@ -18,6 +18,12 @@ export interface RuntimeToolCall {
   name: string;
   consequential?: boolean;
   /**
+   * Consequential calls normally wait for the configured confirmation flow.
+   * Set false only for an explicit-user write that executes immediately but
+   * still needs consequential-call deduplication.
+   */
+  confirmationRequired?: boolean;
+  /**
    * Stable only for the current turn. Used to prevent a re-plan from
    * repeating the same non-idempotent action; never persisted in the trace.
    */
@@ -180,6 +186,22 @@ export class ElaineTurnRuntime {
           };
         }
 
+        const consequentialDedupeKey = call.consequential
+          ? call.dedupeKey
+          : null;
+        if (
+          consequentialDedupeKey &&
+          this.attemptedConsequentialCalls.has(consequentialDedupeKey)
+        ) {
+          return {
+            ...call,
+            allowed: false,
+            stepId: null,
+            reason:
+              "The same consequential action was already attempted in this turn.",
+          };
+        }
+
         let step = this.findRunnableStep(call.name);
         if (!step) {
           step = this.addAdaptedStep(call);
@@ -210,26 +232,18 @@ export class ElaineTurnRuntime {
         }
 
         if (call.consequential) {
-          const dedupeKey = call.dedupeKey ?? `${call.name}:${step.id}`;
-          if (this.attemptedConsequentialCalls.has(dedupeKey)) {
-            const reason =
-              "The same consequential action was already attempted in this turn.";
-            this.updateStep(step, "blocked", reason);
-            return {
-              ...call,
-              allowed: false,
-              stepId: step.id,
-              reason,
-            };
-          }
-          this.attemptedConsequentialCalls.add(dedupeKey);
+          this.attemptedConsequentialCalls.add(
+            call.dedupeKey ?? `${call.name}:${step.id}`,
+          );
         }
 
+        const confirmationRequired =
+          call.confirmationRequired ?? call.consequential === true;
         step.attempts += 1;
         this.updateStep(
           step,
-          call.consequential ? "waiting_confirmation" : "active",
-          call.consequential
+          confirmationRequired ? "waiting_confirmation" : "active",
+          confirmationRequired
             ? "Waiting for the configured confirmation flow"
             : "Running",
         );
@@ -332,8 +346,16 @@ export class ElaineTurnRuntime {
       this.trace.plan.steps.some(
         (step) => step.status === "waiting_confirmation",
       );
+    const retrievalDeferredByPendingResearch =
+      waiting &&
+      this.trace.plan.steps.some(
+        (step) =>
+          step.toolName === "queue_research_task" &&
+          step.status === "waiting_confirmation",
+      );
     const missingCurrentEvidence =
       this.trace.sourceRoute?.requiresRetrievedEvidence === true &&
+      !retrievalDeferredByPendingResearch &&
       !hasCurrentRetrievedEvidence(this.trace.observations ?? []);
     const satisfiedCriteria =
       unfinished.length === 0 && !missingCurrentEvidence

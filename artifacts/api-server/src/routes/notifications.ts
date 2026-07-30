@@ -1,18 +1,14 @@
 import { Router } from "express";
 import { z } from "zod";
-import { and, eq, inArray, isNull } from "drizzle-orm";
-import {
-  db,
-  notificationRecipients,
-  notificationPreferences,
-} from "@workspace/db";
 import { requireAuth } from "../middleware/auth";
 import {
+  bulkUpdateNotificationState,
   getUserNotifications,
   getUnreadCounts,
   getUserPreferences,
+  replaceUserPreferences,
+  updateNotificationState,
 } from "../lib/notifications";
-import { logger } from "../lib/logger";
 
 const router = Router();
 router.use(requireAuth);
@@ -66,54 +62,12 @@ router.patch("/:recipientId", async (req, res) => {
 
   const body = updateStateSchema.parse(req.body);
 
-  // Verify ownership
-  const [row] = await db
-    .select()
-    .from(notificationRecipients)
-    .where(
-      and(
-        eq(notificationRecipients.id, recipientId),
-        eq(notificationRecipients.userId, userId),
-      ),
-    )
-    .limit(1);
-
-  if (!row) {
+  const updated = await updateNotificationState(userId, recipientId, body);
+  if (!updated) {
     res.status(404).json({ error: "Notification not found" });
     return;
   }
-
-  const now = new Date();
-  const update: Partial<typeof notificationRecipients.$inferInsert> = {};
-
-  if (body.read === true && !row.readAt) update.readAt = now;
-  if (body.read === false) update.readAt = null as never;
-  if (body.acknowledged === true && !row.acknowledgedAt)
-    update.acknowledgedAt = now;
-  if (body.dismissed === true && !row.dismissedAt) update.dismissedAt = now;
-  if (body.dismissed === false) update.dismissedAt = null as never;
-  if (body.snoozedUntil !== undefined) {
-    update.snoozedUntil = body.snoozedUntil
-      ? new Date(body.snoozedUntil)
-      : (null as never);
-  }
-
-  const [updated] = await db
-    .update(notificationRecipients)
-    .set(update)
-    .where(eq(notificationRecipients.id, recipientId))
-    .returning();
-
-  res.json({
-    recipientId: updated.id,
-    isRead: updated.readAt != null,
-    readAt: updated.readAt ?? null,
-    isAcknowledged: updated.acknowledgedAt != null,
-    acknowledgedAt: updated.acknowledgedAt ?? null,
-    isDismissed: updated.dismissedAt != null,
-    dismissedAt: updated.dismissedAt ?? null,
-    snoozedUntil: updated.snoozedUntil ?? null,
-  });
+  res.json(updated);
 });
 
 // ── POST /api/notifications/bulk-state ───────────────────────────────────────
@@ -127,34 +81,12 @@ router.post("/bulk-state", async (req, res) => {
   const userId = req.session.userId!;
   const { recipientIds, action } = bulkStateSchema.parse(req.body);
 
-  if (recipientIds.length === 0) {
-    res.json({ updated: 0 });
-    return;
-  }
-
-  const now = new Date();
-  const updateMap: Record<
-    string,
-    Partial<typeof notificationRecipients.$inferInsert>
-  > = {
-    read: { readAt: now },
-    unread: { readAt: null as never },
-    dismissed: { dismissedAt: now, readAt: now },
-    acknowledged: { acknowledgedAt: now, readAt: now },
-  };
-
-  const result = await db
-    .update(notificationRecipients)
-    .set(updateMap[action])
-    .where(
-      and(
-        eq(notificationRecipients.userId, userId),
-        inArray(notificationRecipients.id, recipientIds),
-      ),
-    )
-    .returning({ id: notificationRecipients.id });
-
-  res.json({ updated: result.length });
+  const updated = await bulkUpdateNotificationState(
+    userId,
+    recipientIds,
+    action,
+  );
+  res.json({ updated });
 });
 
 // ── GET /api/notifications/preferences ───────────────────────────────────────
@@ -195,33 +127,7 @@ router.put("/preferences", async (req, res) => {
   const userId = req.session.userId!;
   const { entries } = preferencesBodySchema.parse(req.body);
 
-  // Replace all preferences for this user atomically
-  await db.transaction(async (tx) => {
-    await tx
-      .delete(notificationPreferences)
-      .where(eq(notificationPreferences.userId, userId));
-
-    if (entries.length > 0) {
-      await tx.insert(notificationPreferences).values(
-        entries.map((e) => ({
-          userId,
-          scope: e.scope,
-          scopeValue: e.scopeValue ?? null,
-          channelInApp: e.channelInApp,
-          channelEmail: e.channelEmail,
-          channelSms: e.channelSms,
-          channelPush: e.channelPush,
-          quietHoursEnabled: e.quietHoursEnabled,
-          quietHoursTimezone: e.quietHoursTimezone,
-          quietHoursStart: e.quietHoursStart,
-          quietHoursEnd: e.quietHoursEnd,
-          criticalOverride: e.criticalOverride,
-        })),
-      );
-    }
-  });
-
-  const saved = await getUserPreferences(userId);
+  const saved = await replaceUserPreferences(userId, entries);
   res.json({ entries: saved });
 });
 

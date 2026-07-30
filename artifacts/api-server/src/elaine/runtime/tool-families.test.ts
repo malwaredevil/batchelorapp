@@ -14,6 +14,7 @@ describe("Elaine tool-family compatibility guard", () => {
       "quilting",
       "ornaments",
       "office",
+      "notifications",
       "memory",
       "widgets",
       "navigation",

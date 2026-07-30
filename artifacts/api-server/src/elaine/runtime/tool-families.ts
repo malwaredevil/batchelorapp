@@ -3,7 +3,12 @@ export const ELAINE_TOOL_FAMILY_SENTINELS = {
   pottery: ["show_pottery_item", "update_pottery_item"],
   quilting: ["show_fabric_swatch", "update_fabric"],
   ornaments: ["show_ornament_item", "update_ornament_item"],
-  office: ["send_email"],
+  office: ["send_email", "summarize_inbox", "list_notes", "create_note"],
+  notifications: [
+    "list_notifications",
+    "get_notification_counts",
+    "update_notification_state",
+  ],
   memory: ["remember_household_fact"],
   widgets: ["show_data_card"],
   navigation: ["suggest_navigation"],

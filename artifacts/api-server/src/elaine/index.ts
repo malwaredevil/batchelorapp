@@ -126,6 +126,29 @@ import {
   type OrnamentActionType,
 } from "./ornaments-actions";
 import {
+  buildUniversalActionLabel,
+  universalActionExecutors,
+  universalActionSchemas,
+  universalActionTools,
+  type UniversalActionType,
+} from "./universal-actions";
+import {
+  GET_NOTE_TOOL_NAME,
+  GET_NOTIFICATION_COUNTS_TOOL_NAME,
+  GET_NOTIFICATION_PREFERENCES_TOOL_NAME,
+  LIST_NOTES_TOOL_NAME,
+  LIST_NOTIFICATIONS_TOOL_NAME,
+  executeUniversalReadTool,
+  universalReadTools,
+} from "./universal-read-tools";
+import {
+  executeOfficeTool,
+  FIND_EMAILS_ABOUT_TOPIC_TOOL_NAME,
+  GET_EMAIL_DETAIL_TOOL_NAME,
+  officeActionTools,
+  SUMMARIZE_INBOX_TOOL_NAME,
+} from "./office-actions";
+import {
   assertElaineToolFamilyCoverage,
   classifyElaineRequest,
   createElaineTurnTrace,
@@ -143,6 +166,10 @@ import {
   type ElainePlannerTool,
   type ElaineRuntimeTrace,
 } from "./runtime";
+import {
+  buildElaineCapabilityRegistry,
+  buildPlannerCatalogFromCapabilities,
+} from "./capability-registry";
 import multer from "multer";
 import { createClient } from "@supabase/supabase-js";
 import { multerLimitForPrefix } from "../lib/upload-limits";
@@ -757,6 +784,7 @@ const ActionBody = z.discriminatedUnion("type", [
   ...potteryActionSchemas,
   ...quiltingActionSchemas,
   ...ornamentActionSchemas,
+  ...universalActionSchemas,
 ]);
 
 type PendingAction = z.infer<typeof ActionBody>;
@@ -1020,6 +1048,19 @@ async function buildActionLabel(action: PendingAction): Promise<string> {
           action as { type: OrnamentActionType; payload: unknown },
         );
       }
+      if (
+        universalActionSchemas.some(
+          (schema) =>
+            schema.safeParse({
+              type: action.type,
+              payload: action.payload,
+            }).success,
+        )
+      ) {
+        return buildUniversalActionLabel(
+          action as { type: UniversalActionType; payload: unknown },
+        );
+      }
       return "Perform this action";
   }
 }
@@ -1035,7 +1076,10 @@ type ActionExecutor = (
 
 type TravelActionType = Exclude<
   ActionType,
-  PotteryActionType | QuiltingActionType | OrnamentActionType
+  | PotteryActionType
+  | QuiltingActionType
+  | OrnamentActionType
+  | UniversalActionType
 >;
 
 const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
@@ -2230,6 +2274,7 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
   ...potteryActionExecutors,
   ...quiltingActionExecutors,
   ...ornamentActionExecutors,
+  ...universalActionExecutors,
 };
 
 // ---------------------------------------------------------------------------
@@ -2840,6 +2885,7 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   ...potteryActionTools,
   ...quiltingActionTools,
   ...ornamentActionTools,
+  ...universalActionTools,
   {
     type: "function",
     function: {
@@ -3640,6 +3686,8 @@ const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
 const QUERY_HOUSEHOLD_TOOL_NAME = "query_household_data";
 
 const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+  ...officeActionTools,
+  ...universalReadTools,
   {
     type: "function",
     function: {
@@ -3964,19 +4012,12 @@ const ACTION_TOOL_NAMES = new Set<string>(
 );
 
 function buildElainePlannerToolCatalog(): ElainePlannerTool[] {
-  const seen = new Set<string>();
-  const catalog: ElainePlannerTool[] = [];
-  for (const tool of [...ACTION_TOOLS, ...SOFT_TOOLS, ...SOFT_TOOLS_EXTRA]) {
-    if (tool.type !== "function") continue;
-    const { name, description } = tool.function;
-    if (seen.has(name)) continue;
-    seen.add(name);
-    catalog.push({
-      name,
-      description: description ?? "Elaine capability",
-      consequential: ACTION_TOOL_NAMES.has(name),
-    });
-  }
+  const registry = buildElaineCapabilityRegistry([
+    ...ACTION_TOOLS,
+    ...SOFT_TOOLS,
+    ...SOFT_TOOLS_EXTRA,
+  ]);
+  const catalog = buildPlannerCatalogFromCapabilities(registry);
   assertElaineToolFamilyCoverage(catalog.map((tool) => tool.name));
   return catalog;
 }
@@ -5464,6 +5505,14 @@ router.post("/chat", async (req, res) => {
       CALCULATE_YARDAGE_TOOL_NAME,
       QUERY_HOUSEHOLD_TOOL_NAME,
       LOOKUP_BARCODE_TOOL_NAME,
+      SUMMARIZE_INBOX_TOOL_NAME,
+      FIND_EMAILS_ABOUT_TOPIC_TOOL_NAME,
+      GET_EMAIL_DETAIL_TOOL_NAME,
+      LIST_NOTES_TOOL_NAME,
+      GET_NOTE_TOOL_NAME,
+      LIST_NOTIFICATIONS_TOOL_NAME,
+      GET_NOTIFICATION_COUNTS_TOOL_NAME,
+      GET_NOTIFICATION_PREFERENCES_TOOL_NAME,
     ]);
     const runtimeCandidates = [...toolCallAcc.entries()];
     const runtimeSchedules = runtime.registerToolCalls(
@@ -5703,6 +5752,15 @@ router.post("/chat", async (req, res) => {
       [GET_POLLEN_FORECAST_TOOL_NAME]: "checking pollen levels",
       [CALCULATE_YARDAGE_TOOL_NAME]: "calculating yardage",
       [LOOKUP_BARCODE_TOOL_NAME]: "looking up that barcode",
+      [SUMMARIZE_INBOX_TOOL_NAME]: "reading your inbox",
+      [FIND_EMAILS_ABOUT_TOPIC_TOOL_NAME]: "searching your email",
+      [GET_EMAIL_DETAIL_TOOL_NAME]: "reading that email",
+      [LIST_NOTES_TOOL_NAME]: "reading household notes",
+      [GET_NOTE_TOOL_NAME]: "reading that note",
+      [LIST_NOTIFICATIONS_TOOL_NAME]: "checking your notifications",
+      [GET_NOTIFICATION_COUNTS_TOOL_NAME]: "counting your notifications",
+      [GET_NOTIFICATION_PREFERENCES_TOOL_NAME]:
+        "checking your notification preferences",
     };
     const statusMessage = [...distinctHardToolNames]
       .map((n) => STATUS_LABELS[n])
@@ -6826,6 +6884,28 @@ router.post("/chat", async (req, res) => {
               SEARCH_HOUSEHOLD_TOOL_NAME,
               call.args,
             );
+          } else if (
+            call.name === SUMMARIZE_INBOX_TOOL_NAME ||
+            call.name === FIND_EMAILS_ABOUT_TOPIC_TOOL_NAME ||
+            call.name === GET_EMAIL_DETAIL_TOOL_NAME
+          ) {
+            resultText =
+              (await executeOfficeTool(
+                call.name,
+                call.args,
+                userId,
+                messages,
+              )) ?? "Unsupported Office tool.";
+          } else if (
+            call.name === LIST_NOTES_TOOL_NAME ||
+            call.name === GET_NOTE_TOOL_NAME ||
+            call.name === LIST_NOTIFICATIONS_TOOL_NAME ||
+            call.name === GET_NOTIFICATION_COUNTS_TOOL_NAME ||
+            call.name === GET_NOTIFICATION_PREFERENCES_TOOL_NAME
+          ) {
+            resultText =
+              (await executeUniversalReadTool(call.name, call.args, userId)) ??
+              "Unsupported app data tool.";
           } else {
             resultText = "Unsupported tool.";
           }

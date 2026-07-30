@@ -37,6 +37,94 @@ export interface AttachmentRef {
   name?: string;
 }
 
+export type ElainePlanStepStatus =
+  | "planned"
+  | "active"
+  | "waiting_confirmation"
+  | "adjusted"
+  | "completed"
+  | "blocked"
+  | "failed"
+  | "cancelled";
+
+export interface ElaineRuntimePlanStep {
+  id: string;
+  label: string;
+  kind: "lookup" | "research" | "action" | "respond";
+  toolName?: string | null;
+  dependsOn: string[];
+  expectedEvidence: string;
+  required: boolean;
+  riskClass: "read_only" | "consequential";
+  confirmation: "none" | "configured_policy";
+  retryLimit: number;
+  status: ElainePlanStepStatus;
+  summary?: string;
+  attempts: number;
+}
+
+export interface ElaineRuntimeTrace {
+  version: 1;
+  traceId: string;
+  requestClass: {
+    kind: "answer" | "read" | "research" | "action" | "mixed";
+    complexity: "simple" | "multi_step";
+    requiresFreshData: boolean;
+    hasAttachment: boolean;
+  };
+  goal: string;
+  plan: {
+    version: 1;
+    goal: string;
+    assumptions: string[];
+    completionCriteria: string[];
+    steps: ElaineRuntimePlanStep[];
+  };
+  events: Array<{
+    id: string;
+    sequence: number;
+    type: string;
+    at: string;
+    stepId?: string;
+    status?: string;
+    summary: string;
+    toolName?: string;
+    errorCategory?: string;
+  }>;
+  verification: {
+    status:
+      | "satisfied"
+      | "needs_replan"
+      | "awaiting_confirmation"
+      | "blocked";
+    satisfiedCriteria: string[];
+    unsatisfiedCriteria: string[];
+    summary: string;
+    replanReason?: string;
+  } | null;
+  status:
+    | "running"
+    | "completed"
+    | "awaiting_confirmation"
+    | "blocked"
+    | "failed"
+    | "cancelled";
+  traceAvailable: boolean;
+  startedAt: string;
+  completedAt: string | null;
+  usage: {
+    modelRounds: number;
+    toolCalls: number;
+    replans: number;
+    elapsedMs: number;
+  };
+}
+
+export interface ElaineRuntimeEventEnvelope {
+  event?: ElaineRuntimeTrace["events"][number];
+  trace: ElaineRuntimeTrace;
+}
+
 export interface AssistantMessage {
   role: "user" | "assistant";
   content: string;
@@ -44,6 +132,8 @@ export interface AssistantMessage {
    *  attached to this turn. Only present on user messages; undefined/empty
    *  for assistant messages. */
   attachmentUrls?: Array<AttachmentRef | string>;
+  /** Sanitized plan/progress trace for the assistant turn. */
+  runtimeTrace?: ElaineRuntimeTrace;
 }
 
 export type TravelActionType =
@@ -210,6 +300,7 @@ export interface AssistantChatResponse {
   widgets?: ChatWidget[];
   /** ID of the named conversation this turn was saved to. */
   conversationId?: number;
+  runtimeTrace?: ElaineRuntimeTrace;
 }
 
 export interface AssistantSettings {
@@ -301,9 +392,12 @@ export function useGetElaineConversation<
 // (which also resolves `onDone`).
 export interface AssistantChatStreamCallbacks {
   onDelta?: (text: string) => void;
+  /** Clears provisional text when Elaine continues with tools or a replan. */
+  onResponseReset?: () => void;
   onAction?: (action: AssistantAction) => void;
   onStatus?: (message: string) => void;
   onWidget?: (widget: ChatWidget) => void;
+  onRuntime?: (event: ElaineRuntimeEventEnvelope) => void;
   onDone?: (result: AssistantChatResponse) => void;
 }
 
@@ -418,6 +512,9 @@ export async function streamElaineMessage(
         case "delta":
           callbacks.onDelta?.((data as { text: string }).text);
           break;
+        case "response_reset":
+          callbacks.onResponseReset?.();
+          break;
         case "action":
           callbacks.onAction?.(data as AssistantAction);
           break;
@@ -426,6 +523,9 @@ export async function streamElaineMessage(
           break;
         case "widget":
           callbacks.onWidget?.(data as ChatWidget);
+          break;
+        case "runtime":
+          callbacks.onRuntime?.(data as ElaineRuntimeEventEnvelope);
           break;
         case "done":
           done = data as AssistantChatResponse;
@@ -693,6 +793,7 @@ export interface ConversationMessage {
   role: "user" | "assistant";
   content: string;
   attachmentUrls: Array<AttachmentRef | string>;
+  runtimeTrace?: ElaineRuntimeTrace;
   createdAt: string;
 }
 

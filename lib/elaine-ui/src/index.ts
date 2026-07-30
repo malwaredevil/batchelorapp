@@ -5,6 +5,7 @@ export * from "./ElainePageContext";
 export * from "./useElaineChat";
 export * from "./ElaineChatPanel";
 export * from "./ElaineHistoryPanel";
+export * from "./ElainePlanProgress";
 export * from "./ElaineWidget";
 export * from "./ElaineSettingsCard";
 export * from "./GlobalConfigCard";

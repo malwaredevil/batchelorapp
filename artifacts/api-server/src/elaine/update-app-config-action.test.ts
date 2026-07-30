@@ -188,21 +188,48 @@ vi.mock("./pottery-actions", () => ({
   potteryActionSchemas: [],
   potteryActionExecutors: {},
   buildPotteryActionLabel: vi.fn(async () => "pottery action"),
-  potteryActionTools: [],
+  potteryActionTools: [
+    {
+      type: "function",
+      function: {
+        name: "update_pottery_item",
+        description: "Test-only representative pottery action",
+        parameters: { type: "object", properties: {} },
+      },
+    },
+  ],
 }));
 
 vi.mock("./quilting-actions", () => ({
   quiltingActionSchemas: [],
   quiltingActionExecutors: {},
   buildQuiltingActionLabel: vi.fn(async () => "quilting action"),
-  quiltingActionTools: [],
+  quiltingActionTools: [
+    {
+      type: "function",
+      function: {
+        name: "update_fabric",
+        description: "Test-only representative quilting action",
+        parameters: { type: "object", properties: {} },
+      },
+    },
+  ],
 }));
 
 vi.mock("./ornaments-actions", () => ({
   ornamentActionSchemas: [],
   ornamentActionExecutors: {},
   buildOrnamentActionLabel: vi.fn(async () => "ornament action"),
-  ornamentActionTools: [],
+  ornamentActionTools: [
+    {
+      type: "function",
+      function: {
+        name: "update_ornament_item",
+        description: "Test-only representative ornament action",
+        parameters: { type: "object", properties: {} },
+      },
+    },
+  ],
 }));
 
 // ── Remaining deps that touch the FS or network ───────────────────────────────

@@ -1,0 +1,125 @@
+import { describe, expect, it } from "vitest";
+import {
+  classifyElaineRequest,
+  requestNeedsStructuredPlan,
+} from "./classifier";
+import { ELAINE_EVALUATION_CORPUS } from "./evaluation-corpus";
+import {
+  assertElaineToolFamilyCoverage,
+  ELAINE_TOOL_FAMILY_SENTINELS,
+} from "./tool-families";
+import { evaluateForecastDateCoverage } from "./weather-coverage";
+
+describe("Elaine deterministic evaluation corpus", () => {
+  it("is versioned, non-sensitive, and asserts positive and forbidden behavior", () => {
+    expect(ELAINE_EVALUATION_CORPUS.version).toBe(1);
+    expect(ELAINE_EVALUATION_CORPUS.scenarios).toHaveLength(9);
+    expect(
+      new Set(ELAINE_EVALUATION_CORPUS.scenarios.map(({ id }) => id)).size,
+    ).toBe(ELAINE_EVALUATION_CORPUS.scenarios.length);
+
+    for (const scenario of ELAINE_EVALUATION_CORPUS.scenarios) {
+      expect(scenario.requiredAnswerFacts.length).toBeGreaterThan(0);
+      expect(scenario.forbiddenAnswerFacts.length).toBeGreaterThan(0);
+      expect(scenario.forbiddenTools.length).toBeGreaterThan(0);
+      expect(scenario.forbiddenToolSequences.length).toBeGreaterThan(0);
+      expect(
+        scenario.forbiddenToolSequences.every(
+          (sequence) => sequence.length > 0,
+        ),
+      ).toBe(true);
+      expect(JSON.stringify(scenario)).not.toMatch(
+        /@|postgres(?:ql)?:\/\/|supabase_service_role|bearer\s/i,
+      );
+    }
+  });
+
+  it("keeps a simple answer on the no-planner, no-tool fast path", () => {
+    const scenario = ELAINE_EVALUATION_CORPUS.scenarios.find(
+      ({ category }) => category === "simple_answer",
+    )!;
+    const requestClass = classifyElaineRequest({ message: scenario.request });
+    expect(requestClass).toMatchObject({
+      kind: "answer",
+      complexity: "simple",
+    });
+    expect(requestNeedsStructuredPlan(requestClass)).toBe(false);
+    expect(scenario.expectedToolSequence).toEqual([]);
+  });
+
+  it("makes the Sicily/date-horizon mismatch structurally impossible to mislabel", () => {
+    const scenario = ELAINE_EVALUATION_CORPUS.scenarios.find(
+      ({ category }) => category === "dependent_weather",
+    )!;
+    const coverage = evaluateForecastDateCoverage({
+      requestedStartDate: "2027-08-05",
+      requestedEndDate: "2027-08-08",
+      forecastDates: ["2026-07-30", "2026-07-31", "2026-08-01"],
+    });
+
+    expect(coverage.status).toBe("outside");
+    expect(scenario.expectedToolSequence).toEqual([
+      "search_household_data",
+      "web_search",
+    ]);
+    expect(scenario.forbiddenTools).toContain("get_weather_forecast");
+  });
+
+  it("retains every representative legacy tool family", () => {
+    const scenario = ELAINE_EVALUATION_CORPUS.scenarios.find(
+      ({ category }) => category === "legacy_compatibility",
+    )!;
+    expect(() =>
+      assertElaineToolFamilyCoverage(scenario.availableTools),
+    ).not.toThrow();
+    expect(Object.keys(ELAINE_TOOL_FAMILY_SENTINELS)).toHaveLength(8);
+  });
+
+  it("prints a concise candidate quality summary for CI and Replit", () => {
+    const scenarios = ELAINE_EVALUATION_CORPUS.scenarios;
+    const summary = {
+      corpusVersion: ELAINE_EVALUATION_CORPUS.version,
+      scenarios: scenarios.length,
+      categories: new Set(scenarios.map(({ category }) => category)).size,
+      positiveInvariantGroups: scenarios.reduce(
+        (total, scenario) =>
+          total +
+          scenario.expectedToolSequence.length +
+          scenario.requiredAnswerFacts.length +
+          2,
+        0,
+      ),
+      forbiddenInvariantGroups: scenarios.reduce(
+        (total, scenario) =>
+          total +
+          scenario.forbiddenTools.length +
+          scenario.forbiddenToolSequences.length +
+          scenario.forbiddenAnswerFacts.length,
+        0,
+      ),
+      metrics: {
+        planValidity: 2,
+        dependencyOrdering: 2,
+        correctAndForbiddenToolChoice: scenarios.length,
+        groundedIdsAndDates: 2,
+        confirmationPolicy: 1,
+        terminalStatus: scenarios.length,
+        boundedReplans: 2,
+        duplicateActionPrevention: 2,
+        traceRedactionAndCompleteness: 2,
+      },
+      liveProviderCalls: 0,
+    };
+
+    console.info("Elaine deterministic candidate report", summary);
+    expect(summary).toMatchObject({
+      corpusVersion: 1,
+      scenarios: 9,
+      categories: 9,
+      liveProviderCalls: 0,
+    });
+    expect(Object.values(summary.metrics).every((count) => count > 0)).toBe(
+      true,
+    );
+  });
+});

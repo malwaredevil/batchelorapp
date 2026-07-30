@@ -16,6 +16,7 @@ export default [
       "lib/api-spec/build-spec.ts",
       "artifacts/modules/src/quilting/lib/cell-parser.test.ts",
       "lib/api-client-react/src/custom-fetch.test.ts",
+      "lib/api-client-react/src/elaine.test.ts",
     ],
   },
   {

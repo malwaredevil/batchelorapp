@@ -42,6 +42,7 @@ import type { ElaineChat } from "./useElaineChat";
 import { MarkdownMessage } from "./MarkdownMessage";
 import { ChatWidget } from "./ChatWidgets";
 import { LinkPreviewCard } from "./LinkPreviewCard";
+import { ElainePlanProgress } from "./ElainePlanProgress";
 
 // ─── Response-complete chime ──────────────────────────────────────────────────
 function playResponseChime(): void {
@@ -173,6 +174,7 @@ export function ElaineChatPanel({
     isStreaming,
     streamingContent,
     statusMessage,
+    runtimeTrace,
     endRef,
     executeAction,
     pendingAttachments,
@@ -375,6 +377,9 @@ export function ElaineChatPanel({
                 animated={false}
               />
               <div className={`${bubbleWidthClass} flex flex-col gap-1.5`}>
+                {msg.runtimeTrace && (
+                  <ElainePlanProgress trace={msg.runtimeTrace} />
+                )}
                 <div className="rounded-2xl rounded-tl-sm bg-muted px-3.5 py-2.5 text-sm leading-relaxed text-foreground">
                   <MessageText text={text} citations={citations} />
                 </div>
@@ -426,62 +431,61 @@ export function ElaineChatPanel({
               className="mt-0.5"
               animated={false}
             />
-            {streamingContent ? (
-              <div
-                className={`${bubbleWidthClass} rounded-2xl rounded-tl-sm bg-muted px-3.5 py-2.5 text-sm leading-relaxed text-foreground`}
-              >
-                <MarkdownMessage text={streamingContent} />
-              </div>
-            ) : statusMessage ? (
-              <div
-                className={`flex ${bubbleWidthClass} items-center gap-2 rounded-2xl rounded-tl-sm bg-muted px-3.5 py-2.5 text-sm text-muted-foreground`}
-              >
-                <span className="inline-flex gap-1 text-lg leading-none">
-                  <span
-                    className="animate-bounce"
-                    style={{ animationDelay: "0ms" }}
-                  >
-                    ·
+            <div className={`${bubbleWidthClass} flex flex-col gap-1.5`}>
+              {runtimeTrace && <ElainePlanProgress trace={runtimeTrace} live />}
+              {streamingContent ? (
+                <div className="rounded-2xl rounded-tl-sm bg-muted px-3.5 py-2.5 text-sm leading-relaxed text-foreground">
+                  <MarkdownMessage text={streamingContent} />
+                </div>
+              ) : statusMessage ? (
+                <div className="flex items-center gap-2 rounded-2xl rounded-tl-sm bg-muted px-3.5 py-2.5 text-sm text-muted-foreground">
+                  <span className="inline-flex gap-1 text-lg leading-none">
+                    <span
+                      className="animate-bounce"
+                      style={{ animationDelay: "0ms" }}
+                    >
+                      ·
+                    </span>
+                    <span
+                      className="animate-bounce"
+                      style={{ animationDelay: "150ms" }}
+                    >
+                      ·
+                    </span>
+                    <span
+                      className="animate-bounce"
+                      style={{ animationDelay: "300ms" }}
+                    >
+                      ·
+                    </span>
                   </span>
-                  <span
-                    className="animate-bounce"
-                    style={{ animationDelay: "150ms" }}
-                  >
-                    ·
+                  <span>{statusMessage}</span>
+                </div>
+              ) : (
+                <div className="rounded-2xl rounded-tl-sm bg-muted px-3.5 py-3 text-muted-foreground">
+                  <span className="inline-flex gap-1 text-lg leading-none">
+                    <span
+                      className="animate-bounce"
+                      style={{ animationDelay: "0ms" }}
+                    >
+                      ·
+                    </span>
+                    <span
+                      className="animate-bounce"
+                      style={{ animationDelay: "150ms" }}
+                    >
+                      ·
+                    </span>
+                    <span
+                      className="animate-bounce"
+                      style={{ animationDelay: "300ms" }}
+                    >
+                      ·
+                    </span>
                   </span>
-                  <span
-                    className="animate-bounce"
-                    style={{ animationDelay: "300ms" }}
-                  >
-                    ·
-                  </span>
-                </span>
-                <span>{statusMessage}</span>
-              </div>
-            ) : (
-              <div className="rounded-2xl rounded-tl-sm bg-muted px-3.5 py-3 text-muted-foreground">
-                <span className="inline-flex gap-1 text-lg leading-none">
-                  <span
-                    className="animate-bounce"
-                    style={{ animationDelay: "0ms" }}
-                  >
-                    ·
-                  </span>
-                  <span
-                    className="animate-bounce"
-                    style={{ animationDelay: "150ms" }}
-                  >
-                    ·
-                  </span>
-                  <span
-                    className="animate-bounce"
-                    style={{ animationDelay: "300ms" }}
-                  >
-                    ·
-                  </span>
-                </span>
-              </div>
-            )}
+                </div>
+              )}
+            </div>
           </div>
         )}
 

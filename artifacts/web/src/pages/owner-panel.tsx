@@ -1863,6 +1863,7 @@ function CommCheckCard() {
   const load = useCallback(() => {
     setLoading(true);
     setRunMsg(null);
+    // raw-fetch-ok — owner-only admin endpoint, no Orval hook
     fetch("/api/hub/comm-checks")
       .then((r) =>
         r.ok
@@ -1883,6 +1884,7 @@ function CommCheckCard() {
     setRunning(true);
     setRunMsg(null);
     try {
+      // raw-fetch-ok — owner-only admin endpoint, no Orval hook
       const r = await fetch("/api/hub/comm-checks/run", { method: "POST" });
       const d = (await r.json()) as {
         ok: boolean;
@@ -1921,6 +1923,7 @@ function CommCheckCard() {
     setChannelRunning(channel as unknown as CommStatus);
     setRunMsg(null);
     try {
+      // raw-fetch-ok — owner-only admin endpoint, no Orval hook
       const r = await fetch(`/api/hub/comm-checks/run/${channel}`, {
         method: "POST",
       });

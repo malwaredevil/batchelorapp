@@ -662,6 +662,25 @@ CREATE TABLE IF NOT EXISTS elaine_email_conversations (
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS comm_checks (
+  id                  SERIAL PRIMARY KEY,
+  check_date          TEXT NOT NULL,
+  email_status        TEXT NOT NULL DEFAULT 'pending',
+  email_sent_at       TIMESTAMPTZ,
+  email_verified_at   TIMESTAMPTZ,
+  email_error         TEXT,
+  sms_status          TEXT NOT NULL DEFAULT 'pending',
+  sms_sent_at         TIMESTAMPTZ,
+  sms_verified_at     TIMESTAMPTZ,
+  sms_error           TEXT,
+  slack_status        TEXT NOT NULL DEFAULT 'pending',
+  slack_sent_at       TIMESTAMPTZ,
+  slack_verified_at   TIMESTAMPTZ,
+  slack_error         TEXT,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS comm_checks_check_date_unique ON comm_checks (check_date);
+
 CREATE TABLE IF NOT EXISTS elaine_email_webhook_deliveries (
   id           TEXT PRIMARY KEY,
   received_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -2377,6 +2396,29 @@ async function main() {
     jsonbColumns: ["messages"],
   });
   await resetSequence(dest, "elaine_email_conversations", "id");
+
+  summary["comm_checks"] = await copyTable(source, dest, {
+    table: "comm_checks",
+    columns: [
+      "id",
+      "check_date",
+      "email_status",
+      "email_sent_at",
+      "email_verified_at",
+      "email_error",
+      "sms_status",
+      "sms_sent_at",
+      "sms_verified_at",
+      "sms_error",
+      "slack_status",
+      "slack_sent_at",
+      "slack_verified_at",
+      "slack_error",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "comm_checks", "id");
 
   summary["elaine_email_webhook_deliveries"] = await copyTable(source, dest, {
     table: "elaine_email_webhook_deliveries",

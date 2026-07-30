@@ -899,6 +899,29 @@ async function main() {
   await resetSequence(dest, "elaine_email_conversations", "id");
 
   await copyTable(source, dest, {
+    table: "comm_checks",
+    columns: [
+      "id",
+      "check_date",
+      "email_status",
+      "email_sent_at",
+      "email_verified_at",
+      "email_error",
+      "sms_status",
+      "sms_sent_at",
+      "sms_verified_at",
+      "sms_error",
+      "slack_status",
+      "slack_sent_at",
+      "slack_verified_at",
+      "slack_error",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "comm_checks", "id");
+
+  await copyTable(source, dest, {
     table: "elaine_email_webhook_deliveries",
     columns: ["id", "received_at"],
     orderBy: "received_at",

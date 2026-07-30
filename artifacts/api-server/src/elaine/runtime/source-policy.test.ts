@@ -99,6 +99,40 @@ describe("Elaine source policy", () => {
     );
   });
 
+  it("does not count static page context as current retrieved evidence for volatile questions", () => {
+    // Regression: current_context (page context injected before tool calls) is
+    // static — it must never satisfy requiresRetrievedEvidence even when
+    // pageContext is present, so volatile/current questions actually reach a
+    // live provider or web search before completing.
+    const pageContextObservation = {
+      success: true,
+      provenance: {
+        sourceKind: "current_context" as const,
+        sourceName: "current page context",
+        observedAt: new Date().toISOString(),
+        evidenceKind: "retrieved_fact" as const,
+        confidence: "high" as const,
+        coverage: { status: "matched" as const },
+      },
+    };
+
+    expect(hasCurrentRetrievedEvidence([pageContextObservation])).toBe(false);
+
+    // But adding a real live retrieval on top does satisfy it.
+    expect(
+      hasCurrentRetrievedEvidence([
+        pageContextObservation,
+        {
+          success: true,
+          provenance: provenanceForTool({
+            toolName: "get_weather_forecast",
+            coverageStatus: "matched",
+          }),
+        },
+      ]),
+    ).toBe(true);
+  });
+
   it("does not count inference or out-of-coverage data as current evidence", () => {
     expect(
       hasCurrentRetrievedEvidence([

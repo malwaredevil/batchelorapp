@@ -203,17 +203,28 @@ export function hasCurrentRetrievedEvidence(
     provenance?: ElaineObservationProvenance;
   }[],
 ): boolean {
+  // "current_context" is static page context injected before tool calls — it
+  // is NOT live retrieval and must never satisfy the requiresRetrievedEvidence
+  // gate for volatile/current questions.  Only observations that result from
+  // an actual provider, app-data, or web retrieval call qualify.
   return observations.some(
     ({ success, provenance }) =>
       success &&
       provenance?.evidenceKind === "retrieved_fact" &&
-      [
-        "current_context",
-        "batchelor_app",
-        "first_party_provider",
-        "specialized_api",
-        "web",
-      ].includes(provenance.sourceKind) &&
+      (
+        [
+          "batchelor_app",
+          "first_party_provider",
+          "specialized_api",
+          "web",
+        ] as const
+      ).includes(
+        provenance.sourceKind as
+          | "batchelor_app"
+          | "first_party_provider"
+          | "specialized_api"
+          | "web",
+      ) &&
       provenance.coverage.status !== "outside",
   );
 }

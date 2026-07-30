@@ -90,9 +90,9 @@ jobs:
       # the exact same STATEMENTS source through a local pg Pool instead.
       - name: Bootstrap an empty database
         run: |
-          pnpm exec tsx --eval '
+          pnpm --filter @workspace/scripts exec tsx --eval '
             import pg from "pg";
-            import { STATEMENTS } from "./lib/db/src/schema-statements.ts";
+            import { STATEMENTS } from "../lib/db/src/schema-statements.ts";
             async function main() {
               const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
               try {
@@ -117,9 +117,9 @@ jobs:
 
       - name: Bootstrap the same database again
         run: |
-          pnpm exec tsx --eval '
+          pnpm --filter @workspace/scripts exec tsx --eval '
             import pg from "pg";
-            import { STATEMENTS } from "./lib/db/src/schema-statements.ts";
+            import { STATEMENTS } from "../lib/db/src/schema-statements.ts";
             async function main() {
               const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
               try {

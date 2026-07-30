@@ -209,13 +209,15 @@ export const IMAGE_ONLY_POLICY: BucketPolicy = {
 };
 
 export const TRAVELS_BUCKET_POLICY: BucketPolicy = {
-  // Same 50 MB Supabase-side cap as above; travels also accepts PDFs.
+  // Same 50 MB Supabase-side cap as above; travels accepts PDFs and plain-text
+  // files (email body extractions stored as .txt for search/display).
   fileSizeLimit: SUPABASE_BUCKET_FILE_BYTES,
   allowedMimeTypes: [
     "image/jpeg",
     "image/png",
     "image/webp",
     "application/pdf",
+    "text/plain",
   ],
 };
 

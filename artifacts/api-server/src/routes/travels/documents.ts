@@ -274,6 +274,38 @@ function computeDocumentActivities(
     });
   }
 
+  const parkingEntry = str(ed.parkingEntryDateTime)
+    ? parseDateTime(str(ed.parkingEntryDateTime))
+    : null;
+  if (parkingEntry) {
+    candidates.push({
+      sourceField: "parkingEntryDateTime",
+      dateStr: parkingEntry.dateStr,
+      time: parkingEntry.timeStr,
+      name: `Airport parking check-in${provider ? ` — ${provider}` : ""}`,
+      description: str(ed.parkingLocation) || str(ed.fromLocation),
+      proximity: "🅿️",
+      tip: notes,
+      dataRichness,
+    });
+  }
+
+  const parkingExit = str(ed.parkingExitDateTime)
+    ? parseDateTime(str(ed.parkingExitDateTime))
+    : null;
+  if (parkingExit) {
+    candidates.push({
+      sourceField: "parkingExitDateTime",
+      dateStr: parkingExit.dateStr,
+      time: parkingExit.timeStr,
+      name: `Airport parking exit${provider ? ` — ${provider}` : ""}`,
+      description: str(ed.parkingLocation) || str(ed.fromLocation),
+      proximity: "🅿️",
+      tip: notes,
+      dataRichness,
+    });
+  }
+
   const returnFlightNumber = str(ed.returnFlightNumber);
   const returnFrom = str(ed.returnFromLocation);
   const returnTo = str(ed.returnToLocation);

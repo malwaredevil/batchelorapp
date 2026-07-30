@@ -51,7 +51,7 @@ const DOCUMENT_ADVISOR_INSTRUCTIONS =
 
 const RESPONSE_SCHEMA_BLOCK = `{
   "title": "short human-friendly label (e.g. 'BA417 London → Rome · 15 Jul', 'Marriott Florence · 14–17 Jul', 'Europcar Milan pickup · 10 Aug'). Omit document type words like 'Booking' or 'Confirmation'.",
-  "documentType": "flight_ticket | boarding_pass | hotel_confirmation | car_rental | train_ticket | bus_ticket | ferry | cruise | travel_insurance | visa | tour | activity | event_ticket | restaurant_reservation | airport_transfer | other",
+  "documentType": "flight_ticket | boarding_pass | hotel_confirmation | car_rental | train_ticket | bus_ticket | ferry | cruise | travel_insurance | visa | tour | activity | event_ticket | restaurant_reservation | airport_transfer | airport_parking | other",
 
   "providerName": "airline / hotel / car company / railway / ferry / cruise line / tour operator / restaurant / insurer / venue name",
   "referenceNumber": "booking, confirmation, ticket, or policy number",
@@ -99,6 +99,10 @@ const RESPONSE_SCHEMA_BLOCK = `{
 
   "transferType": "ground transfer type (taxi, shuttle, private car, limousine, minibus)",
 
+  "parkingLocation": "parking garage or lot name and airport/location (e.g. 'P14 at Stuttgart Airport')",
+  "parkingEntryDateTime": "ISO date-time when the car enters the parking facility",
+  "parkingExitDateTime": "ISO date-time when the car is planned to exit the parking facility",
+
   "policyNumber": "insurance policy or certificate number",
   "coverageType": "travel insurance coverage type (e.g. Single Trip, Annual Multi-Trip, Backpacker)",
   "coverageStartDate": "insurance coverage start date",
@@ -131,6 +135,8 @@ BUS & COACH: documentType = "bus_ticket". Use "departureDateTime"/"arrivalDateTi
 CAR RENTALS: documentType = "car_rental". Use "pickupDateTime"/"dropoffDateTime" (NOT "departureDateTime"/"arrivalDateTime"). Pickup and drop-off addresses/branch names → "pickupLocation"/"dropoffLocation". If both locations are the same, copy the value to both. Vehicle category → "vehicleClass".
 
 AIRPORT TRANSFERS & TAXIS: documentType = "airport_transfer". Use "pickupDateTime" and "pickupLocation". Destination → "toLocation". Vehicle type → "vehicleClass" or "transferType".
+
+AIRPORT PARKING: documentType = "airport_parking". Use "parkingEntryDateTime" for the date/time the car enters (NOT the booking/purchase date). Use "parkingExitDateTime" for the planned exit date/time. Parking garage or lot name → "parkingLocation". Airport or site → "fromLocation". Operator or parking company → "providerName". Booking/confirmation number → "referenceNumber".
 
 FERRIES & WATER TRANSPORT: documentType = "ferry". Use "departureDateTime"/"arrivalDateTime". Port names → "departurePort"/"arrivalPort". Vessel name → "ferryName". Cabin/berth → "cabinNumber".
 
@@ -442,7 +448,9 @@ export async function extractFromEmailText(
         messages: [
           {
             role: "user",
-            content: `You are scanning a household email inbox for travel bookings (flights, trains, hotels, car rentals). Decide whether this email is a genuine travel booking/confirmation, and if so extract structured fields.
+            content: `You are scanning a household email inbox for travel bookings (flights, trains, hotels, car rentals, airport parking reservations, transfers, tours, and other travel services). Decide whether this email is a genuine travel booking/confirmation, and if so extract structured fields.
+
+IMPORTANT: The email may be written in any language (German, French, Italian, Spanish, etc.). Read and extract from the original language directly — do not skip non-English emails.
 
 Subject: ${subject}
 From: ${from}
@@ -453,7 +461,7 @@ Today's date is ${new Date().toISOString().slice(0, 10)}.
 
 ${DATE_RULES}
 
-Return a JSON object with "isTravelRelated" (boolean — true only for actual booking confirmations/itineraries/e-tickets, false for newsletters, ads, receipts for unrelated purchases, or generic "your trip is coming up" marketing with no concrete booking details) plus these fields when isTravelRelated is true (include only the ones present):
+Return a JSON object with "isTravelRelated" (boolean — true only for actual booking confirmations/itineraries/e-tickets including airport parking reservations, false for newsletters, ads, receipts for unrelated purchases, or generic "your trip is coming up" marketing with no concrete booking details) plus these fields when isTravelRelated is true (include only the ones present):
 ${RESPONSE_SCHEMA_BLOCK}
 
 Return ONLY valid JSON, no extra text. If isTravelRelated is false, return just {"isTravelRelated": false}.`,

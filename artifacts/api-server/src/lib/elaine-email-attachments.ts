@@ -227,6 +227,16 @@ export async function processEmailBodyAsDocument(params: {
   const trimmed = params.bodyText.trim();
   if (!trimmed) return null;
 
+  logger.info(
+    {
+      emailId: params.emailId,
+      subject: params.subject,
+      bodyLen: trimmed.length,
+      bodyPreview: trimmed.slice(0, 300),
+    },
+    "elaine-email-body: starting extraction",
+  );
+
   let extractedData: Record<string, unknown> & { isTravelRelated: boolean };
   try {
     extractedData = await extractFromEmailText(
@@ -242,6 +252,19 @@ export async function processEmailBodyAsDocument(params: {
     return null;
   }
 
+  logger.info(
+    {
+      emailId: params.emailId,
+      isTravelRelated: extractedData.isTravelRelated,
+      documentType: extractedData.documentType,
+      parkingEntry: extractedData.parkingEntryDateTime,
+      parkingExit: extractedData.parkingExitDateTime,
+      provider: extractedData.providerName,
+      ref: extractedData.referenceNumber,
+    },
+    "elaine-email-body: extraction result",
+  );
+
   if (!extractedData.isTravelRelated) {
     logger.info(
       { emailId: params.emailId },
@@ -255,14 +278,7 @@ export async function processEmailBodyAsDocument(params: {
   let storagePath: string;
   try {
     const bodyBuffer = Buffer.from(trimmed, "utf8");
-    // Supabase Storage rejects text/plain (415). Use application/octet-stream
-    // so the binary bucket accepts the upload; the .txt extension still signals
-    // the content type to any downstream reader.
-    storagePath = await uploadDocument(
-      bodyBuffer,
-      "application/octet-stream",
-      filename,
-    );
+    storagePath = await uploadDocument(bodyBuffer, "text/plain", filename);
   } catch (err) {
     logger.warn(
       { err, emailId: params.emailId },

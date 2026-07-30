@@ -668,11 +668,30 @@ const TRANSFER_FIELDS: FieldSpec[] = [
   { key: "transferType", label: "Transfer type" },
 ];
 
+const PARKING_FIELDS: FieldSpec[] = [
+  { key: "providerName", label: "Parking operator" },
+  { key: "referenceNumber", label: "Booking ref" },
+  { key: "parkingLocation", label: "Parking garage / lot" },
+  { key: "fromLocation", label: "Airport / location" },
+  { key: "parkingEntryDateTime", label: "Entry" },
+  { key: "parkingExitDateTime", label: "Exit" },
+  { key: "passengerNames", label: "Name(s)" },
+  { key: "notes", label: "Notes" },
+];
+
 /**
  * Ordered lookup pairs: [predicate, field-array].
  * First match wins — put more specific patterns before more general ones.
  */
 const DOC_TYPE_LOOKUP: Array<[(t: string) => boolean, FieldSpec[]]> = [
+  // Parking — check before transfer/flight (avoids false "airport" match)
+  [
+    (t) =>
+      t.includes("parking") ||
+      t === "airport_parking" ||
+      t.includes("car_park"),
+    PARKING_FIELDS,
+  ],
   // Ground transport — check before flight (avoids "air" in "airport transfer")
   [
     (t) =>
@@ -894,6 +913,7 @@ const STANDARD_DOC_TYPES: { key: string; label: string }[] = [
   { key: "event_ticket", label: "Event Ticket" },
   { key: "restaurant_reservation", label: "Restaurant Reservation" },
   { key: "airport_transfer", label: "Airport Transfer" },
+  { key: "airport_parking", label: "Airport Parking" },
 ];
 
 function allDocTypeOptions(customTypes: CustomDocumentType[]) {
@@ -946,6 +966,16 @@ function getDocVisualStyle(
       Icon: Car,
       bg: "bg-orange-100 dark:bg-orange-950",
       fg: "text-orange-600 dark:text-orange-400",
+    };
+  if (
+    t.includes("parking") ||
+    t === "airport_parking" ||
+    t.includes("car_park")
+  )
+    return {
+      Icon: MapPin,
+      bg: "bg-zinc-100 dark:bg-zinc-800",
+      fg: "text-zinc-600 dark:text-zinc-400",
     };
   if (t.includes("train"))
     return {
@@ -3316,6 +3346,9 @@ export default function TripDetail({ id }: { id: number }) {
     ["returnFlightNumber", "return flight number"],
     ["returnDepartureDateTime", "return departure"],
     ["returnArrivalDateTime", "return arrival"],
+    ["parkingLocation", "parking location"],
+    ["parkingEntryDateTime", "parking entry"],
+    ["parkingExitDateTime", "parking exit"],
     ["notes", "notes"],
   ];
 

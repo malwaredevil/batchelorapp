@@ -129,6 +129,7 @@ export async function suggestTripId(
     (extracted.departureDateTime ??
       extracted.checkInDate ??
       extracted.pickupDateTime ??
+      extracted.parkingEntryDateTime ??
       extracted.returnDepartureDateTime ??
       extracted.returnArrivalDateTime) as string | undefined,
   );

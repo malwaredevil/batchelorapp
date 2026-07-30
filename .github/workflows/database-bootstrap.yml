@@ -1,0 +1,156 @@
+name: Database Bootstrap
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/database-bootstrap.yml"
+      - "lib/db/src/**"
+      - "lib/db/package.json"
+      - "artifacts/api-server/src/lib/startup-migrate.ts"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/database-bootstrap.yml"
+      - "lib/db/src/**"
+      - "lib/db/package.json"
+      - "artifacts/api-server/src/lib/startup-migrate.ts"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+
+concurrency:
+  group: database-bootstrap-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap:
+    name: Fresh schema and idempotency
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # This job intentionally defines its own disposable connection. It never
+      # reads DATABASE_URL or SUPABASE_* from repository/environment secrets.
+      DATABASE_URL: postgresql://batchelor_ci:batchelor_ci@localhost:5432/batchelor_ci
+      PGPASSWORD: batchelor_ci
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: batchelor_ci
+          POSTGRES_USER: batchelor_ci
+          POSTGRES_PASSWORD: batchelor_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U batchelor_ci -d batchelor_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          version: 10
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          cache: "pnpm"
+
+      - run: pnpm install --frozen-lockfile
+
+      # bootstrap.ts deliberately pins the Supabase CA for production
+      # connections. For this non-TLS disposable PostgreSQL service, execute
+      # the exact same STATEMENTS source through a local pg Pool instead.
+      - name: Bootstrap an empty database
+        run: |
+          pnpm exec tsx --eval '
+            import pg from "pg";
+            import { STATEMENTS } from "./lib/db/src/schema-statements.ts";
+            async function main() {
+              const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+              try {
+                for (const [index, statement] of STATEMENTS.entries()) {
+                  try {
+                    await pool.query(statement);
+                  } catch (error) {
+                    console.error(`[database-bootstrap] statement ${index + 1} failed`);
+                    throw error;
+                  }
+                }
+                console.log(`[database-bootstrap] applied ${STATEMENTS.length} statements`);
+              } finally {
+                await pool.end();
+              }
+            }
+            main().catch((error) => {
+              console.error(error);
+              process.exit(1);
+            });
+          '
+
+      - name: Bootstrap the same database again
+        run: |
+          pnpm exec tsx --eval '
+            import pg from "pg";
+            import { STATEMENTS } from "./lib/db/src/schema-statements.ts";
+            async function main() {
+              const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+              try {
+                for (const [index, statement] of STATEMENTS.entries()) {
+                  try {
+                    await pool.query(statement);
+                  } catch (error) {
+                    console.error(`[database-bootstrap] second-run statement ${index + 1} failed`);
+                    throw error;
+                  }
+                }
+                console.log(`[database-bootstrap] second run applied ${STATEMENTS.length} idempotently`);
+              } finally {
+                await pool.end();
+              }
+            }
+            main().catch((error) => {
+              console.error(error);
+              process.exit(1);
+            });
+          '
+
+      - name: Verify extensions and representative schema
+        run: |
+          psql "$DATABASE_URL" --set ON_ERROR_STOP=1 <<'SQL'
+          SELECT extname, extversion
+          FROM pg_extension
+          WHERE extname = 'vector';
+
+          DO $verify$
+          BEGIN
+            IF to_regclass('public.app_users') IS NULL THEN
+              RAISE EXCEPTION 'app_users was not created';
+            END IF;
+            IF to_regclass('public.elaine_history_conversations') IS NULL THEN
+              RAISE EXCEPTION 'elaine_history_conversations was not created';
+            END IF;
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_extension WHERE extname = 'vector'
+            ) THEN
+              RAISE EXCEPTION 'vector extension was not installed';
+            END IF;
+          END
+          $verify$;
+
+          SELECT count(*) AS public_table_count
+          FROM pg_tables
+          WHERE schemaname = 'public';
+          SQL
+
+      - name: Run database package tests
+        run: pnpm --filter @workspace/db run test

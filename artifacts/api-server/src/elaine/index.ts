@@ -186,11 +186,14 @@ import {
   generateElainePlan,
   loadElaineTurnTracesForMessages,
   mapWithConcurrency,
+  MODEL_VISIBLE_HARD_TOOL_NAMES,
+  MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS,
   persistElaineTraceBestEffort,
   preparedActionAcknowledgement,
   provenanceForTool,
   requestNeedsStructuredPlan,
   sanitizeRuntimeText,
+  selectElaineReplanTool,
   type ElainePlannerTool,
   type ElaineRuntimeTrace,
 } from "./runtime";
@@ -5372,6 +5375,7 @@ router.post("/chat", async (req, res) => {
   // appended as `tool` messages. Capped at MAX_ROUNDS so a confused model
   // cannot loop indefinitely on AI spend.
   const MAX_ROUNDS = 4;
+  let nextForcedToolName: string | null = null;
 
   for (let round = 0; round < MAX_ROUNDS; round++) {
     if (!runtime.recordModelRound()) {
@@ -5393,6 +5397,8 @@ router.post("/chat", async (req, res) => {
       number,
       { id: string; name: string; args: string }
     >();
+    const forcedToolName = nextForcedToolName;
+    nextForcedToolName = null;
 
     try {
       await callModelWithSubagent(
@@ -5411,6 +5417,14 @@ router.post("/chat", async (req, res) => {
               messages,
               max_tokens: elaineConfig.maxResponseTokens,
               stream: true,
+              ...(forcedToolName
+                ? {
+                    tool_choice: {
+                      type: "function" as const,
+                      function: { name: forcedToolName },
+                    },
+                  }
+                : {}),
             },
             { timeout: elaineConfig.requestTimeoutMs },
           );
@@ -5462,39 +5476,6 @@ router.post("/chat", async (req, res) => {
     // Resolve any tool calls not already handled mid-stream. Content no
     // longer needs cleanup here — unlike the old regex-directive scheme, tool
     // calls arrive as a structured field separate from the reply text.
-    const HARD_TOOL_NAMES = new Set([
-      SEARCH_HOUSEHOLD_TOOL_NAME,
-      SHOW_TRIP_CARD_TOOL_NAME,
-      SHOW_POTTERY_ITEM_TOOL_NAME,
-      SHOW_FABRIC_SWATCH_TOOL_NAME,
-      SHOW_ORNAMENT_ITEM_TOOL_NAME,
-      WEB_SEARCH_TOOL_NAME,
-      EBAY_SEARCH_TOOL_NAME,
-      SEARCH_HALLMARK_TOOL_NAME,
-      SEARCH_FLIGHTS_TOOL_NAME,
-      FETCH_PAGE_TOOL_NAME,
-      CONSULT_EXPERTS_TOOL_NAME,
-      GET_WEATHER_TOOL_NAME,
-      FIND_NEARBY_PLACES_TOOL_NAME,
-      GET_ROUTE_INFO_TOOL_NAME,
-      GET_AIR_QUALITY_TOOL_NAME,
-      GET_POLLEN_FORECAST_TOOL_NAME,
-      CALCULATE_YARDAGE_TOOL_NAME,
-      QUERY_HOUSEHOLD_TOOL_NAME,
-      LOOKUP_BARCODE_TOOL_NAME,
-      SUMMARIZE_INBOX_TOOL_NAME,
-      FIND_EMAILS_ABOUT_TOPIC_TOOL_NAME,
-      GET_EMAIL_DETAIL_TOOL_NAME,
-      LIST_NOTES_TOOL_NAME,
-      GET_NOTE_TOOL_NAME,
-      LIST_NOTIFICATIONS_TOOL_NAME,
-      GET_NOTIFICATION_COUNTS_TOOL_NAME,
-      GET_NOTIFICATION_PREFERENCES_TOOL_NAME,
-      LIST_ELAINE_MEMORIES_TOOL_NAME,
-      LIST_ELAINE_TASKS_TOOL_NAME,
-      GET_ELAINE_TASK_TOOL_NAME,
-      REMEMBER_TOOL_NAME,
-    ]);
     const runtimeCandidates = [...toolCallAcc.entries()];
     const runtimeSchedules = runtime.registerToolCalls(
       runtimeCandidates.map(([index, call]) => ({
@@ -5527,7 +5508,7 @@ router.post("/chat", async (req, res) => {
 
     for (const [index, { id, name, args }] of toolCallAcc.entries()) {
       const schedule = runtimeScheduleByIndex.get(index);
-      if (HARD_TOOL_NAMES.has(name)) {
+      if (MODEL_VISIBLE_HARD_TOOL_NAMES.has(name)) {
         if (id && schedule) {
           hardToolCalls.push({
             id,
@@ -5682,11 +5663,29 @@ router.post("/chat", async (req, res) => {
         decision.instruction &&
         round < MAX_ROUNDS - 1
       ) {
+        const selectedTool = selectElaineReplanTool(
+          runtime.snapshot(),
+          MODEL_VISIBLE_HARD_TOOL_NAMES,
+        );
+        if (selectedTool) {
+          runtime.markFailedReadStepsAdjusted(
+            selectedTool.replacesStepIds,
+            selectedTool.toolName,
+          );
+          nextForcedToolName = selectedTool.toolName;
+        }
         if (rawContent.trim()) {
           messages.push({ role: "assistant", content: rawContent });
           sendEvent("response_reset", {});
         }
-        messages.push({ role: "system", content: decision.instruction });
+        messages.push({
+          role: "system",
+          content:
+            decision.instruction +
+            (selectedTool
+              ? ` SERVER ROUTE: Call ${selectedTool.toolName} next as the one bounded safe lookup.`
+              : ""),
+        });
         rawContent = "";
         continue;
       }
@@ -5697,38 +5696,12 @@ router.post("/chat", async (req, res) => {
     // leaving them wondering if elAIne is hung — this round can involve
     // several sequential/parallel model calls before she writes anything.
     const distinctHardToolNames = new Set(hardToolCalls.map((c) => c.name));
-    const STATUS_LABELS: Record<string, string> = {
-      [SEARCH_HOUSEHOLD_TOOL_NAME]: "searching your collection",
-      [SHOW_TRIP_CARD_TOOL_NAME]: "looking up that trip",
-      [SHOW_POTTERY_ITEM_TOOL_NAME]: "looking up that pottery piece",
-      [SHOW_FABRIC_SWATCH_TOOL_NAME]: "looking up that fabric",
-      [SHOW_ORNAMENT_ITEM_TOOL_NAME]: "looking up that ornament",
-      [WEB_SEARCH_TOOL_NAME]: "searching the web",
-      [EBAY_SEARCH_TOOL_NAME]: "checking eBay sold listings",
-      [SEARCH_HALLMARK_TOOL_NAME]: "searching Hallmark.com",
-      [SEARCH_FLIGHTS_TOOL_NAME]: "checking flight prices",
-      [FETCH_PAGE_TOOL_NAME]: "reading that page",
-      [CONSULT_EXPERTS_TOOL_NAME]: "checking in with a couple of experts",
-      [GET_WEATHER_TOOL_NAME]: "checking the forecast",
-      [FIND_NEARBY_PLACES_TOOL_NAME]: "looking up places",
-      [GET_ROUTE_INFO_TOOL_NAME]: "checking travel times",
-      [GET_AIR_QUALITY_TOOL_NAME]: "checking air quality",
-      [GET_POLLEN_FORECAST_TOOL_NAME]: "checking pollen levels",
-      [CALCULATE_YARDAGE_TOOL_NAME]: "calculating yardage",
-      [LOOKUP_BARCODE_TOOL_NAME]: "looking up that barcode",
-      [SUMMARIZE_INBOX_TOOL_NAME]: "reading your inbox",
-      [FIND_EMAILS_ABOUT_TOPIC_TOOL_NAME]: "searching your email",
-      [GET_EMAIL_DETAIL_TOOL_NAME]: "reading that email",
-      [LIST_NOTES_TOOL_NAME]: "reading household notes",
-      [GET_NOTE_TOOL_NAME]: "reading that note",
-      [LIST_NOTIFICATIONS_TOOL_NAME]: "checking your notifications",
-      [GET_NOTIFICATION_COUNTS_TOOL_NAME]: "counting your notifications",
-      [GET_NOTIFICATION_PREFERENCES_TOOL_NAME]:
-        "checking your notification preferences",
-      [REMEMBER_TOOL_NAME]: "saving that memory",
-    };
     const statusMessage = [...distinctHardToolNames]
-      .map((n) => STATUS_LABELS[n])
+      .map(
+        (name) =>
+          MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS[name] ??
+          `checking ${name.replace(/_/g, " ")}`,
+      )
       .join(", ");
     sendEvent("status", {
       message: `${statusMessage.charAt(0).toUpperCase()}${statusMessage.slice(1)}…`,
@@ -6390,6 +6363,9 @@ router.post("/chat", async (req, res) => {
               JSON.parse(call.args),
             );
             if (!parsed.success) {
+              _toolEvidenceComplete = false;
+              runtimeSummary = "Exchange-rate request was invalid";
+              runtimeErrorCategory = "invalid_tool_arguments";
               resultText = "Invalid currency — ask the user to clarify.";
             } else {
               const { from, to } = parsed.data;
@@ -6404,10 +6380,22 @@ router.post("/chat", async (req, res) => {
                   date: string;
                   rates: Record<string, number>;
                 };
+                const missingRates = to.filter((code) => {
+                  const rate = json.rates[code];
+                  return (
+                    typeof rate !== "number" ||
+                    !Number.isFinite(rate) ||
+                    rate <= 0
+                  );
+                });
+                if (!json.date || missingRates.length > 0) {
+                  throw new Error("Provider response omitted requested rates");
+                }
                 const rates = to.map((code) => ({
                   code,
-                  rate: json.rates[code] ?? 0,
+                  rate: json.rates[code]!,
                 }));
+                runtimeSummary = "Current exchange rates were retrieved";
                 resultText =
                   `Exchange rates from ${from} (as of ${json.date}):\n` +
                   rates
@@ -6420,6 +6408,9 @@ router.post("/chat", async (req, res) => {
                   lastUpdated: json.date,
                 });
               } catch {
+                _toolEvidenceComplete = false;
+                runtimeSummary = "Exchange-rate provider was unavailable";
+                runtimeErrorCategory = "provider_error";
                 resultText = `Couldn't fetch exchange rates for ${from} right now — tell the user to try again.`;
               }
             }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { toRuntimePlan } from "./contracts";
+import { provenanceForTool } from "./source-policy";
 import { ElaineTurnRuntime } from "./turn-runtime";
 
 const requestClass = {
@@ -388,6 +389,159 @@ describe("ElaineTurnRuntime", () => {
     expect(decision.shouldReplan).toBe(false);
     expect(decision.verification.status).toBe("awaiting_confirmation");
     expect(runtime.complete().status).toBe("awaiting_confirmation");
+  });
+
+  it("lets a successful required fallback replace a failed read step", () => {
+    const runtime = new ElaineTurnRuntime({
+      traceId: "trace-read-fallback",
+      requestClass,
+      sourceRoute: {
+        freshness: "current",
+        requiresRetrievedEvidence: true,
+        preferredKinds: ["specialized_api", "web"],
+        fallbackKinds: ["web", "model_synthesis"],
+        rationale: "Use current evidence",
+      },
+      plan: toRuntimePlan({
+        version: 1,
+        goal: "Find current evidence",
+        assumptions: [],
+        completionCriteria: ["Current evidence is available"],
+        steps: [
+          {
+            id: "provider",
+            label: "Check the preferred provider",
+            kind: "research",
+            toolName: "get_exchange_rate",
+            dependsOn: [],
+            expectedEvidence: "A current provider result",
+            required: true,
+          },
+          {
+            id: "fallback",
+            label: "Check the web fallback",
+            kind: "research",
+            toolName: "web_search",
+            dependsOn: [],
+            expectedEvidence: "A current web result",
+            required: true,
+          },
+          {
+            id: "respond",
+            label: "Answer",
+            kind: "respond",
+            toolName: null,
+            dependsOn: [],
+            expectedEvidence: "A grounded answer",
+            required: true,
+          },
+        ],
+      }),
+    });
+
+    runtime.registerToolCalls([
+      { id: "provider-call", name: "get_exchange_rate" },
+    ]);
+    runtime.recordObservation({
+      callId: "provider-call",
+      toolName: "get_exchange_rate",
+      success: false,
+      summary: "Provider unavailable",
+      errorCategory: "provider_error",
+      provenance: provenanceForTool({
+        toolName: "get_exchange_rate",
+        coverageStatus: "unknown",
+      }),
+    });
+    runtime.markFailedReadStepsAdjusted(["provider"], "web_search");
+
+    runtime.registerToolCalls([{ id: "fallback-call", name: "web_search" }]);
+    runtime.recordObservation({
+      callId: "fallback-call",
+      toolName: "web_search",
+      success: true,
+      summary: "Current web evidence returned",
+      provenance: provenanceForTool({
+        toolName: "web_search",
+        coverageStatus: "matched",
+      }),
+    });
+
+    expect(
+      runtime.verify({
+        finalContent: "Here is the grounded result.",
+        hasPendingConfirmation: false,
+      }).verification.status,
+    ).toBe("satisfied");
+    expect(runtime.snapshot().plan.steps[0]?.status).toBe("adjusted");
+    expect(runtime.complete().status).toBe("completed");
+  });
+
+  it("remains blocked when the required fallback also fails", () => {
+    const runtime = new ElaineTurnRuntime({
+      traceId: "trace-failed-read-fallback",
+      requestClass,
+      sourceRoute: {
+        freshness: "current",
+        requiresRetrievedEvidence: true,
+        preferredKinds: ["specialized_api", "web"],
+        fallbackKinds: ["web", "model_synthesis"],
+        rationale: "Use current evidence",
+      },
+      plan: toRuntimePlan({
+        version: 1,
+        goal: "Find current evidence",
+        assumptions: [],
+        completionCriteria: ["Current evidence is available"],
+        steps: [
+          {
+            id: "provider",
+            label: "Check the preferred provider",
+            kind: "research",
+            toolName: "get_exchange_rate",
+            dependsOn: [],
+            expectedEvidence: "A current provider result",
+            required: true,
+          },
+          {
+            id: "fallback",
+            label: "Check the web fallback",
+            kind: "research",
+            toolName: "web_search",
+            dependsOn: [],
+            expectedEvidence: "A current web result",
+            required: true,
+          },
+        ],
+      }),
+      budget: { maxReplans: 0 },
+    });
+
+    runtime.registerToolCalls([
+      { id: "provider-call", name: "get_exchange_rate" },
+    ]);
+    runtime.recordObservation({
+      callId: "provider-call",
+      toolName: "get_exchange_rate",
+      success: false,
+      summary: "Provider unavailable",
+    });
+    runtime.markFailedReadStepsAdjusted(["provider"], "web_search");
+    runtime.registerToolCalls([{ id: "fallback-call", name: "web_search" }]);
+    runtime.recordObservation({
+      callId: "fallback-call",
+      toolName: "web_search",
+      success: false,
+      summary: "Web fallback unavailable",
+    });
+
+    const decision = runtime.verify({
+      finalContent: "I could not verify the current information.",
+      hasPendingConfirmation: false,
+    });
+    expect(decision.shouldReplan).toBe(false);
+    expect(decision.verification.status).toBe("blocked");
+    expect(runtime.complete().status).toBe("blocked");
   });
 
   it("still blocks a direct current answer without retrieved evidence", () => {

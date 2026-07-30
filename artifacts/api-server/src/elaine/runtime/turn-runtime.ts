@@ -323,6 +323,31 @@ export class ElaineTurnRuntime {
     }
   }
 
+  markFailedReadStepsAdjusted(
+    stepIds: readonly string[],
+    replacementToolName: string,
+  ): void {
+    for (const stepId of stepIds) {
+      const step = this.trace.plan.steps.find(
+        (candidate) => candidate.id === stepId,
+      );
+      if (
+        !step ||
+        step.status !== "failed" ||
+        step.riskClass !== "read_only" ||
+        step.confirmation !== "none" ||
+        !["lookup", "research"].includes(step.kind)
+      ) {
+        continue;
+      }
+      this.updateStep(
+        step,
+        "adjusted",
+        `Replaced by fallback ${replacementToolName.replace(/_/g, " ")}`,
+      );
+    }
+  }
+
   verify(input: {
     finalContent: string;
     hasPendingConfirmation: boolean;

@@ -199,4 +199,18 @@ describe("Elaine source policy", () => {
       ]),
     ).toBe(true);
   });
+
+  it("does not count a failed exchange-rate provider observation", () => {
+    expect(
+      hasCurrentRetrievedEvidence([
+        {
+          success: false,
+          provenance: provenanceForTool({
+            toolName: "get_exchange_rate",
+            coverageStatus: "unknown",
+          }),
+        },
+      ]),
+    ).toBe(false);
+  });
 });

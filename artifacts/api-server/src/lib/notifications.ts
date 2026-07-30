@@ -243,6 +243,20 @@ export async function getUserNotifications(
     sql`(${notificationRecipients.snoozedUntil} IS NULL OR ${notificationRecipients.snoozedUntil} < ${now.toISOString()})`,
   );
 
+  if (module) {
+    conditions.push(eq(notificationEvents.module, module));
+  }
+  if (severity) {
+    // show at-or-above the requested severity
+    const order = ["informational", "attention", "important", "critical"];
+    const minIdx = order.indexOf(severity);
+    if (minIdx >= 0) {
+      conditions.push(
+        inArray(notificationEvents.severity, order.slice(minIdx)),
+      );
+    }
+  }
+
   const joined = db
     .select({
       recipientId: notificationRecipients.id,
@@ -270,20 +284,6 @@ export async function getUserNotifications(
       eq(notificationEvents.id, notificationRecipients.eventId),
     )
     .where(and(...conditions));
-
-  if (module) {
-    conditions.push(eq(notificationEvents.module, module));
-  }
-  if (severity) {
-    // show at-or-above the requested severity
-    const order = ["informational", "attention", "important", "critical"];
-    const minIdx = order.indexOf(severity);
-    if (minIdx >= 0) {
-      conditions.push(
-        inArray(notificationEvents.severity, order.slice(minIdx)),
-      );
-    }
-  }
 
   const [totalRow] = await db
     .select({ c: count() })
@@ -351,6 +351,145 @@ export async function getUserPreferences(userId: number) {
     .select()
     .from(notificationPreferences)
     .where(eq(notificationPreferences.userId, userId));
+}
+
+export type NotificationStatePatch = {
+  read?: boolean;
+  acknowledged?: boolean;
+  dismissed?: boolean;
+  snoozedUntil?: string | null;
+};
+
+export async function updateNotificationState(
+  userId: number,
+  recipientId: number,
+  body: NotificationStatePatch,
+) {
+  const [row] = await db
+    .select()
+    .from(notificationRecipients)
+    .where(
+      and(
+        eq(notificationRecipients.id, recipientId),
+        eq(notificationRecipients.userId, userId),
+      ),
+    )
+    .limit(1);
+  if (!row) return null;
+
+  const now = new Date();
+  const update: Partial<typeof notificationRecipients.$inferInsert> = {};
+  if (body.read === true && !row.readAt) update.readAt = now;
+  if (body.read === false) update.readAt = null as never;
+  if (body.acknowledged === true && !row.acknowledgedAt)
+    update.acknowledgedAt = now;
+  if (body.dismissed === true && !row.dismissedAt) update.dismissedAt = now;
+  if (body.dismissed === false) update.dismissedAt = null as never;
+  if (body.snoozedUntil !== undefined) {
+    update.snoozedUntil = body.snoozedUntil
+      ? new Date(body.snoozedUntil)
+      : (null as never);
+  }
+
+  const [updated] = await db
+    .update(notificationRecipients)
+    .set(update)
+    .where(
+      and(
+        eq(notificationRecipients.id, recipientId),
+        eq(notificationRecipients.userId, userId),
+      ),
+    )
+    .returning();
+  return {
+    recipientId: updated.id,
+    isRead: updated.readAt != null,
+    readAt: updated.readAt ?? null,
+    isAcknowledged: updated.acknowledgedAt != null,
+    acknowledgedAt: updated.acknowledgedAt ?? null,
+    isDismissed: updated.dismissedAt != null,
+    dismissedAt: updated.dismissedAt ?? null,
+    snoozedUntil: updated.snoozedUntil ?? null,
+  };
+}
+
+export type BulkNotificationAction =
+  | "read"
+  | "unread"
+  | "dismissed"
+  | "acknowledged";
+
+export async function bulkUpdateNotificationState(
+  userId: number,
+  recipientIds: number[],
+  action: BulkNotificationAction,
+): Promise<number> {
+  if (recipientIds.length === 0) return 0;
+  const now = new Date();
+  const updateMap: Record<
+    BulkNotificationAction,
+    Partial<typeof notificationRecipients.$inferInsert>
+  > = {
+    read: { readAt: now },
+    unread: { readAt: null as never },
+    dismissed: { dismissedAt: now, readAt: now },
+    acknowledged: { acknowledgedAt: now, readAt: now },
+  };
+  const result = await db
+    .update(notificationRecipients)
+    .set(updateMap[action])
+    .where(
+      and(
+        eq(notificationRecipients.userId, userId),
+        inArray(notificationRecipients.id, recipientIds),
+      ),
+    )
+    .returning({ id: notificationRecipients.id });
+  return result.length;
+}
+
+export type NotificationPreferenceInput = {
+  scope: "global" | "module" | "event_type";
+  scopeValue?: string | null;
+  channelInApp: boolean;
+  channelEmail: boolean;
+  channelSms: boolean;
+  channelPush: boolean;
+  quietHoursEnabled: boolean;
+  quietHoursTimezone: string;
+  quietHoursStart: string;
+  quietHoursEnd: string;
+  criticalOverride: boolean;
+};
+
+export async function replaceUserPreferences(
+  userId: number,
+  entries: NotificationPreferenceInput[],
+) {
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(notificationPreferences)
+      .where(eq(notificationPreferences.userId, userId));
+    if (entries.length > 0) {
+      await tx.insert(notificationPreferences).values(
+        entries.map((entry) => ({
+          userId,
+          scope: entry.scope,
+          scopeValue: entry.scopeValue ?? null,
+          channelInApp: entry.channelInApp,
+          channelEmail: entry.channelEmail,
+          channelSms: entry.channelSms,
+          channelPush: entry.channelPush,
+          quietHoursEnabled: entry.quietHoursEnabled,
+          quietHoursTimezone: entry.quietHoursTimezone,
+          quietHoursStart: entry.quietHoursStart,
+          quietHoursEnd: entry.quietHoursEnd,
+          criticalOverride: entry.criticalOverride,
+        })),
+      );
+    }
+  });
+  return getUserPreferences(userId);
 }
 
 export async function upsertUserPreferences(

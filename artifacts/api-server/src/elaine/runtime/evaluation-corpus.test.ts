@@ -12,7 +12,7 @@ import { evaluateForecastDateCoverage } from "./weather-coverage";
 
 describe("Elaine deterministic evaluation corpus", () => {
   it("is versioned, non-sensitive, and asserts positive and forbidden behavior", () => {
-    expect(ELAINE_EVALUATION_CORPUS.version).toBe(1);
+    expect(ELAINE_EVALUATION_CORPUS.version).toBe(2);
     expect(ELAINE_EVALUATION_CORPUS.scenarios).toHaveLength(9);
     expect(
       new Set(ELAINE_EVALUATION_CORPUS.scenarios.map(({ id }) => id)).size,
@@ -72,7 +72,7 @@ describe("Elaine deterministic evaluation corpus", () => {
     expect(() =>
       assertElaineToolFamilyCoverage(scenario.availableTools),
     ).not.toThrow();
-    expect(Object.keys(ELAINE_TOOL_FAMILY_SENTINELS)).toHaveLength(8);
+    expect(Object.keys(ELAINE_TOOL_FAMILY_SENTINELS)).toHaveLength(9);
   });
 
   it("prints a concise candidate quality summary for CI and Replit", () => {
@@ -113,7 +113,7 @@ describe("Elaine deterministic evaluation corpus", () => {
 
     console.info("Elaine deterministic candidate report", summary);
     expect(summary).toMatchObject({
-      corpusVersion: 1,
+      corpusVersion: 2,
       scenarios: 9,
       categories: 9,
       liveProviderCalls: 0,

@@ -32,7 +32,7 @@ export interface ElaineEvaluationScenario {
  * results are invented; exact prose is intentionally not asserted.
  */
 export const ELAINE_EVALUATION_CORPUS = {
-  version: 1 as const,
+  version: 2 as const,
   scenarios: [
     {
       id: "simple-general-answer",
@@ -242,6 +242,12 @@ export const ELAINE_EVALUATION_CORPUS = {
         "show_ornament_item",
         "update_ornament_item",
         "send_email",
+        "summarize_inbox",
+        "list_notes",
+        "create_note",
+        "list_notifications",
+        "get_notification_counts",
+        "update_notification_state",
         "remember_household_fact",
         "show_data_card",
         "suggest_navigation",

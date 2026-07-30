@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 100085)
+Total output lines: 9600
+
 import * as Sentry from "@sentry/node";
 import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod/v4";
@@ -126,6 +129,29 @@ import {
   type OrnamentActionType,
 } from "./ornaments-actions";
 import {
+  buildUniversalActionLabel,
+  universalActionExecutors,
+  universalActionSchemas,
+  universalActionTools,
+  type UniversalActionType,
+} from "./universal-actions";
+import {
+  GET_NOTE_TOOL_NAME,
+  GET_NOTIFICATION_COUNTS_TOOL_NAME,
+  GET_NOTIFICATION_PREFERENCES_TOOL_NAME,
+  LIST_NOTES_TOOL_NAME,
+  LIST_NOTIFICATIONS_TOOL_NAME,
+  executeUniversalReadTool,
+  universalReadTools,
+} from "./universal-read-tools";
+import {
+  executeOfficeTool,
+  FIND_EMAILS_ABOUT_TOPIC_TOOL_NAME,
+  GET_EMAIL_DETAIL_TOOL_NAME,
+  officeActionTools,
+  SUMMARIZE_INBOX_TOOL_NAME,
+} from "./office-actions";
+import {
   assertElaineToolFamilyCoverage,
   classifyElaineRequest,
   createElaineTurnTrace,
@@ -143,6 +169,10 @@ import {
   type ElainePlannerTool,
   type ElaineRuntimeTrace,
 } from "./runtime";
+import {
+  buildElaineCapabilityRegistry,
+  buildPlannerCatalogFromCapabilities,
+} from "./capability-registry";
 import multer from "multer";
 import { createClient } from "@supabase/supabase-js";
 import { multerLimitForPrefix } from "../lib/upload-limits";
@@ -757,6 +787,7 @@ const ActionBody = z.discriminatedUnion("type", [
   ...potteryActionSchemas,
   ...quiltingActionSchemas,
   ...ornamentActionSchemas,
+  ...universalActionSchemas,
 ]);
 
 type PendingAction = z.infer<typeof ActionBody>;
@@ -1020,6 +1051,19 @@ async function buildActionLabel(action: PendingAction): Promise<string> {
           action as { type: OrnamentActionType; payload: unknown },
         );
       }
+      if (
+        universalActionSchemas.some(
+          (schema) =>
+            schema.safeParse({
+              type: action.type,
+              payload: action.payload,
+            }).success,
+        )
+      ) {
+        return buildUniversalActionLabel(
+          action as { type: UniversalActionType; payload: unknown },
+        );
+      }
       return "Perform this action";
   }
 }
@@ -1035,7 +1079,10 @@ type ActionExecutor = (
 
 type TravelActionType = Exclude<
   ActionType,
-  PotteryActionType | QuiltingActionType | OrnamentActionType
+  | PotteryActionType
+  | QuiltingActionType
+  | OrnamentActionType
+  | UniversalActionType
 >;
 
 const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
@@ -2230,6 +2277,7 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
   ...potteryActionExecutors,
   ...quiltingActionExecutors,
   ...ornamentActionExecutors,
+  ...universalActionExecutors,
 };
 
 // ---------------------------------------------------------------------------
@@ -2840,6 +2888,7 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   ...potteryActionTools,
   ...quiltingActionTools,
   ...ornamentActionTools,
+  ...universalActionTools,
   {
     type: "function",
     function: {
@@ -3640,6 +3689,8 @@ const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
 const QUERY_HOUSEHOLD_TOOL_NAME = "query_household_data";
 
 const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+  ...officeActionTools,
+  ...universalReadTools,
   {
     type: "function",
     function: {
@@ -3964,19 +4015,12 @@ const ACTION_TOOL_NAMES = new Set<string>(
 );
 
 function buildElainePlannerToolCatalog(): ElainePlannerTool[] {
-  const seen = new Set<string>();
-  const catalog: ElainePlannerTool[] = [];
-  for (const tool of [...ACTION_TOOLS, ...SOFT_TOOLS, ...SOFT_TOOLS_EXTRA]) {
-    if (tool.type !== "function") continue;
-    const { name, description } = tool.function;
-    if (seen.has(name)) continue;
-    seen.add(name);
-    catalog.push({
-      name,
-      description: description ?? "Elaine capability",
-      consequential: ACTION_TOOL_NAMES.has(name),
-    });
-  }
+  const registry = buildElaineCapabilityRegistry([
+    ...ACTION_TOOLS,
+    ...SOFT_TOOLS,
+    ...SOFT_TOOLS_EXTRA,
+  ]);
+  const catalog = buildPlannerCatalogFromCapabilities(registry);
   assertElaineToolFamilyCoverage(catalog.map((tool) => tool.name));
   return catalog;
 }
@@ -4778,7 +4822,7 @@ POTTERY ITEMS: Use update_pottery_item to edit an existing piece (name, notes, q
 
 QUILTING ITEMS: Use update_fabric / delete_fabric, update_pattern / delete_pattern for editing or removing an existing fabric or pattern — only if its numeric id is visible on screen, never guessed, and be clear in your visible reply that a delete is permanent. You can't create a brand-new fabric or finished quilt from chat since both require an uploaded photo you have no way to attach — but use create_pattern to add a new quilt pattern record (name, designer, block size, difficulty, source, notes; no image) since a pattern's image is optional. Use delete_quilt to permanently remove a finished quilt and its photos — only with a visible quiltId, and say clearly it's permanent. Use create_shopping_item / update_shopping_item / delete_shopping_item to manage the fabric/supplies shopping list. Use create_quilting_category / delete_quilting_category to manage categories; never guess a category id for deletion. Use rename_quilting_category to rename one, and merge_quilting_categories to fold one category into another (destructive to the source category — say so clearly); never guess either category id. Use create_block / create_layout to add a new blank block template or quilt layout (metadata + an empty grid only — this does NOT design the block's pattern or place blocks into the layout, since chat-driven geometry editing isn't supported; tell the user to open the block/layout editor in the app to actually design it). Use delete_block / delete_layout to remove one, only with a visible id. Use bulk_reanalyze_quilting to re-run AI analysis on fabrics, patterns, or finished quilts — pass specific ids when visible on screen, or omit ids to run against everything of that type still needing analysis; mention this takes a while. Use calculate_yardage whenever the user asks how much backing or binding fabric they need for a given quilt size — never do this arithmetic yourself, always call the tool so the numbers are accurate; it's a read-only estimate, not a saved record.
 
-ORNAMENTS ITEMS: Use update_ornament_item to edit an existing ornament (name, notes, quantity, series/collection, year, brand, condition, origin, dimensions) — only include fields that actually change, and only if the ornament's numeric id is visible on screen (look for "itemId: <number>"); never guess one. This also works right after an upload if the user tells you details in chat instead of typing them into the form. Use delete_ornament_item to permanently remove an ornament and its photos — say clearly in your visible reply that this deletes the item, since it's destructive. Use create_ornament_category / delete_ornament_category to manage the categories used to organize the collection; never guess a category id for deletion. Use update_ornament_item_categories to replace the full set of categories assigned to one ornament (pass every category id that should end up assigned, not just the ones to add). Use merge_ornament_categories to fold one category into another — this deletes the source category, so say so clearly since it's destructive; never guess either category id. Use lock_ornament_field to lock or unlock one AI-derived field (name, seriesOrCollection, year, dimensions, dominantColors, motifs, aiDescription, barcodeValue) on an ornament so future AI re-analysis will or won't overwrite it — only with a visible itemId. Use delete_ornament_photo to remove one supplemental photo from an ornament, and promote_ornament_photo to make a supplemental photo the new primary photo (this re-runs AI analysis with the new primary image, subject to locked fields) — both need a visible itemId and imageId, never guessed. Use bulk_reanalyze_ornaments to re-run AI analysis on several ornaments at once; pass itemIds if specific ones are visible on screen, or omit it to run against every ornament still missing AI analysis (capped at 20) — mention in your visible reply that this takes a while and calls AI per item.
+ORNAMENTS ITEMS: Use update_ornament_item to edit an existing ornament (name, notes, quantity, series/collection, year, brand, condition, origin, dimensions) — only include fields that actually change, and only if the ornament's numeric id is visible on screen (look for "itemId: <number>"); never guess one. This also works right after an upload if the user tells you details in chat instead of typing them into the form. Use delete_ornament_item to permanently remove an ornament and its photos — say clearly in your visible reply that this deletes the item, since it's destructive. Use create_ornament_category / delete_ornament_category to manage the categories used to organize the collecti…85 tokens truncated…arly since it's destructive; never guess either category id. Use lock_ornament_field to lock or unlock one AI-derived field (name, seriesOrCollection, year, dimensions, dominantColors, motifs, aiDescription, barcodeValue) on an ornament so future AI re-analysis will or won't overwrite it — only with a visible itemId. Use delete_ornament_photo to remove one supplemental photo from an ornament, and promote_ornament_photo to make a supplemental photo the new primary photo (this re-runs AI analysis with the new primary image, subject to locked fields) — both need a visible itemId and imageId, never guessed. Use bulk_reanalyze_ornaments to re-run AI analysis on several ornaments at once; pass itemIds if specific ones are visible on screen, or omit it to run against every ornament still missing AI analysis (capped at 20) — mention in your visible reply that this takes a while and calls AI per item.
 
 CONTEXT-AWARE LOOKUPS — read the on-screen state and act, don't ask: When the user asks a contextual question and the answer is already implicit in the page they're viewing, extract the data silently and call the right tool — never ask them to re-state what you can already see.
 
@@ -5464,6 +5508,14 @@ router.post("/chat", async (req, res) => {
       CALCULATE_YARDAGE_TOOL_NAME,
       QUERY_HOUSEHOLD_TOOL_NAME,
       LOOKUP_BARCODE_TOOL_NAME,
+      SUMMARIZE_INBOX_TOOL_NAME,
+      FIND_EMAILS_ABOUT_TOPIC_TOOL_NAME,
+      GET_EMAIL_DETAIL_TOOL_NAME,
+      LIST_NOTES_TOOL_NAME,
+      GET_NOTE_TOOL_NAME,
+      LIST_NOTIFICATIONS_TOOL_NAME,
+      GET_NOTIFICATION_COUNTS_TOOL_NAME,
+      GET_NOTIFICATION_PREFERENCES_TOOL_NAME,
     ]);
     const runtimeCandidates = [...toolCallAcc.entries()];
     const runtimeSchedules = runtime.registerToolCalls(
@@ -5703,6 +5755,15 @@ router.post("/chat", async (req, res) => {
       [GET_POLLEN_FORECAST_TOOL_NAME]: "checking pollen levels",
       [CALCULATE_YARDAGE_TOOL_NAME]: "calculating yardage",
       [LOOKUP_BARCODE_TOOL_NAME]: "looking up that barcode",
+      [SUMMARIZE_INBOX_TOOL_NAME]: "reading your inbox",
+      [FIND_EMAILS_ABOUT_TOPIC_TOOL_NAME]: "searching your email",
+      [GET_EMAIL_DETAIL_TOOL_NAME]: "reading that email",
+      [LIST_NOTES_TOOL_NAME]: "reading household notes",
+      [GET_NOTE_TOOL_NAME]: "reading that note",
+      [LIST_NOTIFICATIONS_TOOL_NAME]: "checking your notifications",
+      [GET_NOTIFICATION_COUNTS_TOOL_NAME]: "counting your notifications",
+      [GET_NOTIFICATION_PREFERENCES_TOOL_NAME]:
+        "checking your notification preferences",
     };
     const statusMessage = [...distinctHardToolNames]
       .map((n) => STATUS_LABELS[n])
@@ -6826,6 +6887,28 @@ router.post("/chat", async (req, res) => {
               SEARCH_HOUSEHOLD_TOOL_NAME,
               call.args,
             );
+          } else if (
+            call.name === SUMMARIZE_INBOX_TOOL_NAME ||
+            call.name === FIND_EMAILS_ABOUT_TOPIC_TOOL_NAME ||
+            call.name === GET_EMAIL_DETAIL_TOOL_NAME
+          ) {
+            resultText =
+              (await executeOfficeTool(
+                call.name,
+                call.args,
+                userId,
+                messages,
+              )) ?? "Unsupported Office tool.";
+          } else if (
+            call.name === LIST_NOTES_TOOL_NAME ||
+            call.name === GET_NOTE_TOOL_NAME ||
+            call.name === LIST_NOTIFICATIONS_TOOL_NAME ||
+            call.name === GET_NOTIFICATION_COUNTS_TOOL_NAME ||
+            call.name === GET_NOTIFICATION_PREFERENCES_TOOL_NAME
+          ) {
+            resultText =
+              (await executeUniversalReadTool(call.name, call.args, userId)) ??
+              "Unsupported app data tool.";
           } else {
             resultText = "Unsupported tool.";
           }

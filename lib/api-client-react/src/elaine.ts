@@ -80,6 +80,45 @@ export interface ElaineRuntimeTrace {
     completionCriteria: string[];
     steps: ElaineRuntimePlanStep[];
   };
+  sourceRoute?: {
+    freshness: "stable" | "recent" | "current";
+    requiresRetrievedEvidence: boolean;
+    preferredKinds: Array<
+      | "current_context"
+      | "batchelor_app"
+      | "first_party_provider"
+      | "specialized_api"
+      | "web"
+      | "model_synthesis"
+    >;
+    fallbackKinds: string[];
+    rationale: string;
+  };
+  observations?: Array<{
+    callId: string;
+    stepId: string | null;
+    toolName: string;
+    success: boolean;
+    evidenceSummary: string;
+    resultReference?: string;
+    provenance?: {
+      sourceKind: string;
+      sourceName: string;
+      observedAt: string;
+      evidenceKind: "retrieved_fact" | "inference";
+      confidence: "high" | "medium" | "low";
+      sourceUrl?: string;
+      internalReference?: string;
+      coverage: {
+        status: "matched" | "partial" | "outside" | "unknown";
+        start?: string;
+        end?: string;
+        geography?: string;
+      };
+    };
+    startedAt: string;
+    completedAt: string;
+  }>;
   events: Array<{
     id: string;
     sequence: number;
@@ -180,7 +219,11 @@ export type QuiltingActionType =
 export type AssistantActionType =
   | TravelActionType
   | PotteryActionType
-  | QuiltingActionType;
+  | QuiltingActionType
+  | "correct_memory"
+  | "forget_memory"
+  | "queue_research_task"
+  | "cancel_elaine_task";
 
 export interface AssistantAction {
   type: AssistantActionType;
@@ -333,6 +376,10 @@ export interface HouseholdMemoryItem {
   updatedAt: string;
   deletedAt: string | null;
   createdByUserId: number | null;
+  source: string;
+  lastConfirmedAt: string | null;
+  confidence: number;
+  correctionOfId: number | null;
 }
 
 export interface CreateMemoryBody {
@@ -348,7 +395,42 @@ export interface UpdateMemoryBody {
   scope?: MemoryScope;
   category?: MemoryCategory;
   sensitivity?: MemorySensitivity;
-  expiresAt?: string | null;
+  expiresInDays?: number;
+}
+
+export type ElaineTaskState =
+  | "queued"
+  | "running"
+  | "waiting_for_user"
+  | "blocked"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export interface ElaineResearchObservation {
+  query: string;
+  success: boolean;
+  evidenceSummary: string;
+  citations: string[];
+  observedAt: string;
+}
+
+export interface ElaineTask {
+  id: number;
+  goal: string;
+  state: ElaineTaskState;
+  progressPercent: number;
+  progressMessage: string | null;
+  attemptCount: number;
+  maxAttempts: number;
+  answer: string | null;
+  citations: string[];
+  observations: ElaineResearchObservation[];
+  errorCode: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
 }
 
 export const getGetElaineConversationQueryKey = () =>
@@ -769,6 +851,57 @@ export function useUpdateElaineMemory(options?: {
     HouseholdMemoryItem,
     { id: number; body: UpdateMemoryBody }
   > = ({ id, body }) => updateElaineMemoryFn(id, body);
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+export const getListElaineTasksQueryKey = () =>
+  ["/api/elaine/tasks"] as const;
+
+const listElaineTasksFn = (
+  options?: RequestInit,
+): Promise<{ tasks: ElaineTask[] }> =>
+  customFetch<{ tasks: ElaineTask[] }>("/api/elaine/tasks", {
+    ...options,
+    method: "GET",
+  });
+
+export function useListElaineTasks<
+  TData = { tasks: ElaineTask[] },
+  TError = unknown,
+>(options?: {
+  query?: UseQueryOptions<{ tasks: ElaineTask[] }, TError, TData>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getListElaineTasksQueryKey();
+  const queryFn: QueryFunction<{ tasks: ElaineTask[] }> = ({ signal }) =>
+    listElaineTasksFn({ signal });
+  const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    { tasks: ElaineTask[] },
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+const cancelElaineTaskFn = (
+  taskId: number,
+): Promise<{ taskId: number; state: "cancelled" }> =>
+  customFetch<{ taskId: number; state: "cancelled" }>(
+    `/api/elaine/tasks/${taskId}/cancel`,
+    { method: "POST" },
+  );
+
+export function useCancelElaineTask(options?: {
+  mutation?: UseMutationOptions<
+    { taskId: number; state: "cancelled" },
+    unknown,
+    number
+  >;
+}) {
+  const mutationFn = (taskId: number) => cancelElaineTaskFn(taskId);
   return useMutation({ mutationFn, ...options?.mutation });
 }
 

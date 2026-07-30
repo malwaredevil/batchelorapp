@@ -4,6 +4,7 @@ import {
   requestNeedsStructuredPlan,
 } from "./classifier";
 import { ELAINE_EVALUATION_CORPUS } from "./evaluation-corpus";
+import { buildElaineEvaluationReport } from "./evaluation-report";
 import {
   assertElaineToolFamilyCoverage,
   ELAINE_TOOL_FAMILY_SENTINELS,
@@ -12,8 +13,8 @@ import { evaluateForecastDateCoverage } from "./weather-coverage";
 
 describe("Elaine deterministic evaluation corpus", () => {
   it("is versioned, non-sensitive, and asserts positive and forbidden behavior", () => {
-    expect(ELAINE_EVALUATION_CORPUS.version).toBe(2);
-    expect(ELAINE_EVALUATION_CORPUS.scenarios).toHaveLength(9);
+    expect(ELAINE_EVALUATION_CORPUS.version).toBe(3);
+    expect(ELAINE_EVALUATION_CORPUS.scenarios).toHaveLength(18);
     expect(
       new Set(ELAINE_EVALUATION_CORPUS.scenarios.map(({ id }) => id)).size,
     ).toBe(ELAINE_EVALUATION_CORPUS.scenarios.length);
@@ -77,49 +78,62 @@ describe("Elaine deterministic evaluation corpus", () => {
 
   it("prints a concise candidate quality summary for CI and Replit", () => {
     const scenarios = ELAINE_EVALUATION_CORPUS.scenarios;
-    const summary = {
+    const passingResults = scenarios.map(({ id }) => ({
+      scenarioId: id,
+      passed: true,
+      toolSequencePassed: true,
+      confirmationPassed: true,
+      terminalStatusPassed: true,
+      requiredFactsPassed: true,
+      forbiddenBehaviorPassed: true,
+    }));
+    const summary = buildElaineEvaluationReport({
       corpusVersion: ELAINE_EVALUATION_CORPUS.version,
-      scenarios: scenarios.length,
-      categories: new Set(scenarios.map(({ category }) => category)).size,
-      positiveInvariantGroups: scenarios.reduce(
-        (total, scenario) =>
-          total +
-          scenario.expectedToolSequence.length +
-          scenario.requiredAnswerFacts.length +
-          2,
-        0,
-      ),
-      forbiddenInvariantGroups: scenarios.reduce(
-        (total, scenario) =>
-          total +
-          scenario.forbiddenTools.length +
-          scenario.forbiddenToolSequences.length +
-          scenario.forbiddenAnswerFacts.length,
-        0,
-      ),
-      metrics: {
-        planValidity: 2,
-        dependencyOrdering: 2,
-        correctAndForbiddenToolChoice: scenarios.length,
-        groundedIdsAndDates: 2,
-        confirmationPolicy: 1,
-        terminalStatus: scenarios.length,
-        boundedReplans: 2,
-        duplicateActionPrevention: 2,
-        traceRedactionAndCompleteness: 2,
-      },
-      liveProviderCalls: 0,
-    };
+      scenarios,
+      candidate: passingResults,
+      baseline: passingResults,
+    });
 
     console.info("Elaine deterministic candidate report", summary);
     expect(summary).toMatchObject({
-      corpusVersion: 2,
-      scenarios: 9,
-      categories: 9,
-      liveProviderCalls: 0,
+      corpusVersion: 3,
+      scenarioCount: 18,
+      passed: 18,
+      passRate: 1,
+      safetyPassRate: 1,
+      sourceRoutingPassRate: 1,
+      memoryPassRate: 1,
+      durableTaskPassRate: 1,
+      regressionCount: 0,
+      gatePassed: true,
     });
-    expect(Object.values(summary.metrics).every((count) => count > 0)).toBe(
-      true,
+  });
+
+  it("fails the candidate gate for a legacy regression", () => {
+    const scenarios = ELAINE_EVALUATION_CORPUS.scenarios;
+    const baseline = scenarios.map(({ id }) => ({
+      scenarioId: id,
+      passed: true,
+      toolSequencePassed: true,
+      confirmationPassed: true,
+      terminalStatusPassed: true,
+      requiredFactsPassed: true,
+      forbiddenBehaviorPassed: true,
+    }));
+    const candidate = baseline.map((result) =>
+      result.scenarioId === "legacy-tool-families"
+        ? { ...result, passed: false, toolSequencePassed: false }
+        : result,
     );
+    const report = buildElaineEvaluationReport({
+      corpusVersion: ELAINE_EVALUATION_CORPUS.version,
+      scenarios,
+      candidate,
+      baseline,
+    });
+    expect(report).toMatchObject({
+      regressionCount: 1,
+      gatePassed: false,
+    });
   });
 });

@@ -227,6 +227,30 @@ async function processOne(
       signal: jobController.signal,
       updateProgress: (progressPercent, message) =>
         updateProgress(job.id, leaseOwner, progressPercent, message),
+      saveCheckpoint: async (result, progressPercent, message) => {
+        const boundedProgress = Number.isFinite(progressPercent)
+          ? Math.max(0, Math.min(100, Math.round(progressPercent)))
+          : 0;
+        const saved = await pool.query(
+          `UPDATE app_jobs
+           SET result = $3::jsonb,
+               progress_percent = $4,
+               progress_message = $5,
+               updated_at = now()
+           WHERE id = $1
+             AND status = 'running'
+             AND lease_owner = $2
+           RETURNING id`,
+          [
+            job.id,
+            leaseOwner,
+            JSON.stringify(result),
+            boundedProgress,
+            message.slice(0, 500),
+          ],
+        );
+        return (saved.rowCount ?? saved.rows.length) > 0;
+      },
     });
     const succeeded = await markSucceeded(job.id, leaseOwner);
     if (!succeeded) {

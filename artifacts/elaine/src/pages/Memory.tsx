@@ -286,7 +286,12 @@ function MemoryCard({ item, onDeleted, onUpdated }: MemoryCardProps) {
           </span>
         )}
         <span className="ml-auto text-xs text-muted-foreground">
-          {formatRelative(item.createdAt)}
+          {item.lastConfirmedAt
+            ? `Confirmed ${formatRelative(item.lastConfirmedAt).toLowerCase()}`
+            : `Added ${formatRelative(item.createdAt).toLowerCase()}`}
+        </span>
+        <span className="text-xs text-muted-foreground">
+          {item.source.replace(/_/g, " ")}
         </span>
         {expiry && (
           <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
@@ -453,7 +458,7 @@ export default function Memory() {
   });
 
   function refresh() {
-    qc.invalidateQueries({ queryKey: getListElaineMemoryQueryKey() });
+    void qc.invalidateQueries({ queryKey: getListElaineMemoryQueryKey() });
   }
 
   function handleClearSummary() {
@@ -512,8 +517,8 @@ export default function Memory() {
                 Conversation Summary
               </p>
               <p className="text-xs text-muted-foreground">
-                A rolling portrait of your household — updated automatically
-                after every conversation
+                Your personal continuity summary — explicit facts remain
+                separately auditable below
               </p>
             </div>
             {summary && (

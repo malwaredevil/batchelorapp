@@ -889,9 +889,37 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE elaine_memory ADD COLUMN IF NOT EXISTS active      BOOLEAN   NOT NULL DEFAULT true`,
   `ALTER TABLE elaine_memory ADD COLUMN IF NOT EXISTS deleted_at  TIMESTAMPTZ`,
   `ALTER TABLE elaine_memory ADD COLUMN IF NOT EXISTS updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()`,
+  `ALTER TABLE elaine_memory ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'legacy'`,
+  `ALTER TABLE elaine_memory ADD COLUMN IF NOT EXISTS last_confirmed_at TIMESTAMPTZ`,
+  `ALTER TABLE elaine_memory ADD COLUMN IF NOT EXISTS confidence NUMERIC(4,3) NOT NULL DEFAULT 0.500`,
+  `ALTER TABLE elaine_memory ADD COLUMN IF NOT EXISTS correction_of_id INTEGER`,
   `CREATE INDEX IF NOT EXISTS elaine_memory_scope_active_idx ON elaine_memory (scope, active)`,
   `CREATE INDEX IF NOT EXISTS elaine_memory_owner_idx        ON elaine_memory (owner_user_id)`,
   `CREATE INDEX IF NOT EXISTS elaine_memory_expires_idx      ON elaine_memory (expires_at) WHERE active = true`,
+  `CREATE INDEX IF NOT EXISTS elaine_memory_confirmed_idx    ON elaine_memory (last_confirmed_at DESC) WHERE active = true`,
+
+  `CREATE TABLE IF NOT EXISTS elaine_memory_events (
+    id                  SERIAL PRIMARY KEY,
+    memory_id           INTEGER REFERENCES elaine_memory(id) ON DELETE SET NULL,
+    previous_memory_id  INTEGER,
+    user_id             INTEGER NOT NULL,
+    action              TEXT NOT NULL,
+    metadata            JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE elaine_memory_events ENABLE ROW LEVEL SECURITY`,
+  `DO $$ BEGIN
+     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+       REVOKE ALL ON TABLE elaine_memory_events FROM anon;
+     END IF;
+     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+       REVOKE ALL ON TABLE elaine_memory_events FROM authenticated;
+     END IF;
+   END $$`,
+  `CREATE INDEX IF NOT EXISTS elaine_memory_events_memory_idx
+     ON elaine_memory_events (memory_id)`,
+  `CREATE INDEX IF NOT EXISTS elaine_memory_events_user_created_idx
+     ON elaine_memory_events (user_id, created_at DESC)`,
 
   `CREATE TABLE IF NOT EXISTS elaine_nudges (
     id          SERIAL PRIMARY KEY,
@@ -1059,6 +1087,8 @@ export const STATEMENTS: string[] = [
     completed_at         TIMESTAMPTZ
   )`,
   `ALTER TABLE elaine_turn_traces ENABLE ROW LEVEL SECURITY`,
+  `ALTER TABLE elaine_turn_traces ADD COLUMN IF NOT EXISTS source_route JSONB`,
+  `ALTER TABLE elaine_turn_traces ADD COLUMN IF NOT EXISTS observations JSONB NOT NULL DEFAULT '[]'::jsonb`,
   // Trace rows are server diagnostics, not a Supabase Data API resource.
   // Supabase installs broad default table grants; revoke them when those
   // roles exist while keeping fresh vanilla-Postgres bootstrap compatible.

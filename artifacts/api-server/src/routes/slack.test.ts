@@ -374,6 +374,7 @@ describe("slack.turn job handler — worker execution", () => {
       attempt: 1,
       signal: new AbortController().signal,
       updateProgress: vi.fn().mockResolvedValue(undefined),
+      saveCheckpoint: vi.fn().mockResolvedValue(true),
     };
   }
 

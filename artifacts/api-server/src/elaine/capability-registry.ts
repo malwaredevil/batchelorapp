@@ -47,7 +47,7 @@ function policies(
     kind: defaults.kind,
     risk:
       defaults.kind === "action" &&
-      /^(?:cancel_|delete_|disconnect_|remove_|revoke_)/.test(toolName)
+      /^(?:cancel_|delete_|disconnect_|forget_|remove_|revoke_)/.test(toolName)
         ? "high"
         : defaults.risk,
     auth: defaults.auth,
@@ -336,6 +336,40 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
     audit: "runtime_observation",
     retry: "safe",
     channels: ["web", "sms", "voice"],
+  }),
+  ...policies(["correct_memory", "forget_memory"], {
+    ...ACTION_DEFAULTS,
+    domain: "memory",
+    executorPrefix: "memoryAction",
+    channels: ["web"],
+  }),
+  ...policies(["queue_research_task", "cancel_elaine_task"], {
+    ...ACTION_DEFAULTS,
+    domain: "research",
+    executorPrefix: "researchTaskAction",
+    channels: ["web"],
+  }),
+  ...policies(["list_memories"], {
+    domain: "memory",
+    kind: "read",
+    risk: "low",
+    auth: "session",
+    confirmation: "never",
+    executorPrefix: "memoryRead",
+    audit: "runtime_observation",
+    retry: "read_only",
+    channels: ["web"],
+  }),
+  ...policies(["list_elaine_tasks", "get_elaine_task"], {
+    domain: "research",
+    kind: "read",
+    risk: "none",
+    auth: "session",
+    confirmation: "never",
+    executorPrefix: "researchTaskRead",
+    audit: "runtime_observation",
+    retry: "read_only",
+    channels: ["web"],
   }),
   ...policies(["web_search", "fetch_page", "consult_experts", "ebay_search"], {
     domain: "research",

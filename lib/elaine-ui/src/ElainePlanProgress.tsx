@@ -66,6 +66,17 @@ export function ElainePlanProgress({
       </summary>
       <div className="mt-2 space-y-2 border-t border-border/50 pt-2">
         <p className="text-muted-foreground">{trace.goal}</p>
+        {trace.sourceRoute && (
+          <p className="text-muted-foreground">
+            Source plan:{" "}
+            {trace.sourceRoute.preferredKinds
+              .map((source) => source.replace(/_/g, " "))
+              .join(" → ")}
+            {trace.sourceRoute.requiresRetrievedEvidence
+              ? " · live evidence required"
+              : ""}
+          </p>
+        )}
         <ol className="space-y-1.5" aria-label="Elaine plan progress">
           {trace.plan.steps.map((step) => (
             <li key={step.id} className="flex items-start gap-2">
@@ -85,6 +96,12 @@ export function ElainePlanProgress({
         </ol>
         {trace.verification?.summary && (
           <p className="text-muted-foreground">{trace.verification.summary}</p>
+        )}
+        {(trace.observations?.length ?? 0) > 0 && (
+          <p className="text-muted-foreground">
+            {trace.observations?.filter((item) => item.success).length ?? 0} of{" "}
+            {trace.observations?.length ?? 0} evidence sources succeeded
+          </p>
         )}
         {!trace.traceAvailable && (
           <p className="text-amber-600 dark:text-amber-400">

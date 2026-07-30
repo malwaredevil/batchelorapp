@@ -93,10 +93,54 @@ export const ElaineObservationSchema = z.object({
   evidenceSummary: z.string().max(220),
   resultReference: z.string().max(240).optional(),
   source: z.string().max(120).optional(),
+  provenance: z
+    .object({
+      sourceKind: z.enum([
+        "current_context",
+        "batchelor_app",
+        "first_party_provider",
+        "specialized_api",
+        "web",
+        "model_synthesis",
+      ]),
+      sourceName: z.string().max(120),
+      observedAt: z.iso.datetime(),
+      evidenceKind: z.enum(["retrieved_fact", "inference"]),
+      confidence: z.enum(["high", "medium", "low"]),
+      sourceUrl: z.string().max(500).optional(),
+      internalReference: z.string().max(240).optional(),
+      coverage: z.object({
+        status: z.enum(["matched", "partial", "outside", "unknown"]),
+        start: z.string().max(80).optional(),
+        end: z.string().max(80).optional(),
+        geography: z.string().max(160).optional(),
+      }),
+    })
+    .optional(),
   startedAt: z.iso.datetime(),
   completedAt: z.iso.datetime(),
 });
 export type ElaineObservation = z.infer<typeof ElaineObservationSchema>;
+
+export type ElaineSourceKind =
+  | "current_context"
+  | "batchelor_app"
+  | "first_party_provider"
+  | "specialized_api"
+  | "web"
+  | "model_synthesis";
+
+export type ElaineObservationProvenance = NonNullable<
+  ElaineObservation["provenance"]
+>;
+
+export interface ElaineSourceRoute {
+  freshness: "stable" | "recent" | "current";
+  requiresRetrievedEvidence: boolean;
+  preferredKinds: ElaineSourceKind[];
+  fallbackKinds: ElaineSourceKind[];
+  rationale: string;
+}
 
 export const ElaineTerminalStatusSchema = z.enum([
   "completed",
@@ -160,6 +204,8 @@ export interface ElaineRuntimeTrace {
   requestClass: ElaineRequestClass;
   goal: string;
   plan: ElainePlan;
+  sourceRoute?: ElaineSourceRoute;
+  observations?: ElaineObservation[];
   events: ElaineRuntimeEvent[];
   verification: ElaineVerification | null;
   status: ElaineTerminalStatus | "running";

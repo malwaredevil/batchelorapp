@@ -6,6 +6,11 @@ import {
   getUserNotifications,
   getUserPreferences,
 } from "../lib/notifications";
+import { getRelevantElaineMemory } from "../lib/elaine-memory";
+import {
+  getElaineTaskForUser,
+  listElaineTasksForUser,
+} from "../lib/elaine-tasks";
 
 export const LIST_NOTES_TOOL_NAME = "list_notes";
 export const GET_NOTE_TOOL_NAME = "get_note";
@@ -13,6 +18,9 @@ export const LIST_NOTIFICATIONS_TOOL_NAME = "list_notifications";
 export const GET_NOTIFICATION_COUNTS_TOOL_NAME = "get_notification_counts";
 export const GET_NOTIFICATION_PREFERENCES_TOOL_NAME =
   "get_notification_preferences";
+export const LIST_ELAINE_MEMORIES_TOOL_NAME = "list_memories";
+export const LIST_ELAINE_TASKS_TOOL_NAME = "list_elaine_tasks";
+export const GET_ELAINE_TASK_TOOL_NAME = "get_elaine_task";
 
 const ListNotesPayload = z.object({
   limit: z.number().int().min(1).max(100).default(30),
@@ -26,6 +34,16 @@ const ListNotificationsPayload = z.object({
   unread: z.boolean().optional(),
   page: z.number().int().positive().default(1),
   pageSize: z.number().int().positive().max(100).default(30),
+});
+const ListMemoriesPayload = z.object({
+  query: z.string().trim().min(1).max(500).default("household preferences"),
+  limit: z.number().int().min(1).max(30).default(15),
+});
+const ListElaineTasksPayload = z.object({
+  limit: z.number().int().min(1).max(100).default(30),
+});
+const GetElaineTaskPayload = z.object({
+  taskId: z.number().int().positive(),
 });
 
 export const universalReadTools: OpenAI.Chat.Completions.ChatCompletionTool[] =
@@ -96,6 +114,52 @@ export const universalReadTools: OpenAI.Chat.Completions.ChatCompletionTool[] =
         parameters: { type: "object", properties: {} },
       },
     },
+    {
+      type: "function",
+      function: {
+        name: LIST_ELAINE_MEMORIES_TOOL_NAME,
+        description:
+          "Find the current user's relevant accessible Elaine memories, including exact numeric IDs, scope, source, confidence, and last-confirmed time. Use this before proposing a correction or deletion; never guess an ID.",
+        parameters: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description:
+                "Words describing the memory topic the user is asking about",
+            },
+            limit: { type: "integer", minimum: 1, maximum: 30 },
+          },
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: LIST_ELAINE_TASKS_TOOL_NAME,
+        description:
+          "List the current user's own Elaine background research tasks, with exact task IDs, states, progress, and completion summaries.",
+        parameters: {
+          type: "object",
+          properties: {
+            limit: { type: "integer", minimum: 1, maximum: 100 },
+          },
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: GET_ELAINE_TASK_TOOL_NAME,
+        description:
+          "Get one of the current user's Elaine background research tasks by an exact task ID returned by list_elaine_tasks.",
+        parameters: {
+          type: "object",
+          properties: { taskId: { type: "integer" } },
+          required: ["taskId"],
+        },
+      },
+    },
   ];
 
 function toolResult(value: unknown): string {
@@ -134,6 +198,38 @@ export async function executeUniversalReadTool(
   }
   if (name === GET_NOTIFICATION_PREFERENCES_TOOL_NAME) {
     return toolResult({ entries: await getUserPreferences(userId) });
+  }
+  if (name === LIST_ELAINE_MEMORIES_TOOL_NAME) {
+    const parsed = ListMemoriesPayload.safeParse(input);
+    if (!parsed.success) return "Invalid memory list request.";
+    const result = await getRelevantElaineMemory({
+      userId,
+      query: parsed.data.query,
+      limit: parsed.data.limit,
+    });
+    return toolResult({
+      memories: result.memories.map((memory) => ({
+        id: memory.id,
+        content: memory.content,
+        scope: memory.scope,
+        source: memory.source,
+        confidence: memory.confidence,
+        lastConfirmedAt: memory.lastConfirmedAt,
+      })),
+      returned: result.memories.length,
+    });
+  }
+  if (name === LIST_ELAINE_TASKS_TOOL_NAME) {
+    const parsed = ListElaineTasksPayload.safeParse(input);
+    if (!parsed.success) return "Invalid Elaine task list request.";
+    const tasks = await listElaineTasksForUser(userId, parsed.data.limit);
+    return toolResult({ tasks, returned: tasks.length });
+  }
+  if (name === GET_ELAINE_TASK_TOOL_NAME) {
+    const parsed = GetElaineTaskPayload.safeParse(input);
+    if (!parsed.success) return "Invalid Elaine task request.";
+    const task = await getElaineTaskForUser(userId, parsed.data.taskId);
+    return task ? toolResult(task) : "Elaine task not found.";
   }
   return null;
 }

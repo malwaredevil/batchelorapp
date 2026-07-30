@@ -18,5 +18,8 @@ describe("startup readiness ordering", () => {
     expect(indexSource.indexOf("markStartupReady()")).toBeLessThan(
       indexSource.indexOf('startJobWorker("slack")'),
     );
+    expect(indexSource.indexOf("markStartupReady()")).toBeLessThan(
+      indexSource.indexOf('startJobWorker("ai")'),
+    );
   });
 });

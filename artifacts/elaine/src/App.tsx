@@ -19,6 +19,7 @@ import { InstallBanner } from "@workspace/web-core";
 import "@/features";
 import Chat from "@/pages/Chat";
 import Memory from "@/pages/Memory";
+import Tasks from "@/pages/Tasks";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -78,6 +79,7 @@ function Routes() {
           <Switch>
             <Route path="/" component={Chat} />
             <Route path="/memory" component={Memory} />
+            <Route path="/tasks" component={Tasks} />
             <Route component={NotFound} />
           </Switch>
         </main>

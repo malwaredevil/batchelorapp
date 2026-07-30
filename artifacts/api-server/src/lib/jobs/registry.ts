@@ -18,6 +18,11 @@ export type JobHandlerContext = {
   attempt: number;
   signal: AbortSignal;
   updateProgress(progressPercent: number, message: string): Promise<void>;
+  saveCheckpoint(
+    result: unknown,
+    progressPercent: number,
+    message: string,
+  ): Promise<boolean>;
 };
 
 export type JobDefinition<TPayload extends z.ZodTypeAny> = {
@@ -40,6 +45,26 @@ const emptyPayload = z.object({}).strict();
 // ---------------------------------------------------------------------------
 
 export const JOB_REGISTRY = [
+  {
+    type: "elaine.research",
+    queue: "ai",
+    payloadSchemaVersion: 1,
+    payloadSchema: z.object({
+      userId: z.number().int().positive(),
+      goal: z.string().min(1).max(500),
+      queries: z.array(z.string().min(1).max(500)).min(1).max(5),
+      traceId: z.string().uuid().optional(),
+      requestedAt: z.string().datetime(),
+      confirmationGrantedAt: z.string().datetime(),
+    }),
+    maxAttempts: 3,
+    idempotencyStrategy:
+      "One confirmed user/goal/query-set per UTC day. Checkpointed query indexes are skipped on retry; the task is read-only and has no non-idempotent side effects.",
+    handler: async (payload, context) => {
+      const { runElaineResearchTask } = await import("../elaine-tasks");
+      await runElaineResearchTask(payload, context);
+    },
+  },
   {
     type: "slack.turn",
     queue: "slack",

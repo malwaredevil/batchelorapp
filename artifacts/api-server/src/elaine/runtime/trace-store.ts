@@ -18,6 +18,8 @@ export async function createElaineTurnTrace(input: {
     requestClass: input.trace.requestClass,
     goal: input.trace.goal,
     plan: input.trace.plan,
+    sourceRoute: input.trace.sourceRoute ?? null,
+    observations: input.trace.observations ?? [],
     events: input.trace.events,
     verification: input.trace.verification,
     status: input.trace.status,
@@ -41,6 +43,8 @@ export async function finishElaineTurnTrace(input: {
       requestClass: input.trace.requestClass,
       goal: input.trace.goal,
       plan: input.trace.plan,
+      sourceRoute: input.trace.sourceRoute ?? null,
+      observations: input.trace.observations ?? [],
       events: input.trace.events,
       verification: input.trace.verification,
       status: input.trace.status,
@@ -64,6 +68,8 @@ export async function loadElaineTurnTracesForMessages(
       requestClass: elaineTurnTraces.requestClass,
       goal: elaineTurnTraces.goal,
       plan: elaineTurnTraces.plan,
+      sourceRoute: elaineTurnTraces.sourceRoute,
+      observations: elaineTurnTraces.observations,
       events: elaineTurnTraces.events,
       verification: elaineTurnTraces.verification,
       status: elaineTurnTraces.status,
@@ -88,6 +94,16 @@ export async function loadElaineTurnTracesForMessages(
       requestClass: row.requestClass as ElaineRuntimeTrace["requestClass"],
       goal: row.goal,
       plan: row.plan as ElaineRuntimeTrace["plan"],
+      ...(row.sourceRoute
+        ? {
+            sourceRoute: row.sourceRoute as NonNullable<
+              ElaineRuntimeTrace["sourceRoute"]
+            >,
+          }
+        : {}),
+      observations: row.observations as NonNullable<
+        ElaineRuntimeTrace["observations"]
+      >,
       events: row.events as ElaineRuntimeTrace["events"],
       verification:
         (row.verification as ElaineRuntimeTrace["verification"]) ?? null,

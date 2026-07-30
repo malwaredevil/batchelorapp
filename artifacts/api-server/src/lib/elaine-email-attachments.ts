@@ -255,7 +255,14 @@ export async function processEmailBodyAsDocument(params: {
   let storagePath: string;
   try {
     const bodyBuffer = Buffer.from(trimmed, "utf8");
-    storagePath = await uploadDocument(bodyBuffer, "text/plain", filename);
+    // Supabase Storage rejects text/plain (415). Use application/octet-stream
+    // so the binary bucket accepts the upload; the .txt extension still signals
+    // the content type to any downstream reader.
+    storagePath = await uploadDocument(
+      bodyBuffer,
+      "application/octet-stream",
+      filename,
+    );
   } catch (err) {
     logger.warn(
       { err, emailId: params.emailId },

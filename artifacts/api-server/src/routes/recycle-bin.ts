@@ -30,7 +30,13 @@ import { logActivity } from "../lib/soft-delete";
 
 const router: IRouter = Router();
 
-router.use(requireAuth);
+// Scope requireAuth to /recycle-bin paths only. This router is mounted without
+// a path prefix in routes/index.ts (router.use(recycleBinRouter)), so a blanket
+// router.use(requireAuth) would intercept every request that flows through the
+// routes chain — including unauthenticated webhook routes (/elaine/email-webhook,
+// /agentphone/webhook) that are mounted later. See the "Global requireAuth bug
+// in Express sub-routers" memory note.
+router.use("/recycle-bin", requireAuth);
 
 const PURGE_DAYS = 30;
 

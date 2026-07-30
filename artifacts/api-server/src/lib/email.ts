@@ -114,7 +114,7 @@ export async function sendReminderAlertEmail(
 // list of things to do"). Defaults to the verified app.batchelor.app domain;
 // can be overridden via ELAINE_FROM_EMAIL.
 const ELAINE_FROM_EMAIL =
-  process.env.ELAINE_FROM_EMAIL || "Elaine <elAIne@app.batchelor.app>";
+  process.env.ELAINE_FROM_EMAIL || "Elaine <elaine@app.batchelor.app>";
 
 function escapeHtml(input: string): string {
   return input

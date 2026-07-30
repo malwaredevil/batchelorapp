@@ -171,3 +171,9 @@ jobs:
           FROM pg_tables
           WHERE schemaname = 'public';
           SQL
+
+      # Pull requests also exercise the focused database unit suite. Main-push
+      # runs stay dedicated to proving the committed schema can bootstrap.
+      - name: Run database package tests
+        if: github.event_name == 'pull_request'
+        run: pnpm --filter @workspace/db run test

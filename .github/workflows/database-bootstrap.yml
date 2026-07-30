@@ -67,6 +67,24 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Some schema statements intentionally name Supabase's Data API roles.
+      # Recreate only those role names in the disposable PostgreSQL service;
+      # they are NOLOGIN and receive no application privileges.
+      - name: Prepare Supabase-compatible roles
+        run: |
+          psql "$DATABASE_URL" --set ON_ERROR_STOP=1 <<'SQL'
+          DO $roles$
+          BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+              EXECUTE 'CREATE ROLE anon NOLOGIN';
+            END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+              EXECUTE 'CREATE ROLE authenticated NOLOGIN';
+            END IF;
+          END
+          $roles$;
+          SQL
+
       # bootstrap.ts deliberately pins the Supabase CA for production
       # connections. For this non-TLS disposable PostgreSQL service, execute
       # the exact same STATEMENTS source through a local pg Pool instead.

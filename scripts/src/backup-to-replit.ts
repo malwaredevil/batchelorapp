@@ -652,6 +652,31 @@ CREATE TABLE IF NOT EXISTS elaine_memory (
   created_by_user_id  INTEGER NOT NULL,
   created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE elaine_memory ADD COLUMN IF NOT EXISTS type               TEXT        NOT NULL DEFAULT 'fact';
+ALTER TABLE elaine_memory ADD COLUMN IF NOT EXISTS scope              TEXT        NOT NULL DEFAULT 'household';
+ALTER TABLE elaine_memory ADD COLUMN IF NOT EXISTS category           TEXT        NOT NULL DEFAULT 'fact';
+ALTER TABLE elaine_memory ADD COLUMN IF NOT EXISTS sensitivity        TEXT        NOT NULL DEFAULT 'low';
+ALTER TABLE elaine_memory ADD COLUMN IF NOT EXISTS owner_user_id      INTEGER;
+ALTER TABLE elaine_memory ADD COLUMN IF NOT EXISTS expires_at         TIMESTAMPTZ;
+ALTER TABLE elaine_memory ADD COLUMN IF NOT EXISTS active             BOOLEAN     NOT NULL DEFAULT TRUE;
+ALTER TABLE elaine_memory ADD COLUMN IF NOT EXISTS deleted_at         TIMESTAMPTZ;
+ALTER TABLE elaine_memory ADD COLUMN IF NOT EXISTS updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE elaine_memory ADD COLUMN IF NOT EXISTS source             TEXT        NOT NULL DEFAULT 'legacy';
+ALTER TABLE elaine_memory ADD COLUMN IF NOT EXISTS last_confirmed_at  TIMESTAMPTZ;
+ALTER TABLE elaine_memory ADD COLUMN IF NOT EXISTS confidence         NUMERIC(4,3) NOT NULL DEFAULT 0.500;
+ALTER TABLE elaine_memory ADD COLUMN IF NOT EXISTS correction_of_id   INTEGER;
+
+CREATE TABLE IF NOT EXISTS elaine_memory_events (
+  id                  SERIAL PRIMARY KEY,
+  memory_id           INTEGER,
+  previous_memory_id  INTEGER,
+  user_id             INTEGER NOT NULL,
+  action              TEXT NOT NULL,
+  metadata            JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS elaine_memory_events_memory_idx      ON elaine_memory_events (memory_id);
+CREATE INDEX IF NOT EXISTS elaine_memory_events_user_created_idx ON elaine_memory_events (user_id, created_at DESC);
 
 -- Elaine inbound email (Resend webhook)
 CREATE TABLE IF NOT EXISTS elaine_email_conversations (
@@ -2440,10 +2465,44 @@ async function main() {
 
   summary["elaine_memory"] = await copyTable(source, dest, {
     table: "elaine_memory",
-    columns: ["id", "content", "created_by_user_id", "created_at"],
+    columns: [
+      "id",
+      "type",
+      "content",
+      "scope",
+      "category",
+      "sensitivity",
+      "owner_user_id",
+      "expires_at",
+      "active",
+      "deleted_at",
+      "source",
+      "last_confirmed_at",
+      "confidence",
+      "correction_of_id",
+      "updated_at",
+      "created_by_user_id",
+      "created_at",
+    ],
     orderBy: "id",
   });
   await resetSequence(dest, "elaine_memory", "id");
+
+  summary["elaine_memory_events"] = await copyTable(source, dest, {
+    table: "elaine_memory_events",
+    columns: [
+      "id",
+      "memory_id",
+      "previous_memory_id",
+      "user_id",
+      "action",
+      "metadata",
+      "created_at",
+    ],
+    orderBy: "id",
+    jsonbColumns: ["metadata"],
+  });
+  await resetSequence(dest, "elaine_memory_events", "id");
 
   summary["elaine_nudges"] = await copyTable(source, dest, {
     table: "elaine_nudges",

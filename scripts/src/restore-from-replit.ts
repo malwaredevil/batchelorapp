@@ -724,7 +724,7 @@ async function main() {
 
   // ── Travels ───────────────────────────────────────────────────────────────
   await dest.query(
-    "TRUNCATE messenger_reactions, messenger_link_previews, messenger_attachments, messenger_messages, messenger_conversations, travels_calendar_trip_suggestions, travels_custom_document_types, travels_trip_card_collapse_state, travels_card_layout_preferences, travels_gmail_scan_decisions, travels_gmail_connections, elaine_history_messages, elaine_history_conversations, elaine_global_config, elaine_nudges, elaine_memory, elaine_settings, elaine_email_webhook_deliveries, elaine_email_conversations, elaine_conversations, travels_reminder_calendar_events, travels_connected_calendars, travels_google_calendar_connections, travels_calendar_settings, travels_reminder_alert_log, travels_reminders, travels_wishlist, travels_trip_photos, travels_trip_documents CASCADE",
+    "TRUNCATE messenger_reactions, messenger_link_previews, messenger_attachments, messenger_messages, messenger_conversations, travels_calendar_trip_suggestions, travels_custom_document_types, travels_trip_card_collapse_state, travels_card_layout_preferences, travels_gmail_scan_decisions, travels_gmail_connections, elaine_history_messages, elaine_history_conversations, elaine_global_config, elaine_nudges, elaine_memory_events, elaine_memory, elaine_settings, elaine_email_webhook_deliveries, elaine_email_conversations, elaine_conversations, travels_reminder_calendar_events, travels_connected_calendars, travels_google_calendar_connections, travels_calendar_settings, travels_reminder_alert_log, travels_reminders, travels_wishlist, travels_trip_photos, travels_trip_documents CASCADE",
   );
   await dest.query("TRUNCATE travels_trips CASCADE");
 
@@ -941,10 +941,44 @@ async function main() {
 
   await copyTable(source, dest, {
     table: "elaine_memory",
-    columns: ["id", "content", "created_by_user_id", "created_at"],
+    columns: [
+      "id",
+      "type",
+      "content",
+      "scope",
+      "category",
+      "sensitivity",
+      "owner_user_id",
+      "expires_at",
+      "active",
+      "deleted_at",
+      "source",
+      "last_confirmed_at",
+      "confidence",
+      "correction_of_id",
+      "updated_at",
+      "created_by_user_id",
+      "created_at",
+    ],
     orderBy: "id",
   });
   await resetSequence(dest, "elaine_memory", "id");
+
+  await copyTable(source, dest, {
+    table: "elaine_memory_events",
+    columns: [
+      "id",
+      "memory_id",
+      "previous_memory_id",
+      "user_id",
+      "action",
+      "metadata",
+      "created_at",
+    ],
+    orderBy: "id",
+    jsonbColumns: ["metadata"],
+  });
+  await resetSequence(dest, "elaine_memory_events", "id");
 
   await copyTable(source, dest, {
     table: "elaine_nudges",

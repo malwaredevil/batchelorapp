@@ -166,6 +166,14 @@ export class ElaineTurnRuntime {
     );
   }
 
+  canAttemptAnotherModelRound(): boolean {
+    this.refreshElapsed();
+    return (
+      this.trace.usage.modelRounds < this.budget.maxModelRounds &&
+      this.trace.usage.elapsedMs <= this.budget.maxElapsedMs
+    );
+  }
+
   registerToolCalls(calls: RuntimeToolCall[]): RuntimeScheduledToolCall[] {
     const completedIds = new Set(
       this.trace.plan.steps
@@ -356,16 +364,43 @@ export class ElaineTurnRuntime {
       for (const step of this.trace.plan.steps) {
         if (step.kind === "respond" && step.status === "planned") {
           this.updateStep(step, "completed", "Response prepared");
+        } else if (step.kind === "clarify" && step.status === "planned") {
+          this.updateStep(
+            step,
+            "waiting_input",
+            "Waiting for the user's answer",
+          );
         }
       }
     }
 
+    const waitingInputStepIds = new Set(
+      this.trace.plan.steps
+        .filter((step) => step.status === "waiting_input")
+        .map((step) => step.id),
+    );
+    const deferredByInput = new Set(waitingInputStepIds);
+    let foundDeferredStep = true;
+    while (foundDeferredStep) {
+      foundDeferredStep = false;
+      for (const step of this.trace.plan.steps) {
+        if (
+          !deferredByInput.has(step.id) &&
+          step.dependsOn.some((dependency) => deferredByInput.has(dependency))
+        ) {
+          deferredByInput.add(step.id);
+          foundDeferredStep = true;
+        }
+      }
+    }
     const unfinished = this.trace.plan.steps.filter(
       (step) =>
         step.required &&
         !["completed", "adjusted"].includes(step.status) &&
-        step.status !== "waiting_confirmation",
+        !["waiting_confirmation", "waiting_input"].includes(step.status) &&
+        !deferredByInput.has(step.id),
     );
+    const waitingForInput = waitingInputStepIds.size > 0;
     const waiting =
       input.hasPendingConfirmation ||
       this.trace.plan.steps.some(
@@ -381,12 +416,16 @@ export class ElaineTurnRuntime {
     const missingCurrentEvidence =
       this.trace.sourceRoute?.requiresRetrievedEvidence === true &&
       !retrievalDeferredByPendingResearch &&
+      !waitingForInput &&
       !hasCurrentRetrievedEvidence(this.trace.observations ?? []);
     const satisfiedCriteria =
-      unfinished.length === 0 && !missingCurrentEvidence
+      unfinished.length === 0 && !missingCurrentEvidence && !waitingForInput
         ? [...this.trace.plan.completionCriteria]
         : [];
     const unsatisfiedCriteria = [
+      ...this.trace.plan.steps
+        .filter((step) => step.status === "waiting_input")
+        .map((step) => step.expectedEvidence),
       ...(missingCurrentEvidence
         ? ["A successful current source observation with matching coverage"]
         : []),
@@ -430,9 +469,11 @@ export class ElaineTurnRuntime {
     const status: ElaineVerification["status"] =
       unfinished.length > 0 || missingCurrentEvidence
         ? "blocked"
-        : waiting
-          ? "awaiting_confirmation"
-          : "satisfied";
+        : waitingForInput
+          ? "awaiting_input"
+          : waiting
+            ? "awaiting_confirmation"
+            : "satisfied";
     const budgetExhausted =
       (unfinished.length > 0 || missingCurrentEvidence) &&
       this.budgetWasExhausted();
@@ -445,7 +486,9 @@ export class ElaineTurnRuntime {
             : `Could not satisfy ${unfinished.length} required plan step${unfinished.length === 1 ? "" : "s"}`
         : status === "awaiting_confirmation"
           ? "The answer is ready and one or more actions await confirmation"
-          : "Plan criteria satisfied";
+          : status === "awaiting_input"
+            ? "Elaine asked for the missing input needed to continue"
+            : "Plan criteria satisfied";
     const verification: ElaineVerification = {
       status,
       satisfiedCriteria,
@@ -464,7 +507,9 @@ export class ElaineTurnRuntime {
         ? "completed"
         : this.trace.verification?.status === "awaiting_confirmation"
           ? "awaiting_confirmation"
-          : "blocked");
+          : this.trace.verification?.status === "awaiting_input"
+            ? "awaiting_input"
+            : "blocked");
     this.trace.status = resolvedStatus;
     this.trace.completedAt = this.now().toISOString();
     this.refreshElapsed();
@@ -474,9 +519,11 @@ export class ElaineTurnRuntime {
         ? "Request completed"
         : resolvedStatus === "awaiting_confirmation"
           ? "Ready for confirmation"
-          : resolvedStatus === "blocked"
-            ? "Completed with a limitation"
-            : `Turn ${resolvedStatus}`,
+          : resolvedStatus === "awaiting_input"
+            ? "Waiting for the user's answer"
+            : resolvedStatus === "blocked"
+              ? "Completed with a limitation"
+              : `Turn ${resolvedStatus}`,
       { status: resolvedStatus },
     );
     return this.snapshot();

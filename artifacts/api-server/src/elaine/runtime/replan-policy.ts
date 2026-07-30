@@ -1,5 +1,6 @@
 import type { ElainePlanStep, ElaineRuntimeTrace } from "./contracts";
 import { SPECIALIZED_CURRENT_TOOL_NAMES } from "./model-tool-policy";
+import { hasCurrentRetrievedEvidence } from "./source-policy";
 
 export interface ElaineReplanToolSelection {
   toolName: string;
@@ -8,6 +9,11 @@ export interface ElaineReplanToolSelection {
     | "unattempted_required_lookup"
     | "current_web_fallback"
     | "bounded_retry";
+}
+
+export interface ElaineSatisfiedFallbackAdjustment {
+  replacementToolName: string;
+  replacesStepIds: string[];
 }
 
 function dependenciesReady(
@@ -29,6 +35,62 @@ function isSafeRequiredRead(
     typeof step.toolName === "string" &&
     availableToolNames.has(step.toolName)
   );
+}
+
+/**
+ * Finds a successful current read that already replaced failed specialized
+ * sources. The caller can adjust those failures before verification without
+ * performing the successful fallback a second time.
+ */
+export function findElaineSatisfiedFallback(
+  trace: ElaineRuntimeTrace,
+): ElaineSatisfiedFallbackAdjustment | null {
+  if (trace.sourceRoute?.requiresRetrievedEvidence !== true) return null;
+
+  const successfulFallback = (trace.observations ?? []).find((observation) => {
+    if (
+      !observation.stepId ||
+      !observation.success ||
+      !observation.provenance ||
+      !trace.sourceRoute?.fallbackKinds.includes(
+        observation.provenance.sourceKind,
+      ) ||
+      !hasCurrentRetrievedEvidence([observation])
+    ) {
+      return false;
+    }
+    const step = trace.plan.steps.find(
+      (candidate) => candidate.id === observation.stepId,
+    );
+    return (
+      step?.status === "completed" &&
+      step.riskClass === "read_only" &&
+      step.confirmation === "none" &&
+      ["lookup", "research"].includes(step.kind)
+    );
+  });
+  if (!successfulFallback) return null;
+
+  const replacesStepIds = trace.plan.steps
+    .filter(
+      (step) =>
+        step.status === "failed" &&
+        step.required &&
+        step.riskClass === "read_only" &&
+        step.confirmation === "none" &&
+        ["lookup", "research"].includes(step.kind) &&
+        typeof step.toolName === "string" &&
+        step.toolName !== successfulFallback.toolName &&
+        SPECIALIZED_CURRENT_TOOL_NAMES.has(step.toolName),
+    )
+    .map((step) => step.id);
+
+  return replacesStepIds.length > 0
+    ? {
+        replacementToolName: successfulFallback.toolName,
+        replacesStepIds,
+      }
+    : null;
 }
 
 /**

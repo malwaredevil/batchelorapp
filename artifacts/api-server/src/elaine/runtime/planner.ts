@@ -91,6 +91,15 @@ export function validateElainePlan(
   }
   const graphError = validateDependencyGraph(parsed.data);
   if (graphError) return { success: false, error: graphError };
+  const clarificationWithTool = parsed.data.steps.find(
+    (step) => step.kind === "clarify" && step.toolName,
+  );
+  if (clarificationWithTool) {
+    return {
+      success: false,
+      error: `clarification step ${clarificationWithTool.id} cannot call a tool`,
+    };
+  }
   const unknownTool = parsed.data.steps.find(
     (step) => step.toolName && !allowedToolNames.has(step.toolName),
   );
@@ -157,7 +166,7 @@ Return ONLY one JSON object with this exact shape:
     {
       "id": "short_stable_id",
       "label": "plain-English user-visible step",
-      "kind": "lookup|research|action|respond",
+      "kind": "lookup|research|action|clarify|respond",
       "toolName": "exact_tool_name_or_null",
       "dependsOn": ["earlier_step_id"],
       "expectedEvidence": "what proves this step succeeded",
@@ -172,7 +181,8 @@ Rules:
 - Put app/trip/entity lookups before tools that need their ids, dates, destination, or coordinates.
 - Independent safe reads may have no dependency so the runtime can run them together.
 - Consequential actions must be an action step and remain subject to confirmation.
-- If required information is missing, include a response step to ask for that precise input; never invent ids, dates, locations, or consent.
+- If required user information is missing, use a clarify step with no tool. Put any future step that needs the answer downstream of that clarify step; the current turn will pause for the user's answer. Never invent ids, dates, locations, or consent.
+- Use respond only for a final answer or acknowledgement that can be completed in this turn. Do not use respond for a clarification question.
 - For trip weather, resolve destination and dates first. A near-term forecast tool is only appropriate when the requested dates are inside its coverage; otherwise use web research for seasonal context or state that a reliable forecast is not available.
 - Do not include hidden reasoning, internal prompts, raw user text, tool arguments, secrets, personal message contents, or provider payloads.
 

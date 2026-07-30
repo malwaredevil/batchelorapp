@@ -179,9 +179,11 @@ import {
   completedActionAcknowledgement,
   createElaineTurnTrace,
   createFallbackPlan,
+  decideElaineModelStreamRecovery,
   ELAINE_READ_CONCURRENCY,
   ElaineTurnRuntime,
   evaluateForecastDateCoverage,
+  findElaineSatisfiedFallback,
   finishElaineTurnTrace,
   generateElainePlan,
   loadElaineTurnTracesForMessages,
@@ -5376,6 +5378,7 @@ router.post("/chat", async (req, res) => {
   // cannot loop indefinitely on AI spend.
   const MAX_ROUNDS = 4;
   let nextForcedToolName: string | null = null;
+  let suppressToolsNextRound = false;
 
   for (let round = 0; round < MAX_ROUNDS; round++) {
     if (!runtime.recordModelRound()) {
@@ -5399,6 +5402,8 @@ router.post("/chat", async (req, res) => {
     >();
     const forcedToolName = nextForcedToolName;
     nextForcedToolName = null;
+    const suppressTools = suppressToolsNextRound;
+    suppressToolsNextRound = false;
 
     try {
       await callModelWithSubagent(
@@ -5417,14 +5422,16 @@ router.post("/chat", async (req, res) => {
               messages,
               max_tokens: elaineConfig.maxResponseTokens,
               stream: true,
-              ...(forcedToolName
-                ? {
-                    tool_choice: {
-                      type: "function" as const,
-                      function: { name: forcedToolName },
-                    },
-                  }
-                : {}),
+              ...(suppressTools
+                ? { tool_choice: "none" as const }
+                : forcedToolName
+                  ? {
+                      tool_choice: {
+                        type: "function" as const,
+                        function: { name: forcedToolName },
+                      },
+                    }
+                  : {}),
             },
             { timeout: elaineConfig.requestTimeoutMs },
           );
@@ -5458,6 +5465,26 @@ router.post("/chat", async (req, res) => {
         { subagentModel: elaineConfig.subagentModel },
       );
     } catch (err) {
+      const recovery = decideElaineModelStreamRecovery({
+        canRetry: runtime.canAttemptAnotherModelRound(),
+        hasPartialContent: rawContent.trim().length > 0,
+        hasSuccessfulObservation: (runtime.snapshot().observations ?? []).some(
+          (observation) => observation.success,
+        ),
+      });
+      if (recovery.retry && recovery.instruction) {
+        req.log.warn(
+          { err, traceId, suppressTools: recovery.suppressTools },
+          "elAIne assistant stream failed; retrying within turn budget",
+        );
+        if (recovery.resetPartialContent) {
+          sendEvent("response_reset", {});
+        }
+        rawContent = "";
+        messages.push({ role: "system", content: recovery.instruction });
+        suppressToolsNextRound = recovery.suppressTools;
+        continue;
+      }
       req.log.error({ err }, "elAIne assistant stream failed");
       const failedTrace = runtime.complete("failed");
       if (tracePersisted) {
@@ -5640,6 +5667,13 @@ router.post("/chat", async (req, res) => {
     }
 
     if (hardToolCalls.length === 0 || round === MAX_ROUNDS - 1) {
+      const satisfiedFallback = findElaineSatisfiedFallback(runtime.snapshot());
+      if (satisfiedFallback) {
+        runtime.markFailedReadStepsAdjusted(
+          satisfiedFallback.replacesStepIds,
+          satisfiedFallback.replacementToolName,
+        );
+      }
       if (!rawContent.trim()) {
         const acknowledgement =
           preparedActionAcknowledgement(resolvedActions) ??
@@ -6970,6 +7004,13 @@ router.post("/chat", async (req, res) => {
   // One final deterministic verification covers budget exhaustion and a model
   // that stopped without satisfying a planned step. It never asks for hidden
   // reasoning; it compares only typed plan state and normalized observations.
+  const satisfiedFallback = findElaineSatisfiedFallback(runtime.snapshot());
+  if (satisfiedFallback) {
+    runtime.markFailedReadStepsAdjusted(
+      satisfiedFallback.replacesStepIds,
+      satisfiedFallback.replacementToolName,
+    );
+  }
   const finalVerification = runtime.verify({
     finalContent: rawContent,
     hasPendingConfirmation: resolvedActions.length > 0,
@@ -7173,6 +7214,7 @@ router.get("/diagnostics", async (req, res) => {
       completed: string;
       blocked: string;
       awaiting_confirmation: string;
+      awaiting_input: string;
       failed: string;
       grounded_observations: string;
       current_source_turns: string;
@@ -7183,6 +7225,8 @@ router.get("/diagnostics", async (req, res) => {
         count(*) FILTER (WHERE status = 'blocked')::text AS blocked,
         count(*) FILTER (WHERE status = 'awaiting_confirmation')::text
           AS awaiting_confirmation,
+        count(*) FILTER (WHERE status = 'awaiting_input')::text
+          AS awaiting_input,
         count(*) FILTER (WHERE status = 'failed')::text AS failed,
         coalesce(sum(jsonb_array_length(observations)), 0)::text
           AS grounded_observations,

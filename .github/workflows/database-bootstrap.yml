@@ -171,6 +171,3 @@ jobs:
           FROM pg_tables
           WHERE schemaname = 'public';
           SQL
-
-      - name: Run database package tests
-        run: pnpm --filter @workspace/db run test

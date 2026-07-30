@@ -89,6 +89,7 @@ export type OpenRouterServerTool =
 const REQUEST_TIMEOUT_MS_DEFAULT = 12_000;
 
 function makeOpenRouterClient(timeoutMs: number): OpenAI {
+  // openai-direct-ok — reviewed shared OpenRouter provider facade.
   return new OpenAI({
     apiKey: env.openrouterApiKey,
     baseURL: "https://openrouter.ai/api/v1",

@@ -60,5 +60,16 @@ describe("Elaine capability registry", () => {
     expect(ELAINE_TOOL_POLICIES["summarize_inbox"]?.auth).toBe(
       "session_and_user_oauth",
     );
+    expect(ELAINE_TOOL_POLICIES["forget_memory"]).toMatchObject({
+      kind: "action",
+      risk: "high",
+      confirmation: "action_mode",
+      channels: ["web"],
+    });
+    expect(ELAINE_TOOL_POLICIES["queue_research_task"]).toMatchObject({
+      kind: "action",
+      confirmation: "action_mode",
+      channels: ["web"],
+    });
   });
 });

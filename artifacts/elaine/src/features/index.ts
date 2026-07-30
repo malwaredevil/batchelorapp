@@ -1,5 +1,22 @@
 import { registerFeature } from "./registry";
-import { MessageSquare, Settings as SettingsIcon, Brain } from "lucide-react";
+import {
+  MessageSquare,
+  Settings as SettingsIcon,
+  Brain,
+  SearchCheck,
+} from "lucide-react";
+
+registerFeature({
+  id: "tasks",
+  nav: {
+    group: "main",
+    href: "/tasks",
+    label: "Tasks",
+    icon: SearchCheck,
+    order: 17,
+    testId: "navlink-tasks",
+  },
+});
 
 registerFeature({
   id: "chat",

@@ -19,6 +19,13 @@ const serviceMocks = vi.hoisted(() => ({
     recipientId: 9,
     isRead: true,
   })),
+  getRelevantElaineMemory: vi.fn(async () => ({
+    memories: [],
+    evidenceBlock: "(none)",
+    existingFactContents: [],
+  })),
+  listElaineTasksForUser: vi.fn(async () => []),
+  getElaineTaskForUser: vi.fn(async () => null),
 }));
 
 vi.mock("../lib/office-notes", () => ({
@@ -37,6 +44,13 @@ vi.mock("../lib/notifications", () => ({
   replaceUserPreferences: serviceMocks.replaceUserPreferences,
   updateNotificationState: serviceMocks.updateNotificationState,
 }));
+vi.mock("../lib/elaine-memory", () => ({
+  getRelevantElaineMemory: serviceMocks.getRelevantElaineMemory,
+}));
+vi.mock("../lib/elaine-tasks", () => ({
+  listElaineTasksForUser: serviceMocks.listElaineTasksForUser,
+  getElaineTaskForUser: serviceMocks.getElaineTaskForUser,
+}));
 import {
   UNIVERSAL_ACTION_TYPES,
   universalActionExecutors,
@@ -45,9 +59,12 @@ import {
 } from "./universal-actions";
 import {
   GET_NOTE_TOOL_NAME,
+  GET_ELAINE_TASK_TOOL_NAME,
   GET_NOTIFICATION_COUNTS_TOOL_NAME,
   GET_NOTIFICATION_PREFERENCES_TOOL_NAME,
   LIST_NOTES_TOOL_NAME,
+  LIST_ELAINE_MEMORIES_TOOL_NAME,
+  LIST_ELAINE_TASKS_TOOL_NAME,
   LIST_NOTIFICATIONS_TOOL_NAME,
   executeUniversalReadTool,
   universalReadTools,
@@ -77,6 +94,9 @@ describe("Elaine universal app-control definitions", () => {
       LIST_NOTIFICATIONS_TOOL_NAME,
       GET_NOTIFICATION_COUNTS_TOOL_NAME,
       GET_NOTIFICATION_PREFERENCES_TOOL_NAME,
+      LIST_ELAINE_MEMORIES_TOOL_NAME,
+      LIST_ELAINE_TASKS_TOOL_NAME,
+      GET_ELAINE_TASK_TOOL_NAME,
     ]);
   });
 

@@ -8,7 +8,10 @@ import {
   type ElaineTerminalStatus,
   type ElaineVerification,
   type ElaineRequestClass,
+  type ElaineObservationProvenance,
+  type ElaineSourceRoute,
 } from "./contracts";
+import { hasCurrentRetrievedEvidence } from "./source-policy";
 
 export interface RuntimeToolCall {
   id: string;
@@ -69,6 +72,7 @@ export class ElaineTurnRuntime {
     traceId: string;
     requestClass: ElaineRequestClass;
     plan: ElainePlan;
+    sourceRoute?: ElaineSourceRoute;
     traceAvailable?: boolean;
     budget?: Partial<ElaineRuntimeBudget>;
     now?: () => Date;
@@ -84,6 +88,8 @@ export class ElaineTurnRuntime {
       requestClass: input.requestClass,
       goal: input.plan.goal,
       plan: clonePlan(input.plan),
+      ...(input.sourceRoute ? { sourceRoute: input.sourceRoute } : {}),
+      observations: [],
       events: [],
       verification: null,
       status: "running",
@@ -107,6 +113,26 @@ export class ElaineTurnRuntime {
       ...this.trace,
       requestClass: { ...this.trace.requestClass },
       plan: clonePlan(this.trace.plan),
+      ...(this.trace.sourceRoute
+        ? {
+            sourceRoute: {
+              ...this.trace.sourceRoute,
+              preferredKinds: [...this.trace.sourceRoute.preferredKinds],
+              fallbackKinds: [...this.trace.sourceRoute.fallbackKinds],
+            },
+          }
+        : {}),
+      observations: (this.trace.observations ?? []).map((observation) => ({
+        ...observation,
+        ...(observation.provenance
+          ? {
+              provenance: {
+                ...observation.provenance,
+                coverage: { ...observation.provenance.coverage },
+              },
+            }
+          : {}),
+      })),
       events: this.trace.events.map((event) => ({ ...event })),
       verification: this.trace.verification
         ? {
@@ -225,12 +251,36 @@ export class ElaineTurnRuntime {
     summary: string;
     errorCategory?: string;
     waitingConfirmation?: boolean;
+    resultReference?: string;
+    provenance?: ElaineObservationProvenance;
   }): void {
     const stepId = this.callSteps.get(input.callId);
     const step = stepId
       ? this.trace.plan.steps.find((candidate) => candidate.id === stepId)
       : undefined;
     const summary = sanitizeRuntimeText(input.summary, 220);
+    const observedAt = this.now().toISOString();
+    this.trace.observations = [
+      ...(this.trace.observations ?? []),
+      {
+        callId: input.callId,
+        stepId: stepId ?? null,
+        toolName: input.toolName,
+        success: input.success,
+        ...(input.errorCategory
+          ? { errorCategory: sanitizeRuntimeText(input.errorCategory, 80) }
+          : {}),
+        evidenceSummary: summary,
+        ...(input.resultReference
+          ? {
+              resultReference: sanitizeRuntimeText(input.resultReference, 240),
+            }
+          : {}),
+        ...(input.provenance ? { provenance: input.provenance } : {}),
+        startedAt: observedAt,
+        completedAt: observedAt,
+      },
+    ].slice(-50);
     this.emit("observation", summary || "Tool result received", {
       stepId,
       toolName: input.toolName,
@@ -282,23 +332,34 @@ export class ElaineTurnRuntime {
       this.trace.plan.steps.some(
         (step) => step.status === "waiting_confirmation",
       );
+    const missingCurrentEvidence =
+      this.trace.sourceRoute?.requiresRetrievedEvidence === true &&
+      !hasCurrentRetrievedEvidence(this.trace.observations ?? []);
     const satisfiedCriteria =
-      unfinished.length === 0 ? [...this.trace.plan.completionCriteria] : [];
-    const unsatisfiedCriteria =
-      unfinished.length > 0
-        ? unfinished.map((step) => step.expectedEvidence)
+      unfinished.length === 0 && !missingCurrentEvidence
+        ? [...this.trace.plan.completionCriteria]
         : [];
+    const unsatisfiedCriteria = [
+      ...(missingCurrentEvidence
+        ? ["A successful current source observation with matching coverage"]
+        : []),
+      ...(unfinished.length > 0
+        ? unfinished.map((step) => step.expectedEvidence)
+        : []),
+    ];
 
     if (
-      unfinished.length > 0 &&
+      (unfinished.length > 0 || missingCurrentEvidence) &&
       this.trace.usage.replans < this.budget.maxReplans &&
       this.trace.usage.modelRounds < this.budget.maxModelRounds &&
       this.withinElapsedBudget()
     ) {
       this.trace.usage.replans += 1;
-      const summary = `More evidence is needed for: ${unfinished
-        .map((step) => step.label)
-        .join("; ")}`;
+      const summary = missingCurrentEvidence
+        ? "A current source is still needed before presenting volatile facts"
+        : `More evidence is needed for: ${unfinished
+            .map((step) => step.label)
+            .join("; ")}`;
       const verification: ElaineVerification = {
         status: "needs_replan",
         satisfiedCriteria,
@@ -320,17 +381,21 @@ export class ElaineTurnRuntime {
     }
 
     const status: ElaineVerification["status"] =
-      unfinished.length > 0
+      unfinished.length > 0 || missingCurrentEvidence
         ? "blocked"
         : waiting
           ? "awaiting_confirmation"
           : "satisfied";
-    const budgetExhausted = unfinished.length > 0 && this.budgetWasExhausted();
+    const budgetExhausted =
+      (unfinished.length > 0 || missingCurrentEvidence) &&
+      this.budgetWasExhausted();
     const summary =
       status === "blocked"
         ? budgetExhausted
-          ? `Runtime budget exhausted with ${unfinished.length} required plan step${unfinished.length === 1 ? "" : "s"} still incomplete`
-          : `Could not satisfy ${unfinished.length} required plan step${unfinished.length === 1 ? "" : "s"}`
+          ? "Runtime budget exhausted before all required evidence was verified"
+          : missingCurrentEvidence
+            ? "Could not verify the request with a current source"
+            : `Could not satisfy ${unfinished.length} required plan step${unfinished.length === 1 ? "" : "s"}`
         : status === "awaiting_confirmation"
           ? "The answer is ready and one or more actions await confirmation"
           : "Plan criteria satisfied";

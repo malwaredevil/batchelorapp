@@ -227,4 +227,32 @@ describe("worker — stale running-job lease recovery", () => {
       capturedQueries.some((q) => q.sql.includes("app_job_attempts")),
     ).toBe(true);
   });
+
+  it("fences durable checkpoints by active status and lease owner", async () => {
+    mockHandlerFn.mockImplementationOnce(
+      async (
+        _payload: unknown,
+        context: {
+          saveCheckpoint(
+            result: unknown,
+            progress: number,
+            message: string,
+          ): Promise<boolean>;
+        },
+      ) => {
+        expect(
+          await context.saveCheckpoint({ completed: [0] }, 50, "checkpoint"),
+        ).toBe(true);
+      },
+    );
+
+    await runOneWorkerCycle();
+
+    const checkpoint = capturedQueries.find((query) =>
+      query.sql.includes("SET result = $3::jsonb"),
+    );
+    expect(checkpoint?.sql).toContain("status = 'running'");
+    expect(checkpoint?.sql).toContain("lease_owner = $2");
+    expect(checkpoint?.params[2]).toBe('{"completed":[0]}');
+  });
 });

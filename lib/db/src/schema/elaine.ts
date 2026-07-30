@@ -8,6 +8,7 @@ import {
   timestamp,
   jsonb,
   index,
+  numeric,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -73,8 +74,8 @@ export type InsertElaineSettings = typeof elaineSettings.$inferInsert;
 // sensitivity: low | medium | high
 export const elaineMemory = pgTable("elaine_memory", {
   id: serial("id").primaryKey(),
-  // 'fact'    — an explicit factoid stored by the remember tool or auto-extracted
-  // 'summary' — the single maintained prose summary updated after every turn
+  // 'fact'    — an explicit fact stored by the remember/correct flows
+  // 'summary' — a per-user prose continuity summary updated after each turn
   type: text("type").notNull().default("fact"),
   content: text("content").notNull(),
   scope: text("scope").notNull().default("household"),
@@ -84,6 +85,12 @@ export const elaineMemory = pgTable("elaine_memory", {
   expiresAt: timestamp("expires_at", { withTimezone: true }),
   active: boolean("active").notNull().default(true),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  source: text("source").notNull().default("legacy"),
+  lastConfirmedAt: timestamp("last_confirmed_at", { withTimezone: true }),
+  confidence: numeric("confidence", { precision: 4, scale: 3 })
+    .notNull()
+    .default("0.500"),
+  correctionOfId: integer("correction_of_id"),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .defaultNow()
     .notNull(),
@@ -95,6 +102,38 @@ export const elaineMemory = pgTable("elaine_memory", {
 
 export type ElaineMemoryRow = typeof elaineMemory.$inferSelect;
 export type InsertElaineMemory = typeof elaineMemory.$inferInsert;
+
+// Append-only audit trail for explicit remember/correct/forget operations.
+// Event metadata is deliberately small and sanitized; memory contents remain
+// on the memory row and are never copied into this ledger.
+export const elaineMemoryEvents = pgTable(
+  "elaine_memory_events",
+  {
+    id: serial("id").primaryKey(),
+    memoryId: integer("memory_id").references(() => elaineMemory.id, {
+      onDelete: "set null",
+    }),
+    previousMemoryId: integer("previous_memory_id"),
+    userId: integer("user_id").notNull(),
+    action: text("action").notNull(),
+    metadata: jsonb("metadata")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("elaine_memory_events_memory_idx").on(table.memoryId),
+    index("elaine_memory_events_user_created_idx").on(
+      table.userId,
+      table.createdAt,
+    ),
+  ],
+).enableRLS();
+
+export type ElaineMemoryEventRow = typeof elaineMemoryEvents.$inferSelect;
+export type InsertElaineMemoryEvent = typeof elaineMemoryEvents.$inferInsert;
 
 // Proactive nudges — messages Elaine generates unprompted (e.g. "your trip
 // starts in 2 days and the packing list is empty"), produced by scheduled
@@ -279,6 +318,10 @@ export const elaineTurnTraces = pgTable(
     plan: jsonb("plan")
       .notNull()
       .default(sql`'{}'::jsonb`),
+    sourceRoute: jsonb("source_route"),
+    observations: jsonb("observations")
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     events: jsonb("events")
       .notNull()
       .default(sql`'[]'::jsonb`),

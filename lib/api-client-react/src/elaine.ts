@@ -41,6 +41,7 @@ export type ElainePlanStepStatus =
   | "planned"
   | "active"
   | "waiting_confirmation"
+  | "waiting_input"
   | "adjusted"
   | "completed"
   | "blocked"
@@ -50,7 +51,7 @@ export type ElainePlanStepStatus =
 export interface ElaineRuntimePlanStep {
   id: string;
   label: string;
-  kind: "lookup" | "research" | "action" | "respond";
+  kind: "lookup" | "research" | "action" | "clarify" | "respond";
   toolName?: string | null;
   dependsOn: string[];
   expectedEvidence: string;
@@ -135,6 +136,7 @@ export interface ElaineRuntimeTrace {
       | "satisfied"
       | "needs_replan"
       | "awaiting_confirmation"
+      | "awaiting_input"
       | "blocked";
     satisfiedCriteria: string[];
     unsatisfiedCriteria: string[];
@@ -145,6 +147,7 @@ export interface ElaineRuntimeTrace {
     | "running"
     | "completed"
     | "awaiting_confirmation"
+    | "awaiting_input"
     | "blocked"
     | "failed"
     | "cancelled";

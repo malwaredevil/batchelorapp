@@ -19,7 +19,7 @@ function StepIcon({ status }: { status: ElainePlanStepStatus }) {
   if (status === "active") {
     return <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />;
   }
-  if (status === "waiting_confirmation") {
+  if (status === "waiting_confirmation" || status === "waiting_input") {
     return <Clock3 className="h-3.5 w-3.5 text-amber-500" />;
   }
   if (status === "adjusted") {
@@ -37,6 +37,7 @@ function statusLabel(trace: ElaineRuntimeTrace): string {
     return active?.label ?? "Working through the plan";
   }
   if (trace.status === "awaiting_confirmation") return "Ready for confirmation";
+  if (trace.status === "awaiting_input") return "Waiting for your answer";
   if (trace.status === "completed") return "Plan completed";
   if (trace.status === "blocked") return "Completed with a limitation";
   if (trace.status === "cancelled") return "Plan cancelled";

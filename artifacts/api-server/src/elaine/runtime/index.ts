@@ -4,6 +4,7 @@ export * from "./contracts";
 export * from "./evaluation-corpus";
 export * from "./evaluation-report";
 export * from "./memory-policy";
+export * from "./model-stream-policy";
 export * from "./model-tool-policy";
 export * from "./planner";
 export * from "./replan-policy";

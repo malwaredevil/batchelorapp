@@ -26,7 +26,11 @@ export interface ElaineEvaluationScenario {
   forbiddenTools: string[];
   forbiddenToolSequences: string[][];
   expectedConfirmation: boolean;
-  expectedTerminalStatus: "completed" | "awaiting_confirmation" | "blocked";
+  expectedTerminalStatus:
+    | "completed"
+    | "awaiting_confirmation"
+    | "awaiting_input"
+    | "blocked";
   requiredAnswerFacts: string[];
   forbiddenAnswerFacts: string[];
 }
@@ -179,7 +183,7 @@ export const ELAINE_EVALUATION_CORPUS = {
       forbiddenTools: ["update_trip_details"],
       forbiddenToolSequences: [["update_trip_details"]],
       expectedConfirmation: false,
-      expectedTerminalStatus: "blocked",
+      expectedTerminalStatus: "awaiting_input",
       requiredAnswerFacts: ["which trip", "new dates"],
       forbiddenAnswerFacts: ["tripId: 1"],
     },

@@ -46,6 +46,75 @@ describe("validateElainePlan", () => {
     expect(result.success).toBe(true);
   });
 
+  it("accepts a no-tool clarification and defers dependent work", () => {
+    const result = validateElainePlan(
+      {
+        version: 1,
+        goal: "Research destinations after the user names them",
+        assumptions: [],
+        completionCriteria: ["The requested destinations are researched"],
+        steps: [
+          {
+            id: "clarify",
+            label: "Ask which destinations to research",
+            kind: "clarify",
+            toolName: null,
+            dependsOn: [],
+            expectedEvidence: "The user provides destinations",
+            required: true,
+          },
+          {
+            id: "research",
+            label: "Research the destinations",
+            kind: "research",
+            toolName: "web_search",
+            dependsOn: ["clarify"],
+            expectedEvidence: "Current destination evidence",
+            required: true,
+          },
+        ],
+      },
+      new Set(["web_search"]),
+    );
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.plan.steps[0]).toMatchObject({
+        kind: "clarify",
+        toolName: null,
+        retryLimit: 0,
+      });
+    }
+  });
+
+  it("rejects a clarification step that tries to call a tool", () => {
+    expect(
+      validateElainePlan(
+        {
+          version: 1,
+          goal: "Clarify an invented request",
+          assumptions: [],
+          completionCriteria: ["The missing detail is provided"],
+          steps: [
+            {
+              id: "clarify",
+              label: "Ask for the missing detail",
+              kind: "clarify",
+              toolName: "web_search",
+              dependsOn: [],
+              expectedEvidence: "The user provides the missing detail",
+              required: true,
+            },
+          ],
+        },
+        new Set(["web_search"]),
+      ),
+    ).toEqual({
+      success: false,
+      error: "clarification step clarify cannot call a tool",
+    });
+  });
+
   it("rejects missing dependencies, cycles, and unknown tools", () => {
     const base = {
       version: 1,

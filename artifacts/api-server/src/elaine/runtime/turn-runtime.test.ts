@@ -391,6 +391,116 @@ describe("ElaineTurnRuntime", () => {
     expect(runtime.complete().status).toBe("awaiting_confirmation");
   });
 
+  it("pauses for missing user input without consuming a re-plan", () => {
+    const runtime = new ElaineTurnRuntime({
+      traceId: "trace-clarify",
+      requestClass,
+      sourceRoute: {
+        freshness: "current",
+        requiresRetrievedEvidence: true,
+        preferredKinds: ["web"],
+        fallbackKinds: ["model_synthesis"],
+        rationale: "Current evidence can only be gathered after clarification.",
+      },
+      plan: toRuntimePlan({
+        version: 1,
+        goal: "Research destinations for an invented trip",
+        assumptions: [],
+        completionCriteria: ["The requested destinations are researched"],
+        steps: [
+          {
+            id: "destinations",
+            label: "Ask which destinations to compare",
+            kind: "clarify",
+            toolName: null,
+            dependsOn: [],
+            expectedEvidence: "The user provides destinations and a timeframe",
+            required: true,
+          },
+          {
+            id: "research",
+            label: "Research the requested destinations",
+            kind: "action",
+            toolName: "queue_research_task",
+            dependsOn: ["destinations"],
+            expectedEvidence: "A valid research task proposal",
+            required: true,
+          },
+        ],
+      }),
+    });
+
+    runtime.recordModelRound();
+    const decision = runtime.verify({
+      finalContent:
+        "Which destinations should I compare, and what timeframe should I use?",
+      hasPendingConfirmation: false,
+    });
+
+    expect(decision.shouldReplan).toBe(false);
+    expect(decision.verification).toMatchObject({
+      status: "awaiting_input",
+      unsatisfiedCriteria: ["The user provides destinations and a timeframe"],
+    });
+    expect(runtime.snapshot().usage.replans).toBe(0);
+    expect(runtime.snapshot().plan.steps).toEqual([
+      expect.objectContaining({
+        id: "destinations",
+        status: "waiting_input",
+      }),
+      expect.objectContaining({ id: "research", status: "planned" }),
+    ]);
+    expect(runtime.complete().status).toBe("awaiting_input");
+  });
+
+  it("does not pause unless a clarification question was actually produced", () => {
+    const runtime = new ElaineTurnRuntime({
+      traceId: "trace-empty-clarify",
+      requestClass,
+      plan: toRuntimePlan({
+        version: 1,
+        goal: "Clarify an invented request",
+        assumptions: [],
+        completionCriteria: ["The missing detail is provided"],
+        steps: [
+          {
+            id: "clarify",
+            label: "Ask for the missing detail",
+            kind: "clarify",
+            toolName: null,
+            dependsOn: [],
+            expectedEvidence: "The user provides the missing detail",
+            required: true,
+          },
+        ],
+      }),
+      budget: { maxReplans: 0 },
+    });
+
+    const decision = runtime.verify({
+      finalContent: "",
+      hasPendingConfirmation: false,
+    });
+
+    expect(decision.verification.status).toBe("blocked");
+    expect(runtime.snapshot().plan.steps[0]?.status).toBe("planned");
+  });
+
+  it("reports whether a failed model stream can use another bounded round", () => {
+    const runtime = new ElaineTurnRuntime({
+      traceId: "trace-model-recovery-budget",
+      requestClass,
+      plan: tripWeatherPlan(),
+      budget: { maxModelRounds: 2 },
+    });
+
+    expect(runtime.canAttemptAnotherModelRound()).toBe(true);
+    expect(runtime.recordModelRound()).toBe(true);
+    expect(runtime.canAttemptAnotherModelRound()).toBe(true);
+    expect(runtime.recordModelRound()).toBe(true);
+    expect(runtime.canAttemptAnotherModelRound()).toBe(false);
+  });
+
   it("lets a successful required fallback replace a failed read step", () => {
     const runtime = new ElaineTurnRuntime({
       traceId: "trace-read-fallback",

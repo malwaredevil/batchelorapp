@@ -66,6 +66,16 @@ describe("Elaine deterministic evaluation corpus", () => {
     expect(scenario.forbiddenTools).toContain("get_weather_forecast");
   });
 
+  it("distinguishes a useful clarification from a blocked turn", () => {
+    const scenario = ELAINE_EVALUATION_CORPUS.scenarios.find(
+      ({ category }) => category === "missing_information",
+    )!;
+
+    expect(scenario.expectedToolSequence).toEqual([]);
+    expect(scenario.expectedTerminalStatus).toBe("awaiting_input");
+    expect(scenario.requiredAnswerFacts).toEqual(["which trip", "new dates"]);
+  });
+
   it("retains every representative legacy tool family", () => {
     const scenario = ELAINE_EVALUATION_CORPUS.scenarios.find(
       ({ category }) => category === "legacy_compatibility",

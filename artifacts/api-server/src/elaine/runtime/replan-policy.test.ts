@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { toRuntimePlan, type ElaineRuntimeTrace } from "./contracts";
-import { selectElaineReplanTool } from "./replan-policy";
+import {
+  findElaineSatisfiedFallback,
+  selectElaineReplanTool,
+} from "./replan-policy";
+import { provenanceForTool } from "./source-policy";
 
 const available = new Set([
   "web_search",
@@ -251,5 +255,176 @@ describe("selectElaineReplanTool", () => {
     expect(selectElaineReplanTool(trace, available)?.toolName).toBe(
       "web_search",
     );
+  });
+});
+
+describe("findElaineSatisfiedFallback", () => {
+  it("reuses a successful current web fallback for a failed specialized source", () => {
+    const trace = traceWith([
+      {
+        id: "provider",
+        label: "Check eBay",
+        kind: "research",
+        toolName: "ebay_search",
+        dependsOn: [],
+        expectedEvidence: "Current sold listings",
+        required: true,
+      },
+      {
+        id: "fallback",
+        label: "Search the web",
+        kind: "research",
+        toolName: "web_search",
+        dependsOn: [],
+        expectedEvidence: "Current market evidence",
+        required: true,
+      },
+    ]);
+    trace.plan.steps[0]!.status = "failed";
+    trace.plan.steps[0]!.attempts = 1;
+    trace.plan.steps[1]!.status = "completed";
+    trace.plan.steps[1]!.attempts = 1;
+    trace.observations = [
+      {
+        callId: "web-call",
+        stepId: "fallback",
+        toolName: "web_search",
+        success: true,
+        evidenceSummary: "Current web results were returned",
+        provenance: provenanceForTool({
+          toolName: "web_search",
+          coverageStatus: "matched",
+        }),
+        startedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+      },
+    ];
+
+    expect(findElaineSatisfiedFallback(trace)).toEqual({
+      replacementToolName: "web_search",
+      replacesStepIds: ["provider"],
+    });
+  });
+
+  it("does not reuse a failed fallback or a same-tool retry", () => {
+    const failed = traceWith([
+      {
+        id: "provider",
+        label: "Check eBay",
+        kind: "research",
+        toolName: "ebay_search",
+        dependsOn: [],
+        expectedEvidence: "Current sold listings",
+        required: true,
+      },
+      {
+        id: "fallback",
+        label: "Search the web",
+        kind: "research",
+        toolName: "web_search",
+        dependsOn: [],
+        expectedEvidence: "Current market evidence",
+        required: true,
+      },
+    ]);
+    failed.plan.steps[0]!.status = "failed";
+    failed.plan.steps[1]!.status = "failed";
+    failed.observations = [
+      {
+        callId: "web-call",
+        stepId: "fallback",
+        toolName: "web_search",
+        success: false,
+        evidenceSummary: "Web search failed",
+        provenance: provenanceForTool({
+          toolName: "web_search",
+          coverageStatus: "unknown",
+        }),
+        startedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+      },
+    ];
+    expect(findElaineSatisfiedFallback(failed)).toBeNull();
+
+    const sameTool = traceWith([
+      {
+        id: "first",
+        label: "Search the web",
+        kind: "research",
+        toolName: "web_search",
+        dependsOn: [],
+        expectedEvidence: "Current market evidence",
+        required: true,
+      },
+      {
+        id: "retry",
+        label: "Retry the web",
+        kind: "research",
+        toolName: "web_search",
+        dependsOn: [],
+        expectedEvidence: "Current market evidence",
+        required: true,
+      },
+    ]);
+    sameTool.plan.steps[0]!.status = "failed";
+    sameTool.plan.steps[1]!.status = "completed";
+    sameTool.observations = [
+      {
+        callId: "web-retry",
+        stepId: "retry",
+        toolName: "web_search",
+        success: true,
+        evidenceSummary: "Current web results were returned",
+        provenance: provenanceForTool({
+          toolName: "web_search",
+          coverageStatus: "matched",
+        }),
+        startedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+      },
+    ];
+    expect(findElaineSatisfiedFallback(sameTool)).toBeNull();
+  });
+
+  it("does not treat another specialized provider as the configured fallback", () => {
+    const trace = traceWith([
+      {
+        id: "failed-provider",
+        label: "Check eBay",
+        kind: "research",
+        toolName: "ebay_search",
+        dependsOn: [],
+        expectedEvidence: "Current sold listings",
+        required: true,
+      },
+      {
+        id: "successful-provider",
+        label: "Check exchange rates",
+        kind: "lookup",
+        toolName: "get_exchange_rate",
+        dependsOn: [],
+        expectedEvidence: "A current exchange rate",
+        required: true,
+      },
+    ]);
+    trace.plan.steps[0]!.status = "failed";
+    trace.plan.steps[1]!.status = "completed";
+    trace.observations = [
+      {
+        callId: "rate-call",
+        stepId: "successful-provider",
+        toolName: "get_exchange_rate",
+        success: true,
+        evidenceSummary: "A current exchange rate was returned",
+        provenance: provenanceForTool({
+          toolName: "get_exchange_rate",
+          coverageStatus: "matched",
+        }),
+        startedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+      },
+    ];
+
+    expect(findElaineSatisfiedFallback(trace)).toBeNull();
   });
 });

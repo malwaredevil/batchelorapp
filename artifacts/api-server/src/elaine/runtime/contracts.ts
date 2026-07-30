@@ -26,6 +26,7 @@ export const ElainePlanStepKindSchema = z.enum([
   "lookup",
   "research",
   "action",
+  "clarify",
   "respond",
 ]);
 export type ElainePlanStepKind = z.infer<typeof ElainePlanStepKindSchema>;
@@ -34,6 +35,7 @@ export const ElainePlanStepStatusSchema = z.enum([
   "planned",
   "active",
   "waiting_confirmation",
+  "waiting_input",
   "adjusted",
   "completed",
   "blocked",
@@ -145,6 +147,7 @@ export interface ElaineSourceRoute {
 export const ElaineTerminalStatusSchema = z.enum([
   "completed",
   "awaiting_confirmation",
+  "awaiting_input",
   "blocked",
   "failed",
   "cancelled",
@@ -177,7 +180,12 @@ export interface ElaineRuntimeEvent {
 }
 
 export interface ElaineVerification {
-  status: "satisfied" | "needs_replan" | "awaiting_confirmation" | "blocked";
+  status:
+    | "satisfied"
+    | "needs_replan"
+    | "awaiting_confirmation"
+    | "awaiting_input"
+    | "blocked";
   satisfiedCriteria: string[];
   unsatisfiedCriteria: string[];
   summary: string;
@@ -256,7 +264,7 @@ export function toRuntimePlan(input: ElainePlanInput): ElainePlan {
       toolName: step.toolName ?? null,
       riskClass: step.kind === "action" ? "consequential" : "read_only",
       confirmation: step.kind === "action" ? "configured_policy" : "none",
-      retryLimit: step.kind === "action" ? 0 : 1,
+      retryLimit: step.kind === "action" || step.kind === "clarify" ? 0 : 1,
       status: "planned",
       attempts: 0,
     })),

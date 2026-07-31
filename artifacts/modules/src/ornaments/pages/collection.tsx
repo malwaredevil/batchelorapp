@@ -696,7 +696,7 @@ export default function Collection() {
           <h2 className="text-xl font-serif font-bold text-foreground">
             No ornaments found
           </h2>
-          <p className="text-muted-foreground mt-2 max-w-md">
+          <p className="text-muted-foreground mt-2 max-md">
             {search || filterCategoryIds.size > 0
               ? "Try adjusting your search or filters to find what you're looking for."
               : "Your collection is empty. Start by adding your first hallmark keepsake."}

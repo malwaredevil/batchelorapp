@@ -8891,10 +8891,7 @@ async function executeRestrictedSoftTool(
           .where(
             and(
               isNull(potteryItems.deletedAt),
-              or(
-                ilike(potteryItems.name, pat),
-                ilike(potteryItems.maker, pat),
-              ),
+              or(ilike(potteryItems.name, pat), ilike(potteryItems.maker, pat)),
             ),
           )
           .limit(5);
@@ -9016,7 +9013,10 @@ async function executeRestrictedSoftTool(
           })
           .from(finishedQuilts)
           .where(
-            and(isNull(finishedQuilts.deletedAt), ilike(finishedQuilts.name, pat)),
+            and(
+              isNull(finishedQuilts.deletedAt),
+              ilike(finishedQuilts.name, pat),
+            ),
           )
           .limit(5);
         if (rows.length > 0) {

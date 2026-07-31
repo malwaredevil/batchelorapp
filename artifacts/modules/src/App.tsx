@@ -453,14 +453,26 @@ function AppRoutes() {
   return (
     <Switch>
       <Route path="/travels/trips/:id/share">
-        <Sentry.ErrorBoundary fallback={<div className="p-8 text-center text-muted-foreground">Something went wrong.</div>}>
+        <Sentry.ErrorBoundary
+          fallback={
+            <div className="p-8 text-center text-muted-foreground">
+              Something went wrong.
+            </div>
+          }
+        >
           <Suspense fallback={<Splash />}>
             <TravelsTripShare />
           </Suspense>
         </Sentry.ErrorBoundary>
       </Route>
       <Route path="/travels/privacy">
-        <Sentry.ErrorBoundary fallback={<div className="p-8 text-center text-muted-foreground">Something went wrong.</div>}>
+        <Sentry.ErrorBoundary
+          fallback={
+            <div className="p-8 text-center text-muted-foreground">
+              Something went wrong.
+            </div>
+          }
+        >
           <Suspense fallback={<Splash />}>
             <TravelsPrivacyPolicy />
           </Suspense>

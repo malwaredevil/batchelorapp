@@ -19,7 +19,11 @@ import type { OrnamentsOrnamentItem as OrnamentItem } from "@workspace/api-clien
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { usePageAssistantContext } from "@/ornaments/lib/assistant-context";
-import { useAppConfigSummary } from "@workspace/elaine-ui";
+import {
+  formatElaineContextEntity,
+  formatElaineContextList,
+  useAppConfigSummary,
+} from "@workspace/elaine-ui";
 import { generateInsurancePdf } from "@/ornaments/lib/pdf-export";
 import { Button } from "@/components/ui/button";
 import {
@@ -101,10 +105,17 @@ export default function Maintenance() {
     "ornaments-maintenance",
     `Maintenance page. Shows items missing descriptions or photos. Currently ${items.length} items need attention.${
       items.length > 0
-        ? ` Items needing attention (itemId — reason): ${items
-            .slice(0, 30)
-            .map((i) => `itemId: ${i.id} (${i.reasons.join(", ")})`)
-            .join("; ")}.`
+        ? ` ${formatElaineContextList(items, {
+            label: "Items needing attention (itemId — reason)",
+            limit: 30,
+            formatItem: (item) =>
+              formatElaineContextEntity({
+                entity: "item",
+                id: item.id,
+                label: "Needs attention",
+                details: [`reasons: ${item.reasons.join(", ")}`],
+              }),
+          })}.`
         : ""
     }${configSummary ? ` ${configSummary}` : ""}`,
   );

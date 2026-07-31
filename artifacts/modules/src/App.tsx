@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, type ReactNode } from "react";
 import * as Sentry from "@sentry/react";
 import {
   Switch,
@@ -453,30 +453,18 @@ function AppRoutes() {
   return (
     <Switch>
       <Route path="/travels/trips/:id/share">
-        <Sentry.ErrorBoundary
-          fallback={
-            <div className="p-8 text-center text-muted-foreground">
-              Something went wrong.
-            </div>
-          }
-        >
+        <PublicRouteBoundary>
           <Suspense fallback={<Splash />}>
             <TravelsTripShare />
           </Suspense>
-        </Sentry.ErrorBoundary>
+        </PublicRouteBoundary>
       </Route>
       <Route path="/travels/privacy">
-        <Sentry.ErrorBoundary
-          fallback={
-            <div className="p-8 text-center text-muted-foreground">
-              Something went wrong.
-            </div>
-          }
-        >
+        <PublicRouteBoundary>
           <Suspense fallback={<Splash />}>
             <TravelsPrivacyPolicy />
           </Suspense>
-        </Sentry.ErrorBoundary>
+        </PublicRouteBoundary>
       </Route>
       <Route>
         <AuthProvider>
@@ -504,6 +492,20 @@ function AppRoutes() {
         </AuthProvider>
       </Route>
     </Switch>
+  );
+}
+
+function PublicRouteBoundary({ children }: { children: ReactNode }) {
+  return (
+    <Sentry.ErrorBoundary
+      fallback={
+        <div className="p-8 text-center text-muted-foreground">
+          Something went wrong.
+        </div>
+      }
+    >
+      {children}
+    </Sentry.ErrorBoundary>
   );
 }
 

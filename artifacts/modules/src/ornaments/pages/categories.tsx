@@ -19,6 +19,10 @@ import type { OrnamentsCategory as Category } from "@workspace/api-client-react"
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { usePageAssistantContext } from "@/ornaments/lib/assistant-context";
+import {
+  formatElaineContextEntity,
+  formatElaineContextList,
+} from "@workspace/elaine-ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -348,9 +352,15 @@ export default function Categories() {
 
   usePageAssistantContext(
     "ornaments-categories",
-    `Categories management page. Current categories (categoryId: name): ${
-      categories?.map((c) => `${c.id}: "${c.name}"`).join(", ") || "none"
-    }.`,
+    `Categories management page. ${formatElaineContextList(categories ?? [], {
+      label: "Current categories (categoryId — name)",
+      formatItem: (category) =>
+        formatElaineContextEntity({
+          entity: "category",
+          id: category.id,
+          label: category.name,
+        }),
+    })}.`,
   );
 
   const onSubmit = async (data: z.infer<typeof createSchema>) => {

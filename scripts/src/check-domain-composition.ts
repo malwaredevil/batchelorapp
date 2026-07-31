@@ -78,6 +78,76 @@ const requirements: Array<{
     path: ".gitignore",
     includes: [".replit", "**/.replit-artifact/"],
   },
+  {
+    path: "AGENTS.md",
+    includes: [
+      "Composition and Configuration Is the Default Architecture",
+      "docs/composition-and-configuration.md",
+    ],
+  },
+  {
+    path: "replit.md",
+    includes: [
+      "Composition and configuration is the highest-priority design rule",
+      "check-domain-composition",
+    ],
+  },
+  {
+    path: "docs/composition-and-configuration.md",
+    includes: ["Required decision order", "Review questions"],
+  },
+  {
+    path: "scripts/src/pre-publish.sh",
+    includes: ["run_bg composition", "check-domain-composition"],
+  },
+  {
+    path: "lib/elaine-ui/src/page-context-formatters.ts",
+    includes: ["formatElaineContextList", "formatElaineContextEntity"],
+  },
+  ...[
+    "artifacts/modules/src/ornaments/pages/categories.tsx",
+    "artifacts/modules/src/ornaments/pages/collection.tsx",
+    "artifacts/modules/src/ornaments/pages/maintenance.tsx",
+    "artifacts/modules/src/travels/pages/Dashboard.tsx",
+    "artifacts/modules/src/travels/pages/TravelCalendar.tsx",
+    "artifacts/modules/src/travels/pages/Trips.tsx",
+  ].map((path) => ({
+    path,
+    includes: ["formatElaineContextList"],
+  })),
+  {
+    path: "lib/web-core/src/sentry.ts",
+    includes: ["initBrowserMonitoring", "Sentry.replayIntegration"],
+  },
+  ...[
+    "artifacts/modules/src/sentry.ts",
+    "artifacts/web/src/sentry.ts",
+    "artifacts/elaine/src/sentry.ts",
+  ].map((path) => ({
+    path,
+    includes: ["initBrowserMonitoring"],
+    excludes: ["Sentry.init", "Sentry.replayIntegration"],
+  })),
+  {
+    path: "artifacts/modules/src/App.tsx",
+    includes: ["PublicRouteBoundary"],
+  },
+  {
+    path: "artifacts/api-server/src/elaine/index.ts",
+    includes: ["queryHouseholdData", "searchHouseholdData"],
+    excludes: [
+      "async function queryHouseholdData",
+      "async function searchHouseholdData",
+    ],
+  },
+  {
+    path: "artifacts/api-server/src/elaine/household-counts.ts",
+    includes: ["export async function queryHouseholdData", "isNull"],
+  },
+  {
+    path: "artifacts/api-server/src/elaine/household-search.ts",
+    includes: ["export async function searchHouseholdData", "isNull"],
+  },
 ];
 
 const violations: string[] = [];

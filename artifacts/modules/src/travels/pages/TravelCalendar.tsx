@@ -54,6 +54,10 @@ import {
 } from "@workspace/api-client-react";
 import { usePageAssistantContext } from "@/travels/lib/assistant-context";
 import {
+  formatElaineContextEntity,
+  formatElaineContextList,
+} from "@workspace/elaine-ui";
+import {
   CalendarCore,
   dateKey,
   chunk,
@@ -446,13 +450,17 @@ export default function TravelCalendar() {
           `"${d.event.title}"${d.kind === "overlay" ? ` (${d.calendar?.summary})` : ""}`,
       )
       .join("; ");
-    const suggestionSummary = pendingSuggestions
-      .slice(0, 5)
-      .map(
-        (s) =>
-          `suggestionId: ${s.id} — "${s.suggestedTitle}"${s.destination ? ` to ${s.destination}` : ""}`,
-      )
-      .join("; ");
+    const suggestionSummary = formatElaineContextList(pendingSuggestions, {
+      label: "Pending suggestions (suggestionId — title, destination)",
+      limit: 5,
+      formatItem: (suggestion) =>
+        formatElaineContextEntity({
+          entity: "suggestion",
+          id: suggestion.id,
+          label: suggestion.suggestedTitle,
+          details: [suggestion.destination && `to ${suggestion.destination}`],
+        }),
+    });
     return (
       `Travel Calendar page: viewing ${monthLabel} in ${calView} view. Shared Travel calendar is "${status.calendarSummary}". ` +
       `${overlayCalendars.length} other connected calendar(s) available as overlays. ` +
@@ -460,7 +468,7 @@ export default function TravelCalendar() {
         ? `Events in range: ${summary}.`
         : "No events found in this range.") +
       (pendingSuggestions.length > 0
-        ? ` There are ${pendingSuggestions.length} AI-detected trip suggestion(s) awaiting review: ${suggestionSummary}.`
+        ? ` There are ${pendingSuggestions.length} AI-detected trip suggestion(s) awaiting review. ${suggestionSummary}.`
         : "")
     );
   }, [

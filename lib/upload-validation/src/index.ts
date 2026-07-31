@@ -1,4 +1,8 @@
 import sharp from "sharp";
+import {
+  LARGE_UPLOAD_BYTES,
+  STANDARD_UPLOAD_BYTES,
+} from "@workspace/upload-policy";
 
 export type SupportedMimeType = "image/jpeg" | "image/png" | "image/webp";
 export type SupportedDocMimeType = SupportedMimeType | "application/pdf";
@@ -8,14 +12,14 @@ export type SupportedDocMimeType = SupportedMimeType | "application/pdf";
  * Must match the server's multer `limits.fileSize` on those routes.
  * Client-side forms mirror this value to warn users immediately on selection.
  */
-export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024; // 25 MB
+export const MAX_UPLOAD_BYTES = STANDARD_UPLOAD_BYTES;
 
 /**
  * Maximum file size for large uploads (travels photos and Elaine attachments).
  * Must match the server's multer `limits.fileSize` on those routes.
  * Client-side forms mirror this value to warn users immediately on selection.
  */
-export const MAX_LARGE_UPLOAD_BYTES = 50 * 1024 * 1024; // 50 MB
+export const MAX_LARGE_UPLOAD_BYTES = LARGE_UPLOAD_BYTES;
 
 /**
  * Hard ceiling on the number of pixels Sharp will decode from any input. Rejects

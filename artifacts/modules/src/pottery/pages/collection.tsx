@@ -63,7 +63,7 @@ import { toast } from "sonner";
 import { useAppConfigSummary } from "@workspace/elaine-ui";
 import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
 import { DominantColorDots } from "@/components/collection/DominantColorDots";
-import { CollectionErrorState } from "@/components/CollectionErrorState";
+import { CollectionErrorState } from "@workspace/collection-ui";
 import { QuantityBadge } from "@/components/collection/QuantityBadge";
 
 // ---------------------------------------------------------------------------

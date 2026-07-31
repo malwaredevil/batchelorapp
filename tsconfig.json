@@ -46,6 +46,9 @@
       "path": "./lib/upload-validation"
     },
     {
+      "path": "./lib/upload-policy"
+    },
+    {
       "path": "./lib/ai-actions"
     }
   ]

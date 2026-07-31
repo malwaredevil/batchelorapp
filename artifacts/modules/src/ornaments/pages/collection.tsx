@@ -40,7 +40,7 @@ import {
 import { usePageAssistantContext } from "@/ornaments/lib/assistant-context";
 import { useAppConfigSummary } from "@workspace/elaine-ui";
 import { Button } from "@/components/ui/button";
-import { CollectionErrorState } from "@/components/CollectionErrorState";
+import { CollectionErrorState } from "@workspace/collection-ui";
 import { DominantColorDots } from "@/components/collection/DominantColorDots";
 import { colorToHex } from "@workspace/web-core/colors";
 import {

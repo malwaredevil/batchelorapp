@@ -1,5 +1,5 @@
 {
-  "name": "@workspace/upload-validation",
+  "name": "@workspace/upload-policy",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,12 +10,7 @@
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
-  "dependencies": {
-    "@workspace/upload-policy": "workspace:*",
-    "sharp": "^0.35.1"
-  },
   "devDependencies": {
-    "@types/node": "catalog:",
     "vitest": "^3.2.6"
   }
 }

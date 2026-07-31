@@ -6,8 +6,7 @@
     "emitDeclarationOnly": true,
     "outDir": "dist",
     "rootDir": "src",
-    "types": ["node"]
+    "lib": ["dom", "es2022"]
   },
-  "references": [{ "path": "../upload-policy" }],
   "include": ["src"]
 }

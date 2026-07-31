@@ -4,8 +4,8 @@
  * This test imports the REAL app.ts (with all external dependencies mocked)
  * and sends oversized multipart requests to prove that:
  *   1. The global uploadSizeGuard in app.ts rejects requests above the default
- *      101 MB cap with 413 before any route handler or body parser runs.
- *   2. The global uploadSizeGuard applies the 101 MB high cap for high-cap
+ *      26 MB guard threshold before any route handler or body parser runs.
+ *   2. The global uploadSizeGuard applies the 51 MB threshold for high-cap
  *      routes (e.g. /api/travels/trips/…) and rejects above that with 413.
  *
  * Why this matters: the route-level multer tests (upload-rejection.test.ts)
@@ -92,6 +92,7 @@ vi.mock("@sentry/node", () => ({
 // ---------------------------------------------------------------------------
 
 import app from "../app";
+import { DEFAULT_UPLOAD_BYTES, HIGH_UPLOAD_BYTES } from "./uploadSizeGuard";
 
 // ---------------------------------------------------------------------------
 // Server lifecycle helpers
@@ -181,10 +182,10 @@ function rawPost(opts: {
 // ---------------------------------------------------------------------------
 
 describe("app.ts — uploadSizeGuard global wiring", () => {
-  it("rejects a default-cap upload exceeding 101 MB with 413 on a pottery route", async () => {
-    // Spoof a 110 MB Content-Length — well above the 101 MB default cap.
+  it("rejects an upload above the default threshold on a pottery route", async () => {
+    // Spoof a Content-Length above the live shared guard threshold.
     // The guard must return 413 before the (mocked) router ever runs.
-    const oversized = 110 * 1024 * 1024;
+    const oversized = DEFAULT_UPLOAD_BYTES + 1;
     const tinyBody = Buffer.from(
       '--b\r\nContent-Disposition: form-data; name="image"\r\n\r\ndata\r\n--b--',
     );
@@ -202,9 +203,8 @@ describe("app.ts — uploadSizeGuard global wiring", () => {
     );
   });
 
-  it("rejects a high-cap upload exceeding 101 MB with 413 on a travels route", async () => {
-    // Spoof a 110 MB Content-Length — above the 101 MB high cap for /api/travels/trips/.
-    const oversized = 110 * 1024 * 1024;
+  it("rejects an upload above the high-cap threshold on a travels route", async () => {
+    const oversized = HIGH_UPLOAD_BYTES + 1;
     const tinyBody = Buffer.from(
       '--b\r\nContent-Disposition: form-data; name="file"\r\n\r\ndata\r\n--b--',
     );
@@ -223,7 +223,7 @@ describe("app.ts — uploadSizeGuard global wiring", () => {
   });
 
   it("allows a 5 MB upload on a default-cap route through to the (mocked) router", async () => {
-    // 5 MB is well below the 101 MB default cap — the guard must pass it through.
+    // 5 MB is well below the 26 MB default guard threshold.
     // The mocked router returns 200 so any non-413 response means the guard allowed it.
     const FIVE_MB = 5 * 1024 * 1024;
     const boundary = "validboundary";

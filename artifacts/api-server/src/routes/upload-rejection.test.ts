@@ -559,13 +559,10 @@ describe("Pottery POST /api/pottery/items — upload rejection", () => {
     expect(res.status).toBe(400);
   });
 
-  it.skip("rejects a file exceeding the 100 MB size limit with 413 — covered by uploadSizeGuard.test.ts", () => {
-    // The upload limit is now 100 MB. Allocating a 101 MB+ buffer in a unit test
-    // is impractical (slow, high memory). The 413 rejection path (both fast-path
-    // Content-Length header and slow-path byte-count) is comprehensively tested
-    // in src/middleware/uploadSizeGuard.test.ts using raw Node http with a spoofed
-    // Content-Length, which avoids the allocation cost. That test imports the live
-    // DEFAULT_UPLOAD_BYTES constant so it stays in sync with any future limit change.
+  it.skip("rejects a file exceeding its configured size limit with 413 — covered by uploadSizeGuard.test.ts", () => {
+    // The 413 rejection path (both fast-path Content-Length and slow-path byte
+    // count) is comprehensively tested in uploadSizeGuard.test.ts without a
+    // large allocation. That suite imports the live shared limits.
   });
 
   it("accepts a valid JPEG and returns 201", async () => {
@@ -709,7 +706,7 @@ describe("Quilting POST /api/quilting/fabrics — upload rejection", () => {
     expect(res.status).toBe(400);
   });
 
-  it.skip("rejects a file exceeding the 100 MB size limit with 413 — covered by uploadSizeGuard.test.ts", () => {
+  it.skip("rejects a file exceeding its configured size limit with 413 — covered by uploadSizeGuard.test.ts", () => {
     // See the pottery section above for the rationale. Same applies here.
   });
 
@@ -852,7 +849,7 @@ describe("Ornaments POST /api/ornaments/items — upload rejection", () => {
     expect(res.status).toBe(400);
   });
 
-  it.skip("rejects a file exceeding the 100 MB size limit with 413 — covered by uploadSizeGuard.test.ts", () => {
+  it.skip("rejects a file exceeding its configured size limit with 413 — covered by uploadSizeGuard.test.ts", () => {
     // See the pottery section above for the rationale. Same applies here.
   });
 
@@ -988,7 +985,7 @@ describe("Travels POST /api/travels/trips/:id/documents — upload rejection", (
     expect(res.status).toBe(400);
   });
 
-  it.skip("rejects a file exceeding the 100 MB size limit with 413 — covered by uploadSizeGuard.test.ts", () => {
+  it.skip("rejects a file exceeding its configured size limit with 413 — covered by uploadSizeGuard.test.ts", () => {
     // See the pottery section above for the rationale. Same applies here.
   });
 

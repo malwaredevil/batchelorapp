@@ -84,6 +84,14 @@ import {
   semanticCollectionSearch,
   buildFabricSearchDocument,
 } from "../../lib/collection-search";
+import { getModels } from "../../lib/ai-client";
+import {
+  assignGenerationRunTarget,
+  runAnalysisWithEvidence,
+  runAnalysisWithEvidenceTrace,
+} from "../../lib/ai-provenance";
+import { parseStringArray } from "../../lib/collection-parsing";
+import { resolveOrCreateQuiltingCategories as resolveOrCreateCategories } from "../../lib/quilting/resolve-categories";
 
 const {
   embedding: _e,
@@ -116,69 +124,6 @@ function clamp(v: unknown, max: number): string | null {
   if (typeof v !== "string") return null;
   const t = v.trim();
   return t.length > 0 ? t.slice(0, max) : null;
-}
-
-function parseStringArray(raw: unknown): string[] {
-  if (Array.isArray(raw))
-    return raw.filter((v): v is string => typeof v === "string");
-  if (typeof raw === "string") {
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed))
-        return parsed.filter((v): v is string => typeof v === "string");
-    } catch {
-      return raw
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-    }
-  }
-  return [];
-}
-
-function isUniqueConstraintViolation(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as { code: string }).code === "23505"
-  );
-}
-
-/** Resolve category names → IDs, creating shared household categories as needed. */
-async function resolveOrCreateCategories(names: string[]): Promise<number[]> {
-  if (names.length === 0) return [];
-  const ids: number[] = [];
-  for (const name of names) {
-    const trimmed = name.trim();
-    if (!trimmed) continue;
-    const [existing] = await db
-      .select({ id: categories.id })
-      .from(categories)
-      .where(eq(categories.name, trimmed))
-      .limit(1);
-    if (existing) {
-      ids.push(existing.id);
-    } else {
-      try {
-        const [created] = await db
-          .insert(categories)
-          .values({ name: trimmed })
-          .returning({ id: categories.id });
-        if (created) ids.push(created.id);
-      } catch (err) {
-        if (!isUniqueConstraintViolation(err)) throw err;
-        // Created concurrently by another request — look it up.
-        const [race] = await db
-          .select({ id: categories.id })
-          .from(categories)
-          .where(eq(categories.name, trimmed))
-          .limit(1);
-        if (race) ids.push(race.id);
-      }
-    }
-  }
-  return ids;
 }
 
 const router: IRouter = Router();
@@ -664,7 +609,17 @@ router.post("/fabrics", aiLimiter, upload.single("image"), async (req, res) => {
     return { lockedFields: [], name, lineName, designer, manufacturer };
   })();
 
-  const analysis = await analyzeImage([dataUrl], context);
+  const { result: analysis, runId: analysisRunId } =
+    await runAnalysisWithEvidenceTrace(
+      {
+        module: "quilting",
+        feature: "catalogue-fabric-image",
+        targetType: "quilting_fabric",
+        userId,
+        model: (await getModels()).fastVision,
+      },
+      () => analyzeImage([dataUrl], context),
+    );
   const embeddingText = buildEmbeddingText(analysis);
   const [embedding, imagePath, visualEmb] = await Promise.all([
     embedText(embeddingText),
@@ -706,10 +661,11 @@ router.post("/fabrics", aiLimiter, upload.single("image"), async (req, res) => {
         ? sql`${`[${visualEmb.join(",")}]`}::vector`
         : null,
     })
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .returning(fabricColumns as any)) as unknown as Array<
     Omit<FabricRow, "embedding" | "visualEmbedding">
   >;
+
+  await assignGenerationRunTarget(analysisRunId, row.id);
 
   const categoryNames = parseStringArray(req.body.categories);
   if (categoryNames.length > 0) {
@@ -1081,7 +1037,17 @@ router.post("/fabrics/:id/reanalyze", aiLimiter, async (req, res) => {
   };
 
   const [analysis, visualEmb] = await Promise.all([
-    analyzeImage(dataUrls, context),
+    runAnalysisWithEvidence(
+      {
+        module: "quilting",
+        feature: "reanalyze-fabric",
+        targetType: "quilting_fabric",
+        targetId: id,
+        userId: row.userId ?? undefined,
+        model: (await getModels()).fastVision,
+      },
+      () => analyzeImage(dataUrls, context),
+    ),
     generateVisualEmbedding(dataUrls[0]).catch(() => null),
   ]);
   const embeddingText = buildEmbeddingText(analysis);
@@ -1203,7 +1169,17 @@ export async function bulkReanalyzeFabrics(
         styleDescriptors: row.styleDescriptors,
       };
       const [analysis, visualEmb] = await Promise.all([
-        analyzeImage(dataUrls, context),
+        runAnalysisWithEvidence(
+          {
+            module: "quilting",
+            feature: "bulk-reanalyze-fabric",
+            targetType: "quilting_fabric",
+            targetId: id,
+            userId: row.userId ?? undefined,
+            model: (await getModels()).fastVision,
+          },
+          () => analyzeImage(dataUrls, context),
+        ),
         generateVisualEmbedding(dataUrls[0]).catch(() => null),
       ]);
       const embedding = await embedText(buildEmbeddingText(analysis));

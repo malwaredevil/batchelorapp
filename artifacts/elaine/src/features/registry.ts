@@ -1,4 +1,5 @@
 import type { ComponentType } from "react";
+import { createFeatureRegistry } from "@workspace/web-core";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -37,11 +38,10 @@ export interface FeatureRegistration {
 // Registry store (module-level singleton — safe for SPA lifecycle)
 // ---------------------------------------------------------------------------
 
-const _features: FeatureRegistration[] = [];
+const registry = createFeatureRegistry<FeatureRegistration>();
 
 export function registerFeature(config: FeatureRegistration): void {
-  if (_features.some((f) => f.id === config.id)) return; // idempotent
-  _features.push(config);
+  registry.register(config);
 }
 
 // ---------------------------------------------------------------------------
@@ -49,7 +49,8 @@ export function registerFeature(config: FeatureRegistration): void {
 // ---------------------------------------------------------------------------
 
 export function getNavItems(): NavEntry[] {
-  return _features
+  return registry
+    .list()
     .flatMap((f) => (f.nav ? [f.nav] : []))
     .sort((a, b) => (a.order ?? 50) - (b.order ?? 50));
 }

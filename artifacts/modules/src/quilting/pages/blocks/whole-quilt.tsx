@@ -29,6 +29,10 @@ import {
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
+import {
+  downloadBlob,
+  normalizeDownloadStem,
+} from "@workspace/web-core/download";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -983,12 +987,7 @@ export default function WholeQuiltDesigner() {
           : "image/png";
     canvas.toBlob((b) => {
       if (!b) return;
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(b);
-      a.download = `${(name.trim() || "quilt").replace(/\s+/g, "-").toLowerCase()}.${format}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      downloadBlob(b, `${normalizeDownloadStem(name, "quilt")}.${format}`);
     }, mime);
   }
 

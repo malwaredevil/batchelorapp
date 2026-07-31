@@ -26,9 +26,10 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { TagSelector } from "@/quilting/components/tag-selector";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
-
-// Must match MAX_UPLOAD_BYTES in lib/upload-validation/src/index.ts
-const MAX_UPLOAD_BYTES = 100 * 1024 * 1024; // 100 MB
+import {
+  STANDARD_IMAGE_UPLOAD,
+  validateClientUpload,
+} from "@workspace/upload-policy";
 
 const AddPatternSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -92,8 +93,9 @@ export default function AddPattern() {
     const f = e.target.files?.[0];
     e.target.value = "";
     if (!f) return;
-    if (f.size > MAX_UPLOAD_BYTES) {
-      toast.error(`${f.name} — skipped (max 10 MB per file)`);
+    const validation = validateClientUpload(f, STANDARD_IMAGE_UPLOAD);
+    if (!validation.ok) {
+      toast.error(validation.message);
       return;
     }
     setFile(f);

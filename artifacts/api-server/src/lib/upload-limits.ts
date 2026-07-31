@@ -29,13 +29,17 @@
  * the default 25 MB cap, which is the safe (under-permissive) failure mode
  * rather than a silent security gap.
  */
+import {
+  LARGE_UPLOAD_BYTES,
+  STANDARD_UPLOAD_BYTES,
+} from "@workspace/upload-policy";
 
 /**
  * Per-route multer fileSize limit for standard upload routes (pottery,
  * ornaments, quilting). Must stay at least 1 MB below DEFAULT_UPLOAD_BYTES
- * (101 MB) so the global guard is always the primary rejection point.
+ * (26 MB) so the global guard is always the primary rejection point.
  */
-export const DEFAULT_MULTER_FILE_BYTES = 25 * 1024 * 1024; // 25 MB
+export const DEFAULT_MULTER_FILE_BYTES = STANDARD_UPLOAD_BYTES;
 
 /** Image-only buckets mirror the standard inbound upload ceiling. */
 export const STANDARD_IMAGE_BUCKET_FILE_BYTES = DEFAULT_MULTER_FILE_BYTES;
@@ -50,25 +54,24 @@ export const STANDARD_IMAGE_BUCKET_FILE_BYTES = DEFAULT_MULTER_FILE_BYTES;
  * allowed size"), which logs as a startup warning and leaves the bucket with
  * stale policies.
  *
- * Express + multer still enforces its own (larger) per-route cap — the bucket
- * policy here is an independent Supabase-side guard that kicks in after the
- * file reaches Supabase Storage.  In practice, any file that passes multer
- * and is within this limit will be stored successfully.
+ * Express + multer enforces a route-specific cap before the bucket policy. The
+ * bucket policy remains an independent Supabase-side guard that applies when
+ * the file reaches Storage.
  */
-export const SUPABASE_BUCKET_FILE_BYTES = 50 * 1024 * 1024; // 50 MB (Supabase free-plan ceiling)
+export const SUPABASE_BUCKET_FILE_BYTES = LARGE_UPLOAD_BYTES;
 
 /**
  * Per-route multer fileSize limit for high-cap upload routes (travels
  * photos/docs, elaine attachments, messenger). Must stay at least 1 MB below
- * HIGH_UPLOAD_BYTES (101 MB) so the global guard is always the primary
+ * HIGH_UPLOAD_BYTES (51 MB) so the global guard is always the primary
  * rejection point.
  */
-export const HIGH_MULTER_FILE_BYTES = 50 * 1024 * 1024; // 50 MB
+export const HIGH_MULTER_FILE_BYTES = LARGE_UPLOAD_BYTES;
 
 /**
  * Elaine attachment uploads cap.
  */
-export const ELAINE_ATTACHMENT_FILE_BYTES = 50 * 1024 * 1024; // 50 MB
+export const ELAINE_ATTACHMENT_FILE_BYTES = LARGE_UPLOAD_BYTES;
 
 /**
  * Route path prefixes whose uploads are allowed up to HIGH_MULTER_FILE_BYTES
@@ -98,7 +101,7 @@ export const HIGH_UPLOAD_PREFIXES: readonly string[] = [
  *
  * If the prefix (or any leading sub-path of a request that starts with it)
  * appears in HIGH_UPLOAD_PREFIXES, returns HIGH_MULTER_FILE_BYTES (50 MB).
- * Otherwise returns DEFAULT_MULTER_FILE_BYTES (50 MB).
+ * Otherwise returns DEFAULT_MULTER_FILE_BYTES (25 MB).
  *
  * Route files should use this instead of importing HIGH_MULTER_FILE_BYTES
  * directly so that the prefix list remains the single source of truth.

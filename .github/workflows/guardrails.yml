@@ -64,7 +64,7 @@ jobs:
 
       - name: "Ban: restricted files in diff"
         run: |
-          RESTRICTED=$(cat /tmp/changed_files.txt | grep -E "^\.agents/|^\.local/|^threat_model\.md|^\.env$|^\.env\.|^\.replit$|^\.replitignore$|^replit\.nix$|^\.upm/" || true)
+          RESTRICTED=$(cat /tmp/changed_files.txt | grep -E "(^|/)\.replit-artifact/|^\.agents/|^\.local/|^threat_model\.md|^\.env$|^\.env\.|^\.replit$|^\.replitignore$|^replit\.nix$|^\.upm/" || true)
           if [ -n "$RESTRICTED" ]; then
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "ERROR: The following restricted files appear in this diff:"
@@ -79,6 +79,7 @@ jobs:
             echo "  .replitignore   — Replit-local ignore rules"
             echo "  replit.nix      — Replit-local nix config"
             echo "  .upm/           — Replit package manager cache"
+            echo "  .replit-artifact/ — Replit-local artifact routing config"
             echo ""
             echo "Remove them from your branch and add them to .gitignore."
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -174,6 +175,9 @@ jobs:
           cache: "pnpm"
 
       - run: pnpm install --frozen-lockfile
+
+      - name: "Architecture: domain composition boundaries"
+        run: pnpm --filter @workspace/scripts run check-domain-composition
 
       - name: "Ban: raw fetch('/api/...') in frontend artifacts"
         run: pnpm --filter @workspace/scripts run check-raw-fetch

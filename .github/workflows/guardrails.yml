@@ -87,9 +87,6 @@ jobs:
           fi
           echo "✓ No restricted files in diff"
 
-      - name: "Architecture: domain composition boundaries"
-        run: pnpm --filter @workspace/scripts run check-domain-composition
-
       - name: "Ban: ad-hoc direct OpenAI SDK instantiation in server code"
         run: |
           # Check each matching line + its adjacent lines for the exemption comment
@@ -178,6 +175,9 @@ jobs:
           cache: "pnpm"
 
       - run: pnpm install --frozen-lockfile
+
+      - name: "Architecture: domain composition boundaries"
+        run: pnpm --filter @workspace/scripts run check-domain-composition
 
       - name: "Ban: raw fetch('/api/...') in frontend artifacts"
         run: pnpm --filter @workspace/scripts run check-raw-fetch

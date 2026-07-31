@@ -339,7 +339,7 @@ scripts/               # Utility scripts (backup, restore, CI checks, verificati
 - All schema changes go in `lib/db/src/schema-statements.ts` as `CREATE ... IF NOT EXISTS`
 - Then mirror the change in the Drizzle schema file under `lib/db/src/schema/`
 - Never use `drizzle-kit push` in any form (see §2.1)
-- The Supabase project reference is `gadhlfluflknlwgmlmos`
+- The Supabase project reference is embedded in `DATABASE_URL` — the hostname segment has the form `<ref>.supabase.co` (never hard-code the reference in public files; derive it from the env var)
 - Table naming: `pottery_*`, `quilting_*`, `ornaments_*`, `travels_*`, `app_*`
 - `user_id` on shared tables is attribution only — never used as an access filter
 

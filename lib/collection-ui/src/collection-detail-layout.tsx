@@ -12,12 +12,30 @@ export interface CollectionDetailLayoutProps {
   titleSlot: ReactNode;
   /** Right column: action icon buttons (small, outlined) */
   actions?: ReactNode;
-  /** Right column: metadata fields */
+  /** Optional concise summary that belongs beside the hero image. */
+  heroContent?: ReactNode;
+  /** Full-width metadata fields rendered below the hero. */
   fields: ReactNode;
-  /** Right column: additional panels (categories, description, etc.) */
+  /** Heading for the full-width field panel. Set null to omit its wrapper. */
+  fieldsTitle?: string | null;
+  /** Full-width additional panels (categories, description, etc.) */
   panels?: ReactNode;
   /** Full-width sections below the two-column hero */
   sections?: ReactNode;
+}
+
+export function CollectionDetailHero({ children }: { children: ReactNode }) {
+  return <div className="grid gap-6 md:grid-cols-2">{children}</div>;
+}
+
+export function CollectionDetailPanelStack({
+  children,
+  className = "",
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return <div className={`mt-6 space-y-4 ${className}`.trim()}>{children}</div>;
 }
 
 export function CollectionDetailLayout({
@@ -26,7 +44,9 @@ export function CollectionDetailLayout({
   gallery,
   titleSlot,
   actions,
+  heroContent,
   fields,
+  fieldsTitle = "Details",
   panels,
   sections,
 }: CollectionDetailLayoutProps) {
@@ -43,12 +63,14 @@ export function CollectionDetailLayout({
         {backLabel}
       </button>
 
-      {/* Hero: two-column grid */}
-      <div className="grid gap-6 md:grid-cols-2">
+      {/* Hero: image plus concise identity/actions only. Long record data is
+          intentionally rendered below at full width so every collection
+          detail page uses the available viewport consistently. */}
+      <CollectionDetailHero>
         {/* Left: image gallery */}
         <div className="space-y-4">{gallery}</div>
 
-        {/* Right: info + actions */}
+        {/* Right: identity, actions, and a deliberately concise summary */}
         <div className="flex flex-col gap-4">
           {/* Title row + icon action buttons */}
           <div className="flex items-start justify-between gap-3">
@@ -56,16 +78,26 @@ export function CollectionDetailLayout({
             {actions && <div className="flex shrink-0 gap-1">{actions}</div>}
           </div>
 
-          {/* Fields */}
-          <div className="space-y-1">{fields}</div>
-
-          {/* Extra panels */}
-          {panels}
+          {heroContent}
         </div>
-      </div>
+      </CollectionDetailHero>
 
-      {/* Full-width sections */}
-      {sections && <div className="mt-8 space-y-6">{sections}</div>}
+      <CollectionDetailPanelStack>
+        {fieldsTitle === null ? (
+          fields
+        ) : (
+          <section className="rounded-xl border border-card-border bg-card">
+            <div className="border-b border-border px-4 py-3">
+              <h2 className="text-sm font-semibold">{fieldsTitle}</h2>
+            </div>
+            <div className="px-4 py-2">{fields}</div>
+          </section>
+        )}
+        {panels}
+      </CollectionDetailPanelStack>
+
+      {/* Full-width sections below the standard record panels */}
+      {sections && <div className="mt-6 space-y-6">{sections}</div>}
     </div>
   );
 }

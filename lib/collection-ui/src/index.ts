@@ -26,6 +26,8 @@ export type {
 export {
   CollectionDetailLayout,
   CollectionDetailSkeleton,
+  CollectionDetailHero,
+  CollectionDetailPanelStack,
 } from "./collection-detail-layout";
 export type { CollectionDetailLayoutProps } from "./collection-detail-layout";
 
@@ -37,6 +39,20 @@ export type {
   CollectionDetailFieldProps,
   CollectionDetailSectionProps,
 } from "./collection-detail-field";
+
+export { CategoryChipPicker } from "./category-chip-picker";
+export type { CategoryChipPickerProps } from "./category-chip-picker";
+export { CategoryTagSelector } from "./category-tag-selector";
+export type {
+  CategoryTagSelectorProps,
+  CreateCategoryInput,
+} from "./category-tag-selector";
+
+export { QuickEditSheetFrame } from "./quick-edit-sheet";
+export type { QuickEditSheetFrameProps } from "./quick-edit-sheet";
+
+export { CollectionErrorState } from "./collection-error-state";
+export type { CollectionErrorStateProps } from "./collection-error-state";
 
 export { PreviewZoomModal } from "./preview-zoom-modal";
 export {

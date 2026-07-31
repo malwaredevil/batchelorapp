@@ -6,3 +6,5 @@ export * from "./use-install-prompt";
 export * from "./install-banner";
 export * from "./mount-app";
 export * from "./not-found";
+export * from "./feature-registry";
+export * from "./download";

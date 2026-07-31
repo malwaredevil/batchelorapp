@@ -51,6 +51,10 @@ import {
   Pencil,
   FolderOpen,
 } from "lucide-react";
+import {
+  downloadBlob,
+  normalizeDownloadStem,
+} from "@workspace/web-core/download";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -3778,14 +3782,7 @@ export default function BlockDesigner() {
           toast.error("Export failed.");
           return;
         }
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `${(name.trim() || "block").replace(/\s+/g, "-").toLowerCase()}.${ext}`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        downloadBlob(blob, `${normalizeDownloadStem(name, "block")}.${ext}`);
         toast.success(`Exported as ${ext.toUpperCase()}.`);
       },
       mime,

@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { AlertCircle, RefreshCw } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@workspace/ui/button";
 
-interface CollectionErrorStateProps {
+export interface CollectionErrorStateProps {
   onRetry: () => Promise<unknown>;
   message?: string;
 }
@@ -23,7 +23,10 @@ export function CollectionErrorState({
   }
 
   return (
-    <div className="flex flex-col items-center justify-center gap-4 py-24 text-muted-foreground">
+    <div
+      role="alert"
+      className="flex flex-col items-center justify-center gap-4 py-24 text-muted-foreground"
+    >
       <AlertCircle className="h-10 w-10 text-destructive" />
       <p className="text-center text-sm">{message}</p>
       <Button
@@ -35,7 +38,7 @@ export function CollectionErrorState({
         <RefreshCw
           className={`mr-2 h-4 w-4 ${retrying ? "animate-spin" : ""}`}
         />
-        Try again
+        {retrying ? "Trying again…" : "Try again"}
       </Button>
     </div>
   );

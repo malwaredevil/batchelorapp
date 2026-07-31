@@ -154,6 +154,36 @@ export async function recordFieldCandidates(
   }
 }
 
+/**
+ * Attach an analysis that ran before insertion to the record created from it.
+ * A single statement updates the run and all of its candidates atomically.
+ */
+export async function assignGenerationRunTarget(
+  runId: number,
+  targetId: number,
+): Promise<void> {
+  if (runId < 0) return;
+  try {
+    await pool.query(
+      `WITH updated_run AS (
+         UPDATE ai_generation_runs
+         SET target_id=$2
+         WHERE id=$1
+         RETURNING id
+       )
+       UPDATE ai_field_candidates
+       SET target_id=$2
+       WHERE generation_run_id IN (SELECT id FROM updated_run)`,
+      [runId, targetId],
+    );
+  } catch (err) {
+    logger.warn(
+      { err, runId, targetId },
+      "ai-provenance: failed to assign generation run target",
+    );
+  }
+}
+
 export async function recordFieldDecision(
   candidateId: number,
   decisionType: "accept" | "reject" | "edit" | "lock" | "unlock",
@@ -193,7 +223,7 @@ export async function recordFieldDecision(
  * Convenience wrapper: run an AI call with full provenance tracking.
  * Automatically starts a run, calls fn(), records candidates, finalizes.
  */
-export async function withProvenance<T extends Record<string, unknown>>(
+export async function withProvenance<T extends object>(
   input: StartGenerationRunInput,
   fn: (runId: number) => Promise<{
     result: T;
@@ -229,4 +259,64 @@ export async function withProvenance<T extends Record<string, unknown>>(
     );
     throw err;
   }
+}
+
+export interface AnalysisEvidenceInput extends Omit<
+  StartGenerationRunInput,
+  "provider"
+> {
+  provider?: string;
+  authorityClass?: AuthorityClass;
+  confidenceMethod?: ConfidenceMethod;
+}
+
+export function buildAnalysisCandidates(
+  result: object,
+  options?: {
+    authorityClass?: AuthorityClass;
+    confidenceMethod?: ConfidenceMethod;
+  },
+): FieldCandidateInput[] {
+  return Object.entries(result).map(([fieldPath, value]) => ({
+    fieldPath,
+    value,
+    confidenceMethod: options?.confidenceMethod ?? "vision_inference",
+    authorityClass: options?.authorityClass ?? "vision",
+  }));
+}
+
+/**
+ * Standard facade for structured AI analysis workflows. It records one
+ * generation run plus field-level candidates without requiring every domain
+ * route to duplicate lifecycle bookkeeping. Domain prompts, parsing, locks,
+ * and merge policy remain owned by the caller.
+ */
+export async function runAnalysisWithEvidenceTrace<T extends object>(
+  input: AnalysisEvidenceInput,
+  analyze: () => Promise<T>,
+): Promise<{ result: T; runId: number }> {
+  const { authorityClass, confidenceMethod, ...runInput } = input;
+  return withProvenance(
+    {
+      ...runInput,
+      provider: input.provider ?? "openrouter",
+    },
+    async () => {
+      const result = await analyze();
+      return {
+        result,
+        candidates: buildAnalysisCandidates(result, {
+          confidenceMethod,
+          authorityClass,
+        }),
+      };
+    },
+  );
+}
+
+export async function runAnalysisWithEvidence<T extends object>(
+  input: AnalysisEvidenceInput,
+  analyze: () => Promise<T>,
+): Promise<T> {
+  return (await runAnalysisWithEvidenceTrace(input, analyze)).result;
 }

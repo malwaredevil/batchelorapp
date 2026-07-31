@@ -90,6 +90,17 @@ import {
   semanticCollectionSearch,
   buildOrnamentSearchDocument,
 } from "../../lib/collection-search";
+import { getModels } from "../../lib/ai-client";
+import {
+  assignGenerationRunTarget,
+  runAnalysisWithEvidence,
+  runAnalysisWithEvidenceTrace,
+} from "../../lib/ai-provenance";
+import {
+  matchCategoryIds,
+  mergeExistingCategoryIds,
+  parsePositiveIntegerArray,
+} from "../../lib/collection-parsing";
 
 // Excludes the embedding + visualEmbedding vectors from list/detail queries —
 // they're large and only needed internally, never surfaced via the API.
@@ -505,23 +516,20 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
   const contentType = sniffedType;
   const cleanBuffer = await stripMetadata(file.buffer, contentType);
 
-  let manualCategoryIds: number[] = [];
-  try {
-    const raw = req.body?.categoryIds;
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        manualCategoryIds = parsed
-          .map(Number)
-          .filter((n) => Number.isInteger(n) && n > 0);
-      }
-    }
-  } catch {
-    // Ignore malformed field — manual categories are optional
-  }
+  const manualCategoryIds = parsePositiveIntegerArray(req.body?.categoryIds);
 
   const dataUrl = toDataUrl(cleanBuffer, contentType);
-  const analysis = await analyzeOrnamentImage([dataUrl]);
+  const { result: analysis, runId: analysisRunId } =
+    await runAnalysisWithEvidenceTrace(
+      {
+        module: "ornaments",
+        feature: "catalogue-image",
+        targetType: "ornament_item",
+        userId,
+        model: (await getModels()).fastVision,
+      },
+      () => analyzeOrnamentImage([dataUrl]),
+    );
   const embedding = await embedText(buildEmbeddingText(analysis));
 
   const nameField = clampField(req.body?.name, MAX_NAME);
@@ -636,38 +644,23 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
       })
       .returning();
 
+    await assignGenerationRunTarget(analysisRunId, row.id);
+
     // Categories are a shared household set — auto-match plus manual picks.
     const allCats = await db
       .select({ id: categories.id, name: categories.name })
       .from(categories);
-    const normalizeQuotes = (s: string) => s.replace(/[″\u201C\u201D]/g, '"');
-    const analysisText = normalizeQuotes(
-      [
-        analysis.name,
-        analysis.seriesOrCollection,
-        analysis.dimensions,
-        ...(analysis.motifs ?? []),
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase(),
+    const autoCategoryIds = matchCategoryIds(allCats, [
+      analysis.name,
+      analysis.seriesOrCollection,
+      analysis.dimensions,
+      analysis.motifs,
+    ]);
+    const allCategoryIds = mergeExistingCategoryIds(
+      allCats,
+      autoCategoryIds,
+      manualCategoryIds,
     );
-    function categoryMatchesText(catName: string): boolean {
-      const normalized = normalizeQuotes(catName.toLowerCase());
-      const escaped = normalized.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const pattern = new RegExp(`(?<![a-z0-9])${escaped}(?![a-z0-9])`, "i");
-      return pattern.test(analysisText);
-    }
-    const autoCategoryIds = allCats
-      .filter((cat) => categoryMatchesText(cat.name))
-      .map((cat) => cat.id);
-    const allCatIds = new Set(allCats.map((c) => c.id));
-    const safeManualCategoryIds = manualCategoryIds.filter((id) =>
-      allCatIds.has(id),
-    );
-    const allCategoryIds = [
-      ...new Set([...autoCategoryIds, ...safeManualCategoryIds]),
-    ];
     if (allCategoryIds.length > 0) {
       await db.insert(itemCategories).values(
         allCategoryIds.map((catId) => ({
@@ -1326,7 +1319,17 @@ export async function runItemAnalysis(id: number): Promise<unknown> {
     ),
   ];
 
-  const analysis = await analyzeOrnamentImage(dataUrls);
+  const analysis = await runAnalysisWithEvidence(
+    {
+      module: "ornaments",
+      feature: "reanalyze-item",
+      targetType: "ornament_item",
+      targetId: id,
+      userId: item.userId ?? undefined,
+      model: (await getModels()).fastVision,
+    },
+    () => analyzeOrnamentImage(dataUrls),
+  );
   const embedding = await embedText(buildEmbeddingText(analysis));
 
   const locked = new Set(item.lockedFields ?? []);
@@ -1368,38 +1371,24 @@ export async function runItemAnalysis(id: number): Promise<unknown> {
     .returning(itemColumns);
 
   // Re-run category auto-matching (union-only — never removes existing assignments).
-  const normalizeQ = (s: string) => s.replace(/[″\u201C\u201D]/g, '"');
-  const analysisText = normalizeQ(
-    [
-      merged.name,
-      merged.seriesOrCollection,
-      merged.dimensions,
-      ...merged.motifs,
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase(),
-  );
-
   const allCats = await db
     .select({ id: categories.id, name: categories.name })
     .from(categories);
+  const autoCategoryIds = matchCategoryIds(allCats, [
+    merged.name,
+    merged.seriesOrCollection,
+    merged.dimensions,
+    merged.motifs,
+  ]);
   const existingCatRows = await db
     .select({ categoryId: itemCategories.categoryId })
     .from(itemCategories)
     .where(eq(itemCategories.itemId, id));
   const existingCatIds = new Set(existingCatRows.map((r) => r.categoryId));
 
-  const newCatIds = allCats
-    .filter((cat) => {
-      const norm = normalizeQ(cat.name.toLowerCase());
-      const esc = norm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      return new RegExp(`(?<![a-z0-9])${esc}(?![a-z0-9])`, "i").test(
-        analysisText,
-      );
-    })
-    .map((cat) => cat.id)
-    .filter((catId) => !existingCatIds.has(catId));
+  const newCatIds = autoCategoryIds.filter(
+    (catId) => !existingCatIds.has(catId),
+  );
 
   if (newCatIds.length > 0) {
     await db

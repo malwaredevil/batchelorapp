@@ -12,6 +12,7 @@ import {
   Sliders,
   Library,
   Plus,
+  ChevronDown,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -720,6 +721,8 @@ export default function LayoutComposer() {
   const { data: blockTemplates } = useListBlockTemplates();
   const createBlockFromTemplate = useCreateBlock();
   const [spawnTemplateId, setSpawnTemplateId] = useState<number | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
 
   const [name, setName] = useState("Untitled layout");
   const [rows, setRows] = useState(5);
@@ -1074,6 +1077,8 @@ export default function LayoutComposer() {
             queryKey: getListBlocksQueryKey(),
           });
           setSelectedBlock(newBlock.id);
+          setPaletteOpen(true);
+          setTemplatesOpen(false);
           setSpawnTemplateId(null);
           toast.success(`Block "${tpl.name}" added to palette`);
         },
@@ -1670,121 +1675,182 @@ export default function LayoutComposer() {
         </div>
 
         {/* Right: block palette + categories */}
-        <div className="flex flex-col gap-3 lg:w-64">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Block palette
-          </p>
+        <div className="flex flex-col gap-3 lg:sticky lg:top-20 lg:w-72 lg:self-start">
+          <section className="overflow-hidden rounded-lg border border-border bg-card">
+            <button
+              type="button"
+              onClick={() => setPaletteOpen((open) => !open)}
+              aria-expanded={paletteOpen}
+              aria-controls="layout-block-palette"
+              className="flex w-full items-center gap-2 px-3 py-3 text-left hover:bg-muted/50"
+            >
+              <ChevronDown
+                className={`h-4 w-4 shrink-0 transition-transform ${
+                  paletteOpen ? "" : "-rotate-90"
+                }`}
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold">
+                  Block palette
+                </span>
+                <span className="block truncate text-xs text-muted-foreground">
+                  {selectedBlock === null
+                    ? "Empty cell selected"
+                    : (blockMap.get(selectedBlock)?.name ?? "Block selected")}
+                </span>
+              </span>
+              <span className="rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
+                {blockList?.length ?? 0}
+              </span>
+            </button>
 
-          <button
-            onClick={() => setSelectedBlock(null)}
-            className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
-              selectedBlock === null
-                ? "border-primary bg-primary/5 text-primary"
-                : "border-border text-muted-foreground hover:border-primary/40"
-            }`}
-          >
-            <span className="text-base">◻</span>
-            <span>Empty cell (eraser)</span>
-          </button>
-
-          {(!blockList || blockList.length === 0) && (
-            <div className="rounded-lg border border-dashed border-border p-4 text-center">
-              <p className="text-sm text-muted-foreground">
-                No block designs yet.
-              </p>
-              <a
-                href="/quilting/blocks/new"
-                className="mt-1 block text-xs text-primary hover:underline"
+            {paletteOpen && (
+              <div
+                id="layout-block-palette"
+                className="max-h-[min(32rem,55vh)] space-y-2 overflow-y-auto border-t border-border p-3"
               >
-                Create one in the Block Designer →
-              </a>
-            </div>
-          )}
-
-          {blockList && blockList.length > 0 && fabricsLoading && (
-            <div className="flex flex-col gap-2">
-              {blockList.map((block) => (
-                <div
-                  key={block.id}
-                  className="flex items-center gap-3 rounded-lg border border-border p-2"
-                >
-                  <Skeleton className="h-10 w-10 shrink-0 rounded" />
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <Skeleton className="h-3.5 w-3/4" />
-                    <Skeleton className="h-3 w-1/2" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {blockList && blockList.length > 0 && !fabricsLoading && (
-            <div className="flex flex-col gap-2">
-              {blockList.map((block) => (
                 <button
-                  key={block.id}
-                  onClick={() => setSelectedBlock(block.id)}
-                  className={`flex items-center gap-3 rounded-lg border p-2 text-left transition-colors ${
-                    selectedBlock === block.id
-                      ? "border-primary bg-primary/5 ring-1 ring-primary"
-                      : "border-border hover:border-primary/40"
+                  type="button"
+                  onClick={() => setSelectedBlock(null)}
+                  className={`flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
+                    selectedBlock === null
+                      ? "border-primary bg-primary/5 text-primary"
+                      : "border-border text-muted-foreground hover:border-primary/40"
                   }`}
                 >
-                  <div className="shrink-0 overflow-hidden rounded">
-                    <BlockMini block={block} size={40} />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{block.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {block.gridSize}×{block.gridSize}
-                    </p>
-                  </div>
+                  <span className="text-base">◻</span>
+                  <span>Empty cell (eraser)</span>
                 </button>
-              ))}
-            </div>
-          )}
 
-          {/* Library Templates */}
-          {blockTemplates && blockTemplates.length > 0 && (
-            <div className="flex flex-col gap-2 border-t border-border pt-3">
-              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                <Library className="h-3.5 w-3.5" />
-                Library Templates
-              </p>
-              {blockTemplates.map((tpl: QuiltingBlockTemplate) => (
-                <button
-                  key={tpl.id}
-                  disabled={spawnTemplateId === tpl.id}
-                  onClick={() => handleSpawnFromTemplate(tpl)}
-                  className="flex items-center gap-3 rounded-lg border border-border p-2 text-left transition-colors hover:border-primary/40 disabled:opacity-60"
-                  title="Create a block from this template and add to palette"
-                >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded bg-muted/30">
-                    <BlockPreviewSvg
-                      cells={tpl.cells}
-                      gridSize={tpl.gridW}
-                      seams={tpl.seams as BlockSeamLine[]}
-                      size={40}
-                    />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{tpl.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {tpl.gridW}×{tpl.gridH}
+                {(!blockList || blockList.length === 0) && (
+                  <div className="rounded-lg border border-dashed border-border p-4 text-center">
+                    <p className="text-sm text-muted-foreground">
+                      No block designs yet.
                     </p>
+                    <a
+                      href="/quilting/blocks/new"
+                      className="mt-1 block text-xs text-primary hover:underline"
+                    >
+                      Create one in the Block Designer →
+                    </a>
                   </div>
-                  <div className="shrink-0 text-primary">
-                    {spawnTemplateId === tpl.id ? (
-                      <span className="text-xs text-muted-foreground">
-                        Adding…
-                      </span>
-                    ) : (
-                      <Plus className="h-4 w-4" />
-                    )}
+                )}
+
+                {blockList && blockList.length > 0 && fabricsLoading && (
+                  <div className="flex flex-col gap-2">
+                    {blockList.map((block) => (
+                      <div
+                        key={block.id}
+                        className="flex items-center gap-3 rounded-lg border border-border p-2"
+                      >
+                        <Skeleton className="h-10 w-10 shrink-0 rounded" />
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <Skeleton className="h-3.5 w-3/4" />
+                          <Skeleton className="h-3 w-1/2" />
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                </button>
-              ))}
-            </div>
+                )}
+
+                {blockList && blockList.length > 0 && !fabricsLoading && (
+                  <div className="flex flex-col gap-2">
+                    {blockList.map((block) => (
+                      <button
+                        type="button"
+                        key={block.id}
+                        onClick={() => setSelectedBlock(block.id)}
+                        className={`flex items-center gap-3 rounded-lg border p-2 text-left transition-colors ${
+                          selectedBlock === block.id
+                            ? "border-primary bg-primary/5 ring-1 ring-primary"
+                            : "border-border hover:border-primary/40"
+                        }`}
+                      >
+                        <div className="shrink-0 overflow-hidden rounded">
+                          <BlockMini block={block} size={40} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">
+                            {block.name}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {block.gridSize}×{block.gridSize}
+                          </p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+
+          {blockTemplates && blockTemplates.length > 0 && (
+            <section className="overflow-hidden rounded-lg border border-border bg-card">
+              <button
+                type="button"
+                onClick={() => setTemplatesOpen((open) => !open)}
+                aria-expanded={templatesOpen}
+                aria-controls="layout-library-templates"
+                className="flex w-full items-center gap-2 px-3 py-3 text-left hover:bg-muted/50"
+              >
+                <ChevronDown
+                  className={`h-4 w-4 shrink-0 transition-transform ${
+                    templatesOpen ? "" : "-rotate-90"
+                  }`}
+                />
+                <Library className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1 text-sm font-semibold">
+                  Library Templates
+                </span>
+                <span className="rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums text-muted-foreground">
+                  {blockTemplates.length}
+                </span>
+              </button>
+              {templatesOpen && (
+                <div
+                  id="layout-library-templates"
+                  className="max-h-[min(32rem,55vh)] space-y-2 overflow-y-auto border-t border-border p-3"
+                >
+                  {blockTemplates.map((tpl: QuiltingBlockTemplate) => (
+                    <button
+                      type="button"
+                      key={tpl.id}
+                      disabled={spawnTemplateId === tpl.id}
+                      onClick={() => handleSpawnFromTemplate(tpl)}
+                      className="flex w-full items-center gap-3 rounded-lg border border-border p-2 text-left transition-colors hover:border-primary/40 disabled:opacity-60"
+                      title="Create a block from this template and add to palette"
+                    >
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded bg-muted/30">
+                        <BlockPreviewSvg
+                          cells={tpl.cells}
+                          gridSize={tpl.gridW}
+                          seams={tpl.seams as BlockSeamLine[]}
+                          size={40}
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">
+                          {tpl.name}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {tpl.gridW}×{tpl.gridH}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-primary">
+                        {spawnTemplateId === tpl.id ? (
+                          <span className="text-xs text-muted-foreground">
+                            Adding…
+                          </span>
+                        ) : (
+                          <Plus className="h-4 w-4" />
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
           )}
 
           {/* Categories */}

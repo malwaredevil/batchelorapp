@@ -6,17 +6,17 @@
  * code is immediately caught here — there is no duplicated logic.
  *
  * Three core test cases (matching the task spec):
- *   1. Fast path — spoofed Content-Length header > 101 MB → 413 before any body
+ *   1. Fast path — Content-Length above the live default threshold → 413 before any body
  *      bytes are read, and the route handler is never entered.
- *   2. Slow path — actual chunked body exceeding 101 MB (no Content-Length) →
- *      413 via the streaming byte counter.  Marked skip: streaming 101+ MB in
+ *   2. Slow path — a chunked body above the threshold (no Content-Length) →
+ *      413 via the streaming byte counter. Marked skip because large streaming
  *      unit tests is impractical; the fast-path Content-Length test is the
  *      authoritative guard coverage.
  *   3. Regression guard — honest 5 MB multipart body with Content-Length → 200;
  *      the guard passes the request through to the real multer handler.
  *
  * Plus two additional cases for coverage:
- *   4. High-cap route (travels/trips/…) — 13 MB below the 101 MB cap → 200.
+ *   4. High-cap route (travels/trips/…) — 13 MB below 51 MB → 200.
  *   5. Non-multipart content type (JSON) — guard is bypassed entirely → 200.
  *
  * Implementation notes
@@ -318,7 +318,7 @@ describe("uploadSizeGuard middleware", () => {
 
   // ── Fast path ─────────────────────────────────────────────────────────────
 
-  it("rejects via Content-Length header when value exceeds the 101 MB default cap, without entering the route handler", async () => {
+  it("rejects a Content-Length above the default threshold without entering the route handler", async () => {
     let handlerEntered = false;
     server = await startServer(
       buildTestApp(() => {
@@ -326,9 +326,9 @@ describe("uploadSizeGuard middleware", () => {
       }),
     );
 
-    // Spoof a 110 MB Content-Length while sending only a tiny body.
+    // Spoof a Content-Length just above the live threshold while sending a tiny body.
     // The guard must return 413 immediately, before calling next().
-    const oversized = 110 * 1024 * 1024; // 110 MB — well above DEFAULT_UPLOAD_BYTES (101 MB)
+    const oversized = DEFAULT_UPLOAD_BYTES + 1;
     const tinyBody = Buffer.from("--b\r\n\r\nhello\r\n--b--");
 
     const result = await rawPost(server, {
@@ -348,16 +348,15 @@ describe("uploadSizeGuard middleware", () => {
 
   // ── Slow path ─────────────────────────────────────────────────────────────
 
-  it.skip("rejects via streaming byte count when chunked body exceeds the 101 MB default cap", async () => {
-    // The slow path requires streaming > 101 MB of chunked data with no Content-Length.
-    // Allocating and piping 101+ MB in a unit test is impractical (slow, high memory,
+  it.skip("rejects via streaming byte count when a chunked body exceeds the default threshold", async () => {
+    // Allocating and piping a threshold-sized body in a unit test is impractical (slow, high memory,
     // CI timeout risk). The fast-path Content-Length test above is the authoritative
     // guard coverage. The slow-path logic itself is unchanged — only the threshold changed.
     server = await startServer(buildTestApp());
     const result = await rawPostChunked(server, {
       path: "/api/pottery/items",
       contentType: "multipart/form-data; boundary=b",
-      totalBytes: 110 * 1024 * 1024, // 110 MB > DEFAULT_UPLOAD_BYTES (101 MB)
+      totalBytes: DEFAULT_UPLOAD_BYTES + 1,
     });
     expect(result.status).toBe(413);
     expect((result.body as { error: string }).error).toMatch(
@@ -396,7 +395,7 @@ describe("uploadSizeGuard middleware", () => {
 
   // ── High-cap routes ───────────────────────────────────────────────────────
 
-  it("allows a 13 MB upload on a high-cap route (travels/trips/ has a 101 MB cap)", async () => {
+  it("allows a 13 MB upload on a high-cap travels route", async () => {
     server = await startServer(buildTestApp());
 
     // Build an actual 13 MB multipart body so Content-Length matches the data
@@ -410,7 +409,7 @@ describe("uploadSizeGuard middleware", () => {
     const result = await rawPost(server, {
       path: "/api/travels/trips/123/photos",
       contentType: `multipart/form-data; boundary=${boundary}`,
-      contentLength: body.length, // honest Content-Length — 13 MB < 101 MB cap
+      contentLength: body.length, // honest Content-Length — 13 MB < 51 MB
       body,
     });
 
@@ -419,10 +418,10 @@ describe("uploadSizeGuard middleware", () => {
     expect(result.status).not.toBe(413);
   }, 15_000); // allow extra time for 13 MB in-process transfer
 
-  it("rejects a 110 MB upload on a high-cap route via spoofed Content-Length (101 MB cap)", async () => {
+  it("rejects a Content-Length above the high-cap threshold", async () => {
     server = await startServer(buildTestApp());
 
-    const oversized = 110 * 1024 * 1024; // 110 MB > HIGH_UPLOAD_BYTES (101 MB)
+    const oversized = HIGH_UPLOAD_BYTES + 1;
     const tinyBody = Buffer.from("--b\r\n\r\nhello\r\n--b--");
 
     const result = await rawPost(server, {
@@ -498,13 +497,10 @@ describe("uploadSizeGuard constants", () => {
 // for each policy, making it obvious which bucket is out of range.
 
 describe("Supabase Storage bucket policy limits are within upload guard thresholds", () => {
-  // All four bucket policies (IMAGE_ONLY, TRAVELS, MESSENGER, ELAINE_ATTACHMENTS)
-  // now use SUPABASE_BUCKET_FILE_BYTES (50 MB) as their fileSizeLimit.  This is
-  // separate from the Express/multer limits (DEFAULT_MULTER_FILE_BYTES = 100 MB,
-  // HIGH_MULTER_FILE_BYTES = 100 MB) because Supabase enforces a plan-level
-  // ceiling on the bucket fileSizeLimit parameter (free plan: 50 MB).  Setting it
-  // higher causes updateBucket to return "The object exceeded the maximum allowed
-  // size", leaving bucket policies stale on every server restart.
+  // High-cap bucket policies use SUPABASE_BUCKET_FILE_BYTES (50 MB), while
+  // image-only buckets use the standard 25 MB ceiling. Supabase also enforces a
+  // plan-level ceiling on fileSizeLimit; keeping both values derived from the
+  // shared policy prevents storage and route limits from drifting.
 
   it("the image-only bucket limit is within the default Express guard", () => {
     expect(STANDARD_IMAGE_BUCKET_FILE_BYTES).toBeLessThanOrEqual(

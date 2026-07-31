@@ -85,6 +85,17 @@ import {
   semanticCollectionSearch,
   buildPotterySearchDocument,
 } from "../../lib/collection-search";
+import { getModels } from "../../lib/ai-client";
+import {
+  assignGenerationRunTarget,
+  runAnalysisWithEvidence,
+  runAnalysisWithEvidenceTrace,
+} from "../../lib/ai-provenance";
+import {
+  matchCategoryIds,
+  mergeExistingCategoryIds,
+  parsePositiveIntegerArray,
+} from "../../lib/collection-parsing";
 
 // All columns except the three embedding vectors — the 1536-dim text embedding,
 // the 1024-dim whole-piece visual embedding, and the 1024-dim zone embedding are
@@ -376,31 +387,29 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
   const cleanBuffer = await stripMetadata(file.buffer, contentType);
 
   // Parse manually selected category IDs from the form field
-  let manualCategoryIds: number[] = [];
-  try {
-    const raw = req.body?.categoryIds;
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        manualCategoryIds = parsed
-          .map(Number)
-          .filter((n) => Number.isInteger(n) && n > 0);
-      }
-    }
-  } catch {
-    // Ignore malformed field — manual categories are optional
-  }
+  const manualCategoryIds = parsePositiveIntegerArray(req.body?.categoryIds);
 
   const dataUrl = toDataUrl(cleanBuffer, contentType);
+  const analysisModel = (await getModels()).fastVision;
 
   // Phase 1: main cataloguing analysis, whole-piece visual embed, and zone
   // analysis all run in parallel. Each gracefully returns null when the
   // relevant API key is absent rather than hard-failing the upload.
-  const [analysis, visualEmbedding, surfaceZones] = await Promise.all([
-    analyzeImage([dataUrl]),
+  const [analysisTrace, visualEmbedding, surfaceZones] = await Promise.all([
+    runAnalysisWithEvidenceTrace(
+      {
+        module: "pottery",
+        feature: "catalogue-image",
+        targetType: "pottery_item",
+        userId,
+        model: analysisModel,
+      },
+      () => analyzeImage([dataUrl]),
+    ),
     generateVisualEmbedding(cleanBuffer).catch(() => null),
     analyzePotteryZones([dataUrl]).catch(() => null),
   ]);
+  const { result: analysis, runId: analysisRunId } = analysisTrace;
 
   // Phase 2: text embed + zone embed in parallel (zone embed crops the center
   // 70% of the image to focus on the main decorative body).
@@ -461,6 +470,8 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
       })
       .returning();
 
+    await assignGenerationRunTarget(analysisRunId, row.id);
+
     // Auto-match categories based on AI analysis, merged with user's manual picks.
     // Manual picks always win (union — nothing is ever removed).
     // Categories are a shared household set, not scoped to the creator.
@@ -468,49 +479,19 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
       .select({ id: categories.id, name: categories.name })
       .from(categories);
 
-    // Normalise inch-mark variants so AI output (which may use ″ double-prime)
-    // and user-typed category names (which use plain ") match each other.
-    const normalizeQuotes = (s: string) => s.replace(/[″\u201C\u201D]/g, '"');
-
-    const analysisText = normalizeQuotes(
-      [
-        analysis.name,
-        analysis.style,
-        analysis.shape,
-        analysis.patternDescription,
-        analysis.dimensions,
-        ...(analysis.motifs ?? []),
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase(),
+    const autoCategoryIds = matchCategoryIds(allCats, [
+      analysis.name,
+      analysis.style,
+      analysis.shape,
+      analysis.patternDescription,
+      analysis.dimensions,
+      analysis.motifs,
+    ]);
+    const allCategoryIds = mergeExistingCategoryIds(
+      allCats,
+      autoCategoryIds,
+      manualCategoryIds,
     );
-
-    // Match category names as whole words/phrases only — not as substrings of larger
-    // numbers or words.  E.g. category "8"" must NOT match inside "18"" or "28"".
-    // The lookbehind/lookahead rejects a match when it is immediately surrounded by
-    // an alphanumeric character (a-z, 0-9), which catches digit-prefix false positives
-    // (28 contains 8) and word-suffix false positives (plates contains plate).
-    function categoryMatchesText(catName: string): boolean {
-      const normalized = normalizeQuotes(catName.toLowerCase());
-      const escaped = normalized.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const pattern = new RegExp(`(?<![a-z0-9])${escaped}(?![a-z0-9])`, "i");
-      return pattern.test(analysisText);
-    }
-
-    const autoCategoryIds = allCats
-      .filter((cat) => categoryMatchesText(cat.name))
-      .map((cat) => cat.id);
-
-    // Categories are shared, so only guard against IDs that don't exist at all.
-    const allCatIds = new Set(allCats.map((c) => c.id));
-    const safeManualCategoryIds = manualCategoryIds.filter((id) =>
-      allCatIds.has(id),
-    );
-
-    const allCategoryIds = [
-      ...new Set([...autoCategoryIds, ...safeManualCategoryIds]),
-    ];
     if (allCategoryIds.length > 0) {
       await db.insert(itemCategories).values(
         allCategoryIds.map((catId) => ({
@@ -1118,13 +1099,24 @@ export async function runItemAnalysis(id: number): Promise<unknown> {
     dominantColors: item.dominantColors,
     motifs: item.motifs,
   };
+  const analysisModel = (await getModels()).fastVision;
 
   // Phase 1: analysis + visual embed + zone analysis in parallel.
   // All three use .catch(() => null) so a single API error (e.g. Jina rate
   // limit) cannot kill the whole item — the analysis itself still succeeds and
   // existing embedding values are left untouched (see spread below).
   const [analysis, visualEmbedding, surfaceZones] = await Promise.all([
-    analyzeImage(dataUrls, reanalysisContext),
+    runAnalysisWithEvidence(
+      {
+        module: "pottery",
+        feature: "reanalyze-item",
+        targetType: "pottery_item",
+        targetId: id,
+        userId: item.userId ?? undefined,
+        model: analysisModel,
+      },
+      () => analyzeImage(dataUrls, reanalysisContext),
+    ),
     generateVisualEmbedding(primaryResult.buffer).catch(() => null),
     analyzePotteryZones(dataUrls).catch(() => null),
   ]);
@@ -1193,40 +1185,26 @@ export async function runItemAnalysis(id: number): Promise<unknown> {
     .returning(itemColumns);
 
   // Re-run category auto-matching (union-only — never removes existing assignments).
-  const normalizeQ = (s: string) => s.replace(/[″\u201C\u201D]/g, '"');
-  const analysisText = normalizeQ(
-    [
-      merged.name,
-      merged.style,
-      merged.shape,
-      merged.patternDescription,
-      merged.dimensions,
-      ...(Array.isArray(merged.motifs) ? merged.motifs : []),
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase(),
-  );
-
   const allCats = await db
     .select({ id: categories.id, name: categories.name })
     .from(categories);
+  const autoCategoryIds = matchCategoryIds(allCats, [
+    merged.name,
+    merged.style,
+    merged.shape,
+    merged.patternDescription,
+    merged.dimensions,
+    merged.motifs,
+  ]);
   const existingCatRows = await db
     .select({ categoryId: itemCategories.categoryId })
     .from(itemCategories)
     .where(eq(itemCategories.itemId, id));
   const existingCatIds = new Set(existingCatRows.map((r) => r.categoryId));
 
-  const newCatIds = allCats
-    .filter((cat) => {
-      const norm = normalizeQ(cat.name.toLowerCase());
-      const esc = norm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      return new RegExp(`(?<![a-z0-9])${esc}(?![a-z0-9])`, "i").test(
-        analysisText,
-      );
-    })
-    .map((cat) => cat.id)
-    .filter((catId) => !existingCatIds.has(catId));
+  const newCatIds = autoCategoryIds.filter(
+    (catId) => !existingCatIds.has(catId),
+  );
 
   if (newCatIds.length > 0) {
     await db

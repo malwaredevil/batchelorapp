@@ -58,6 +58,10 @@ import {
   type CustomDocumentType,
   getUploadErrorMessage,
 } from "@workspace/api-client-react";
+import {
+  LARGE_IMAGE_UPLOAD,
+  validateClientUpload,
+} from "@workspace/upload-policy";
 import { OneThingInput } from "@/travels/components/OneThingInput";
 import { MagnetCheckDialog } from "@/travels/components/MagnetCheckDialog";
 import { ReminderEditDialog } from "@/travels/components/ReminderEditDialog";
@@ -2283,39 +2287,27 @@ function PhotoGridSection({
     total: number;
   } | null>(null);
 
-  // Must match MAX_LARGE_UPLOAD_BYTES in lib/upload-validation/src/index.ts
-  const MAX_LARGE_UPLOAD_BYTES = 21 * 1024 * 1024; // 21 MB
-
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const MAX_PHOTO_BYTES = 20 * 1024 * 1024; // 20 MB — matches server multer limit for /api/travels/trips/
-    const MAX_PHOTO_MB = 20;
     const allFiles = Array.from(e.target.files ?? []);
     e.target.value = "";
     if (allFiles.length === 0) return;
 
-    const oversized = allFiles.filter((f) => f.size > MAX_PHOTO_BYTES);
-    if (oversized.length > 0) {
-      const names = oversized.map((f) => f.name).join(", ");
-      toast.error(`${names} — skipped (max ${MAX_PHOTO_MB} MB per file)`);
-    }
-    const files = allFiles.filter((f) => f.size <= MAX_PHOTO_BYTES);
-    if (files.length === 0) return;
-
-    const tooLarge = files.filter((f) => f.size > MAX_LARGE_UPLOAD_BYTES);
-    if (tooLarge.length > 0) {
-      if (tooLarge.length === files.length) {
-        toast.error(
-          tooLarge.length === 1
-            ? "Photo is too large. Please choose an image under 21 MB."
-            : `All selected photos are too large. Please choose images under 21 MB.`,
-        );
-        return;
-      }
+    const rejected = allFiles
+      .map((file) => ({
+        file,
+        validation: validateClientUpload(file, LARGE_IMAGE_UPLOAD),
+      }))
+      .filter(({ validation }) => !validation.ok);
+    if (rejected.length > 0) {
+      const first = rejected[0].validation;
       toast.error(
-        `${tooLarge.length} photo${tooLarge.length > 1 ? "s" : ""} skipped — over the 21 MB limit.`,
+        rejected.length === 1 && !first.ok
+          ? first.message
+          : `${rejected.length} unsupported or oversized photos were skipped.`,
       );
     }
-    const accepted = files.filter((f) => f.size <= MAX_LARGE_UPLOAD_BYTES);
+    const rejectedFiles = new Set(rejected.map(({ file }) => file));
+    const accepted = allFiles.filter((file) => !rejectedFiles.has(file));
     if (accepted.length === 0) return;
 
     if (accepted.length === 1) {

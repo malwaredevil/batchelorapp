@@ -1,4 +1,5 @@
 import { parseCell } from "@/quilting/lib/cell-parser";
+import { downloadBlob, downloadText } from "@workspace/web-core/download";
 
 /** Extract unique fabric IDs referenced by `fab:{id}` colours in cell strings. */
 function extractFabricIds(cells: string[]): string[] {
@@ -153,15 +154,7 @@ export function buildBlockSvgString(
 }
 
 export function downloadAsSvg(svgStr: string, filename: string): void {
-  const blob = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  downloadText(svgStr, filename, "image/svg+xml;charset=utf-8");
 }
 
 export async function downloadSvgAsJpeg(
@@ -192,14 +185,7 @@ export async function downloadSvgAsJpeg(
             reject(new Error("toBlob failed"));
             return;
           }
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = filename;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
+          downloadBlob(blob, filename);
           resolve();
         },
         "image/jpeg",
@@ -232,13 +218,7 @@ export async function downloadCollectionImage(
     const fname = /\.(jpg|jpeg|png|webp)$/i.test(filename)
       ? filename
       : `${filename}.${ext}`;
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = fname;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    downloadBlob(blob, fname);
   } catch {
     window.open(url, "_blank");
   }
@@ -271,14 +251,7 @@ export async function downloadSvgAsPng(
           reject(new Error("toBlob failed"));
           return;
         }
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        downloadBlob(blob, filename);
         resolve();
       }, "image/png");
     });

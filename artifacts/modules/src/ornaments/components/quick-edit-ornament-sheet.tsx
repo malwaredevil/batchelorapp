@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { X, Loader2, Trash2 } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   useUpdateOrnament,
@@ -14,7 +14,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
+import {
+  CategoryChipPicker,
+  QuickEditSheetFrame,
+} from "@workspace/collection-ui";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -118,149 +121,124 @@ export function QuickEditOrnamentSheet({
   const busy = update.isPending || remove.isPending;
 
   return (
-    <>
-      <div
-        className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
-        onClick={onClose}
-        aria-hidden
-      />
-      <div className="fixed inset-x-0 bottom-0 z-50 max-h-[85dvh] overflow-y-auto rounded-t-2xl border-t border-card-border bg-background shadow-2xl">
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-card-border bg-background px-4 py-3">
-          <p className="max-w-[240px] truncate text-sm font-semibold">
-            {ornament.name}
-          </p>
-          <button
-            type="button"
-            onClick={onClose}
-            className="grid h-8 w-8 place-items-center rounded-full bg-muted text-muted-foreground hover:bg-card-border"
-          >
-            <X className="h-4 w-4" />
-          </button>
+    <QuickEditSheetFrame
+      title={ornament.name}
+      onClose={onClose}
+      thumbnail={
+        ornament.imageUrl
+          ? { src: ornament.imageUrl, alt: ornament.name }
+          : undefined
+      }
+      footer={
+        <>
+          <Button onClick={save} disabled={busy} className="flex-1">
+            {update.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+            Save
+          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" size="icon" disabled={busy}>
+                <Trash2 className="h-4 w-4 text-destructive" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Remove this ornament?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This permanently removes &ldquo;{ornament.name}&rdquo; from
+                  your collection. This cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => remove.mutate({ id: ornament.id })}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </>
+      }
+    >
+      <div className="space-y-1.5">
+        <Label htmlFor="qeo-name">Name</Label>
+        <Input
+          id="qeo-name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          disabled={busy}
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="qeo-brand">Brand</Label>
+        <Input
+          id="qeo-brand"
+          value={brand}
+          onChange={(e) => setBrand(e.target.value)}
+          disabled={busy}
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="qeo-series">Series / Collection</Label>
+        <Input
+          id="qeo-series"
+          value={seriesOrCollection}
+          onChange={(e) => setSeriesOrCollection(e.target.value)}
+          disabled={busy}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="qeo-year">Year</Label>
+          <Input
+            id="qeo-year"
+            type="number"
+            value={year}
+            onChange={(e) => setYear(e.target.value)}
+            disabled={busy}
+            placeholder="e.g. 1995"
+          />
         </div>
-
-        <div className="space-y-4 px-4 py-5">
-          <div className="space-y-1.5">
-            <Label htmlFor="qeo-name">Name</Label>
-            <Input
-              id="qeo-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              disabled={busy}
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="qeo-brand">Brand</Label>
-            <Input
-              id="qeo-brand"
-              value={brand}
-              onChange={(e) => setBrand(e.target.value)}
-              disabled={busy}
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="qeo-series">Series / Collection</Label>
-            <Input
-              id="qeo-series"
-              value={seriesOrCollection}
-              onChange={(e) => setSeriesOrCollection(e.target.value)}
-              disabled={busy}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="qeo-year">Year</Label>
-              <Input
-                id="qeo-year"
-                type="number"
-                value={year}
-                onChange={(e) => setYear(e.target.value)}
-                disabled={busy}
-                placeholder="e.g. 1995"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="qeo-condition">Condition</Label>
-              <Input
-                id="qeo-condition"
-                value={condition}
-                onChange={(e) => setCondition(e.target.value)}
-                disabled={busy}
-                placeholder="e.g. Mint, Good, Fair"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="qeo-notes">Notes</Label>
-            <Textarea
-              id="qeo-notes"
-              rows={3}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              disabled={busy}
-            />
-          </div>
-
-          {allCategories.length > 0 && (
-            <div className="space-y-1.5">
-              <Label>Categories</Label>
-              <div className="flex flex-wrap gap-2">
-                {allCategories.map((cat) => (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    disabled={busy}
-                    onClick={() => toggleCategory(cat.id)}
-                    className={cn(
-                      "inline-flex items-center rounded-full border px-3 py-1 text-sm font-medium transition-colors",
-                      selectedCategoryIds.includes(cat.id)
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-card-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
-                    )}
-                  >
-                    {cat.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="flex gap-2 pt-1">
-            <Button onClick={save} disabled={busy} className="flex-1">
-              {update.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-              Save
-            </Button>
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="outline" size="icon" disabled={busy}>
-                  <Trash2 className="h-4 w-4 text-destructive" />
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Remove this ornament?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This permanently removes &ldquo;{ornament.name}&rdquo; from
-                    your collection. This cannot be undone.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={() => remove.mutate({ id: ornament.id })}
-                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  >
-                    Delete
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="qeo-condition">Condition</Label>
+          <Input
+            id="qeo-condition"
+            value={condition}
+            onChange={(e) => setCondition(e.target.value)}
+            disabled={busy}
+            placeholder="e.g. Mint, Good, Fair"
+          />
         </div>
       </div>
-    </>
+
+      <div className="space-y-1.5">
+        <Label htmlFor="qeo-notes">Notes</Label>
+        <Textarea
+          id="qeo-notes"
+          rows={3}
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          disabled={busy}
+        />
+      </div>
+
+      {allCategories.length > 0 && (
+        <div className="space-y-1.5">
+          <Label>Categories</Label>
+          <CategoryChipPicker
+            categories={allCategories}
+            selectedIds={selectedCategoryIds}
+            onToggle={toggleCategory}
+            disabled={busy}
+          />
+        </div>
+      )}
+    </QuickEditSheetFrame>
   );
 }

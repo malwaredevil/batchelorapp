@@ -48,7 +48,11 @@ import { downloadCollectionImage } from "@/quilting/lib/svg-export";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
 import { FabricIdentityResearchPanel } from "@/quilting/components/FabricIdentityResearchPanel";
 import { FabricCreaseRemoverModal } from "@/quilting/components/FabricCreaseRemoverModal";
-import { CollectionDetailSection } from "@workspace/collection-ui";
+import {
+  CollectionDetailHero,
+  CollectionDetailPanelStack,
+  CollectionDetailSection,
+} from "@workspace/collection-ui";
 
 type Fabric = {
   id: number;
@@ -514,13 +518,13 @@ export default function FabricDetail() {
           </Button>
           <Skeleton className="h-6 w-40" />
         </div>
-        <div className="grid gap-6 md:grid-cols-2">
+        <CollectionDetailHero>
           <Skeleton className="aspect-square w-full rounded-xl" />
           <div className="space-y-3">
             <Skeleton className="h-6 w-3/4" />
             <Skeleton className="h-4 w-1/2" />
           </div>
-        </div>
+        </CollectionDetailHero>
       </div>
     );
   }
@@ -581,7 +585,7 @@ export default function FabricDetail() {
           Fabrics
         </Button>
 
-        <div className="grid gap-6 md:grid-cols-2">
+        <CollectionDetailHero>
           {/* Col 1: main photo + gallery strip */}
           <div className="flex flex-col gap-3">
             <div
@@ -890,287 +894,305 @@ export default function FabricDetail() {
                 </div>
               </div>
             )}
-            {/* Inventory */}
-            <CollectionDetailSection title="Inventory">
-              {isEditing ? (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="mb-1 block text-xs text-muted-foreground">
-                      Quantity
-                    </label>
-                    <Input
-                      value={field("quantity")}
-                      onChange={(e) => set("quantity", e.target.value)}
-                      type="number"
-                      min="0"
-                      step="0.25"
-                      className="h-8 text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs text-muted-foreground">
-                      Unit
-                    </label>
-                    <Input
-                      value={field("quantityUnit")}
-                      onChange={(e) => set("quantityUnit", e.target.value)}
-                      className="h-8 text-sm"
-                      placeholder="yards"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs text-muted-foreground">
-                      Width (inches)
-                    </label>
-                    <Input
-                      value={field("widthInches")}
-                      onChange={(e) => set("widthInches", e.target.value)}
-                      type="number"
-                      min="0"
-                      className="h-8 text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs text-muted-foreground">
-                      SKU
-                    </label>
-                    <Input
-                      value={field("sku")}
-                      onChange={(e) => set("sku", e.target.value)}
-                      className="h-8 text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs text-muted-foreground">
-                      Acquired
-                    </label>
-                    <Input
-                      value={field("acquiredAt")}
-                      onChange={(e) => set("acquiredAt", e.target.value)}
-                      className="h-8 text-sm"
-                      placeholder="2024-01"
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">Quantity</span>
-                    <p className="font-semibold">
-                      {f.quantity} {f.quantityUnit}
-                    </p>
-                  </div>
-                  {f.widthInches != null && (
-                    <div>
-                      <span className="text-muted-foreground">Width</span>
-                      <p className="font-semibold">{f.widthInches}"</p>
-                    </div>
-                  )}
-                  {f.sku && (
-                    <div>
-                      <span className="text-muted-foreground">SKU</span>
-                      <p className="font-mono font-semibold">{f.sku}</p>
-                    </div>
-                  )}
-                  {f.acquiredAt && (
-                    <div>
-                      <span className="text-muted-foreground">Acquired</span>
-                      <p className="font-semibold">{f.acquiredAt}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </CollectionDetailSection>
+          </div>
+        </CollectionDetailHero>
 
-            {/* Fabric details */}
-            <CollectionDetailSection title="Fabric details">
-              {isEditing ? (
-                <div className="space-y-2">
-                  {(
-                    [
-                      "name",
-                      "lineName",
-                      "designer",
-                      "manufacturer",
-                      "colorway",
-                      "printType",
-                      "fiberContent",
-                    ] as const
-                  ).map((k) => {
-                    const labels: Record<string, string> = {
-                      name: "Name",
-                      lineName: "Line name",
-                      designer: "Designer",
-                      manufacturer: "Manufacturer",
-                      colorway: "Colorway",
-                      printType: "Print type",
-                      fiberContent: "Fibre content",
-                    };
-                    const isAI = AI_FIELDS.includes(k as keyof Fabric);
-                    return (
-                      <div key={k}>
-                        <label className="mb-1 flex items-center text-xs text-muted-foreground">
-                          {labels[k]}
-                          {isAI && (
-                            <LockButton
-                              field={k}
-                              lockedFields={lockedFields}
-                              onToggle={toggleLock}
-                            />
-                          )}
-                        </label>
-                        <Input
-                          value={field(k)}
-                          onChange={(e) => set(k, e.target.value)}
-                          className="h-8 text-sm"
-                        />
-                      </div>
-                    );
-                  })}
+        {/* Record information belongs below the hero at full width. Keeping
+            these panels out of the narrow image-side column matches the shared
+            collection-detail contract and makes long AI/category data easier
+            to scan. */}
+        <CollectionDetailPanelStack>
+          {/* Inventory */}
+          <CollectionDetailSection title="Inventory">
+            {isEditing ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">
+                    Quantity
+                  </label>
+                  <Input
+                    value={field("quantity")}
+                    onChange={(e) => set("quantity", e.target.value)}
+                    type="number"
+                    min="0"
+                    step="0.25"
+                    className="h-8 text-sm"
+                  />
                 </div>
-              ) : (
-                <div className="space-y-2 text-sm">
-                  {(
-                    [
-                      ["lineName", "Line", f.lineName],
-                      ["designer", "Designer", f.designer],
-                      ["manufacturer", "Manufacturer", f.manufacturer],
-                      ["colorway", "Colorway", f.colorway],
-                      ["printType", "Print type", f.printType],
-                      ["fiberContent", "Fibre", f.fiberContent],
-                    ] as [string, string, string | null | undefined][]
-                  )
-                    .filter(([, , v]) => v)
-                    .map(([k, label, v]) => (
-                      <div
-                        key={k}
-                        className="flex items-center justify-between"
-                      >
-                        <span className="flex items-center gap-0.5 text-muted-foreground">
-                          {label}
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">
+                    Unit
+                  </label>
+                  <Input
+                    value={field("quantityUnit")}
+                    onChange={(e) => set("quantityUnit", e.target.value)}
+                    className="h-8 text-sm"
+                    placeholder="yards"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">
+                    Width (inches)
+                  </label>
+                  <Input
+                    value={field("widthInches")}
+                    onChange={(e) => set("widthInches", e.target.value)}
+                    type="number"
+                    min="0"
+                    className="h-8 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">
+                    SKU
+                  </label>
+                  <Input
+                    value={field("sku")}
+                    onChange={(e) => set("sku", e.target.value)}
+                    className="h-8 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">
+                    Acquired
+                  </label>
+                  <Input
+                    value={field("acquiredAt")}
+                    onChange={(e) => set("acquiredAt", e.target.value)}
+                    className="h-8 text-sm"
+                    placeholder="2024-01"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Quantity</span>
+                  <p className="font-semibold">
+                    {f.quantity} {f.quantityUnit}
+                  </p>
+                </div>
+                {f.widthInches != null && (
+                  <div>
+                    <span className="text-muted-foreground">Width</span>
+                    <p className="font-semibold">{f.widthInches}"</p>
+                  </div>
+                )}
+                {f.sku && (
+                  <div>
+                    <span className="text-muted-foreground">SKU</span>
+                    <p className="font-mono font-semibold">{f.sku}</p>
+                  </div>
+                )}
+                {f.acquiredAt && (
+                  <div>
+                    <span className="text-muted-foreground">Acquired</span>
+                    <p className="font-semibold">{f.acquiredAt}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </CollectionDetailSection>
+
+          {/* Fabric details */}
+          <CollectionDetailSection title="Fabric details">
+            {isEditing ? (
+              <div className="space-y-2">
+                {(
+                  [
+                    "name",
+                    "lineName",
+                    "designer",
+                    "manufacturer",
+                    "colorway",
+                    "printType",
+                    "fiberContent",
+                  ] as const
+                ).map((k) => {
+                  const labels: Record<string, string> = {
+                    name: "Name",
+                    lineName: "Line name",
+                    designer: "Designer",
+                    manufacturer: "Manufacturer",
+                    colorway: "Colorway",
+                    printType: "Print type",
+                    fiberContent: "Fibre content",
+                  };
+                  const isAI = AI_FIELDS.includes(k as keyof Fabric);
+                  return (
+                    <div key={k}>
+                      <label className="mb-1 flex items-center text-xs text-muted-foreground">
+                        {labels[k]}
+                        {isAI && (
                           <LockButton
                             field={k}
                             lockedFields={lockedFields}
                             onToggle={toggleLock}
                           />
-                        </span>
-                        <span className="font-medium capitalize">{v}</span>
-                      </div>
-                    ))}
-                </div>
-              )}
-            </CollectionDetailSection>
+                        )}
+                      </label>
+                      <Input
+                        value={field(k)}
+                        onChange={(e) => set(k, e.target.value)}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="space-y-2 text-sm">
+                {(
+                  [
+                    ["lineName", "Line", f.lineName],
+                    ["designer", "Designer", f.designer],
+                    ["manufacturer", "Manufacturer", f.manufacturer],
+                    ["colorway", "Colorway", f.colorway],
+                    ["printType", "Print type", f.printType],
+                    ["fiberContent", "Fibre", f.fiberContent],
+                  ] as [string, string, string | null | undefined][]
+                )
+                  .filter(([, , v]) => v)
+                  .map(([k, label, v]) => (
+                    <div key={k} className="flex items-center justify-between">
+                      <span className="flex items-center gap-0.5 text-muted-foreground">
+                        {label}
+                        <LockButton
+                          field={k}
+                          lockedFields={lockedFields}
+                          onToggle={toggleLock}
+                        />
+                      </span>
+                      <span className="font-medium capitalize">{v}</span>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </CollectionDetailSection>
 
-            {/* Colors / Motifs */}
-            <CollectionDetailSection title="Characteristics">
-              {isEditing ? (
-                <div className="space-y-2">
-                  <div>
-                    <label className="mb-1 flex items-center text-xs text-muted-foreground">
-                      Dominant colours
+          {/* Colors / Motifs */}
+          <CollectionDetailSection title="Characteristics">
+            {isEditing ? (
+              <div className="space-y-2">
+                <div>
+                  <label className="mb-1 flex items-center text-xs text-muted-foreground">
+                    Dominant colours
+                    <LockButton
+                      field="dominantColors"
+                      lockedFields={lockedFields}
+                      onToggle={toggleLock}
+                    />
+                  </label>
+                  <Input
+                    value={field("dominantColors")}
+                    onChange={(e) => set("dominantColors", e.target.value)}
+                    placeholder="red, blue, gold"
+                    className="h-8 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 flex items-center text-xs text-muted-foreground">
+                    Motifs
+                    <LockButton
+                      field="motifs"
+                      lockedFields={lockedFields}
+                      onToggle={toggleLock}
+                    />
+                  </label>
+                  <Input
+                    value={field("motifs")}
+                    onChange={(e) => set("motifs", e.target.value)}
+                    placeholder="floral, leaves"
+                    className="h-8 text-sm"
+                  />
+                </div>
+              </div>
+            ) : (
+              <>
+                {f.dominantColors.length > 0 && (
+                  <div className="mb-2">
+                    <p className="mb-1.5 flex items-center gap-0.5 text-xs text-muted-foreground">
+                      Colours
                       <LockButton
                         field="dominantColors"
                         lockedFields={lockedFields}
                         onToggle={toggleLock}
                       />
-                    </label>
-                    <Input
-                      value={field("dominantColors")}
-                      onChange={(e) => set("dominantColors", e.target.value)}
-                      placeholder="red, blue, gold"
-                      className="h-8 text-sm"
-                    />
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {f.dominantColors.map((c) => (
+                        <Badge
+                          key={c}
+                          variant="secondary"
+                          className="capitalize"
+                        >
+                          {c}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
+                )}
+                {f.motifs.length > 0 && (
                   <div>
-                    <label className="mb-1 flex items-center text-xs text-muted-foreground">
+                    <p className="mb-1.5 flex items-center gap-0.5 text-xs text-muted-foreground">
                       Motifs
                       <LockButton
                         field="motifs"
                         lockedFields={lockedFields}
                         onToggle={toggleLock}
                       />
-                    </label>
-                    <Input
-                      value={field("motifs")}
-                      onChange={(e) => set("motifs", e.target.value)}
-                      placeholder="floral, leaves"
-                      className="h-8 text-sm"
-                    />
-                  </div>
-                </div>
-              ) : (
-                <>
-                  {f.dominantColors.length > 0 && (
-                    <div className="mb-2">
-                      <p className="mb-1.5 flex items-center gap-0.5 text-xs text-muted-foreground">
-                        Colours
-                        <LockButton
-                          field="dominantColors"
-                          lockedFields={lockedFields}
-                          onToggle={toggleLock}
-                        />
-                      </p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {f.dominantColors.map((c) => (
-                          <Badge
-                            key={c}
-                            variant="secondary"
-                            className="capitalize"
-                          >
-                            {c}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {f.motifs.length > 0 && (
-                    <div>
-                      <p className="mb-1.5 flex items-center gap-0.5 text-xs text-muted-foreground">
-                        Motifs
-                        <LockButton
-                          field="motifs"
-                          lockedFields={lockedFields}
-                          onToggle={toggleLock}
-                        />
-                      </p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {f.motifs.map((m) => (
-                          <Badge
-                            key={m}
-                            variant="outline"
-                            className="capitalize"
-                          >
-                            {m}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {f.dominantColors.length === 0 && f.motifs.length === 0 && (
-                    <p className="text-xs text-muted-foreground italic">
-                      No characteristics catalogued yet
                     </p>
-                  )}
-                </>
-              )}
-            </CollectionDetailSection>
+                    <div className="flex flex-wrap gap-1.5">
+                      {f.motifs.map((m) => (
+                        <Badge key={m} variant="outline" className="capitalize">
+                          {m}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {f.dominantColors.length === 0 && f.motifs.length === 0 && (
+                  <p className="text-xs text-muted-foreground italic">
+                    No characteristics catalogued yet
+                  </p>
+                )}
+              </>
+            )}
+          </CollectionDetailSection>
 
-            {/* Categories */}
-            <CollectionDetailSection
-              title="Categories"
-              action={
-                !catEditing && !isEditing ? (
-                  <button
-                    onClick={enterCatEdit}
-                    className="rounded p-0.5 text-muted-foreground/40 transition-colors hover:text-muted-foreground"
-                    title="Edit categories"
-                  >
-                    <Pencil className="h-3 w-3" />
-                  </button>
-                ) : undefined
-              }
-            >
-              {isEditing ? (
+          {/* Categories */}
+          <CollectionDetailSection
+            title="Categories"
+            action={
+              !catEditing && !isEditing ? (
+                <button
+                  onClick={enterCatEdit}
+                  className="rounded p-0.5 text-muted-foreground/40 transition-colors hover:text-muted-foreground"
+                  title="Edit categories"
+                >
+                  <Pencil className="h-3 w-3" />
+                </button>
+              ) : undefined
+            }
+          >
+            {isEditing ? (
+              <TagSelector
+                allCategories={allCategories ?? []}
+                selectedIds={selectedCategoryIds}
+                onToggle={(id) =>
+                  setSelectedCategoryIds((prev) =>
+                    prev.includes(id)
+                      ? prev.filter((x) => x !== id)
+                      : [...prev, id],
+                  )
+                }
+                onCreated={(cat) =>
+                  setSelectedCategoryIds((prev) => [...prev, cat.id])
+                }
+                disabled={updateFabric.isPending}
+              />
+            ) : catEditing ? (
+              <>
                 <TagSelector
                   allCategories={allCategories ?? []}
                   selectedIds={selectedCategoryIds}
@@ -1181,126 +1203,106 @@ export default function FabricDetail() {
                         : [...prev, id],
                     )
                   }
-                  onCreated={(cat) =>
-                    setSelectedCategoryIds((prev) => [...prev, cat.id])
-                  }
+                  onCreated={(cat) => {
+                    setSelectedCategoryIds((prev) => [...prev, cat.id]);
+                    setLocalNewCats((prev) =>
+                      prev.some((c) => c.id === cat.id) ? prev : [...prev, cat],
+                    );
+                  }}
                   disabled={updateFabric.isPending}
                 />
-              ) : catEditing ? (
-                <>
-                  <TagSelector
-                    allCategories={allCategories ?? []}
-                    selectedIds={selectedCategoryIds}
-                    onToggle={(id) =>
-                      setSelectedCategoryIds((prev) =>
-                        prev.includes(id)
-                          ? prev.filter((x) => x !== id)
-                          : [...prev, id],
-                      )
-                    }
-                    onCreated={(cat) => {
-                      setSelectedCategoryIds((prev) => [...prev, cat.id]);
-                      setLocalNewCats((prev) =>
-                        prev.some((c) => c.id === cat.id)
-                          ? prev
-                          : [...prev, cat],
-                      );
-                    }}
+                <div className="mt-3 flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={handleSaveCategories}
                     disabled={updateFabric.isPending}
-                  />
-                  <div className="mt-3 flex gap-2">
-                    <Button
-                      size="sm"
-                      onClick={handleSaveCategories}
-                      disabled={updateFabric.isPending}
-                    >
-                      <Check className="mr-1.5 h-3.5 w-3.5" />
-                      {updateFabric.isPending ? "Saving…" : "Save"}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setCatEditing(false)}
-                      disabled={updateFabric.isPending}
-                    >
-                      <XIcon className="mr-1.5 h-3.5 w-3.5" />
-                      Cancel
-                    </Button>
-                  </div>
-                </>
-              ) : f.categories.length > 0 ? (
-                <div className="flex flex-wrap gap-1.5">
-                  {f.categories.map((cat) => (
-                    <Badge
-                      key={cat.id}
-                      variant="outline"
-                      className="border-transparent"
-                      style={(() => {
-                        const palette = cat.bgColor
-                          ? {
-                              bgColor: cat.bgColor,
-                              textColor: cat.textColor ?? "#fff",
-                            }
-                          : getCategoryPalette(cat.name);
-                        return {
-                          backgroundColor: palette.bgColor,
-                          color: palette.textColor,
-                        };
-                      })()}
-                    >
-                      {cat.name}
-                    </Badge>
-                  ))}
+                  >
+                    <Check className="mr-1.5 h-3.5 w-3.5" />
+                    {updateFabric.isPending ? "Saving…" : "Save"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setCatEditing(false)}
+                    disabled={updateFabric.isPending}
+                  >
+                    <XIcon className="mr-1.5 h-3.5 w-3.5" />
+                    Cancel
+                  </Button>
                 </div>
-              ) : (
-                <p className="text-xs italic text-muted-foreground">
-                  No categories — click{" "}
-                  <Pencil className="inline h-2.5 w-2.5" /> to add
-                </p>
-              )}
-            </CollectionDetailSection>
-
-            {/* AI description */}
-            {f.aiDescription && (
-              <CollectionDetailSection title="AI description">
-                <p className="text-sm leading-relaxed text-muted-foreground">
-                  {f.aiDescription}
-                </p>
-              </CollectionDetailSection>
-            )}
-
-            {/* Pairings — fabrics that pair well */}
-            <FabricPairings fabricId={f.id} />
-
-            {/* Identity research */}
-            <FabricIdentityResearchPanel fabricId={f.id} />
-
-            {/* Notes */}
-            <CollectionDetailSection title="Notes">
-              {isEditing ? (
-                <Textarea
-                  value={field("notes")}
-                  onChange={(e) => set("notes", e.target.value)}
-                  rows={4}
-                  className="text-sm"
-                  placeholder="Any notes about this fabric…"
-                />
-              ) : f.notes ? (
-                <p className="text-sm leading-relaxed">{f.notes}</p>
-              ) : (
-                <p className="text-xs text-muted-foreground italic">No notes</p>
-              )}
-            </CollectionDetailSection>
-
-            {/* Lock hint */}
-            {!isEditing && (
-              <p className="flex items-center gap-1 text-xs text-muted-foreground/60">
-                <LockOpen className="h-3 w-3" />
-                Tap a lock icon to protect a field from AI updates.
+              </>
+            ) : f.categories.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {f.categories.map((cat) => (
+                  <Badge
+                    key={cat.id}
+                    variant="outline"
+                    className="border-transparent"
+                    style={(() => {
+                      const palette = cat.bgColor
+                        ? {
+                            bgColor: cat.bgColor,
+                            textColor: cat.textColor ?? "#fff",
+                          }
+                        : getCategoryPalette(cat.name);
+                      return {
+                        backgroundColor: palette.bgColor,
+                        color: palette.textColor,
+                      };
+                    })()}
+                  >
+                    {cat.name}
+                  </Badge>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs italic text-muted-foreground">
+                No categories — click <Pencil className="inline h-2.5 w-2.5" />{" "}
+                to add
               </p>
             )}
-          </div>
-        </div>
+          </CollectionDetailSection>
+
+          {/* AI description */}
+          {f.aiDescription && (
+            <CollectionDetailSection title="AI description">
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                {f.aiDescription}
+              </p>
+            </CollectionDetailSection>
+          )}
+
+          {/* Pairings — fabrics that pair well */}
+          <FabricPairings fabricId={f.id} />
+
+          {/* Identity research */}
+          <FabricIdentityResearchPanel fabricId={f.id} />
+
+          {/* Notes */}
+          <CollectionDetailSection title="Notes">
+            {isEditing ? (
+              <Textarea
+                value={field("notes")}
+                onChange={(e) => set("notes", e.target.value)}
+                rows={4}
+                className="text-sm"
+                placeholder="Any notes about this fabric…"
+              />
+            ) : f.notes ? (
+              <p className="text-sm leading-relaxed">{f.notes}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground italic">No notes</p>
+            )}
+          </CollectionDetailSection>
+
+          {/* Lock hint */}
+          {!isEditing && (
+            <p className="flex items-center gap-1 text-xs text-muted-foreground/60">
+              <LockOpen className="h-3 w-3" />
+              Tap a lock icon to protect a field from AI updates.
+            </p>
+          )}
+        </CollectionDetailPanelStack>
       </div>
 
       <FabricCreaseRemoverModal

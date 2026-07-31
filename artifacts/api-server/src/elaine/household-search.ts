@@ -238,10 +238,7 @@ export async function searchHouseholdData(
       })
       .from(finishedQuilts)
       .where(
-        and(
-          isNull(finishedQuilts.deletedAt),
-          ilike(finishedQuilts.name, pat),
-        ),
+        and(isNull(finishedQuilts.deletedAt), ilike(finishedQuilts.name, pat)),
       )
       .limit(5);
     if (rows.length > 0) {

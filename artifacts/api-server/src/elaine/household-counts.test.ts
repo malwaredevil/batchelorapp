@@ -87,8 +87,8 @@ const { isNullSpy, dbMock, selectQueue } = vi.hoisted(() => {
 // valid SQL objects) but record every call so tests can assert on the argument.
 vi.mock("drizzle-orm", async (importOriginal) => {
   const actual = await importOriginal<typeof import("drizzle-orm")>();
-  isNullSpy.mockImplementation(
-    (...args: Parameters<typeof actual.isNull>) => actual.isNull(...args),
+  isNullSpy.mockImplementation((...args: Parameters<typeof actual.isNull>) =>
+    actual.isNull(...args),
   );
   return { ...actual, isNull: isNullSpy };
 });
@@ -146,7 +146,9 @@ describe("queryHouseholdData — ornaments", () => {
     const { ornamentsItems } = await dbTables();
     // Both the count and recent queries must use the soft-delete predicate.
     const calls = isNullSpy.mock.calls.map((c) => c[0]);
-    const deletedAtCalls = calls.filter((col) => col === ornamentsItems.deletedAt);
+    const deletedAtCalls = calls.filter(
+      (col) => col === ornamentsItems.deletedAt,
+    );
     expect(deletedAtCalls.length).toBeGreaterThanOrEqual(2);
   });
 
@@ -210,7 +212,9 @@ describe("queryHouseholdData — pottery", () => {
 
     const { potteryItems } = await dbTables();
     const calls = isNullSpy.mock.calls.map((c) => c[0]);
-    const deletedAtCalls = calls.filter((col) => col === potteryItems.deletedAt);
+    const deletedAtCalls = calls.filter(
+      (col) => col === potteryItems.deletedAt,
+    );
     expect(deletedAtCalls.length).toBeGreaterThanOrEqual(2);
   });
 
@@ -245,8 +249,8 @@ describe("queryHouseholdData — pottery", () => {
 describe("queryHouseholdData — quilting", () => {
   it("applies isNull(deletedAt) to fabric, pattern, and finished-quilt count queries", async () => {
     selectQueue.push([{ total: 10 }]); // fabrics count
-    selectQueue.push([{ total: 5 }]);  // quiltPatterns count
-    selectQueue.push([{ total: 2 }]);  // finishedQuilts count
+    selectQueue.push([{ total: 5 }]); // quiltPatterns count
+    selectQueue.push([{ total: 2 }]); // finishedQuilts count
 
     await queryHouseholdData(["quilting"]);
 
@@ -288,9 +292,9 @@ describe("queryHouseholdData — quilting", () => {
 
 describe("queryHouseholdData — pottery + ornaments together", () => {
   it("applies separate isNull predicates for each collection", async () => {
-    selectQueue.push([{ total: 8 }]);  // pottery count
+    selectQueue.push([{ total: 8 }]); // pottery count
     selectQueue.push([{ name: "Bowl" }]); // pottery recent
-    selectQueue.push([{ total: 3 }]);  // ornaments count
+    selectQueue.push([{ total: 3 }]); // ornaments count
     selectQueue.push([{ name: "Angel" }]); // ornaments recent
 
     await queryHouseholdData(["pottery", "ornaments"]);
@@ -302,8 +306,8 @@ describe("queryHouseholdData — pottery + ornaments together", () => {
   });
 
   it("shows 0 for a fully-deleted collection alongside a non-zero other", async () => {
-    selectQueue.push([{ total: 0 }]);  // pottery — all deleted
-    selectQueue.push([]);              // pottery recent — empty
+    selectQueue.push([{ total: 0 }]); // pottery — all deleted
+    selectQueue.push([]); // pottery recent — empty
     selectQueue.push([{ total: 7 }]); // ornaments — 7 alive
     selectQueue.push([{ name: "Star" }]); // ornaments recent
 

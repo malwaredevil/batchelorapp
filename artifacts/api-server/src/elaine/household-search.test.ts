@@ -79,8 +79,8 @@ const { isNullSpy, dbMock, selectQueue } = vi.hoisted(() => {
 // valid SQL objects) but record every call so tests can assert on the argument.
 vi.mock("drizzle-orm", async (importOriginal) => {
   const actual = await importOriginal<typeof import("drizzle-orm")>();
-  isNullSpy.mockImplementation(
-    (...args: Parameters<typeof actual.isNull>) => actual.isNull(...args),
+  isNullSpy.mockImplementation((...args: Parameters<typeof actual.isNull>) =>
+    actual.isNull(...args),
   );
   return { ...actual, isNull: isNullSpy };
 });
@@ -115,7 +115,9 @@ async function dbTables() {
 
 describe("searchHouseholdData — pottery", () => {
   it("applies isNull(potteryItems.deletedAt) in the WHERE clause", async () => {
-    selectQueue.push([{ id: 1, name: "Blue Vase", maker: "Studio X", style: "Modern" }]);
+    selectQueue.push([
+      { id: 1, name: "Blue Vase", maker: "Studio X", style: "Modern" },
+    ]);
 
     await searchHouseholdData("vase", ["pottery"]);
 
@@ -124,7 +126,9 @@ describe("searchHouseholdData — pottery", () => {
   });
 
   it("returns matching pottery items when the DB returns rows", async () => {
-    selectQueue.push([{ id: 7, name: "Blue Vase", maker: "Studio X", style: "Modern" }]);
+    selectQueue.push([
+      { id: 7, name: "Blue Vase", maker: "Studio X", style: "Modern" },
+    ]);
 
     const result = await searchHouseholdData("vase", ["pottery"]);
 
@@ -163,7 +167,9 @@ describe("searchHouseholdData — pottery", () => {
 
 describe("searchHouseholdData — ornaments", () => {
   it("applies isNull(ornamentsItems.deletedAt) in the WHERE clause", async () => {
-    selectQueue.push([{ id: 1, name: "Frosty", seriesOrCollection: "Winter", year: 2020 }]);
+    selectQueue.push([
+      { id: 1, name: "Frosty", seriesOrCollection: "Winter", year: 2020 },
+    ]);
 
     await searchHouseholdData("frosty", ["ornaments"]);
 
@@ -172,7 +178,9 @@ describe("searchHouseholdData — ornaments", () => {
   });
 
   it("returns matching ornament items when the DB returns rows", async () => {
-    selectQueue.push([{ id: 5, name: "Frosty", seriesOrCollection: "Winter", year: 2020 }]);
+    selectQueue.push([
+      { id: 5, name: "Frosty", seriesOrCollection: "Winter", year: 2020 },
+    ]);
 
     const result = await searchHouseholdData("frosty", ["ornaments"]);
 
@@ -191,7 +199,12 @@ describe("searchHouseholdData — ornaments", () => {
   it("reports the count accurately when multiple matching ornaments are returned", async () => {
     selectQueue.push([
       { id: 1, name: "Angel", seriesOrCollection: null, year: 2019 },
-      { id: 2, name: "Angel Deluxe", seriesOrCollection: "Celestial", year: 2021 },
+      {
+        id: 2,
+        name: "Angel Deluxe",
+        seriesOrCollection: "Celestial",
+        year: 2021,
+      },
     ]);
 
     const result = await searchHouseholdData("angel", ["ornaments"]);
@@ -208,7 +221,9 @@ describe("searchHouseholdData — ornaments", () => {
 
 describe("searchHouseholdData — fabrics", () => {
   it("applies isNull(fabrics.deletedAt) in the WHERE clause", async () => {
-    selectQueue.push([{ id: 1, name: "Blue Batik", designer: "Jane", manufacturer: "Moda" }]);
+    selectQueue.push([
+      { id: 1, name: "Blue Batik", designer: "Jane", manufacturer: "Moda" },
+    ]);
 
     await searchHouseholdData("batik", ["fabrics"]);
 
@@ -217,7 +232,9 @@ describe("searchHouseholdData — fabrics", () => {
   });
 
   it("returns matching fabrics when the DB returns rows", async () => {
-    selectQueue.push([{ id: 12, name: "Blue Batik", designer: "Jane", manufacturer: "Moda" }]);
+    selectQueue.push([
+      { id: 12, name: "Blue Batik", designer: "Jane", manufacturer: "Moda" },
+    ]);
 
     const result = await searchHouseholdData("batik", ["fabrics"]);
 
@@ -272,7 +289,9 @@ describe("searchHouseholdData — patterns", () => {
 
 describe("searchHouseholdData — quilts", () => {
   it("applies isNull(finishedQuilts.deletedAt) in the WHERE clause", async () => {
-    selectQueue.push([{ id: 1, name: "Grandma's Quilt", dateCompleted: "2022-12-01" }]);
+    selectQueue.push([
+      { id: 1, name: "Grandma's Quilt", dateCompleted: "2022-12-01" },
+    ]);
 
     await searchHouseholdData("grandma", ["quilts"]);
 
@@ -281,7 +300,9 @@ describe("searchHouseholdData — quilts", () => {
   });
 
   it("returns matching quilts when the DB returns rows", async () => {
-    selectQueue.push([{ id: 9, name: "Grandma's Quilt", dateCompleted: "2022-12-01" }]);
+    selectQueue.push([
+      { id: 9, name: "Grandma's Quilt", dateCompleted: "2022-12-01" },
+    ]);
 
     const result = await searchHouseholdData("grandma", ["quilts"]);
 
@@ -384,7 +405,9 @@ describe("searchHouseholdData — trips", () => {
 describe("searchHouseholdData — multiple domains", () => {
   it("applies separate isNull predicates for each collection", async () => {
     selectQueue.push([{ id: 1, name: "Blue Vase", maker: null, style: null }]); // pottery
-    selectQueue.push([{ id: 2, name: "Blue Star", seriesOrCollection: null, year: null }]); // ornaments
+    selectQueue.push([
+      { id: 2, name: "Blue Star", seriesOrCollection: null, year: null },
+    ]); // ornaments
 
     await searchHouseholdData("blue", ["pottery", "ornaments"]);
 
@@ -396,7 +419,9 @@ describe("searchHouseholdData — multiple domains", () => {
 
   it("shows 'No X found' for a fully-deleted domain while another has results", async () => {
     selectQueue.push([]); // pottery — all deleted, no results
-    selectQueue.push([{ id: 5, name: "Blue Star", seriesOrCollection: "Sky", year: 2023 }]); // ornaments
+    selectQueue.push([
+      { id: 5, name: "Blue Star", seriesOrCollection: "Sky", year: 2023 },
+    ]); // ornaments
 
     const result = await searchHouseholdData("blue", ["pottery", "ornaments"]);
 

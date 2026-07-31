@@ -26,25 +26,34 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // Hoisted mocks — all values used inside vi.mock() factories must live here.
 // ---------------------------------------------------------------------------
 
-const { mockEmbedText, mockJinaEmbedding, mockDbExecuteRows, mockRRFResult, mockRerankResult, dbMock } =
-  vi.hoisted(() => {
-    const mockDbExecuteRows: { rows: Array<{ id: number; similarity: number }> } = {
+const {
+  mockEmbedText,
+  mockJinaEmbedding,
+  mockDbExecuteRows,
+  mockRRFResult,
+  mockRerankResult,
+  dbMock,
+} = vi.hoisted(() => {
+  const mockDbExecuteRows: { rows: Array<{ id: number; similarity: number }> } =
+    {
       rows: [],
     };
 
-    const dbMock = {
-      execute: vi.fn(async () => mockDbExecuteRows),
-    };
+  const dbMock = {
+    execute: vi.fn(async () => mockDbExecuteRows),
+  };
 
-    return {
-      mockEmbedText: vi.fn<() => Promise<number[]>>().mockResolvedValue([0.1, 0.2, 0.3]),
-      mockJinaEmbedding: vi.fn<() => Promise<null>>().mockResolvedValue(null),
-      mockDbExecuteRows,
-      mockRRFResult: [] as Array<{ id: number; similarity: number }>,
-      mockRerankResult: [] as number[],
-      dbMock,
-    };
-  });
+  return {
+    mockEmbedText: vi
+      .fn<() => Promise<number[]>>()
+      .mockResolvedValue([0.1, 0.2, 0.3]),
+    mockJinaEmbedding: vi.fn<() => Promise<null>>().mockResolvedValue(null),
+    mockDbExecuteRows,
+    mockRRFResult: [] as Array<{ id: number; similarity: number }>,
+    mockRerankResult: [] as number[],
+    dbMock,
+  };
+});
 
 // ---------------------------------------------------------------------------
 // Module mocks
@@ -63,7 +72,8 @@ vi.mock("./reranker", () => ({
     (_lanes: unknown, _k: unknown, _pool: unknown) => mockRRFResult,
   ),
   rerankCandidates: vi.fn(
-    async (_query: unknown, _docs: unknown, _limit: unknown) => mockRerankResult,
+    async (_query: unknown, _docs: unknown, _limit: unknown) =>
+      mockRerankResult,
   ),
 }));
 
@@ -94,14 +104,18 @@ beforeEach(() => {
 // Helper: build CollectionSearchOptions for tests
 // ---------------------------------------------------------------------------
 
-type FetchDocuments = (ids: number[]) => Promise<Array<{ id: number; text: string }>>;
+type FetchDocuments = (
+  ids: number[],
+) => Promise<Array<{ id: number; text: string }>>;
 
 function makeOptions(
   fetchDocuments: FetchDocuments,
   table: typeof potteryItems | typeof fabrics = potteryItems,
 ) {
   const visibilityWhere =
-    table === fabrics ? isNull(fabrics.deletedAt) : isNull(potteryItems.deletedAt);
+    table === fabrics
+      ? isNull(fabrics.deletedAt)
+      : isNull(potteryItems.deletedAt);
 
   return {
     query: "blue vase",
@@ -109,7 +123,9 @@ function makeOptions(
     textEmbeddingCol: "embedding",
     visualEmbeddingCol: "visual_embedding",
     visibilityWhere: visibilityWhere as ReturnType<typeof isNull>,
-    db: dbMock as unknown as Parameters<typeof semanticCollectionSearch>[0]["db"],
+    db: dbMock as unknown as Parameters<
+      typeof semanticCollectionSearch
+    >[0]["db"],
     fetchDocuments,
   };
 }
@@ -136,13 +152,13 @@ describe("semanticCollectionSearch — soft-delete exclusion", () => {
 
     mockDbExecuteRows.rows = [
       { id: deletedId, similarity: 0.99 }, // deleted — highest similarity
-      { id: activeId, similarity: 0.80 },
+      { id: activeId, similarity: 0.8 },
     ];
 
     // RRF merges both ids.
     mockRRFResult.push(
       { id: deletedId, similarity: 0.99 },
-      { id: activeId, similarity: 0.80 },
+      { id: activeId, similarity: 0.8 },
     );
 
     // Reranker returns only the active id (called after visible-candidate filter).
@@ -169,16 +185,18 @@ describe("semanticCollectionSearch — soft-delete exclusion", () => {
 
     mockDbExecuteRows.rows = [
       { id: deletedId, similarity: 0.95 },
-      { id: activeId, similarity: 0.70 },
+      { id: activeId, similarity: 0.7 },
     ];
     mockRRFResult.push(
       { id: deletedId, similarity: 0.95 },
-      { id: activeId, similarity: 0.70 },
+      { id: activeId, similarity: 0.7 },
     );
     mockRerankResult.push(activeId);
 
     const fetchDocuments = vi.fn(async (ids: number[]) =>
-      ids.filter((id) => id !== deletedId).map((id) => ({ id, text: `text-${id}` })),
+      ids
+        .filter((id) => id !== deletedId)
+        .map((id) => ({ id, text: `text-${id}` })),
     );
 
     await semanticCollectionSearch(makeOptions(fetchDocuments));
@@ -227,7 +245,9 @@ describe("semanticCollectionSearch — soft-delete exclusion", () => {
         .map((id) => ({ id, text: `Fabric ${id}` })),
     );
 
-    const result = await semanticCollectionSearch(makeOptions(fetchDocuments, fabrics));
+    const result = await semanticCollectionSearch(
+      makeOptions(fetchDocuments, fabrics),
+    );
 
     expect(result).not.toContain(deletedFabricId);
     expect(result).toContain(activeFabricId);
@@ -270,7 +290,8 @@ describe("fabric pairings endpoint — hydration soft-delete guard", () => {
 
     // Extract the pairings route block.
     const startMarker = 'router.get("/fabrics/:id/pairings"';
-    const endMarker = "// ---------------------------------------------------------------------------\n// Get one";
+    const endMarker =
+      "// ---------------------------------------------------------------------------\n// Get one";
     const pairingsBlock = source.slice(
       source.indexOf(startMarker),
       source.indexOf(endMarker),

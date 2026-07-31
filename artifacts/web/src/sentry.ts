@@ -10,7 +10,12 @@ if (dsn && import.meta.env.PROD) {
     release: release || undefined,
     integrations: [
       Sentry.browserTracingIntegration(),
-      Sentry.replayIntegration(),
+      Sentry.replayIntegration({
+        // This is a private single-household app with no third-party users.
+        // Disable default masking so replays show actual content for debugging.
+        maskAllText: false,
+        blockAllMedia: false,
+      }),
       Sentry.replayCanvasIntegration(),
       // Captures failed HTTP requests (4xx/5xx) as Sentry events.
       // 401 excluded: always unauthenticated page load / expired session;

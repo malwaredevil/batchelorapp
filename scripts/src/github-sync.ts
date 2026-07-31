@@ -471,81 +471,196 @@ async function main() {
     });
   }
 
-  // One tree, one commit, one ref update
-  const newTree = await gh<{ sha: string }>("POST", "/git/trees", {
-    base_tree: headCommit.tree.sha,
-    tree: treeEntries,
-  });
-  console.log(`tree: ${newTree.sha.slice(0, 8)}`);
+  // ── Categorise changes: workflow files vs everything else ─────────────────
+  //
+  // Hard-enforced routing rule (also documented in replit.md §Stage 3c and
+  // replit.md §Gotchas):
+  //
+  //   .github/workflows/*.yml  →  MUST go directly to main (--direct-to-main).
+  //                               GitHub only executes the workflow version that
+  //                               lives on main; a branch copy is silently ignored.
+  //
+  //   Everything else          →  MUST go through a PR so CI validates changes
+  //                               against the (already-updated) workflow definitions
+  //                               before they land on main.
+  //
+  //   Mixed batch (both kinds, no --direct-to-main flag)  →  auto-split:
+  //       Step 1: push workflow files directly to main.
+  //       Step 2: open a PR for all other files (CI now uses the new workflows).
+  //
+  //   --direct-to-main + non-workflow files  →  hard error, aborted immediately.
+  const wfEntries = treeEntries.filter((e) =>
+    (e.path ?? "").startsWith(".github/"),
+  );
+  const otherEntries = treeEntries.filter(
+    (e) => !(e.path ?? "").startsWith(".github/"),
+  );
+  const hasWorkflow = wfEntries.length > 0;
+  const hasOther = otherEntries.length > 0;
 
-  const newCommit = await gh<{ sha: string }>("POST", "/git/commits", {
-    message: commitMessage,
-    tree: newTree.sha,
-    parents: [headSha],
-  });
-  console.log(`commit: ${newCommit.sha.slice(0, 8)}`);
-
-  if (directToMain) {
-    // Emergency path: update main directly without a PR.
-    // Intended for GitHub Actions workflow-file changes (which GitHub requires
-    // to live on main before they execute) and genuine one-line hotfixes that
-    // cannot wait for a full CI run on a PR.  Avoid for routine syncs.
-    await gh("PATCH", `/git/refs/heads/${BRANCH}`, { sha: newCommit.sha });
-    console.log(
-      `\n✓ Pushed directly to ${REPO}@${BRANCH} — single commit, single CI run triggered.`,
+  // Hard guard: --direct-to-main is strictly for .github/ workflow files.
+  if (directToMain && hasOther) {
+    const nonWfPaths = otherEntries.map((e) => `  ${e.path ?? ""}`).join("\n");
+    console.error(
+      `\n🚫  ABORTED: --direct-to-main is only permitted for .github/workflows/ files.\n` +
+        `The following non-workflow files must go through a PR:\n${nonWfPaths}\n\n` +
+        `Run github-sync WITHOUT --direct-to-main.\n` +
+        `When both workflow and non-workflow files are present the script will\n` +
+        `auto-split: push workflow files to main first, then open a PR for the\n` +
+        `remaining files so CI runs against the freshly-updated workflow definitions.`,
     );
-    console.log(`  https://github.com/${REPO}/commit/${newCommit.sha}`);
+    process.exit(1);
+  }
+
+  // Helper — build a Git tree + commit and return both SHAs.
+  const makeCommit = async (
+    parentSha: string,
+    baseTreeSha: string,
+    entries: object[],
+    message: string,
+  ): Promise<{ sha: string; treeSha: string }> => {
+    const tree = await gh<{ sha: string }>("POST", "/git/trees", {
+      base_tree: baseTreeSha,
+      tree: entries,
+    });
+    console.log(`tree: ${tree.sha.slice(0, 8)}`);
+    const commit = await gh<{ sha: string }>("POST", "/git/commits", {
+      message,
+      tree: tree.sha,
+      parents: [parentSha],
+    });
+    console.log(`commit: ${commit.sha.slice(0, 8)}`);
+    return { sha: commit.sha, treeSha: tree.sha };
+  };
+
+  // Helper — create a sync branch and open a PR pointing at the given commit.
+  const openSyncPR = async (
+    commitSha: string,
+    changed: number,
+    deleted: number,
+    bodyPrefix: string,
+  ): Promise<void> => {
+    const now = new Date();
+    const datePart = now.toISOString().slice(0, 10).replace(/-/g, "");
+    const timePart = now.toISOString().slice(11, 16).replace(":", "");
+    const syncBranch = `sync/${datePart}-${timePart}-${slugify(commitMessage)}`;
+
+    await gh("POST", "/git/refs", {
+      ref: `refs/heads/${syncBranch}`,
+      sha: commitSha,
+    });
+    console.log(`branch: ${syncBranch}`);
+
+    const prBody =
+      `## Sync PR\n\n` +
+      bodyPrefix +
+      `**Commit:** \`${commitSha.slice(0, 8)}\`  \n` +
+      `**Files changed:** ${changed} modified` +
+      (deleted > 0 ? `, ${deleted} deleted` : "") +
+      `\n\n---\n\n` +
+      commitMessage +
+      `\n\n---\n\n` +
+      `> Created automatically by \`github-sync.ts\`.\n` +
+      `> **Merge only after all CI checks are green.**\n` +
+      `> This PR contains no workflow files — workflow-file-only changes use \`--direct-to-main\`.`;
+
+    const pr = await gh<{ number: number; html_url: string }>(
+      "POST",
+      "/pulls",
+      {
+        title: commitMessage,
+        head: syncBranch,
+        base: BRANCH,
+        body: prBody,
+      },
+    );
+
+    console.log(
+      `\n✓ Sync PR #${pr.number} opened — ${changed} file(s) changed`,
+    );
+    console.log(`  PR:     ${pr.html_url}`);
+    console.log(`  Commit: https://github.com/${REPO}/commit/${commitSha}`);
+    console.log(
+      `\n  CI is now running on the PR. Merge when all checks are green.`,
+    );
+    console.log(
+      `  The composition guard runs in the "Composition guard" and "Lint" CI jobs.`,
+    );
+  };
+
+  // ── Case 1: auto-split (workflow + other files, no --direct-to-main) ──────
+  if (hasWorkflow && hasOther) {
+    console.log(
+      `\nAuto-split: ${wfEntries.length} workflow file(s) + ${otherEntries.length} other file(s).`,
+    );
+
+    // Step 1 — push workflow files directly to main.
+    console.log(`\n  [1/2] Pushing workflow files directly to main …`);
+    const { sha: wfSha, treeSha: wfTreeSha } = await makeCommit(
+      headSha,
+      headCommit.tree.sha,
+      wfEntries,
+      commitMessage + " [workflow files]",
+    );
+    await gh("PATCH", `/git/refs/heads/${BRANCH}`, { sha: wfSha });
+    console.log(
+      `  ✓ Workflow files on main: https://github.com/${REPO}/commit/${wfSha}`,
+    );
+
+    // Step 2 — PR for all other files, parented on the workflow commit so the
+    // PR branch includes the updated workflow definitions as its base.
+    console.log(
+      `\n  [2/2] Opening PR for ${otherEntries.length} non-workflow file(s) …`,
+    );
+    const { sha: otherSha } = await makeCommit(
+      wfSha,
+      wfTreeSha,
+      otherEntries,
+      commitMessage,
+    );
+    const nonWfChanged = changedFiles.filter(
+      (f) => !f.startsWith(".github/"),
+    ).length;
+    const nonWfDeleted = deletedFiles.filter(
+      (f) => !f.startsWith(".github/"),
+    ).length;
+    const autoSplitPrefix =
+      `> **Auto-split sync:** workflow files were pushed directly to main first\n` +
+      `> so CI here runs against the updated workflow definitions.\n\n`;
+    await openSyncPR(otherSha, nonWfChanged, nonWfDeleted, autoSplitPrefix);
+
+    console.log(
+      `\n  Auto-split summary:\n` +
+        `    Workflow files → main: https://github.com/${REPO}/commit/${wfSha}\n` +
+        `    Other files    → PR above (CI uses the updated workflow definitions)`,
+    );
     return;
   }
 
-  // Normal path: create a sync branch, push the commit there, and open a PR
-  // so that CI runs before anything lands on main.  Merge the PR after all
-  // checks are green.
-  const now = new Date();
-  const datePart = now.toISOString().slice(0, 10).replace(/-/g, ""); // YYYYMMDD
-  const timePart = now.toISOString().slice(11, 16).replace(":", ""); // HHmm
-  const syncBranch = `sync/${datePart}-${timePart}-${slugify(commitMessage)}`;
+  // ── Case 2: direct-to-main (workflow files only, --direct-to-main flag) ───
+  if (directToMain) {
+    const { sha: newCommitSha } = await makeCommit(
+      headSha,
+      headCommit.tree.sha,
+      treeEntries,
+      commitMessage,
+    );
+    await gh("PATCH", `/git/refs/heads/${BRANCH}`, { sha: newCommitSha });
+    console.log(
+      `\n✓ Pushed directly to ${REPO}@${BRANCH} — single commit, single CI run triggered.`,
+    );
+    console.log(`  https://github.com/${REPO}/commit/${newCommitSha}`);
+    return;
+  }
 
-  // Create the new branch pointing at the new commit (not main HEAD — the commit
-  // is already built on top of main HEAD as its parent, so the branch just
-  // needs to point at it).
-  await gh("POST", "/git/refs", {
-    ref: `refs/heads/${syncBranch}`,
-    sha: newCommit.sha,
-  });
-  console.log(`branch: ${syncBranch}`);
-
-  // Build a PR body that CI tools and human reviewers can both parse.
-  const prBody =
-    `## Sync PR\n\n` +
-    `**Commit:** \`${newCommit.sha.slice(0, 8)}\`  \n` +
-    `**Files changed:** ${changedFiles.length} modified` +
-    (deletedFiles.length > 0 ? `, ${deletedFiles.length} deleted` : "") +
-    `\n\n---\n\n` +
-    commitMessage +
-    `\n\n---\n\n` +
-    `> Created automatically by \`github-sync.ts\`.\n` +
-    `> Merge after **all CI checks are green**.\n` +
-    `> For workflow-file-only changes that must land directly on main, re-run with \`--direct-to-main\`.`;
-
-  const pr = await gh<{ number: number; html_url: string }>("POST", "/pulls", {
-    title: commitMessage,
-    head: syncBranch,
-    base: BRANCH,
-    body: prBody,
-  });
-
-  console.log(
-    `\n✓ Sync PR #${pr.number} opened — ${changedFiles.length} file(s) changed`,
+  // ── Case 3: normal PR mode (no workflow files, no --direct-to-main) ───────
+  const { sha: newCommitSha } = await makeCommit(
+    headSha,
+    headCommit.tree.sha,
+    treeEntries,
+    commitMessage,
   );
-  console.log(`  PR:     ${pr.html_url}`);
-  console.log(`  Commit: https://github.com/${REPO}/commit/${newCommit.sha}`);
-  console.log(
-    `\n  CI is now running on the PR. Merge when all checks are green.`,
-  );
-  console.log(
-    `  The composition guard runs in the "Composition guard" and "Lint" CI jobs.`,
-  );
+  await openSyncPR(newCommitSha, changedFiles.length, deletedFiles.length, "");
 }
 
 main().catch((e) => {

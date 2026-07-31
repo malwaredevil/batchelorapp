@@ -450,7 +450,7 @@ export default function TravelCalendar() {
       .slice(0, 5)
       .map(
         (s) =>
-          `"${s.suggestedTitle}"${s.destination ? ` to ${s.destination}` : ""}`,
+          `suggestionId: ${s.id} — "${s.suggestedTitle}"${s.destination ? ` to ${s.destination}` : ""}`,
       )
       .join("; ");
     return (

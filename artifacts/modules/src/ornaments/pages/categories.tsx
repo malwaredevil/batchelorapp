@@ -348,7 +348,9 @@ export default function Categories() {
 
   usePageAssistantContext(
     "ornaments-categories",
-    `Categories management page. Current categories: ${categories?.map((c) => c.name).join(", ") || "none"}.`,
+    `Categories management page. Current categories (categoryId: name): ${
+      categories?.map((c) => `${c.id}: "${c.name}"`).join(", ") || "none"
+    }.`,
   );
 
   const onSubmit = async (data: z.infer<typeof createSchema>) => {

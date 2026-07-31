@@ -99,7 +99,14 @@ export default function Maintenance() {
 
   usePageAssistantContext(
     "ornaments-maintenance",
-    `Maintenance page. Shows items missing descriptions or photos. Currently ${items.length} items need attention.${configSummary ? ` ${configSummary}` : ""}`,
+    `Maintenance page. Shows items missing descriptions or photos. Currently ${items.length} items need attention.${
+      items.length > 0
+        ? ` Items needing attention (itemId — reason): ${items
+            .slice(0, 30)
+            .map((i) => `itemId: ${i.id} (${i.reasons.join(", ")})`)
+            .join("; ")}.`
+        : ""
+    }${configSummary ? ` ${configSummary}` : ""}`,
   );
 
   const handleBulkReanalyze = async () => {

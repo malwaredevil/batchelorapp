@@ -2,6 +2,7 @@ import { useParams, useLocation } from "wouter";
 import { useMemo } from "react";
 import { useGetBlock, useListFabrics } from "@workspace/api-client-react";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
+import { formatElaineContextList, formatElaineContextEntity } from "@workspace/elaine-ui";
 import { ArrowLeft, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -756,7 +757,7 @@ export default function CutPatternPage() {
     "quilting-cut-pattern",
     isLoading || !block
       ? undefined
-      : `Cut Pattern page for block "${block.name}" (id ${block.id}): a printable cutting diagram and fabric-requirements sheet derived from the block's grid. Informational/printable only, no chat-editable content here.`,
+      : `Cut Pattern page for ${formatElaineContextEntity({ entity: "block", id: block.id, label: block.name })}: a printable cutting diagram and fabric-requirements sheet derived from the block's grid. Informational/printable only, no chat-editable content here.`,
   );
 
   const fabricColorMap = useMemo<Record<string, string>>(() => {

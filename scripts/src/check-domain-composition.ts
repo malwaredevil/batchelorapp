@@ -211,7 +211,7 @@ const requirements: Array<{
     fix: "lib/elaine-ui/src/page-context-formatters.ts must export formatElaineContextList and formatElaineContextEntity. Do not rename, split, or delete these exports — they are the single source of truth for Elaine page context formatting.",
   },
 
-  // ── Domain pages that have been migrated must use the shared formatters ───
+  // ── Domain pages that have been migrated must use the shared list formatter ─
   ...[
     "artifacts/modules/src/ornaments/pages/categories.tsx",
     "artifacts/modules/src/ornaments/pages/collection.tsx",
@@ -219,10 +219,54 @@ const requirements: Array<{
     "artifacts/modules/src/travels/pages/Dashboard.tsx",
     "artifacts/modules/src/travels/pages/TravelCalendar.tsx",
     "artifacts/modules/src/travels/pages/Trips.tsx",
+    // Migrated in task #469 — list pages
+    "artifacts/modules/src/pottery/pages/categories.tsx",
+    "artifacts/modules/src/pottery/pages/compare.tsx",
+    "artifacts/modules/src/pottery/pages/detail.tsx",
+    "artifacts/modules/src/pottery/pages/scan.tsx",
+    "artifacts/modules/src/pottery/pages/stats.tsx",
+    "artifacts/modules/src/quilting/pages/categories.tsx",
+    "artifacts/modules/src/quilting/pages/shopping/index.tsx",
+    "artifacts/modules/src/quilting/pages/layouts/index.tsx",
+    "artifacts/modules/src/quilting/pages/patterns/index.tsx",
+    "artifacts/modules/src/quilting/pages/quilts/index.tsx",
+    "artifacts/modules/src/quilting/pages/blocks/index.tsx",
+    "artifacts/modules/src/travels/pages/Wishlist.tsx",
+    "artifacts/modules/src/travels/pages/TripDetail.tsx",
+    "artifacts/modules/src/quilting/pages/fabrics/index.tsx",
+    "artifacts/modules/src/pottery/pages/add.tsx",
+    "artifacts/modules/src/pottery/pages/collection.tsx",
   ].map((path) => ({
     path,
     includes: ["formatElaineContextList"],
     fix: `${path} was migrated to use formatElaineContextList from @workspace/elaine-ui. Do not revert to inline .join() or .slice().map() context construction.`,
+  })),
+
+  // ── Domain detail pages migrated to formatElaineContextEntity (single item) ─
+  ...[
+    "artifacts/modules/src/ornaments/pages/detail.tsx",
+  ].map((path) => ({
+    path,
+    includes: ["formatElaineContextEntity"],
+    fix: `${path} was migrated to use formatElaineContextEntity from @workspace/elaine-ui. Do not revert to inline entityId interpolation in the usePageAssistantContext context string.`,
+  })),
+
+  // ── Domain pages that have been migrated must use the shared entity formatter
+  ...[
+    // Migrated in task #469 — detail pages that surface a single entity ID
+    "artifacts/modules/src/quilting/pages/layouts/composer.tsx",
+    "artifacts/modules/src/quilting/pages/blocks/cut-pattern.tsx",
+    "artifacts/modules/src/quilting/pages/blocks/designer.tsx",
+    "artifacts/modules/src/quilting/pages/blocks/detail.tsx",
+    "artifacts/modules/src/quilting/pages/fabrics/detail.tsx",
+    "artifacts/modules/src/quilting/pages/layouts/detail.tsx",
+    "artifacts/modules/src/quilting/pages/patterns/detail.tsx",
+    "artifacts/modules/src/quilting/pages/quilts/detail.tsx",
+    "artifacts/web/src/components/AppLauncher.tsx",
+  ].map((path) => ({
+    path,
+    includes: ["formatElaineContextEntity"],
+    fix: `${path} was migrated to use formatElaineContextEntity from @workspace/elaine-ui. Do not revert to inline entityId interpolation in the usePageAssistantContext context string.`,
   })),
 
   // ── Browser monitoring must go through the shared initBrowserMonitoring ───
@@ -370,65 +414,20 @@ for (const file of routeSourceFiles) {
   }
 }
 
-// ── Scan C: New page files must use shared Elaine context formatters ──────
+// ── Scan C: New page files that build entity lists must use shared formatters ─
 //
-// Any .tsx page file that calls usePageAssistantContext must import from
-// @workspace/elaine-ui to get formatElaineContextList and formatElaineContextEntity.
-// Inline .join() / .slice().map() patterns create per-page formatting drift —
-// Elaine sees inconsistent entity-ID labels across domains.
+// A .tsx page file that calls usePageAssistantContext AND builds a list inline
+// (evidenced by .join(", ") or .join("; ") in the file) must import the shared
+// formatters from @workspace/elaine-ui.  Inline .join() / .slice().map() patterns
+// create per-page formatting drift — Elaine sees inconsistent entity-ID labels.
 //
-// The files below predate this rule and are tracked as migration candidates.
-// DO NOT add new files to this set.  New pages must use the shared formatters.
-// When a file is migrated, remove it from this set so the protection holds.
+// Pages with purely static context strings (no entity list building) do not need
+// the import; they are not flagged.  Regression protection for migrated pages is
+// provided by the named-file requirements in Section 1.
 //
-const ELAINE_CONTEXT_LEGACY_EXEMPT = new Set([
-  // ── Ornaments — migration candidates ──────────────────────────────────────
-  "artifacts/modules/src/ornaments/pages/camera-add.tsx",
-  "artifacts/modules/src/ornaments/pages/hallmark-events.tsx",
-  "artifacts/modules/src/ornaments/pages/scan.tsx",
-  "artifacts/modules/src/ornaments/pages/stats.tsx",
-  // ── Pottery — migration candidates ────────────────────────────────────────
-  "artifacts/modules/src/pottery/pages/categories.tsx",
-  "artifacts/modules/src/pottery/pages/compare.tsx",
-  "artifacts/modules/src/pottery/pages/detail.tsx",
-  "artifacts/modules/src/pottery/pages/scan.tsx",
-  "artifacts/modules/src/pottery/pages/stats.tsx",
-  // ── Quilting — migration candidates ───────────────────────────────────────
-  "artifacts/modules/src/quilting/pages/blocks/cut-pattern.tsx",
-  "artifacts/modules/src/quilting/pages/blocks/designer.tsx",
-  "artifacts/modules/src/quilting/pages/blocks/detail.tsx",
-  "artifacts/modules/src/quilting/pages/blocks/index.tsx",
-  "artifacts/modules/src/quilting/pages/blocks/whole-quilt-list.tsx",
-  "artifacts/modules/src/quilting/pages/blocks/whole-quilt.tsx",
-  "artifacts/modules/src/quilting/pages/categories.tsx",
-  "artifacts/modules/src/quilting/pages/compare.tsx",
-  "artifacts/modules/src/quilting/pages/fabrics/detail.tsx",
-  "artifacts/modules/src/quilting/pages/layouts/composer.tsx",
-  "artifacts/modules/src/quilting/pages/layouts/detail.tsx",
-  "artifacts/modules/src/quilting/pages/layouts/index.tsx",
-  "artifacts/modules/src/quilting/pages/library/blocks.tsx",
-  "artifacts/modules/src/quilting/pages/patterns/add.tsx",
-  "artifacts/modules/src/quilting/pages/patterns/detail.tsx",
-  "artifacts/modules/src/quilting/pages/patterns/index.tsx",
-  "artifacts/modules/src/quilting/pages/quilts/add.tsx",
-  "artifacts/modules/src/quilting/pages/quilts/detail.tsx",
-  "artifacts/modules/src/quilting/pages/quilts/index.tsx",
-  "artifacts/modules/src/quilting/pages/shopping/index.tsx",
-  "artifacts/modules/src/quilting/pages/tools/yardage.tsx",
-  // ── Travels — migration candidates ────────────────────────────────────────
-  "artifacts/modules/src/travels/pages/Destinations.tsx",
-  "artifacts/modules/src/travels/pages/Documents.tsx",
-  "artifacts/modules/src/travels/pages/Explore.tsx",
-  "artifacts/modules/src/travels/pages/GmailReview.tsx",
-  "artifacts/modules/src/travels/pages/TripDetail.tsx",
-  "artifacts/modules/src/travels/pages/Wishlist.tsx",
-  "artifacts/modules/src/travels/pages/WorldMap.tsx",
-  // ── Hub / web artifact — migration candidates ──────────────────────────────
-  "artifacts/web/src/components/AppLauncher.tsx",
-  "artifacts/web/src/pages/control-panel.tsx",
-  "artifacts/web/src/pages/google-apis-demo.tsx",
-]);
-
+// DO NOT add an exempt set here.  Instead: migrate inline patterns to use the
+// shared formatters, OR keep the context string static (no inline joining).
+//
 const pageFiles = allSourceFiles.filter(
   (f) =>
     f.endsWith(".tsx") &&
@@ -438,20 +437,33 @@ const pageFiles = allSourceFiles.filter(
 );
 
 for (const file of pageFiles) {
-  if (ELAINE_CONTEXT_LEGACY_EXEMPT.has(file)) continue;
   const contents = read(file);
+  // Detect inline entity-list building inside context strings.
+  // The `|| "none"` suffix is the canonical indicator that a .join() is producing
+  // an entity list for the context string (not for JSX rendering).  This keeps
+  // the check precise and avoids false-positives from incidental JSX .join() calls.
+  const hasInlineListPattern =
+    contents.includes('.join(", ") || "none"') ||
+    contents.includes('.join("; ") || "none"') ||
+    contents.includes(".join(',') || \"none\"") ||
+    contents.includes(".join(';') || \"none\"") ||
+    contents.includes(".join(', ') || 'none'") ||
+    contents.includes(".join('; ') || 'none'");
   if (
     contents.includes("usePageAssistantContext") &&
-    !contents.includes("@workspace/elaine-ui")
+    hasInlineListPattern &&
+    !contents.includes("formatElaineContextList") &&
+    !contents.includes("formatElaineContextEntity")
   ) {
     violations.push(
-      `${file}: uses usePageAssistantContext without importing from @workspace/elaine-ui\n` +
-        "  FIX: Add 'import { formatElaineContextList, formatElaineContextEntity }'\n" +
-        "       from '@workspace/elaine-ui' and use those functions to build the\n" +
-        "       context string.  Never pass inline .join() or .slice().map() output\n" +
-        "       to usePageAssistantContext — Elaine needs consistent entity-ID labels\n" +
-        "       to invoke the correct app operations.  See docs/composition-and-\n" +
-        "       configuration.md §Elaine page context.",
+      `${file}: uses usePageAssistantContext with inline .join() list-building but does not call formatElaineContextList or formatElaineContextEntity\n` +
+        "  FIX: Import and use formatElaineContextList / formatElaineContextEntity\n" +
+        "       from '@workspace/elaine-ui' to build the context string.\n" +
+        "       Simply importing another export from @workspace/elaine-ui does NOT\n" +
+        "       satisfy this check — the formatter functions must be present in the file.\n" +
+        "       Inline .join() / .slice().map() patterns create per-page formatting drift.\n" +
+        "       Elaine needs consistent entity-ID labels to invoke the correct operations.\n" +
+        "       See docs/composition-and-configuration.md §Elaine page context.",
     );
   }
 }

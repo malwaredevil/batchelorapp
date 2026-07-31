@@ -32,6 +32,7 @@ import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
 import { TagSelector } from "@/quilting/components/tag-selector";
 import type { QuiltingCategory } from "@workspace/api-client-react";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
+import { formatElaineContextList, formatElaineContextEntity } from "@workspace/elaine-ui";
 
 type LayoutCellData = { blockId: number | null; rotation: 0 | 90 | 180 | 270 };
 
@@ -75,7 +76,7 @@ export default function LayoutDetail() {
     "quilting-layout-detail",
     isLoading || !layout
       ? undefined
-      : `Layout Detail page (layoutId: ${layout.id}): "${layout.name}", ${layout.rows}x${layout.cols} grid.`,
+      : `Layout Detail page: ${formatElaineContextEntity({ entity: "layout", id: layout.id, label: layout.name, details: [`${layout.rows}x${layout.cols} grid`] })}.`,
   );
 
   const { data: allBlocks = [] } = useListBlocks();

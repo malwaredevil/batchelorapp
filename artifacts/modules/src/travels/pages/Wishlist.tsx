@@ -39,6 +39,7 @@ type WishlistItem = TravelsWishlistItem;
 import { useQueryClient } from "@tanstack/react-query";
 import { getListWishlistQueryKey } from "@workspace/api-client-react";
 import { usePageAssistantContext } from "@/travels/lib/assistant-context";
+import { formatElaineContextList, formatElaineContextEntity } from "@workspace/elaine-ui";
 
 // ─── Notes JSON format ────────────────────────────────────────────────────────
 //
@@ -563,13 +564,7 @@ export default function Wishlist() {
 
   usePageAssistantContext(
     "wishlist",
-    `Viewing wishlist with ${items.length} destination(s): ${sortedItems
-      .slice(0, 15)
-      .map(
-        (i) =>
-          `${i.destination} (wishlistId: ${i.id}${i.done ? ", done" : ""})`,
-      )
-      .join(", ")}.` +
+    `Viewing wishlist with ${items.length} destination(s). ${formatElaineContextList(sortedItems, { label: "Destinations", formatItem: (i) => formatElaineContextEntity({ entity: "wishlist", id: i.id, label: i.destination, details: [i.done ? "done" : ""] }), limit: 15 })}.` +
       (newDest.trim()
         ? ` User is currently typing a new wishlist entry: "${newDest.trim()}"${newDate ? ` targeting ${newDate}` : ""}.`
         : ""),

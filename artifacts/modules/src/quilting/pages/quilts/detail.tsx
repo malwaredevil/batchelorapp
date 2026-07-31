@@ -37,6 +37,7 @@ import { TagSelector } from "@/quilting/components/tag-selector";
 import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
 import { downloadCollectionImage } from "@/quilting/lib/svg-export";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
+import { formatElaineContextList, formatElaineContextEntity } from "@workspace/elaine-ui";
 import {
   CollectionDetailHero,
   CollectionDetailPanelStack,
@@ -106,7 +107,7 @@ export default function QuiltDetail() {
     "quilting-quilt-detail",
     isLoading || !quilt
       ? undefined
-      : `Quilt Detail page (quiltId: ${quilt.id}): "${quilt.name}"${quilt.recipient ? `, made for ${quilt.recipient}` : ""}${quilt.dateCompleted ? `, completed ${quilt.dateCompleted}` : ""}${quilt.sizeWidth && quilt.sizeHeight ? `, size ${quilt.sizeWidth}x${quilt.sizeHeight}"` : ""}.`,
+      : `Quilt Detail page: ${formatElaineContextEntity({ entity: "quilt", id: quilt.id, label: quilt.name, details: [quilt.recipient ? `made for ${quilt.recipient}` : "", quilt.dateCompleted ? `completed ${quilt.dateCompleted}` : "", quilt.sizeWidth && quilt.sizeHeight ? `size ${quilt.sizeWidth}x${quilt.sizeHeight}"` : ""].filter(Boolean) })}.`,
   );
 
   const deleteQuilt = useDeleteQuilt({

@@ -65,6 +65,7 @@ import {
   useListElaineMemory,
 } from "@workspace/api-client-react";
 import { usePageAssistantContext } from "@/lib/assistant-context";
+import { formatElaineContextList, formatElaineContextEntity } from "@workspace/elaine-ui";
 
 const base = import.meta.env.BASE_URL;
 
@@ -865,7 +866,7 @@ export function AppLauncher() {
     [
       `On the app launcher (the Batchelor hub home page) — lets the household pick which app to open: Pottery (${potteryStatsData?.totalItems ?? "?"} items), Quilting (${quiltingStatsData?.totalFabrics ?? "?"} fabrics), or Travels (${travelsStatsData?.totalTrips ?? "?"} trips). ${totalCount} widget(s) are shown on the dashboard.`,
       nextTrip
-        ? `Next upcoming trip: "${nextTrip.title}" to ${nextTrip.destination}${nextTrip.startDate ? `, starting ${nextTrip.startDate}` : ""}${nextTrip.endDate ? ` to ${nextTrip.endDate}` : ""} (status: ${nextTrip.status}, tripId: ${nextTrip.id})`
+        ? `Next upcoming trip: ${formatElaineContextEntity({ entity: "trip", id: nextTrip.id, label: nextTrip.title, details: [nextTrip.destination ? `to ${nextTrip.destination}` : "", nextTrip.startDate ? `starting ${nextTrip.startDate}` : "", nextTrip.endDate ? `to ${nextTrip.endDate}` : "", `status: ${nextTrip.status}`].filter(Boolean) })}`
         : "No upcoming trips currently planned.",
     ].join(" "),
   );

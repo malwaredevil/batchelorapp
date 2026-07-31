@@ -44,6 +44,7 @@ import { TagSelector } from "@/quilting/components/tag-selector";
 import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
 import { downloadCollectionImage } from "@/quilting/lib/svg-export";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
+import { formatElaineContextList, formatElaineContextEntity } from "@workspace/elaine-ui";
 import { PatternAnalysisPanel } from "@/quilting/components/PatternAnalysisPanel";
 import {
   CollectionDetailHero,
@@ -115,7 +116,7 @@ export default function PatternDetail() {
     "quilting-pattern-detail",
     isLoading || !pattern
       ? undefined
-      : `Pattern Detail page (patternId: ${pattern.id}): "${pattern.name}"${pattern.designer ? ` by ${pattern.designer}` : ""}. Block size: ${pattern.blockSize ?? "unknown"}. Difficulty: ${pattern.difficulty ?? "unknown"}. Source: ${pattern.sourceType ?? "unknown"}.`,
+      : `Pattern Detail page: ${formatElaineContextEntity({ entity: "pattern", id: pattern.id, label: pattern.name, details: [pattern.designer ? `by ${pattern.designer}` : "", `block size: ${pattern.blockSize ?? "unknown"}`, `difficulty: ${pattern.difficulty ?? "unknown"}`, `source: ${pattern.sourceType ?? "unknown"}`].filter(Boolean) })}.`,
   );
 
   const deletePattern = useDeletePattern({

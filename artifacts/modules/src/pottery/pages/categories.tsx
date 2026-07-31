@@ -38,6 +38,7 @@ import {
 } from "@/components/category-manager/EditableCategory";
 import { MergeDialog } from "@/components/category-manager/MergeDialog";
 import { usePageAssistantContext } from "@/pottery/lib/assistant-context";
+import { formatElaineContextList, formatElaineContextEntity } from "@workspace/elaine-ui";
 
 // ---------------------------------------------------------------------------
 // Per-row component — owns all mutation hooks for a single category
@@ -231,7 +232,7 @@ export default function Categories() {
     "pottery-categories",
     isLoading
       ? undefined
-      : `Categories page: ${cats.length} categor${cats.length === 1 ? "y" : "ies"} in the collection, ${unusedCount} unused. Categories (id, name, piece count): ${cats.map((c) => `${c.id}:"${c.name}" (${c.count ?? 0})`).join(", ") || "none"}.`,
+      : `Categories page: ${cats.length} categor${cats.length === 1 ? "y" : "ies"} in the collection, ${unusedCount} unused. ${formatElaineContextList(cats, { label: "Categories (categoryId — name, piece count)", formatItem: (c) => formatElaineContextEntity({ entity: "category", id: c.id, label: c.name, details: [`${c.count ?? 0} piece(s)`] }) })}.`,
   );
 
   return (

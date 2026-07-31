@@ -63,6 +63,7 @@ import {
 import type { QuiltingCategory } from "@workspace/api-client-react";
 import { parseCell, fmtInch } from "@/quilting/lib/cell-parser";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
+import { formatElaineContextList, formatElaineContextEntity } from "@workspace/elaine-ui";
 import { CategoryEditDialog } from "@/quilting/components/CategoryEditDialog";
 import {
   AlertDialog,
@@ -725,15 +726,7 @@ export default function Blocks() {
     "quilting-blocks",
     isLoading
       ? undefined
-      : `Block Designer list page: ${blockList?.length ?? 0} saved block(s). Visible blocks: ${
-          (blockList ?? [])
-            .slice(0, 30)
-            .map(
-              (b: { id: number; name: string }) =>
-                `${b.name} (blockId: ${b.id})`,
-            )
-            .join(", ") || "none"
-        }. You have create_block / delete_block action tools — but they only create/remove a blank grid template with metadata, they cannot design the block's actual pattern; direct the user to the designer here for that.`,
+      : `Block Designer list page: ${blockList?.length ?? 0} saved block(s). ${formatElaineContextList(blockList ?? [], { label: "Visible blocks", formatItem: (b: { id: number; name: string }) => formatElaineContextEntity({ entity: "block", id: b.id, label: b.name }), limit: 30 })}. You have create_block / delete_block action tools — but they only create/remove a blank grid template with metadata, they cannot design the block's actual pattern; direct the user to the designer here for that.`,
   );
 
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);

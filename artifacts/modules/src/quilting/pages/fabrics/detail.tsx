@@ -46,6 +46,7 @@ import { ImageLightbox } from "@/quilting/components/image-lightbox";
 import { ImageEditor } from "@/quilting/components/image-editor";
 import { downloadCollectionImage } from "@/quilting/lib/svg-export";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
+import { formatElaineContextList, formatElaineContextEntity } from "@workspace/elaine-ui";
 import { FabricIdentityResearchPanel } from "@/quilting/components/FabricIdentityResearchPanel";
 import { FabricCreaseRemoverModal } from "@/quilting/components/FabricCreaseRemoverModal";
 import {
@@ -223,7 +224,7 @@ export default function FabricDetail() {
     "quilting-fabric-detail",
     isLoading || !fabric
       ? undefined
-      : `Fabric Detail page (fabricId: ${fabric.id}): "${fabric.name}"${fabric.designer ? ` by ${fabric.designer}` : ""}${fabric.lineName ? `, line "${fabric.lineName}"` : ""}. ${fabric.quantity} ${fabric.quantityUnit} on hand. Print type: ${fabric.printType ?? "unknown"}. Colours: ${(fabric.dominantColors ?? []).join(", ") || "none"}. Categories: ${(fabric.categories ?? []).map((c: { name: string }) => c.name).join(", ") || "none"}.`,
+      : `Fabric Detail page: ${formatElaineContextEntity({ entity: "fabric", id: fabric.id, label: fabric.name, details: [fabric.designer ? `by ${fabric.designer}` : "", fabric.lineName ? `line "${fabric.lineName}"` : "", `${fabric.quantity} ${fabric.quantityUnit} on hand`, `print type: ${fabric.printType ?? "unknown"}`, `colours: ${(fabric.dominantColors ?? []).join(", ") || "none"}`, `categories: ${(fabric.categories ?? []).map((c: { name: string }) => c.name).join(", ") || "none"}`].filter(Boolean) })}.`,
   );
 
   const deleteFabric = useDeleteFabric({

@@ -60,7 +60,7 @@ import {
 import { colorToHex } from "@/pottery/lib/colors";
 import { usePageAssistantContext } from "@/pottery/lib/assistant-context";
 import { toast } from "sonner";
-import { useAppConfigSummary } from "@workspace/elaine-ui";
+import { useAppConfigSummary, formatElaineContextList, formatElaineContextEntity } from "@workspace/elaine-ui";
 import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
 import { DominantColorDots } from "@/components/collection/DominantColorDots";
 import { CollectionErrorState } from "@workspace/collection-ui";
@@ -966,15 +966,7 @@ export default function Collection() {
           filtered.length !== (data?.length ?? 0)
             ? `Currently filtered to ${filtered.length} piece(s)${search.trim() ? ` matching search "${search.trim()}"` : ""}. `
             : ""
-        }Visible pieces (itemId: name — key details): ${filtered
-          .slice(0, 40)
-          .map(
-            (item) =>
-              `itemId: ${item.id} — "${item.name}"${item.maker ? `, maker: ${item.maker}` : ""}${item.style ? `, style: ${item.style}` : ""}${item.shape ? `, shape: ${item.shape}` : ""}${(item.quantity ?? 1) > 1 ? `, qty: ${item.quantity}` : ""}${item.categories.length ? `, categories: ${item.categories.map((c) => c.name).join(", ")} (categoryIds: ${item.categories.map((c) => c.id).join(", ")})` : ""}`,
-          )
-          .join(
-            "; ",
-          )}${filtered.length > 40 ? "; (list truncated, more pieces exist)" : ""}. Available category ids for filtering/assignment: ${usedCategories.map((c) => `${c.name}=${c.id}`).join(", ") || "none"}.${configSummary ? `\n\n${configSummary}` : ""}`,
+        }${formatElaineContextList(filtered.slice(0, 40), { label: "Visible pieces", formatItem: (item) => formatElaineContextEntity({ entity: "item", id: item.id, label: item.name, details: [item.maker ? `maker: ${item.maker}` : "", item.style ? `style: ${item.style}` : "", item.shape ? `shape: ${item.shape}` : "", (item.quantity ?? 1) > 1 ? `qty: ${item.quantity}` : "", item.categories.length ? `categories: ${item.categories.map((c) => c.name).join("; ")}` : ""].filter(Boolean) }) })}${filtered.length > 40 ? " (list truncated, more pieces exist)" : ""}. ${formatElaineContextList(usedCategories, { label: "Available categories", formatItem: (c) => formatElaineContextEntity({ entity: "category", id: c.id, label: c.name }) })}.${configSummary ? `\n\n${configSummary}` : ""}`,
   );
 
   return (

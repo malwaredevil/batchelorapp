@@ -53,6 +53,7 @@ import {
 } from "@/components/category-manager/EditableCategory";
 import { MergeDialog } from "@/components/category-manager/MergeDialog";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
+import { formatElaineContextList, formatElaineContextEntity } from "@workspace/elaine-ui";
 
 // ---------------------------------------------------------------------------
 // Per-row component — owns all mutation hooks for a single category
@@ -212,15 +213,7 @@ export default function Categories() {
     "quilting-categories",
     isLoading
       ? undefined
-      : `Categories page: ${cats.length} categor${cats.length === 1 ? "y" : "ies"} shared across fabrics/patterns/quilts/blocks/layouts. Visible: ${
-          cats
-            .slice(0, 30)
-            .map(
-              (c: QuiltingCategoryWithCount) =>
-                `${c.name} (id: ${c.id}, ${c.count} item(s))`,
-            )
-            .join(", ") || "none"
-        }. You have create/rename/delete/merge_category action tools.`,
+      : `Categories page: ${cats.length} categor${cats.length === 1 ? "y" : "ies"} shared across fabrics/patterns/quilts/blocks/layouts. ${formatElaineContextList(cats, { label: "Visible categories", formatItem: (c: QuiltingCategoryWithCount) => formatElaineContextEntity({ entity: "category", id: c.id, label: c.name, details: [`${c.count ?? 0} item(s)`] }), limit: 30 })}. You have create/rename/delete/merge_category action tools.`,
   );
 
   useEffect(() => {

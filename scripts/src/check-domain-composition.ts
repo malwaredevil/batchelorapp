@@ -456,6 +456,175 @@ for (const file of pageFiles) {
   }
 }
 
+// ── Scan D: Cross-artifact shared exports must be enrolled or acknowledged ──
+//
+// When a named export from @workspace/elaine-ui or @workspace/web-core/* is
+// imported by code in two or more distinct top-level artifacts (modules, web,
+// elaine, api-server), it is a shared mechanism.  Every shared mechanism must
+// be either:
+//
+//   (a) ENROLLED — appears as a required marker in Section 1 (named-file
+//       requirements), so its correct usage is mechanically verified, OR
+//
+//   (b) ACKNOWLEDGED — listed in KNOWN_SHARED_EXPORTS_NO_BOUNDARY_NEEDED
+//       below, with a comment explaining why no boundary is needed (e.g.
+//       it is a pure utility or a UI component whose shared use is the point).
+//
+// How the check works: it reads this script's own source and confirms that
+// the export name appears as a string literal somewhere in this file.
+// That makes the check self-referential in a useful way — any export that
+// has been consciously handled (enrolled or acknowledged) will be present;
+// any that slipped through without a conscious decision will not be.
+//
+// When you add a new cross-artifact export to elaine-ui or web-core:
+//   1. If it carries domain policy (formatting, monitoring, auth patterns):
+//      add a named-file requirement to Section 1.
+//   2. If it is a pure utility or shared UI component: add it here with a
+//      one-line comment explaining why no boundary is needed.
+//   Do this in the SAME change that makes the export cross-artifact.
+//
+// IMPORTANT: do not add @workspace/collection-ui or @workspace/app-shell
+// exports here — those are covered by named-file requirements in Section 1
+// that verify the specific component names at their call sites.
+//
+const KNOWN_SHARED_EXPORTS_NO_BOUNDARY_NEEDED = new Set([
+  // ── @workspace/elaine-ui ─────────────────────────────────────────────────
+  // UI components: shared use is the point; no drift risk in the component itself.
+  "ElaineWidget",
+  "ElaineChatPanel",
+  "ElaineHistoryPanel",
+  "ElainePlanProgress",
+  "ElaineAvatar",
+  "ElaineWordmark",
+  "ElaineName",
+  "ElaineSettingsCard",
+  "GlobalConfigCard",
+  "AppSwitcher",
+  "CommandPalette",
+  "ChatWidgets",
+  "MarkdownMessage",
+  "AppId",
+  // Hooks: provide shared capability; no domain-policy drift risk.
+  "useElaineChat",
+  "useAppConfigSummary", // reads app config for Elaine page context — sharing IS the design
+  "useTTS",
+  "useVoiceInput",
+  "useTheme",
+  // ── @workspace/web-core ──────────────────────────────────────────────────
+  // Pure color utilities — no policy, no drift risk.
+  "getCategoryPalette",
+  "colorToHex",
+  "autoTextColor",
+  "CATEGORY_BG_PALETTE",
+  // Standard SPA lifecycle helpers — expected to appear in every artifact entrypoint.
+  "mountApp",
+  "NotFound",         // standard 404 component
+  "InstallBanner",    // PWA install prompt
+  "useInstallPrompt", // PWA hook
+  // Auth state hook — shared because the session model is shared.
+  "useAuth",
+  // Pure utilities — no domain policy.
+  "cn",
+  "useIsMobile",
+  "downloadText",
+  "downloadBlob",
+  "downloadFile",
+  "ElainePageContext",         // context provider — shared use is the design
+  "ElainePageContextProvider", // root-level context provider, mounted once per SPA
+  "ThemeProvider",             // root-level theme provider, mounted once per SPA
+]);
+
+// ── Import parsing helpers ────────────────────────────────────────────────────
+
+/**
+ * Extract the top-level artifact directory from a workspace-relative path.
+ * Returns null for paths that don't belong to a top-level artifact.
+ */
+function topLevelArtifact(filePath: string): string | null {
+  const m = filePath.match(/^artifacts\/([^/]+)\//);
+  return m ? m[1] : null;
+}
+
+/**
+ * Parse all named (non-type) imports from @workspace/elaine-ui or
+ * @workspace/web-core/* in a source file and return them as an array of
+ * export names.
+ */
+function extractSharedLibImports(source: string): string[] {
+  // Matches: import { ... } from '@workspace/elaine-ui'
+  //          import { ... } from '@workspace/web-core/sentry'
+  // Skips:   import type { ... } (type-only — no runtime coupling)
+  //
+  // Uses [^}]* (not [\s\S]*?) so the match STOPS at the first closing brace
+  // and never spans across multiple import statements.  [\s\S]*? would
+  // backtrack past } characters and capture names from unrelated imports.
+  const re =
+    /import(?!\s+type)\s*\{([^}]*)\}\s*from\s*['"]@workspace\/(?:elaine-ui|web-core(?:\/[^'"]*)?)['"]/g;
+  const names: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(source)) !== null) {
+    for (const raw of m[1].split(",")) {
+      // Strip inline // comments before trimming (e.g. "ElaineWidget, // used for X")
+      const withoutComment = raw.split("//")[0];
+      // Handle "X as Y" aliases → take the original export name (X)
+      const name = withoutComment
+        .trim()
+        .replace(/\s+as\s+\S+$/, "") // strip "as Alias" suffix
+        .replace(/^type\s+/, "")     // strip inline "type" keyword
+        .trim();
+      if (name && !name.startsWith("*") && /^[A-Za-z_$]/.test(name)) {
+        names.push(name);
+      }
+    }
+  }
+  return names;
+}
+
+// ── Scan ─────────────────────────────────────────────────────────────────────
+
+// Read this script's own source once so we can check whether an export name
+// is mentioned anywhere in it (enrolled as a boundary OR acknowledged below).
+const checkScriptSource = read("scripts/src/check-domain-composition.ts");
+
+// Collect: exportName → Set of top-level artifact dirs that import it
+const exportArtifacts = new Map<string, Set<string>>();
+
+for (const file of allSourceFiles) {
+  const artifact = topLevelArtifact(file);
+  if (!artifact) continue;
+  const source = read(file);
+  for (const name of extractSharedLibImports(source)) {
+    if (!exportArtifacts.has(name)) exportArtifacts.set(name, new Set());
+    exportArtifacts.get(name)!.add(artifact);
+  }
+}
+
+// Flag any export that spans 2+ artifacts but hasn't been consciously handled.
+for (const [name, artifacts] of exportArtifacts) {
+  if (artifacts.size < 2) continue; // single-artifact usage — not yet "shared"
+
+  // Does this name appear anywhere in the check script source?
+  // Named-file requirement markers appear as quoted strings in includes[].
+  // KNOWN_SHARED_EXPORTS_NO_BOUNDARY_NEEDED entries appear as quoted strings above.
+  // Either way the name IS present → consciously handled → no violation.
+  if (checkScriptSource.includes(`"${name}"`)) continue;
+
+  const artifactList = [...artifacts].sort().join(", ");
+  violations.push(
+    `@workspace shared export "${name}" is imported in ${artifacts.size} artifacts` +
+      ` (${artifactList}) but is not enrolled or acknowledged in this check script\n` +
+      "  FIX: In the SAME change that made this export cross-artifact, do ONE of:\n" +
+      `    (a) ENROLL — if "${name}" carries domain policy (formatting, monitoring,\n` +
+      "        analytics, auth patterns): add a named-file requirement to Section 1\n" +
+      "        that verifies its correct usage at call sites.\n" +
+      `    (b) ACKNOWLEDGE — if "${name}" is a pure utility or shared UI component\n` +
+      "        with no drift risk: add it to KNOWN_SHARED_EXPORTS_NO_BOUNDARY_NEEDED\n" +
+      "        in this script with a one-line comment explaining why no boundary\n" +
+      "        is needed.  Do not skip the comment — it is the audit trail.\n" +
+      "  See docs/composition-and-configuration.md §Enrollment rule.",
+  );
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Report
 // ────────────────────────────────────────────────────────────────────────────

@@ -63,7 +63,10 @@ import {
 import type { QuiltingCategory } from "@workspace/api-client-react";
 import { parseCell, fmtInch } from "@/quilting/lib/cell-parser";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
-import { formatElaineContextList, formatElaineContextEntity } from "@workspace/elaine-ui";
+import {
+  formatElaineContextList,
+  formatElaineContextEntity,
+} from "@workspace/elaine-ui";
 import { CategoryEditDialog } from "@/quilting/components/CategoryEditDialog";
 import {
   AlertDialog,

@@ -140,7 +140,9 @@ test("does NOT flag an empty file", () => {
 // Scan C — hasInlineContextListBuilding
 // ────────────────────────────────────────────────────────────────────────────
 
-console.log("\ncheck-domain-composition.test: Scan C — hasInlineContextListBuilding");
+console.log(
+  "\ncheck-domain-composition.test: Scan C — hasInlineContextListBuilding",
+);
 
 const CONTEXT_HOOK = `usePageAssistantContext`;
 
@@ -237,8 +239,14 @@ test("parses a simple elaine-ui import", () => {
 test("parses multiple names from a single import statement", () => {
   const source = `import { formatElaineContextList, formatElaineContextEntity } from "@workspace/elaine-ui";`;
   const names = extractSharedLibImports(source);
-  assert.ok(names.includes("formatElaineContextList"), "should include formatElaineContextList");
-  assert.ok(names.includes("formatElaineContextEntity"), "should include formatElaineContextEntity");
+  assert.ok(
+    names.includes("formatElaineContextList"),
+    "should include formatElaineContextList",
+  );
+  assert.ok(
+    names.includes("formatElaineContextEntity"),
+    "should include formatElaineContextEntity",
+  );
   assert.equal(names.length, 2);
 });
 
@@ -266,7 +274,10 @@ import { useAuth } from "@workspace/web-core/auth";
   const names = extractSharedLibImports(source);
   assert.ok(names.includes("ElaineWidget"), "should include ElaineWidget");
   assert.ok(names.includes("useAuth"), "should include useAuth");
-  assert.ok(!names.includes("SomeOther"), "should not include SomeOther from non-workspace package");
+  assert.ok(
+    !names.includes("SomeOther"),
+    "should not include SomeOther from non-workspace package",
+  );
 });
 
 test("returns empty array when no shared imports present", () => {
@@ -278,26 +289,33 @@ test("returns empty array when no shared imports present", () => {
 // Section 1 — checkRequirementContents
 // ────────────────────────────────────────────────────────────────────────────
 
-console.log("\ncheck-domain-composition.test: Section 1 — checkRequirementContents");
+console.log(
+  "\ncheck-domain-composition.test: Section 1 — checkRequirementContents",
+);
 
 test("reports a violation when a required string is missing", () => {
-  const violations = checkRequirementContents(
-    "some/file.ts",
-    "const x = 1;",
-    { includes: ["createFeatureRegistry"] },
-  );
+  const violations = checkRequirementContents("some/file.ts", "const x = 1;", {
+    includes: ["createFeatureRegistry"],
+  });
   assert.equal(violations.length, 1);
-  assert.ok(violations[0].includes("some/file.ts"), "violation message should contain the path");
-  assert.ok(violations[0].includes('"createFeatureRegistry"'), "violation message should quote the missing token");
-  assert.ok(violations[0].includes("missing"), "violation message should say 'missing'");
+  assert.ok(
+    violations[0].includes("some/file.ts"),
+    "violation message should contain the path",
+  );
+  assert.ok(
+    violations[0].includes('"createFeatureRegistry"'),
+    "violation message should quote the missing token",
+  );
+  assert.ok(
+    violations[0].includes("missing"),
+    "violation message should say 'missing'",
+  );
 });
 
 test("reports one violation per missing required string when multiple are absent", () => {
-  const violations = checkRequirementContents(
-    "some/file.ts",
-    "",
-    { includes: ["tokenA", "tokenB", "tokenC"] },
-  );
+  const violations = checkRequirementContents("some/file.ts", "", {
+    includes: ["tokenA", "tokenB", "tokenC"],
+  });
   assert.equal(violations.length, 3, "one violation per missing token");
 });
 
@@ -306,11 +324,9 @@ test("reports no violation when all required strings are present", () => {
 import { createFeatureRegistry } from "@workspace/web-core/feature-registry";
 export const registry = createFeatureRegistry({ features: [] });
 `;
-  const violations = checkRequirementContents(
-    "some/file.ts",
-    contents,
-    { includes: ["createFeatureRegistry"] },
-  );
+  const violations = checkRequirementContents("some/file.ts", contents, {
+    includes: ["createFeatureRegistry"],
+  });
   assert.equal(violations.length, 0);
 });
 
@@ -318,16 +334,14 @@ test("reports a violation when a forbidden (excludes) string is present", () => 
   const contents = `
 async function resolveOrCreateCategories(db: Db) { return []; }
 `;
-  const violations = checkRequirementContents(
-    "routes/fabrics.ts",
-    contents,
-    {
-      includes: ["parseStringArray"],
-      excludes: ["function resolveOrCreateCategories"],
-    },
-  );
+  const violations = checkRequirementContents("routes/fabrics.ts", contents, {
+    includes: ["parseStringArray"],
+    excludes: ["function resolveOrCreateCategories"],
+  });
   // two violations: one for missing include, one for forbidden exclude
-  const forbiddenViolation = violations.find((v) => v.includes("superseded local implementation"));
+  const forbiddenViolation = violations.find((v) =>
+    v.includes("superseded local implementation"),
+  );
   assert.ok(forbiddenViolation, "should report a forbidden-string violation");
   assert.ok(
     forbiddenViolation!.includes('"function resolveOrCreateCategories"'),
@@ -339,37 +353,43 @@ test("reports no violation for excludes when the forbidden string is absent", ()
   const contents = `
 import { parseStringArray, resolveOrCreateQuiltingCategories } from "@workspace/server-lib";
 `;
-  const violations = checkRequirementContents(
-    "routes/fabrics.ts",
-    contents,
-    {
-      includes: ["parseStringArray", "resolveOrCreateQuiltingCategories"],
-      excludes: ["function parseStringArray", "function resolveOrCreateCategories"],
-    },
-  );
+  const violations = checkRequirementContents("routes/fabrics.ts", contents, {
+    includes: ["parseStringArray", "resolveOrCreateQuiltingCategories"],
+    excludes: [
+      "function parseStringArray",
+      "function resolveOrCreateCategories",
+    ],
+  });
   assert.equal(violations.length, 0);
 });
 
 test("includes the FIX message in the violation when fix is provided", () => {
-  const fix = "Import createFeatureRegistry from @workspace/web-core/feature-registry.";
-  const violations = checkRequirementContents(
-    "some/file.ts",
-    "",
-    { includes: ["createFeatureRegistry"], fix },
-  );
+  const fix =
+    "Import createFeatureRegistry from @workspace/web-core/feature-registry.";
+  const violations = checkRequirementContents("some/file.ts", "", {
+    includes: ["createFeatureRegistry"],
+    fix,
+  });
   assert.equal(violations.length, 1);
-  assert.ok(violations[0].includes("FIX:"), "violation should contain FIX: label");
-  assert.ok(violations[0].includes(fix), "violation should contain the full fix message");
+  assert.ok(
+    violations[0].includes("FIX:"),
+    "violation should contain FIX: label",
+  );
+  assert.ok(
+    violations[0].includes(fix),
+    "violation should contain the full fix message",
+  );
 });
 
 test("omits the FIX line when no fix is provided", () => {
-  const violations = checkRequirementContents(
-    "some/file.ts",
-    "",
-    { includes: ["createFeatureRegistry"] },
-  );
+  const violations = checkRequirementContents("some/file.ts", "", {
+    includes: ["createFeatureRegistry"],
+  });
   assert.equal(violations.length, 1);
-  assert.ok(!violations[0].includes("FIX:"), "violation should not contain FIX: when fix is absent");
+  assert.ok(
+    !violations[0].includes("FIX:"),
+    "violation should not contain FIX: when fix is absent",
+  );
 });
 
 test("reports all required-string violations on an empty file", () => {
@@ -387,25 +407,23 @@ test("reports all required-string violations on an empty file", () => {
 });
 
 test("reports violations on a file containing only whitespace", () => {
-  const violations = checkRequirementContents(
-    "some/file.ts",
-    "   \n\n\t  \n",
-    { includes: ["CollectionDetailHero", "CollectionDetailPanelStack"] },
-  );
+  const violations = checkRequirementContents("some/file.ts", "   \n\n\t  \n", {
+    includes: ["CollectionDetailHero", "CollectionDetailPanelStack"],
+  });
   assert.equal(violations.length, 2, "both missing tokens should be reported");
 });
 
 test("does not report an excludes violation on an empty file", () => {
   // Empty file cannot contain a forbidden string — no false positive
-  const violations = checkRequirementContents(
-    "some/file.ts",
-    "",
-    {
-      includes: [],
-      excludes: ["async function queryHouseholdData"],
-    },
+  const violations = checkRequirementContents("some/file.ts", "", {
+    includes: [],
+    excludes: ["async function queryHouseholdData"],
+  });
+  assert.equal(
+    violations.length,
+    0,
+    "empty file should not trigger an excludes violation",
   );
-  assert.equal(violations.length, 0, "empty file should not trigger an excludes violation");
 });
 
 test("handles a requirement with no excludes field (excludes is optional)", () => {
@@ -422,7 +440,9 @@ test("handles a requirement with no excludes field (excludes is optional)", () =
 // Section 1 — checkRequirementFile (missing-file wrapper)
 // ────────────────────────────────────────────────────────────────────────────
 
-console.log("\ncheck-domain-composition.test: Section 1 — checkRequirementFile");
+console.log(
+  "\ncheck-domain-composition.test: Section 1 — checkRequirementFile",
+);
 
 test("returns a structured violation when the file does not exist", () => {
   const result = checkRequirementFile({
@@ -452,7 +472,11 @@ test("does not throw — missing file produces a violation, not an ENOENT crash"
   } catch {
     threw = true;
   }
-  assert.equal(threw, false, "checkRequirementFile must not throw on a missing file");
+  assert.equal(
+    threw,
+    false,
+    "checkRequirementFile must not throw on a missing file",
+  );
 });
 
 test("returns content violations (not a missing-file violation) when file exists and tokens are absent", () => {
@@ -478,7 +502,11 @@ test("returns no violations when file exists and all tokens are present", () => 
     path: "scripts/src/check-domain-composition.ts",
     includes: ["checkRequirementFile"],
   });
-  assert.equal(result.length, 0, "no violations when token is present in the file");
+  assert.equal(
+    result.length,
+    0,
+    "no violations when token is present in the file",
+  );
 });
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -493,7 +521,9 @@ test("returns no violations when file exists and all tokens are present", () => 
 // enforcing anything.
 // ────────────────────────────────────────────────────────────────────────────
 
-console.log("\ncheck-domain-composition.test: Integration — process exit codes");
+console.log(
+  "\ncheck-domain-composition.test: Integration — process exit codes",
+);
 
 const root = join(import.meta.dirname, "../..");
 // scripts/ dir — where tsx is installed and where the npm script runs from
@@ -562,7 +592,9 @@ test("script exits non-zero when a Sentry.init() violation is injected", () => {
 // Scan E — hasLabeledEntityIdInContext
 // ────────────────────────────────────────────────────────────────────────────
 
-console.log("\ncheck-domain-composition.test: Scan E — hasLabeledEntityIdInContext");
+console.log(
+  "\ncheck-domain-composition.test: Scan E — hasLabeledEntityIdInContext",
+);
 
 test("detects threadId: ${selectedThreadId} pattern (real violation)", () => {
   const source = `
@@ -646,7 +678,9 @@ test("does NOT flag an empty file", () => {
 // Summary
 // ────────────────────────────────────────────────────────────────────────────
 
-console.log(`\ncheck-domain-composition.test: ${passed} passed, ${failed} failed\n`);
+console.log(
+  `\ncheck-domain-composition.test: ${passed} passed, ${failed} failed\n`,
+);
 
 if (failed > 0) {
   process.exit(1);

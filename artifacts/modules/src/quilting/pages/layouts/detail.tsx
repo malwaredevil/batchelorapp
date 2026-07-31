@@ -32,7 +32,10 @@ import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
 import { TagSelector } from "@/quilting/components/tag-selector";
 import type { QuiltingCategory } from "@workspace/api-client-react";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
-import { formatElaineContextList, formatElaineContextEntity } from "@workspace/elaine-ui";
+import {
+  formatElaineContextList,
+  formatElaineContextEntity,
+} from "@workspace/elaine-ui";
 
 type LayoutCellData = { blockId: number | null; rotation: 0 | 90 | 180 | 270 };
 

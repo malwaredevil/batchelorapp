@@ -39,7 +39,10 @@ type WishlistItem = TravelsWishlistItem;
 import { useQueryClient } from "@tanstack/react-query";
 import { getListWishlistQueryKey } from "@workspace/api-client-react";
 import { usePageAssistantContext } from "@/travels/lib/assistant-context";
-import { formatElaineContextList, formatElaineContextEntity } from "@workspace/elaine-ui";
+import {
+  formatElaineContextList,
+  formatElaineContextEntity,
+} from "@workspace/elaine-ui";
 
 // ─── Notes JSON format ────────────────────────────────────────────────────────
 //

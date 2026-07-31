@@ -30,7 +30,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { usePageAssistantContext } from "@/pottery/lib/assistant-context";
-import { useAppConfigSummary, formatElaineContextList, formatElaineContextEntity } from "@workspace/elaine-ui";
+import {
+  useAppConfigSummary,
+  formatElaineContextList,
+  formatElaineContextEntity,
+} from "@workspace/elaine-ui";
 import {
   STANDARD_IMAGE_UPLOAD,
   validateClientUpload,
@@ -222,7 +226,18 @@ export default function AddPiece() {
     "pottery-add",
     `Add a Piece page: form for cataloguing a new pottery piece. Primary photo ${file ? "selected" : "not yet selected (required before submit)"}, ${suppPhotos.length} additional photo(s) attached. Current field values — name: ${watchedFields.name?.trim() || "(blank, will be AI-generated)"}, quantity: ${watchedFields.quantity ?? 1}, dimensions: ${watchedFields.dimensions?.trim() || "(blank, AI estimates from photo)"}, notes: ${watchedFields.notes?.trim() || "(blank)"}. ${
       selectedCategoryIds.length
-        ? formatElaineContextList(categories.filter((c) => selectedCategoryIds.includes(c.id)), { label: "Selected categories", formatItem: (c) => formatElaineContextEntity({ entity: "category", id: c.id, label: c.name }) })
+        ? formatElaineContextList(
+            categories.filter((c) => selectedCategoryIds.includes(c.id)),
+            {
+              label: "Selected categories",
+              formatItem: (c) =>
+                formatElaineContextEntity({
+                  entity: "category",
+                  id: c.id,
+                  label: c.name,
+                }),
+            },
+          )
         : "No categories selected"
     }. Pattern, colours, shape and motifs are auto-detected from the photo after submit. ${formatElaineContextList(categories, { label: "Available categories", formatItem: (c) => formatElaineContextEntity({ entity: "category", id: c.id, label: c.name }) })}.${configSummary ? ` ${configSummary}` : ""}`,
   );

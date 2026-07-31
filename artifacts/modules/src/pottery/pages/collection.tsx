@@ -60,7 +60,11 @@ import {
 import { colorToHex } from "@/pottery/lib/colors";
 import { usePageAssistantContext } from "@/pottery/lib/assistant-context";
 import { toast } from "sonner";
-import { useAppConfigSummary, formatElaineContextList, formatElaineContextEntity } from "@workspace/elaine-ui";
+import {
+  useAppConfigSummary,
+  formatElaineContextList,
+  formatElaineContextEntity,
+} from "@workspace/elaine-ui";
 import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
 import { DominantColorDots } from "@/components/collection/DominantColorDots";
 import { CollectionErrorState } from "@workspace/collection-ui";

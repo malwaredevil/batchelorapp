@@ -53,7 +53,10 @@ import {
 } from "@/components/category-manager/EditableCategory";
 import { MergeDialog } from "@/components/category-manager/MergeDialog";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
-import { formatElaineContextList, formatElaineContextEntity } from "@workspace/elaine-ui";
+import {
+  formatElaineContextList,
+  formatElaineContextEntity,
+} from "@workspace/elaine-ui";
 
 // ---------------------------------------------------------------------------
 // Per-row component — owns all mutation hooks for a single category

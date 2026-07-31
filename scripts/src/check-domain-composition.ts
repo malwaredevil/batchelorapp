@@ -39,7 +39,14 @@ function read(path: string): string {
 
 /** Recursively collect files with the given extensions, skipping build dirs. */
 function walkFiles(dir: string, extensions: string[]): string[] {
-  const SKIP = new Set(["node_modules", ".git", "dist", "build", ".turbo", ".cache"]);
+  const SKIP = new Set([
+    "node_modules",
+    ".git",
+    "dist",
+    "build",
+    ".turbo",
+    ".cache",
+  ]);
   const results: string[] = [];
 
   function walk(current: string) {
@@ -141,7 +148,10 @@ const requirements: Array<{
   ].map((path) => ({
     path,
     includes: ["parseStringArray", "resolveOrCreateQuiltingCategories"],
-    excludes: ["function parseStringArray", "function resolveOrCreateCategories"],
+    excludes: [
+      "function parseStringArray",
+      "function resolveOrCreateCategories",
+    ],
     fix: "Import parseStringArray and resolveOrCreateQuiltingCategories from the shared server lib. Route handlers must not reimplement string-array parsing or category resolution.",
   })),
 
@@ -243,9 +253,7 @@ const requirements: Array<{
   })),
 
   // ── Domain detail pages migrated to formatElaineContextEntity (single item) ─
-  ...[
-    "artifacts/modules/src/ornaments/pages/detail.tsx",
-  ].map((path) => ({
+  ...["artifacts/modules/src/ornaments/pages/detail.tsx"].map((path) => ({
     path,
     includes: ["formatElaineContextEntity"],
     fix: `${path} was migrated to use formatElaineContextEntity from @workspace/elaine-ui. Do not revert to inline entityId interpolation in the usePageAssistantContext context string.`,
@@ -429,7 +437,7 @@ export function hasSentryInit(contents: string): boolean {
 }
 
 const SENTRY_INIT_ALLOWED = new Set([
-  "lib/web-core/src/sentry.ts",           // THE shared implementation
+  "lib/web-core/src/sentry.ts", // THE shared implementation
   "artifacts/api-server/src/instrument.ts", // server-side Sentry (separate concern)
 ]);
 
@@ -464,9 +472,9 @@ export function hasDirectOpenAIClient(contents: string): boolean {
   return contents.includes("new OpenAI(");
 }
 
-const routeSourceFiles = walkFiles("artifacts/api-server/src/routes", [".ts"]).filter(
-  (f) => !f.endsWith(".test.ts") && !f.endsWith(".spec.ts"),
-);
+const routeSourceFiles = walkFiles("artifacts/api-server/src/routes", [
+  ".ts",
+]).filter((f) => !f.endsWith(".test.ts") && !f.endsWith(".spec.ts"));
 
 for (const file of routeSourceFiles) {
   const contents = read(file);
@@ -603,8 +611,8 @@ const KNOWN_SHARED_EXPORTS_NO_BOUNDARY_NEEDED = new Set([
   "CATEGORY_BG_PALETTE",
   // Standard SPA lifecycle helpers — expected to appear in every artifact entrypoint.
   "mountApp",
-  "NotFound",         // standard 404 component
-  "InstallBanner",    // PWA install prompt
+  "NotFound", // standard 404 component
+  "InstallBanner", // PWA install prompt
   "useInstallPrompt", // PWA hook
   // Auth state hook — shared because the session model is shared.
   "useAuth",
@@ -614,9 +622,9 @@ const KNOWN_SHARED_EXPORTS_NO_BOUNDARY_NEEDED = new Set([
   "downloadText",
   "downloadBlob",
   "downloadFile",
-  "ElainePageContext",         // context provider — shared use is the design
+  "ElainePageContext", // context provider — shared use is the design
   "ElainePageContextProvider", // root-level context provider, mounted once per SPA
-  "ThemeProvider",             // root-level theme provider, mounted once per SPA
+  "ThemeProvider", // root-level theme provider, mounted once per SPA
 ]);
 
 // ── Import parsing helpers ────────────────────────────────────────────────────
@@ -655,7 +663,7 @@ export function extractSharedLibImports(source: string): string[] {
       const name = withoutComment
         .trim()
         .replace(/\s+as\s+\S+$/, "") // strip "as Alias" suffix
-        .replace(/^type\s+/, "")     // strip inline "type" keyword
+        .replace(/^type\s+/, "") // strip inline "type" keyword
         .trim();
       if (name && !name.startsWith("*") && /^[A-Za-z_$]/.test(name)) {
         names.push(name);

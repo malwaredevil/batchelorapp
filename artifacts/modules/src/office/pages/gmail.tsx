@@ -35,7 +35,10 @@ import { ThreadList, type LayoutMode } from "../components/gmail/ThreadList";
 import { ThreadView } from "../components/gmail/ThreadView";
 import { ComposeModal } from "../components/gmail/ComposeModal";
 import { usePageAssistantContext } from "../lib/assistant-context";
-import { useAppConfigSummary, formatElaineContextEntity } from "@workspace/elaine-ui";
+import {
+  useAppConfigSummary,
+  formatElaineContextEntity,
+} from "@workspace/elaine-ui";
 import { useAddBackgroundTask } from "@/lib/background-tasks";
 
 // This is a general-purpose email client for the household member's own

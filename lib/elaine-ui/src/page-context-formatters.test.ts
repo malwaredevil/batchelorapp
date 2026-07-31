@@ -192,7 +192,10 @@ describe("formatElaineContextList — output shape", () => {
   });
 
   it("truncates to the limit and appends an omission marker", () => {
-    const items = Array.from({ length: 60 }, (_, i) => ({ id: i + 1, name: `Item ${i + 1}` }));
+    const items = Array.from({ length: 60 }, (_, i) => ({
+      id: i + 1,
+      name: `Item ${i + 1}`,
+    }));
     const out = formatElaineContextList(items, {
       label: "Items",
       formatItem: (i) =>
@@ -201,11 +204,14 @@ describe("formatElaineContextList — output shape", () => {
     });
     expect(out).toContain('itemId: 1 — "Item 1"');
     expect(out).toContain("10 more not shown");
-    expect(out).not.toContain('itemId: 60');
+    expect(out).not.toContain("itemId: 60");
   });
 
   it("uses the default limit of 50 when limit is not specified", () => {
-    const items = Array.from({ length: 51 }, (_, i) => ({ id: i + 1, name: `X${i + 1}` }));
+    const items = Array.from({ length: 51 }, (_, i) => ({
+      id: i + 1,
+      name: `X${i + 1}`,
+    }));
     const out = formatElaineContextList(items, {
       label: "L",
       formatItem: (i) =>

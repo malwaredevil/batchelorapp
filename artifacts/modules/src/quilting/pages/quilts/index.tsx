@@ -39,7 +39,10 @@ import type { QuiltingCategory } from "@workspace/api-client-react";
 import { downloadCollectionImage } from "@/quilting/lib/svg-export";
 import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
-import { formatElaineContextList, formatElaineContextEntity } from "@workspace/elaine-ui";
+import {
+  formatElaineContextList,
+  formatElaineContextEntity,
+} from "@workspace/elaine-ui";
 import { useCollectionPage } from "@/quilting/hooks/useCollectionPage";
 import { CollectionPageShell } from "@/quilting/components/CollectionPageShell";
 import { QuickEditQuiltSheet } from "@/quilting/components/quick-edit-quilt-sheet";

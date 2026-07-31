@@ -87,11 +87,11 @@ Source directories are walked and every file is tested regardless of whether it
 was named when the check was written. These scans catch new violations before
 they ship.
 
-| What is scanned | What triggers a violation | Correct pattern |
-|---|---|---|
-| All `.ts` / `.tsx` files | `Sentry.init(` outside `lib/web-core/src/sentry.ts` or `artifacts/api-server/src/instrument.ts` | `initBrowserMonitoring()` from `@workspace/web-core/sentry` |
-| `artifacts/api-server/src/routes/**/*.ts` | `new OpenAI(` in a route handler | `getOpenRouterClient()` / `callModel()` from `lib/ai-client.ts` |
-| All `.tsx` page files not in the legacy-exempt set | `usePageAssistantContext` present without `@workspace/elaine-ui` import | `formatElaineContextList()` + `formatElaineContextEntity()` from `@workspace/elaine-ui` |
+| What is scanned                                    | What triggers a violation                                                                       | Correct pattern                                                                         |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| All `.ts` / `.tsx` files                           | `Sentry.init(` outside `lib/web-core/src/sentry.ts` or `artifacts/api-server/src/instrument.ts` | `initBrowserMonitoring()` from `@workspace/web-core/sentry`                             |
+| `artifacts/api-server/src/routes/**/*.ts`          | `new OpenAI(` in a route handler                                                                | `getOpenRouterClient()` / `callModel()` from `lib/ai-client.ts`                         |
+| All `.tsx` page files not in the legacy-exempt set | `usePageAssistantContext` present without `@workspace/elaine-ui` import                         | `formatElaineContextList()` + `formatElaineContextEntity()` from `@workspace/elaine-ui` |
 
 ### Migration candidates
 

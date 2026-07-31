@@ -9,7 +9,10 @@ import {
 import { useLocation, useParams } from "wouter";
 import { useRegisterNavGuard } from "@/quilting/lib/nav-guard";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
-import { formatElaineContextList, formatElaineContextEntity } from "@workspace/elaine-ui";
+import {
+  formatElaineContextList,
+  formatElaineContextEntity,
+} from "@workspace/elaine-ui";
 import {
   ArrowLeft,
   Save,
@@ -2527,7 +2530,9 @@ export default function BlockDesigner() {
   usePageAssistantContext(
     "quilting-block-designer",
     `Block Designer page (${templateMode ? "block library template" : "block"} ${
-      isNew ? "creation" : `editing ${formatElaineContextEntity({ entity: "block", id: blockId!, label: existing?.name ?? "" })}`
+      isNew
+        ? "creation"
+        : `editing ${formatElaineContextEntity({ entity: "block", id: blockId!, label: existing?.name ?? "" })}`
     }). This is a visual pixel-grid drawing tool for designing a quilt block's fabric layout, cell-by-cell — it cannot be operated via chat. If the user wants to design or edit a block's actual pattern/geometry here, tell them to use this page directly; you can create/delete blocks by name+size via tools, but you cannot draw or edit their grid content.`,
   );
 

@@ -20,7 +20,10 @@ import {
   Flag,
 } from "lucide-react";
 import { usePageAssistantContext } from "@/travels/lib/assistant-context";
-import { formatElaineContextList, formatElaineContextEntity } from "@workspace/elaine-ui";
+import {
+  formatElaineContextList,
+  formatElaineContextEntity,
+} from "@workspace/elaine-ui";
 import {
   loadGoogleMaps,
   svgToMarkerContent,

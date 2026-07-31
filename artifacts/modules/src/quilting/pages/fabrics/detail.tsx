@@ -46,7 +46,10 @@ import { ImageLightbox } from "@/quilting/components/image-lightbox";
 import { ImageEditor } from "@/quilting/components/image-editor";
 import { downloadCollectionImage } from "@/quilting/lib/svg-export";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
-import { formatElaineContextList, formatElaineContextEntity } from "@workspace/elaine-ui";
+import {
+  formatElaineContextList,
+  formatElaineContextEntity,
+} from "@workspace/elaine-ui";
 import { FabricIdentityResearchPanel } from "@/quilting/components/FabricIdentityResearchPanel";
 import { FabricCreaseRemoverModal } from "@/quilting/components/FabricCreaseRemoverModal";
 import {

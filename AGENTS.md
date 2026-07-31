@@ -261,14 +261,14 @@ pre-publishing task.
 
 #### Specifically prohibited patterns (the automated guard detects these)
 
-| Prohibited | Correct alternative |
-|---|---|
-| `Sentry.init(` in any SPA file | `initBrowserMonitoring()` from `@workspace/web-core/sentry` |
-| `new OpenAI(` in `routes/**` | `getOpenRouterClient()` / `callModel()` from `lib/ai-client.ts` |
+| Prohibited                                                               | Correct alternative                                                                     |
+| ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| `Sentry.init(` in any SPA file                                           | `initBrowserMonitoring()` from `@workspace/web-core/sentry`                             |
+| `new OpenAI(` in `routes/**`                                             | `getOpenRouterClient()` / `callModel()` from `lib/ai-client.ts`                         |
 | `usePageAssistantContext` in a new `.tsx` without `@workspace/elaine-ui` | `formatElaineContextList()` + `formatElaineContextEntity()` from `@workspace/elaine-ui` |
-| Inline `.join()` / `.slice().map()` to build Elaine context | `formatElaineContextList()` from `@workspace/elaine-ui` |
-| Local `Sentry.replayIntegration` config | Stays in `lib/web-core/src/sentry.ts` only |
-| Route handler reimplementing household data query | `queryHouseholdData()` / `searchHouseholdData()` from elaine shared fns |
+| Inline `.join()` / `.slice().map()` to build Elaine context              | `formatElaineContextList()` from `@workspace/elaine-ui`                                 |
+| Local `Sentry.replayIntegration` config                                  | Stays in `lib/web-core/src/sentry.ts` only                                              |
+| Route handler reimplementing household data query                        | `queryHouseholdData()` / `searchHouseholdData()` from elaine shared fns                 |
 
 #### Enforcement gates (all three must pass; none can be skipped)
 

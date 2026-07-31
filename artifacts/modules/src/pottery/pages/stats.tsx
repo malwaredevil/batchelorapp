@@ -14,7 +14,10 @@ import {
 import { Loader2, Package, Layers, TrendingUp } from "lucide-react";
 import { colorToHex } from "@/pottery/lib/colors";
 import { usePageAssistantContext } from "@/pottery/lib/assistant-context";
-import { formatElaineContextList, formatElaineContextEntity } from "@workspace/elaine-ui";
+import {
+  formatElaineContextList,
+  formatElaineContextEntity,
+} from "@workspace/elaine-ui";
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 

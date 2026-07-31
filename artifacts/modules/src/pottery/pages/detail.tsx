@@ -66,7 +66,10 @@ import {
   useDeletePotteryImage,
 } from "@workspace/api-client-react";
 import { usePageAssistantContext } from "@/pottery/lib/assistant-context";
-import { formatElaineContextList, formatElaineContextEntity } from "@workspace/elaine-ui";
+import {
+  formatElaineContextList,
+  formatElaineContextEntity,
+} from "@workspace/elaine-ui";
 import { ImageLightbox as SharedImageLightbox } from "@/quilting/components/image-lightbox";
 import {
   STANDARD_IMAGE_UPLOAD,

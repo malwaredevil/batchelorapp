@@ -24,7 +24,10 @@ import {
   Video,
 } from "lucide-react";
 import { usePageAssistantContext } from "@/travels/lib/assistant-context";
-import { formatElaineContextList, formatElaineContextEntity } from "@workspace/elaine-ui";
+import {
+  formatElaineContextList,
+  formatElaineContextEntity,
+} from "@workspace/elaine-ui";
 
 function AerialViewPanel({ destination }: { destination: string }) {
   const { data, isLoading, error } = useQuery({

@@ -42,7 +42,10 @@ import {
   getGetShoppingStatsQueryKey,
 } from "@workspace/api-client-react";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
-import { formatElaineContextList, formatElaineContextEntity } from "@workspace/elaine-ui";
+import {
+  formatElaineContextList,
+  formatElaineContextEntity,
+} from "@workspace/elaine-ui";
 
 type Status = "want" | "ordered" | "bought";
 

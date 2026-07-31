@@ -13,7 +13,10 @@ import { VerdictPill, type Verdict } from "@/pottery/components/verdict";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { usePageAssistantContext } from "@/pottery/lib/assistant-context";
-import { formatElaineContextList, formatElaineContextEntity } from "@workspace/elaine-ui";
+import {
+  formatElaineContextList,
+  formatElaineContextEntity,
+} from "@workspace/elaine-ui";
 
 function VerdictCard({
   title,

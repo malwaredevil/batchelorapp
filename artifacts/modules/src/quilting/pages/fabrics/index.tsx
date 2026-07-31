@@ -71,7 +71,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
-import { useAppConfigSummary, formatElaineContextList, formatElaineContextEntity } from "@workspace/elaine-ui";
+import {
+  useAppConfigSummary,
+  formatElaineContextList,
+  formatElaineContextEntity,
+} from "@workspace/elaine-ui";
 
 const FABRICS_LIST_SS_KEY = "quilting-fabrics-list-state";
 

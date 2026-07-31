@@ -85,8 +85,8 @@ const { dbMock, selectQueue, deleteQuiltByIdMock, eqSpy } = vi.hoisted(() => {
 
 vi.mock("drizzle-orm", async (importOriginal) => {
   const actual = await importOriginal<typeof import("drizzle-orm")>();
-  eqSpy.mockImplementation(
-    (...args: Parameters<typeof actual.eq>) => actual.eq(...args),
+  eqSpy.mockImplementation((...args: Parameters<typeof actual.eq>) =>
+    actual.eq(...args),
   );
   return { ...actual, eq: eqSpy };
 });
@@ -160,9 +160,7 @@ const DUMMY_USER_ID = 99;
 /** Checks that eq() was called at least once with the expected numeric value
  *  as its second argument (the ID column value in the WHERE clause). */
 function expectEqCalledWithId(expectedId: number) {
-  const matchingCall = eqSpy.mock.calls.some(
-    ([, val]) => val === expectedId,
-  );
+  const matchingCall = eqSpy.mock.calls.some(([, val]) => val === expectedId);
   expect(
     matchingCall,
     `expected eq() to have been called with id=${expectedId}, ` +
@@ -299,9 +297,9 @@ describe("Executor fidelity — delete_shopping_item (quilting shopping list pag
       DUMMY_USER_ID,
     );
 
-    expect(
-      (result.body as { result?: { id: number } }).result?.id,
-    ).toBe(shoppingItemId);
+    expect((result.body as { result?: { id: number } }).result?.id).toBe(
+      shoppingItemId,
+    );
     expectEqCalledWithId(shoppingItemId);
   });
 });
@@ -407,9 +405,9 @@ describe("Executor fidelity — remove_wishlist_item (travels wishlist page)", (
 
     const result = await removeWishlistItemExecutor(wishlistId);
 
-    expect(
-      (result.body as { result?: { id: number } }).result?.id,
-    ).toBe(wishlistId);
+    expect((result.body as { result?: { id: number } }).result?.id).toBe(
+      wishlistId,
+    );
     expectEqCalledWithId(wishlistId);
   });
 });

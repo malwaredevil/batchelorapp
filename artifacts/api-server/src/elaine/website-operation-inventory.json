@@ -5,10 +5,9 @@
     "path": "/quilting/fabrics/{id}/identifiers",
     "domain": "quilting",
     "summary": "Add an identifier to a fabric",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "This quilting research/analysis workflow requires selecting a staged result and applying it safely; Elaine needs a typed workflow tool with explicit preview and confirmation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "addFabricImage",
@@ -18,8 +17,7 @@
     "summary": "Add a supplemental image to a fabric",
     "disposition": "attachment_or_camera",
     "mappedTools": [],
-    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it.",
-    "followUpIssue": 360
+    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it."
   },
   {
     "operationId": "addOrnamentImage",
@@ -29,8 +27,7 @@
     "summary": "Add a supplemental image to an ornament",
     "disposition": "attachment_or_camera",
     "mappedTools": [],
-    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it.",
-    "followUpIssue": 360
+    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it."
   },
   {
     "operationId": "addPatternImage",
@@ -40,8 +37,7 @@
     "summary": "Add a supplemental image to a pattern",
     "disposition": "attachment_or_camera",
     "mappedTools": [],
-    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it.",
-    "followUpIssue": 360
+    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it."
   },
   {
     "operationId": "addPotteryImage",
@@ -51,8 +47,7 @@
     "summary": "Add a supplemental image to a piece",
     "disposition": "attachment_or_camera",
     "mappedTools": [],
-    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it.",
-    "followUpIssue": 360
+    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it."
   },
   {
     "operationId": "addQuiltImage",
@@ -62,8 +57,7 @@
     "summary": "Add a supplemental image to a quilt",
     "disposition": "attachment_or_camera",
     "mappedTools": [],
-    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it.",
-    "followUpIssue": 360
+    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it."
   },
   {
     "operationId": "addReaction",
@@ -71,10 +65,9 @@
     "path": "/messenger/messages/{id}/reactions",
     "domain": "messenger",
     "summary": "Add an emoji reaction to a message (idempotent)",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "Elaine has no Messenger executor yet. This needs a shared conversation/message service plus explicit recipient and destructive-message confirmation rules.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "applyFabricIdentityResearch",
@@ -82,10 +75,9 @@
     "path": "/quilting/fabrics/{id}/identity-research/{researchId}",
     "domain": "quilting",
     "summary": "Apply a research candidate to the fabric",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "This quilting research/analysis workflow requires selecting a staged result and applying it safely; Elaine needs a typed workflow tool with explicit preview and confirmation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "applyPatternAnalysis",
@@ -93,10 +85,9 @@
     "path": "/quilting/patterns/{id}/analyses/{analysisId}/apply",
     "domain": "quilting",
     "summary": "Push shopping-needed items from an analysis into the shopping list",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "This quilting research/analysis workflow requires selecting a staged result and applying it safely; Elaine needs a typed workflow tool with explicit preview and confirmation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "assignUnmatchedDocument",
@@ -104,10 +95,9 @@
     "path": "/travels/documents/{docId}/assign",
     "domain": "travels",
     "summary": "Assign an unmatched document to a trip",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "bulkCreatePackingItems",
@@ -115,10 +105,9 @@
     "path": "/travels/trips/{id}/packing/items/bulk",
     "domain": "travels",
     "summary": "Add multiple items to a trip's packing list",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "Elaine supports add/remove packing items today, but this specialized list, bulk, reorder, or template operation still needs the packing route's validation extracted into a shared service.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "bulkReanalyzeFabrics",
@@ -146,10 +135,9 @@
     "path": "/quilting/patterns/bulk-reanalyze",
     "domain": "patterns",
     "summary": "Re-run AI analysis on multiple patterns",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "bulkReanalyzePottery",
@@ -167,10 +155,9 @@
     "path": "/quilting/quilts/bulk-reanalyze",
     "domain": "quilts",
     "summary": "Re-run AI analysis on multiple quilts",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "bulkUpdateState",
@@ -188,10 +175,9 @@
     "path": "/jobs/{id}/cancel",
     "domain": "jobs",
     "summary": "Cancel a nonterminal job (owner only)",
-    "disposition": "owner_or_admin",
-    "mappedTools": [],
-    "reason": "This is an owner/operator control. Elaine only exposes the explicitly allowlisted app-config action today.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "changePassword",
@@ -219,10 +205,9 @@
     "path": "/messenger/conversations/{id}/messages",
     "domain": "messenger",
     "summary": "Clear all messages (soft-delete only, keeps conversation)",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "Elaine has no Messenger executor yet. This needs a shared conversation/message service plus explicit recipient and destructive-message confirmation rules.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "compareFabric",
@@ -230,10 +215,9 @@
     "path": "/quilting/compare",
     "domain": "compare",
     "summary": "Check if a fabric photo matches anything in the collection",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "comparePottery",
@@ -241,10 +225,9 @@
     "path": "/pottery/compare",
     "domain": "compare",
     "summary": "Compare a candidate photo against the collection",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "createBlock",
@@ -262,10 +245,9 @@
     "path": "/quilting/block-templates",
     "domain": "Block Templates",
     "summary": "Save a new block design as a reusable template",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "createConversation",
@@ -273,10 +255,9 @@
     "path": "/messenger/conversations",
     "domain": "messenger",
     "summary": "Create a new conversation (DM or group)",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "Elaine has no Messenger executor yet. This needs a shared conversation/message service plus explicit recipient and destructive-message confirmation rules.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "createFabric",
@@ -286,8 +267,7 @@
     "summary": "Add a fabric (with primary photo)",
     "disposition": "attachment_or_camera",
     "mappedTools": [],
-    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it.",
-    "followUpIssue": 360
+    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it."
   },
   {
     "operationId": "createLayout",
@@ -317,8 +297,7 @@
     "summary": "Add an ornament",
     "disposition": "attachment_or_camera",
     "mappedTools": [],
-    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it.",
-    "followUpIssue": 360
+    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it."
   },
   {
     "operationId": "createOrnamentCategory",
@@ -346,10 +325,9 @@
     "path": "/travels/packing-templates",
     "domain": "travels",
     "summary": "Save a new packing template",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "Elaine supports add/remove packing items today, but this specialized list, bulk, reorder, or template operation still needs the packing route's validation extracted into a shared service.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "createPattern",
@@ -367,10 +345,9 @@
     "path": "/quilting/patterns/{id}/variants",
     "domain": "quilting",
     "summary": "Create a new variant for a pattern",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "This quilting research/analysis workflow requires selecting a staged result and applying it safely; Elaine needs a typed workflow tool with explicit preview and confirmation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "createPottery",
@@ -380,8 +357,7 @@
     "summary": "Add a pottery piece",
     "disposition": "attachment_or_camera",
     "mappedTools": [],
-    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it.",
-    "followUpIssue": 360
+    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it."
   },
   {
     "operationId": "createPotteryCategory",
@@ -401,8 +377,7 @@
     "summary": "Add a finished quilt",
     "disposition": "attachment_or_camera",
     "mappedTools": [],
-    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it.",
-    "followUpIssue": 360
+    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it."
   },
   {
     "operationId": "createQuiltingCategory",
@@ -440,10 +415,9 @@
     "path": "/pottery/watchlist",
     "domain": "pottery",
     "summary": "Create a new watchlist item",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "createWishlistItem",
@@ -471,10 +445,9 @@
     "path": "/quilting/block-templates/{id}",
     "domain": "Block Templates",
     "summary": "Delete a block template",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "deleteConversation",
@@ -482,10 +455,9 @@
     "path": "/messenger/conversations/{id}",
     "domain": "messenger",
     "summary": "Permanently delete a conversation and all its messages",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "Elaine has no Messenger executor yet. This needs a shared conversation/message service plus explicit recipient and destructive-message confirmation rules.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "deleteFabric",
@@ -503,10 +475,9 @@
     "path": "/quilting/fabrics/{id}/identifiers/{identifierId}",
     "domain": "quilting",
     "summary": "Delete a fabric identifier",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "This quilting research/analysis workflow requires selecting a staged result and applying it safely; Elaine needs a typed workflow tool with explicit preview and confirmation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "deleteFabricImage",
@@ -514,10 +485,9 @@
     "path": "/quilting/fabrics/{id}/images/{imageId}",
     "domain": "fabrics",
     "summary": "Delete a supplemental fabric image",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "This image mutation is not covered by the collection's current Elaine photo tools. It needs the route's ownership, primary-image, storage, and cache-invalidation rules exposed through a shared service.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "deleteLayout",
@@ -535,10 +505,9 @@
     "path": "/messenger/messages/{id}",
     "domain": "messenger",
     "summary": "Soft-delete a message",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "Elaine has no Messenger executor yet. This needs a shared conversation/message service plus explicit recipient and destructive-message confirmation rules.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "deleteNote",
@@ -586,10 +555,9 @@
     "path": "/ornaments/categories/unused",
     "domain": "ornaments",
     "summary": "Delete all categories that have no ornaments assigned",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "deletePackingItem",
@@ -607,10 +575,9 @@
     "path": "/travels/packing-templates/{templateId}",
     "domain": "travels",
     "summary": "Delete a packing template",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "Elaine supports add/remove packing items today, but this specialized list, bulk, reorder, or template operation still needs the packing route's validation extracted into a shared service.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "deletePattern",
@@ -628,10 +595,9 @@
     "path": "/quilting/patterns/{id}/images/{imageId}",
     "domain": "patterns",
     "summary": "Delete a supplemental pattern image",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "This image mutation is not covered by the collection's current Elaine photo tools. It needs the route's ownership, primary-image, storage, and cache-invalidation rules exposed through a shared service.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "deletePatternVariant",
@@ -639,10 +605,9 @@
     "path": "/quilting/patterns/{id}/variants/{variantId}",
     "domain": "quilting",
     "summary": "Delete a variant",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "This quilting research/analysis workflow requires selecting a staged result and applying it safely; Elaine needs a typed workflow tool with explicit preview and confirmation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "deletePottery",
@@ -680,10 +645,9 @@
     "path": "/pottery/categories/unused",
     "domain": "pottery",
     "summary": "Delete all categories that have no pieces assigned",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "deleteQuilt",
@@ -701,10 +665,9 @@
     "path": "/quilting/quilts/{id}/images/{imageId}",
     "domain": "quilts",
     "summary": "Delete a supplemental quilt image",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "This image mutation is not covered by the collection's current Elaine photo tools. It needs the route's ownership, primary-image, storage, and cache-invalidation rules exposed through a shared service.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "deleteQuiltingCategory",
@@ -722,10 +685,9 @@
     "path": "/quilting/categories/unused",
     "domain": "categories",
     "summary": "Delete all categories with no assignments",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "deleteShoppingItem",
@@ -753,10 +715,9 @@
     "path": "/travels/trips/{id}/documents/{docId}",
     "domain": "travels",
     "summary": "Delete a trip document",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "deleteUnmatchedDocument",
@@ -764,10 +725,9 @@
     "path": "/travels/documents/{docId}",
     "domain": "travels",
     "summary": "Discard an unmatched document",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "deleteWatchlistItem",
@@ -775,10 +735,9 @@
     "path": "/pottery/watchlist/{id}",
     "domain": "pottery",
     "summary": "Delete a watchlist item",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "deleteWishlistItem",
@@ -796,10 +755,9 @@
     "path": "/quilting/blocks/detect-seams",
     "domain": "blocks",
     "summary": "Use AI to detect seam positions from a block photo",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "dismissWatchlistAlert",
@@ -807,10 +765,9 @@
     "path": "/pottery/watchlist/{id}/alerts/{alertId}/dismiss",
     "domain": "pottery",
     "summary": "Dismiss a watchlist alert",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "downloadTripDocument",
@@ -820,8 +777,7 @@
     "summary": "Download/view a trip document",
     "disposition": "covered_by_general_tool",
     "mappedTools": ["search_household_data", "query_household_data"],
-    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool.",
-    "followUpIssue": 360
+    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool."
   },
   {
     "operationId": "editMessage",
@@ -829,10 +785,9 @@
     "path": "/messenger/messages/{id}",
     "domain": "messenger",
     "summary": "Edit the body of your own last message",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "Elaine has no Messenger executor yet. This needs a shared conversation/message service plus explicit recipient and destructive-message confirmation rules.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "enrichPattern",
@@ -840,10 +795,9 @@
     "path": "/quilting/patterns/{id}/enrich",
     "domain": "patterns",
     "summary": "Enrich designer metadata via AI web search (Perplexity)",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "estimatePotteryMarketValue",
@@ -851,10 +805,9 @@
     "path": "/pottery/items/{id}/estimate-market-value",
     "domain": "pottery",
     "summary": "Look up eBay sold-listing prices and cache them on the item",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "exploreDestination",
@@ -877,10 +830,9 @@
     "path": "/operations/export",
     "domain": "operations",
     "summary": "Export sanitized external operation events as CSV (owner only)",
-    "disposition": "owner_or_admin",
-    "mappedTools": [],
-    "reason": "This is an owner/operator control. Elaine only exposes the explicitly allowlisted app-config action today.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "read_app_operation"],
+    "reason": "Elaine can discover and execute this authenticated JSON read through the reviewed OpenAPI operation bridge."
   },
   {
     "operationId": "extractOrnamentBarcodePhoto",
@@ -890,8 +842,7 @@
     "summary": "Extract a barcode number from a photo using AI vision (escape hatch when camera scan fails)",
     "disposition": "attachment_or_camera",
     "mappedTools": [],
-    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it.",
-    "followUpIssue": 360
+    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it."
   },
   {
     "operationId": "extractPatternBlocks",
@@ -899,10 +850,9 @@
     "path": "/quilting/patterns/{id}/extract-blocks",
     "domain": "patterns",
     "summary": "Extract block grid schema from pattern image via AI",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "extractPatternRequirements",
@@ -910,10 +860,9 @@
     "path": "/quilting/patterns/{id}/variants/{variantId}/extract-requirements",
     "domain": "quilting",
     "summary": "Use AI to extract fabric requirements from pattern image/notes",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "This quilting research/analysis workflow requires selecting a staged result and applying it safely; Elaine needs a typed workflow tool with explicit preview and confirmation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "forgotPassword",
@@ -971,10 +920,9 @@
     "path": "/quilting/blocks/{id}",
     "domain": "blocks",
     "summary": "Get a block design by ID",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "read_app_operation"],
+    "reason": "Elaine can discover and execute this authenticated JSON read through the reviewed OpenAPI operation bridge."
   },
   {
     "operationId": "getBlockPreviewPng",
@@ -984,8 +932,7 @@
     "summary": "Server-rasterised PNG preview of a block design",
     "disposition": "attachment_or_camera",
     "mappedTools": [],
-    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it.",
-    "followUpIssue": 360
+    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it."
   },
   {
     "operationId": "getBlockTemplate",
@@ -993,10 +940,9 @@
     "path": "/quilting/block-templates/{id}",
     "domain": "Block Templates",
     "summary": "Get a single block template by ID",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "read_app_operation"],
+    "reason": "Elaine can discover and execute this authenticated JSON read through the reviewed OpenAPI operation bridge."
   },
   {
     "operationId": "getCollectionStats",
@@ -1004,10 +950,9 @@
     "path": "/pottery/stats",
     "domain": "stats",
     "summary": "Collection statistics",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "read_app_operation"],
+    "reason": "Elaine can discover and execute this authenticated JSON read through the reviewed OpenAPI operation bridge."
   },
   {
     "operationId": "getConversationMessages",
@@ -1015,10 +960,9 @@
     "path": "/messenger/conversations/{id}/messages",
     "domain": "messenger",
     "summary": "Get messages for a conversation",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "Elaine has no Messenger executor yet. This needs a shared conversation/message service plus explicit recipient and destructive-message confirmation rules.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "read_app_operation"],
+    "reason": "Elaine can discover and execute this authenticated JSON read through the reviewed OpenAPI operation bridge."
   },
   {
     "operationId": "getCounts",
@@ -1058,8 +1002,7 @@
     "summary": "Get primary fabric image (proxied, authenticated)",
     "disposition": "attachment_or_camera",
     "mappedTools": [],
-    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it.",
-    "followUpIssue": 360
+    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it."
   },
   {
     "operationId": "getFabricPairings",
@@ -1067,10 +1010,9 @@
     "path": "/quilting/fabrics/{id}/pairings",
     "domain": "fabrics",
     "summary": "Get up to 4 stash fabrics that pair well with this one (embedding similarity)",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "read_app_operation"],
+    "reason": "Elaine can discover and execute this authenticated JSON read through the reviewed OpenAPI operation bridge."
   },
   {
     "operationId": "getFabricSupplementalImage",
@@ -1080,8 +1022,7 @@
     "summary": "Get a supplemental fabric image",
     "disposition": "attachment_or_camera",
     "mappedTools": [],
-    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it.",
-    "followUpIssue": 360
+    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it."
   },
   {
     "operationId": "getGmailMessage",
@@ -1099,10 +1040,9 @@
     "path": "/jobs/{id}",
     "domain": "jobs",
     "summary": "Get one durable job with attempts (owner only)",
-    "disposition": "owner_or_admin",
-    "mappedTools": [],
-    "reason": "This is an owner/operator control. Elaine only exposes the explicitly allowlisted app-config action today.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "read_app_operation"],
+    "reason": "Elaine can discover and execute this authenticated JSON read through the reviewed OpenAPI operation bridge."
   },
   {
     "operationId": "getJobsHealth",
@@ -1110,10 +1050,9 @@
     "path": "/jobs/health",
     "domain": "jobs",
     "summary": "Get durable queue health (owner only)",
-    "disposition": "owner_or_admin",
-    "mappedTools": [],
-    "reason": "This is an owner/operator control. Elaine only exposes the explicitly allowlisted app-config action today.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "read_app_operation"],
+    "reason": "Elaine can discover and execute this authenticated JSON read through the reviewed OpenAPI operation bridge."
   },
   {
     "operationId": "getLayout",
@@ -1121,10 +1060,9 @@
     "path": "/quilting/layouts/{id}",
     "domain": "layouts",
     "summary": "Get a quilt layout by ID",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "read_app_operation"],
+    "reason": "Elaine can discover and execute this authenticated JSON read through the reviewed OpenAPI operation bridge."
   },
   {
     "operationId": "getLinkPreview",
@@ -1132,10 +1070,9 @@
     "path": "/messenger/link-preview",
     "domain": "messenger",
     "summary": "Get cached OG link preview for a URL",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "Elaine has no Messenger executor yet. This needs a shared conversation/message service plus explicit recipient and destructive-message confirmation rules.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "read_app_operation"],
+    "reason": "Elaine can discover and execute this authenticated JSON read through the reviewed OpenAPI operation bridge."
   },
   {
     "operationId": "getNotificationsPreferences",
@@ -1153,10 +1090,9 @@
     "path": "/operations/summary",
     "domain": "operations",
     "summary": "Summarize provider spend, latency, and reliability (owner only)",
-    "disposition": "owner_or_admin",
-    "mappedTools": [],
-    "reason": "This is an owner/operator control. Elaine only exposes the explicitly allowlisted app-config action today.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "read_app_operation"],
+    "reason": "Elaine can discover and execute this authenticated JSON read through the reviewed OpenAPI operation bridge."
   },
   {
     "operationId": "getOrnament",
@@ -1176,8 +1112,7 @@
     "summary": "Collection dashboard summary (totals, book value, series breakdown)",
     "disposition": "covered_by_general_tool",
     "mappedTools": ["search_household_data", "query_household_data"],
-    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool.",
-    "followUpIssue": 360
+    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool."
   },
   {
     "operationId": "getOrnamentStragglers",
@@ -1187,8 +1122,7 @@
     "summary": "List ornaments missing an embedding or core attributes",
     "disposition": "covered_by_general_tool",
     "mappedTools": ["search_household_data", "query_household_data"],
-    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool.",
-    "followUpIssue": 360
+    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool."
   },
   {
     "operationId": "getPackingList",
@@ -1198,8 +1132,7 @@
     "summary": "Get (or auto-create) the packing list and items for a trip",
     "disposition": "covered_by_general_tool",
     "mappedTools": ["search_household_data", "query_household_data"],
-    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool.",
-    "followUpIssue": 360
+    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool."
   },
   {
     "operationId": "getPattern",
@@ -1207,10 +1140,9 @@
     "path": "/quilting/patterns/{id}",
     "domain": "patterns",
     "summary": "Get a quilt pattern by ID",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "read_app_operation"],
+    "reason": "Elaine can discover and execute this authenticated JSON read through the reviewed OpenAPI operation bridge."
   },
   {
     "operationId": "getPatternAnalysis",
@@ -1220,8 +1152,7 @@
     "summary": "Get a single analysis result",
     "disposition": "covered_by_general_tool",
     "mappedTools": ["search_household_data", "query_household_data"],
-    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool.",
-    "followUpIssue": 360
+    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool."
   },
   {
     "operationId": "getPatternImage",
@@ -1231,8 +1162,7 @@
     "summary": "Get primary pattern image",
     "disposition": "attachment_or_camera",
     "mappedTools": [],
-    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it.",
-    "followUpIssue": 360
+    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it."
   },
   {
     "operationId": "getPatternRequirements",
@@ -1242,8 +1172,7 @@
     "summary": "Get fabric requirements for a variant",
     "disposition": "covered_by_general_tool",
     "mappedTools": ["search_household_data", "query_household_data"],
-    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool.",
-    "followUpIssue": 360
+    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool."
   },
   {
     "operationId": "getPatternSupplementalImage",
@@ -1253,8 +1182,7 @@
     "summary": "Get a supplemental pattern image",
     "disposition": "attachment_or_camera",
     "mappedTools": [],
-    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it.",
-    "followUpIssue": 360
+    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it."
   },
   {
     "operationId": "getPottery",
@@ -1272,10 +1200,9 @@
     "path": "/hub/preferences",
     "domain": "hub",
     "summary": "Get the current user's hub dashboard widget layout",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "read_app_operation"],
+    "reason": "Elaine can discover and execute this authenticated JSON read through the reviewed OpenAPI operation bridge."
   },
   {
     "operationId": "getQuilt",
@@ -1283,10 +1210,9 @@
     "path": "/quilting/quilts/{id}",
     "domain": "quilts",
     "summary": "Get a finished quilt by ID",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "read_app_operation"],
+    "reason": "Elaine can discover and execute this authenticated JSON read through the reviewed OpenAPI operation bridge."
   },
   {
     "operationId": "getQuiltImage",
@@ -1296,8 +1222,7 @@
     "summary": "Get primary quilt image",
     "disposition": "attachment_or_camera",
     "mappedTools": [],
-    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it.",
-    "followUpIssue": 360
+    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it."
   },
   {
     "operationId": "getQuiltSupplementalImage",
@@ -1307,8 +1232,7 @@
     "summary": "Get a supplemental quilt image",
     "disposition": "attachment_or_camera",
     "mappedTools": [],
-    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it.",
-    "followUpIssue": 360
+    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it."
   },
   {
     "operationId": "getShoppingItem",
@@ -1316,10 +1240,9 @@
     "path": "/quilting/shopping/{id}",
     "domain": "shopping",
     "summary": "Get a shopping item by ID",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "read_app_operation"],
+    "reason": "Elaine can discover and execute this authenticated JSON read through the reviewed OpenAPI operation bridge."
   },
   {
     "operationId": "getShoppingStats",
@@ -1327,10 +1250,9 @@
     "path": "/quilting/shopping/stats",
     "domain": "shopping",
     "summary": "Budget summary statistics",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "read_app_operation"],
+    "reason": "Elaine can discover and execute this authenticated JSON read through the reviewed OpenAPI operation bridge."
   },
   {
     "operationId": "getStaleCount",
@@ -1338,10 +1260,9 @@
     "path": "/quilting/stats/stale",
     "domain": "stats",
     "summary": "Count fabrics and patterns missing an AI embedding",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "read_app_operation"],
+    "reason": "Elaine can discover and execute this authenticated JSON read through the reviewed OpenAPI operation bridge."
   },
   {
     "operationId": "getStats",
@@ -1349,10 +1270,9 @@
     "path": "/quilting/stats",
     "domain": "stats",
     "summary": "Get collection statistics",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "read_app_operation"],
+    "reason": "Elaine can discover and execute this authenticated JSON read through the reviewed OpenAPI operation bridge."
   },
   {
     "operationId": "getStragglers",
@@ -1362,8 +1282,7 @@
     "summary": "List pieces missing an embedding or core attributes",
     "disposition": "covered_by_general_tool",
     "mappedTools": ["search_household_data", "query_household_data"],
-    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool.",
-    "followUpIssue": 360
+    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool."
   },
   {
     "operationId": "getTravelsStats",
@@ -1393,8 +1312,7 @@
     "summary": "Count of unmatched documents (for a badge indicator)",
     "disposition": "covered_by_general_tool",
     "mappedTools": ["search_household_data", "query_household_data"],
-    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool.",
-    "followUpIssue": 360
+    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool."
   },
   {
     "operationId": "getUnreadCount",
@@ -1402,10 +1320,9 @@
     "path": "/messenger/conversations/unread-count",
     "domain": "messenger",
     "summary": "Total unread message count across all participant conversations (for badge)",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "Elaine has no Messenger executor yet. This needs a shared conversation/message service plus explicit recipient and destructive-message confirmation rules.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "read_app_operation"],
+    "reason": "Elaine can discover and execute this authenticated JSON read through the reviewed OpenAPI operation bridge."
   },
   {
     "operationId": "getUsedFabricIds",
@@ -1413,10 +1330,9 @@
     "path": "/quilting/fabrics/used-ids",
     "domain": "fabrics",
     "summary": "Get IDs of fabrics linked to at least one finished quilt",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "read_app_operation"],
+    "reason": "Elaine can discover and execute this authenticated JSON read through the reviewed OpenAPI operation bridge."
   },
   {
     "operationId": "getWeatherConfig",
@@ -1424,10 +1340,9 @@
     "path": "/hub/weather-config",
     "domain": "hub",
     "summary": "Get the current user's saved weather widget location/unit",
-    "disposition": "owner_or_admin",
-    "mappedTools": [],
-    "reason": "This is an owner/operator control. Elaine only exposes the explicitly allowlisted app-config action today.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "read_app_operation"],
+    "reason": "Elaine can discover and execute this authenticated JSON read through the reviewed OpenAPI operation bridge."
   },
   {
     "operationId": "healthCheck",
@@ -1445,10 +1360,9 @@
     "path": "/quilting/patterns/import-url",
     "domain": "patterns",
     "summary": "Import pattern info from a URL using AI",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "labBulkCreaseFix",
@@ -1456,10 +1370,9 @@
     "path": "/quilting/lab/bulk-crease-fix",
     "domain": "lab",
     "summary": "Auto-remove creases from the default image of multiple fabrics and set the result as the new default (owner only)",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "labDetectCreases",
@@ -1467,10 +1380,9 @@
     "path": "/quilting/lab/detect-creases",
     "domain": "lab",
     "summary": "Detect fabric creases via AI vision (owner only)",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "labRemoveCreases",
@@ -1488,10 +1400,9 @@
     "path": "/quilting/lab/remove-creases/openai",
     "domain": "lab",
     "summary": "Inpaint crease areas with OpenAI gpt-image-2 (owner only)",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "list",
@@ -1509,10 +1420,9 @@
     "path": "/quilting/blocks",
     "domain": "blocks",
     "summary": "List all saved block designs",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "read_app_operation"],
+    "reason": "Elaine can discover and execute this authenticated JSON read through the reviewed OpenAPI operation bridge."
   },
   {
     "operationId": "listBlockTemplates",
@@ -1520,10 +1430,9 @@
     "path": "/quilting/block-templates",
     "domain": "Block Templates",
     "summary": "List all saved block templates (household-shared)",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "read_app_operation"],
+    "reason": "Elaine can discover and execute this authenticated JSON read through the reviewed OpenAPI operation bridge."
   },
   {
     "operationId": "listConversations",
@@ -1531,10 +1440,9 @@
     "path": "/messenger/conversations",
     "domain": "messenger",
     "summary": "List conversations the current user participates in",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "Elaine has no Messenger executor yet. This needs a shared conversation/message service plus explicit recipient and destructive-message confirmation rules.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "read_app_operation"],
+    "reason": "Elaine can discover and execute this authenticated JSON read through the reviewed OpenAPI operation bridge."
   },
   {
     "operationId": "listFabricIdentifiers",
@@ -1544,8 +1452,7 @@
     "summary": "List known identifiers (SKU/selvedge/barcode) for a fabric",
     "disposition": "covered_by_general_tool",
     "mappedTools": ["search_household_data", "query_household_data"],
-    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool.",
-    "followUpIssue": 360
+    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool."
   },
   {
     "operationId": "listFabricIdentityResearch",
@@ -1555,8 +1462,7 @@
     "summary": "List identity-research jobs for a fabric",
     "disposition": "covered_by_general_tool",
     "mappedTools": ["search_household_data", "query_household_data"],
-    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool.",
-    "followUpIssue": 360
+    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool."
   },
   {
     "operationId": "listFabrics",
@@ -1574,10 +1480,9 @@
     "path": "/messenger/conversations/members",
     "domain": "messenger",
     "summary": "List all household member accounts",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "Elaine has no Messenger executor yet. This needs a shared conversation/message service plus explicit recipient and destructive-message confirmation rules.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "read_app_operation"],
+    "reason": "Elaine can discover and execute this authenticated JSON read through the reviewed OpenAPI operation bridge."
   },
   {
     "operationId": "listJobs",
@@ -1585,10 +1490,9 @@
     "path": "/jobs",
     "domain": "jobs",
     "summary": "List durable jobs (owner only)",
-    "disposition": "owner_or_admin",
-    "mappedTools": [],
-    "reason": "This is an owner/operator control. Elaine only exposes the explicitly allowlisted app-config action today.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "read_app_operation"],
+    "reason": "Elaine can discover and execute this authenticated JSON read through the reviewed OpenAPI operation bridge."
   },
   {
     "operationId": "listLayouts",
@@ -1596,10 +1500,9 @@
     "path": "/quilting/layouts",
     "domain": "layouts",
     "summary": "List all saved quilt layouts",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "read_app_operation"],
+    "reason": "Elaine can discover and execute this authenticated JSON read through the reviewed OpenAPI operation bridge."
   },
   {
     "operationId": "listNotes",
@@ -1617,10 +1520,9 @@
     "path": "/operations/budgets",
     "domain": "operations",
     "summary": "List provider budget policies (owner only)",
-    "disposition": "owner_or_admin",
-    "mappedTools": [],
-    "reason": "This is an owner/operator control. Elaine only exposes the explicitly allowlisted app-config action today.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "read_app_operation"],
+    "reason": "Elaine can discover and execute this authenticated JSON read through the reviewed OpenAPI operation bridge."
   },
   {
     "operationId": "listOperationEvents",
@@ -1628,10 +1530,9 @@
     "path": "/operations/events",
     "domain": "operations",
     "summary": "List sanitized external operation events (owner only)",
-    "disposition": "owner_or_admin",
-    "mappedTools": [],
-    "reason": "This is an owner/operator control. Elaine only exposes the explicitly allowlisted app-config action today.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "read_app_operation"],
+    "reason": "Elaine can discover and execute this authenticated JSON read through the reviewed OpenAPI operation bridge."
   },
   {
     "operationId": "listOperationProviders",
@@ -1639,10 +1540,9 @@
     "path": "/operations/providers",
     "domain": "operations",
     "summary": "List observed providers (owner only)",
-    "disposition": "owner_or_admin",
-    "mappedTools": [],
-    "reason": "This is an owner/operator control. Elaine only exposes the explicitly allowlisted app-config action today.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "read_app_operation"],
+    "reason": "Elaine can discover and execute this authenticated JSON read through the reviewed OpenAPI operation bridge."
   },
   {
     "operationId": "listOrnamentCategories",
@@ -1652,8 +1552,7 @@
     "summary": "List categories",
     "disposition": "covered_by_general_tool",
     "mappedTools": ["search_household_data", "query_household_data"],
-    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool.",
-    "followUpIssue": 360
+    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool."
   },
   {
     "operationId": "listOrnaments",
@@ -1673,8 +1572,7 @@
     "summary": "List distinct series/collections with item counts",
     "disposition": "covered_by_general_tool",
     "mappedTools": ["search_household_data", "query_household_data"],
-    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool.",
-    "followUpIssue": 360
+    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool."
   },
   {
     "operationId": "listPackingTemplates",
@@ -1684,8 +1582,7 @@
     "summary": "List all saved packing templates",
     "disposition": "covered_by_general_tool",
     "mappedTools": ["search_household_data", "query_household_data"],
-    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool.",
-    "followUpIssue": 360
+    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool."
   },
   {
     "operationId": "listPatternAnalyses",
@@ -1695,8 +1592,7 @@
     "summary": "List can-i-make-this analyses for a pattern",
     "disposition": "covered_by_general_tool",
     "mappedTools": ["search_household_data", "query_household_data"],
-    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool.",
-    "followUpIssue": 360
+    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool."
   },
   {
     "operationId": "listPatterns",
@@ -1716,8 +1612,7 @@
     "summary": "List size/colorway variants for a pattern",
     "disposition": "covered_by_general_tool",
     "mappedTools": ["search_household_data", "query_household_data"],
-    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool.",
-    "followUpIssue": 360
+    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool."
   },
   {
     "operationId": "listPottery",
@@ -1737,8 +1632,7 @@
     "summary": "List categories",
     "disposition": "covered_by_general_tool",
     "mappedTools": ["search_household_data", "query_household_data"],
-    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool.",
-    "followUpIssue": 360
+    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool."
   },
   {
     "operationId": "listQuiltingCategories",
@@ -1798,8 +1692,7 @@
     "summary": "List documents from forwarded emails that couldn't be auto-matched to a trip",
     "disposition": "covered_by_general_tool",
     "mappedTools": ["search_household_data", "query_household_data"],
-    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool.",
-    "followUpIssue": 360
+    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool."
   },
   {
     "operationId": "listUnseenWatchlistAlerts",
@@ -1809,8 +1702,7 @@
     "summary": "List all undismissed alerts across all watchlist items",
     "disposition": "covered_by_general_tool",
     "mappedTools": ["search_household_data", "query_household_data"],
-    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool.",
-    "followUpIssue": 360
+    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool."
   },
   {
     "operationId": "listWatchlistAlerts",
@@ -1820,8 +1712,7 @@
     "summary": "List alerts for a watchlist item",
     "disposition": "covered_by_general_tool",
     "mappedTools": ["search_household_data", "query_household_data"],
-    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool.",
-    "followUpIssue": 360
+    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool."
   },
   {
     "operationId": "listWatchlistItems",
@@ -1831,8 +1722,7 @@
     "summary": "List all pottery watchlist items (household-shared)",
     "disposition": "covered_by_general_tool",
     "mappedTools": ["search_household_data", "query_household_data"],
-    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool.",
-    "followUpIssue": 360
+    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool."
   },
   {
     "operationId": "listWishlist",
@@ -1850,10 +1740,9 @@
     "path": "/travels/trips/{id}/packing/load-template/{templateId}",
     "domain": "travels",
     "summary": "Merge a template's items into the trip's packing list",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "Elaine supports add/remove packing items today, but this specialized list, bulk, reorder, or template operation still needs the packing route's validation extracted into a shared service.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "login",
@@ -1901,10 +1790,9 @@
     "path": "/ornaments/items/{id}/book-value-lookup",
     "domain": "ornaments",
     "summary": "Look up and save the current book/insurance value from hallmarkornaments.com or hookedonhallmark.com",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "lookupOrnamentEbayPrice",
@@ -1922,10 +1810,9 @@
     "path": "/messenger/messages/{id}/read",
     "domain": "messenger",
     "summary": "Mark a message (and all prior in conversation) as read",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "Elaine has no Messenger executor yet. This needs a shared conversation/message service plus explicit recipient and destructive-message confirmation rules.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "mergeOrnamentCategory",
@@ -1963,10 +1850,9 @@
     "path": "/operations/budgets/{id}/override",
     "domain": "operations",
     "summary": "Temporarily override a budget policy (owner only)",
-    "disposition": "owner_or_admin",
-    "mappedTools": [],
-    "reason": "This is an owner/operator control. Elaine only exposes the explicitly allowlisted app-config action today.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "paletteMatchFabrics",
@@ -1974,10 +1860,9 @@
     "path": "/quilting/tools/palette-match",
     "domain": "tools",
     "summary": "Extract a colour palette from an inspiration image and find matching fabrics",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "paletteMatchPatterns",
@@ -1985,10 +1870,9 @@
     "path": "/quilting/tools/palette-match-patterns",
     "domain": "tools",
     "summary": "Extract a colour palette from an inspiration image and find matching quilt patterns",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "paletteMatchQuilts",
@@ -1996,10 +1880,9 @@
     "path": "/quilting/tools/palette-match-quilts",
     "domain": "tools",
     "summary": "Extract a colour palette from an inspiration image and find matching finished quilts",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "patchBlockTemplate",
@@ -2007,10 +1890,9 @@
     "path": "/quilting/block-templates/{id}",
     "domain": "Block Templates",
     "summary": "Rename or retag a block template",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "pushSubscribe",
@@ -2038,10 +1920,9 @@
     "path": "/quilting/fabrics/{id}/reanalyze",
     "domain": "fabrics",
     "summary": "Re-run AI analysis on a fabric using its existing photos",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "reanalyzeOrnament",
@@ -2049,10 +1930,9 @@
     "path": "/ornaments/items/{id}/reanalyze",
     "domain": "ornaments",
     "summary": "Re-run AI analysis on an ornament",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "reanalyzePattern",
@@ -2060,10 +1940,9 @@
     "path": "/quilting/patterns/{id}/reanalyze",
     "domain": "patterns",
     "summary": "Re-run AI analysis on a pattern using its existing photo",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "reanalyzePottery",
@@ -2071,10 +1950,9 @@
     "path": "/pottery/items/{id}/reanalyze",
     "domain": "pottery",
     "summary": "Re-run AI analysis on a pottery piece",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "reanalyzeQuilt",
@@ -2082,10 +1960,9 @@
     "path": "/quilting/quilts/{id}/reanalyze",
     "domain": "quilts",
     "summary": "Re-run AI analysis on a quilt using its existing photo",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "refreshAllOrnamentData",
@@ -2093,10 +1970,9 @@
     "path": "/ornaments/items/{id}/refresh-all",
     "domain": "ornaments",
     "summary": "Refresh all AI and market data — reanalyze images, book value, eBay price, and AI appraisal all at once",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "removeReaction",
@@ -2104,10 +1980,9 @@
     "path": "/messenger/messages/{id}/reactions/{emoji}",
     "domain": "messenger",
     "summary": "Remove your emoji reaction from a message",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "Elaine has no Messenger executor yet. This needs a shared conversation/message service plus explicit recipient and destructive-message confirmation rules.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "renameOrnamentCategory",
@@ -2115,10 +1990,9 @@
     "path": "/ornaments/categories/{id}",
     "domain": "ornaments",
     "summary": "Rename a category",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "renamePotteryCategory",
@@ -2126,10 +2000,9 @@
     "path": "/pottery/categories/{id}",
     "domain": "pottery",
     "summary": "Rename a category",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "renameQuiltingCategory",
@@ -2147,10 +2020,9 @@
     "path": "/travels/trips/{id}/packing/items/reorder",
     "domain": "travels",
     "summary": "Batch-update sort order for packing items (drag-and-drop reorder)",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "Elaine supports add/remove packing items today, but this specialized list, bulk, reorder, or template operation still needs the packing route's validation extracted into a shared service.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "rescanTripDocument",
@@ -2178,10 +2050,9 @@
     "path": "/jobs/{id}/retry",
     "domain": "jobs",
     "summary": "Retry a failed or dead-letter job (owner only)",
-    "disposition": "owner_or_admin",
-    "mappedTools": [],
-    "reason": "This is an owner/operator control. Elaine only exposes the explicitly allowlisted app-config action today.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "runFabricIdentityResearch",
@@ -2189,10 +2060,9 @@
     "path": "/quilting/fabrics/{id}/identity-research",
     "domain": "quilting",
     "summary": "Run an AI identity-research job for a fabric",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "This quilting research/analysis workflow requires selecting a staged result and applying it safely; Elaine needs a typed workflow tool with explicit preview and confirmation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "runOrnamentAiAppraisal",
@@ -2200,10 +2070,9 @@
     "path": "/ornaments/items/{id}/ai-appraisal",
     "domain": "ornaments",
     "summary": "Run AI collector appraisal on an ornament and save the result",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "runPatternAnalysis",
@@ -2211,10 +2080,9 @@
     "path": "/quilting/patterns/{id}/analyses",
     "domain": "quilting",
     "summary": "Run a can-i-make-this analysis against the fabric stash",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "This quilting research/analysis workflow requires selecting a staged result and applying it safely; Elaine needs a typed workflow tool with explicit preview and confirmation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "savePatternRequirements",
@@ -2222,10 +2090,9 @@
     "path": "/quilting/patterns/{id}/variants/{variantId}/requirements",
     "domain": "quilting",
     "summary": "Replace all fabric requirements for a variant",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "This quilting research/analysis workflow requires selecting a staged result and applying it safely; Elaine needs a typed workflow tool with explicit preview and confirmation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "scanWatchlistItem",
@@ -2233,10 +2100,9 @@
     "path": "/pottery/watchlist/{id}/scan",
     "domain": "pottery",
     "summary": "Run an on-demand eBay scan and upsert new alerts",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "sendMessage",
@@ -2244,10 +2110,9 @@
     "path": "/messenger/conversations/{id}/messages",
     "domain": "messenger",
     "summary": "Send a message in a conversation",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "Elaine has no Messenger executor yet. This needs a shared conversation/message service plus explicit recipient and destructive-message confirmation rules.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "sendPhoneVerificationCode",
@@ -2285,10 +2150,9 @@
     "path": "/quilting/fabrics/{id}/images/{imageId}/set-default",
     "domain": "fabrics",
     "summary": "Set a supplemental image as the fabric's default photo",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "This image mutation is not covered by the collection's current Elaine photo tools. It needs the route's ownership, primary-image, storage, and cache-invalidation rules exposed through a shared service.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "setOrnamentPrimaryImage",
@@ -2316,10 +2180,9 @@
     "path": "/quilting/shopping/{id}/suggest-price",
     "domain": "shopping",
     "summary": "Look up Etsy listings and suggest a price for this shopping item",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "travelsCheckReservationNow",
@@ -2327,10 +2190,9 @@
     "path": "/travels/reservations/{id}/check-now",
     "domain": "travels",
     "summary": "Manually trigger a monitoring check for a reservation",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "Travel reservation monitoring is a multi-step workflow with provider checks and change decisions; its route logic must be extracted into an auditable shared service before Elaine can execute it.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "travelsCreateReservation",
@@ -2338,10 +2200,9 @@
     "path": "/travels/trips/{tripId}/reservations",
     "domain": "travels",
     "summary": "Create a reservation linked to a trip",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "Travel reservation monitoring is a multi-step workflow with provider checks and change decisions; its route logic must be extracted into an auditable shared service before Elaine can execute it.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "travelsDecideChangeEvent",
@@ -2349,10 +2210,9 @@
     "path": "/travels/changes/{id}/decision",
     "domain": "travels",
     "summary": "Accept, reject, or otherwise decide on a change event",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "Travel reservation monitoring is a multi-step workflow with provider checks and change decisions; its route logic must be extracted into an auditable shared service before Elaine can execute it.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "travelsDeleteReservation",
@@ -2360,10 +2220,9 @@
     "path": "/travels/reservations/{id}",
     "domain": "travels",
     "summary": "Delete a reservation",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "Travel reservation monitoring is a multi-step workflow with provider checks and change decisions; its route logic must be extracted into an auditable shared service before Elaine can execute it.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "travelsGetChangeEvent",
@@ -2373,8 +2232,7 @@
     "summary": "Get a change event with full context",
     "disposition": "covered_by_general_tool",
     "mappedTools": ["search_household_data", "query_household_data"],
-    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool.",
-    "followUpIssue": 360
+    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool."
   },
   {
     "operationId": "travelsGetMonitoringPreferences",
@@ -2384,8 +2242,7 @@
     "summary": "Get monitoring preferences for the current user",
     "disposition": "covered_by_general_tool",
     "mappedTools": ["search_household_data", "query_household_data"],
-    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool.",
-    "followUpIssue": 360
+    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool."
   },
   {
     "operationId": "travelsGetReservation",
@@ -2395,8 +2252,7 @@
     "summary": "Get a reservation with full context",
     "disposition": "covered_by_general_tool",
     "mappedTools": ["search_household_data", "query_household_data"],
-    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool.",
-    "followUpIssue": 360
+    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool."
   },
   {
     "operationId": "travelsListReservations",
@@ -2406,8 +2262,7 @@
     "summary": "List reservations for a trip",
     "disposition": "covered_by_general_tool",
     "mappedTools": ["search_household_data", "query_household_data"],
-    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool.",
-    "followUpIssue": 360
+    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool."
   },
   {
     "operationId": "travelsListTripChanges",
@@ -2417,8 +2272,7 @@
     "summary": "List change events for all reservations on a trip",
     "disposition": "covered_by_general_tool",
     "mappedTools": ["search_household_data", "query_household_data"],
-    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool.",
-    "followUpIssue": 360
+    "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool."
   },
   {
     "operationId": "travelsUpdateMonitoringPreferences",
@@ -2426,10 +2280,9 @@
     "path": "/travels/monitoring/preferences",
     "domain": "travels",
     "summary": "Update monitoring preferences for the current user",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "Travel reservation monitoring is a multi-step workflow with provider checks and change decisions; its route logic must be extracted into an auditable shared service before Elaine can execute it.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "travelsUpdateReservation",
@@ -2437,10 +2290,9 @@
     "path": "/travels/reservations/{id}",
     "domain": "travels",
     "summary": "Update a reservation",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "Travel reservation monitoring is a multi-step workflow with provider checks and change decisions; its route logic must be extracted into an auditable shared service before Elaine can execute it.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "travelsUpdateReservationMonitoring",
@@ -2448,10 +2300,9 @@
     "path": "/travels/reservations/{id}/monitoring",
     "domain": "travels",
     "summary": "Enable, disable, or configure monitoring for a reservation",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "Travel reservation monitoring is a multi-step workflow with provider checks and change decisions; its route logic must be extracted into an auditable shared service before Elaine can execute it.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "updateAppConfigValue",
@@ -2469,10 +2320,9 @@
     "path": "/quilting/blocks/{id}",
     "domain": "blocks",
     "summary": "Update a block design",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "updateConversation",
@@ -2480,10 +2330,9 @@
     "path": "/messenger/conversations/{id}",
     "domain": "messenger",
     "summary": "Rename or archive/unarchive a conversation",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "Elaine has no Messenger executor yet. This needs a shared conversation/message service plus explicit recipient and destructive-message confirmation rules.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "updateCurrentUser",
@@ -2511,10 +2360,9 @@
     "path": "/quilting/fabrics/{id}/images/{imageId}",
     "domain": "fabrics",
     "summary": "Update a supplemental fabric image label/position",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "This image mutation is not covered by the collection's current Elaine photo tools. It needs the route's ownership, primary-image, storage, and cache-invalidation rules exposed through a shared service.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "updateLayout",
@@ -2522,10 +2370,9 @@
     "path": "/quilting/layouts/{id}",
     "domain": "layouts",
     "summary": "Update a quilt layout",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "updateNote",
@@ -2553,10 +2400,9 @@
     "path": "/operations/budgets/{id}",
     "domain": "operations",
     "summary": "Update a budget policy (owner only)",
-    "disposition": "owner_or_admin",
-    "mappedTools": [],
-    "reason": "This is an owner/operator control. Elaine only exposes the explicitly allowlisted app-config action today.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "updateOrnament",
@@ -2574,10 +2420,9 @@
     "path": "/ornaments/categories/{id}/colors",
     "domain": "ornaments",
     "summary": "Update a category's background and text colours",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "updateOrnamentImage",
@@ -2585,10 +2430,9 @@
     "path": "/ornaments/items/{id}/images/{imageId}",
     "domain": "ornaments",
     "summary": "Update a supplemental image's label or position",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "This image mutation is not covered by the collection's current Elaine photo tools. It needs the route's ownership, primary-image, storage, and cache-invalidation rules exposed through a shared service.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "updatePackingItem",
@@ -2596,10 +2440,9 @@
     "path": "/travels/trips/{id}/packing/items/{itemId}",
     "domain": "travels",
     "summary": "Update a packing item (toggle packed, rename, reorder)",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "Elaine supports add/remove packing items today, but this specialized list, bulk, reorder, or template operation still needs the packing route's validation extracted into a shared service.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "updatePattern",
@@ -2617,10 +2460,9 @@
     "path": "/quilting/patterns/{id}/images/{imageId}",
     "domain": "patterns",
     "summary": "Update a supplemental pattern image",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "This image mutation is not covered by the collection's current Elaine photo tools. It needs the route's ownership, primary-image, storage, and cache-invalidation rules exposed through a shared service.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "updatePatternVariant",
@@ -2628,10 +2470,9 @@
     "path": "/quilting/patterns/{id}/variants/{variantId}",
     "domain": "quilting",
     "summary": "Update a variant",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "This quilting research/analysis workflow requires selecting a staged result and applying it safely; Elaine needs a typed workflow tool with explicit preview and confirmation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "updatePottery",
@@ -2649,10 +2490,9 @@
     "path": "/pottery/categories/{id}/colors",
     "domain": "pottery",
     "summary": "Update a category's background and text colours",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "updatePotteryImage",
@@ -2660,10 +2500,9 @@
     "path": "/pottery/items/{id}/images/{imageId}",
     "domain": "pottery",
     "summary": "Update a supplemental image's label or position",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "This image mutation is not covered by the collection's current Elaine photo tools. It needs the route's ownership, primary-image, storage, and cache-invalidation rules exposed through a shared service.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "updatePreferences",
@@ -2671,10 +2510,9 @@
     "path": "/hub/preferences",
     "domain": "hub",
     "summary": "Save the current user's hub dashboard widget layout",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "updateQuilt",
@@ -2682,10 +2520,9 @@
     "path": "/quilting/quilts/{id}",
     "domain": "quilts",
     "summary": "Update quilt metadata",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "updateQuiltImage",
@@ -2693,10 +2530,9 @@
     "path": "/quilting/quilts/{id}/images/{imageId}",
     "domain": "quilts",
     "summary": "Update a supplemental quilt image",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "This image mutation is not covered by the collection's current Elaine photo tools. It needs the route's ownership, primary-image, storage, and cache-invalidation rules exposed through a shared service.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "updateQuiltingCategoryColors",
@@ -2704,10 +2540,9 @@
     "path": "/quilting/categories/{id}/colors",
     "domain": "categories",
     "summary": "Update category badge colours",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "updateShoppingItem",
@@ -2745,10 +2580,9 @@
     "path": "/travels/trips/{id}/documents/{docId}",
     "domain": "travels",
     "summary": "Correct/update the extracted data for a trip document",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "updateWatchlistItem",
@@ -2756,10 +2590,9 @@
     "path": "/pottery/watchlist/{id}",
     "domain": "pottery",
     "summary": "Update a watchlist item",
-    "disposition": "planned",
-    "mappedTools": [],
-    "reason": "No safe, registered Elaine tool currently exposes this website operation.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "updateWeatherConfig",
@@ -2767,10 +2600,9 @@
     "path": "/hub/weather-config",
     "domain": "hub",
     "summary": "Save the current user's weather widget location/unit",
-    "disposition": "owner_or_admin",
-    "mappedTools": [],
-    "reason": "This is an owner/operator control. Elaine only exposes the explicitly allowlisted app-config action today.",
-    "followUpIssue": 360
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "updateWishlistItem",
@@ -2790,8 +2622,7 @@
     "summary": "Upload a file attachment",
     "disposition": "attachment_or_camera",
     "mappedTools": [],
-    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it.",
-    "followUpIssue": 360
+    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it."
   },
   {
     "operationId": "uploadTripDocument",
@@ -2801,8 +2632,7 @@
     "summary": "Upload a travel document (PDF or image) with OCR extraction",
     "disposition": "attachment_or_camera",
     "mappedTools": [],
-    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it.",
-    "followUpIssue": 360
+    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it."
   },
   {
     "operationId": "verifyPhoneCode",

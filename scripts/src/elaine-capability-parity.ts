@@ -24,6 +24,7 @@ const HTTP_METHODS = new Set([
 
 const DISPOSITIONS = [
   "direct",
+  "universal_bridge",
   "covered_by_general_tool",
   "attachment_or_camera",
   "interactive_auth",
@@ -47,7 +48,6 @@ type InventoryEntry = OpenApiOperation & {
   disposition: Disposition;
   mappedTools: string[];
   reason: string;
-  followUpIssue?: number;
 };
 
 type OpenApiDocument = {
@@ -155,7 +155,12 @@ const DIRECT_TOOL_MAP: Record<string, string[]> = {
   updateState: ["update_notification_state"],
 };
 
-const APPROVED_MAPPED_TOOLS = new Set(Object.values(DIRECT_TOOL_MAP).flat());
+const APPROVED_MAPPED_TOOLS = new Set([
+  ...Object.values(DIRECT_TOOL_MAP).flat(),
+  "discover_app_operations",
+  "read_app_operation",
+  "execute_app_operation",
+]);
 
 function loadOpenApiOperations(): OpenApiOperation[] {
   const spec = parse(readFileSync(SPEC_PATH, "utf8")) as OpenApiDocument;
@@ -199,7 +204,6 @@ function initialDisposition(operation: OpenApiOperation): InventoryEntry {
       mappedTools: ["search_household_data", "query_household_data"],
       reason:
         "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool.",
-      followUpIssue: 360,
     };
   }
 
@@ -214,7 +218,6 @@ function initialDisposition(operation: OpenApiOperation): InventoryEntry {
       mappedTools: [],
       reason:
         "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it.",
-      followUpIssue: 360,
     };
   }
 
@@ -242,7 +245,6 @@ function initialDisposition(operation: OpenApiOperation): InventoryEntry {
       mappedTools: [],
       reason:
         "This is an owner/operator control. Elaine only exposes the explicitly allowlisted app-config action today.",
-      followUpIssue: 360,
     };
   }
 
@@ -263,7 +265,6 @@ function initialDisposition(operation: OpenApiOperation): InventoryEntry {
       mappedTools: [],
       reason:
         "Elaine has no Messenger executor yet. This needs a shared conversation/message service plus explicit recipient and destructive-message confirmation rules.",
-      followUpIssue: 360,
     };
   }
 
@@ -274,7 +275,6 @@ function initialDisposition(operation: OpenApiOperation): InventoryEntry {
       mappedTools: [],
       reason:
         "Travel reservation monitoring is a multi-step workflow with provider checks and change decisions; its route logic must be extracted into an auditable shared service before Elaine can execute it.",
-      followUpIssue: 360,
     };
   }
 
@@ -285,7 +285,6 @@ function initialDisposition(operation: OpenApiOperation): InventoryEntry {
       mappedTools: [],
       reason:
         "Elaine supports add/remove packing items today, but this specialized list, bulk, reorder, or template operation still needs the packing route's validation extracted into a shared service.",
-      followUpIssue: 360,
     };
   }
 
@@ -300,7 +299,6 @@ function initialDisposition(operation: OpenApiOperation): InventoryEntry {
       mappedTools: [],
       reason:
         "This quilting research/analysis workflow requires selecting a staged result and applying it safely; Elaine needs a typed workflow tool with explicit preview and confirmation.",
-      followUpIssue: 360,
     };
   }
 
@@ -314,7 +312,6 @@ function initialDisposition(operation: OpenApiOperation): InventoryEntry {
       mappedTools: [],
       reason:
         "This image mutation is not covered by the collection's current Elaine photo tools. It needs the route's ownership, primary-image, storage, and cache-invalidation rules exposed through a shared service.",
-      followUpIssue: 360,
     };
   }
 
@@ -324,7 +321,6 @@ function initialDisposition(operation: OpenApiOperation): InventoryEntry {
     mappedTools: [],
     reason:
       "No safe, registered Elaine tool currently exposes this website operation.",
-    followUpIssue: 360,
   };
 }
 
@@ -346,6 +342,7 @@ async function renderReport(entries: InventoryEntry[]): Promise<string> {
       const direct = domainEntries.filter(
         (entry) =>
           entry.disposition === "direct" ||
+          entry.disposition === "universal_bridge" ||
           entry.disposition === "covered_by_general_tool",
       ).length;
       const planned = domainEntries.filter(
@@ -375,6 +372,7 @@ Generated from the committed OpenAPI specification and the reviewed operation in
 
 - Website operations inventoried: ${entries.length}
 - Direct Elaine mappings: ${counts.direct}
+- Universal authenticated operation bridge: ${counts.universal_bridge}
 - Covered by general read tools: ${counts.covered_by_general_tool}
 - Attachment/camera prerequisites: ${counts.attachment_or_camera}
 - Interactive authentication: ${counts.interactive_auth}
@@ -391,7 +389,7 @@ ${rows}
 
 ## Open gaps
 
-Every gap has a precise disposition and reason in \`website-operation-inventory.json\`. Feasible user-facing gaps remain tracked by GitHub issue #360; authentication and binary/camera prerequisites are intentionally explicit rather than silently pretending the operation is supported.
+Every exclusion has a precise disposition and reason in \`website-operation-inventory.json\`. Interactive authentication, browser permission, infrastructure, and binary/camera prerequisites remain intentionally explicit rather than silently pretending the operation is supported.
 
 | Operation | Endpoint | Domain | Disposition | Reason |
 | --- | --- | --- | --- | --- |
@@ -425,6 +423,7 @@ function validate(
     }
     if (
       (entry.disposition === "direct" ||
+        entry.disposition === "universal_bridge" ||
         entry.disposition === "covered_by_general_tool") &&
       entry.mappedTools.length === 0
     ) {

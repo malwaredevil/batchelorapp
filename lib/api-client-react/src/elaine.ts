@@ -226,7 +226,8 @@ export type AssistantActionType =
   | "correct_memory"
   | "forget_memory"
   | "queue_research_task"
-  | "cancel_elaine_task";
+  | "cancel_elaine_task"
+  | "execute_app_operation";
 
 export interface AssistantAction {
   type: AssistantActionType;

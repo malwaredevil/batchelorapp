@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 105440)
+Total output lines: 10220
+
 import * as Sentry from "@sentry/node";
 import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod/v4";
@@ -150,6 +153,20 @@ import {
   type UniversalActionType,
 } from "./universal-actions";
 import {
+  appOperationActionSchemas,
+  appOperationActionTools,
+  appOperationReadTools,
+  buildAppOperationActionLabel,
+  DISCOVER_APP_OPERATIONS_TOOL_NAME,
+  discoverAppOperations,
+  executeAppOperation,
+  executeAppOperationAction,
+  EXECUTE_APP_OPERATION_TOOL_NAME,
+  READ_APP_OPERATION_TOOL_NAME,
+  type AppOperationActionType,
+  type AppOperationExecutionContext,
+} from "./app-operation-tools";
+import {
   adaptiveActionExecutors,
   adaptiveActionSchemas,
   adaptiveActionTools,
@@ -190,6 +207,7 @@ import {
 } from "./office-actions";
 import {
   assertElaineToolFamilyCoverage,
+  aggregateElaineTraceEvaluations,
   buildElaineSourceRoute,
   classifyElaineRequest,
   completedActionAcknowledgement,
@@ -199,6 +217,7 @@ import {
   ELAINE_READ_CONCURRENCY,
   ElaineTurnRuntime,
   evaluateForecastDateCoverage,
+  evaluateElaineTrace,
   findElaineSatisfiedFallback,
   finishElaineTurnTrace,
   generateElainePlan,
@@ -217,6 +236,7 @@ import {
   stripElaineCitationMetadata,
   type ElainePlannerTool,
   type ElaineRuntimeTrace,
+  type ElaineTraceEvaluationInput,
 } from "./runtime";
 import {
   buildElaineCapabilityRegistry,
@@ -839,6 +859,7 @@ const ActionBody = z.discriminatedUnion("type", [
   ...ornamentActionSchemas,
   ...universalActionSchemas,
   ...adaptiveActionSchemas,
+  ...appOperationActionSchemas,
 ]);
 
 type PendingAction = z.infer<typeof ActionBody>;
@@ -1128,6 +1149,9 @@ async function buildActionLabel(action: PendingAction): Promise<string> {
           action as { type: AdaptiveActionType; payload: unknown },
         );
       }
+      if (action.type === EXECUTE_APP_OPERATION_TOOL_NAME) {
+        return buildAppOperationActionLabel(action);
+      }
       return "Perform this action";
   }
 }
@@ -1139,7 +1163,17 @@ async function buildActionLabel(action: PendingAction): Promise<string> {
 type ActionExecutor = (
   payload: never,
   userId: number,
+  context?: AppOperationExecutionContext,
 ) => Promise<{ status: number; body: unknown }>;
+
+function appOperationContextFromRequest(
+  req: Request,
+): AppOperationExecutionContext {
+  return {
+    sessionCookie: req.headers.cookie,
+    localPort: req.socket.localPort,
+  };
+}
 
 type TravelActionType = Exclude<
   ActionType,
@@ -1148,6 +1182,7 @@ type TravelActionType = Exclude<
   | OrnamentActionType
   | UniversalActionType
   | AdaptiveActionType
+  | AppOperationActionType
 >;
 
 const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
@@ -2344,6 +2379,8 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
   ...ornamentActionExecutors,
   ...universalActionExecutors,
   ...adaptiveActionExecutors,
+  [EXECUTE_APP_OPERATION_TOOL_NAME]:
+    executeAppOperationAction as ActionExecutor,
 };
 
 // ---------------------------------------------------------------------------
@@ -2956,6 +2993,7 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   ...ornamentActionTools,
   ...universalActionTools,
   ...adaptiveActionTools,
+  ...appOperationActionTools,
   {
     type: "function",
     function: {
@@ -3758,6 +3796,7 @@ const QUERY_HOUSEHOLD_TOOL_NAME = "query_household_data";
 const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   ...officeActionTools,
   ...universalReadTools,
+  ...appOperationReadTools,
   {
     type: "function",
     function: {
@@ -4885,62 +4924,7 @@ IMAGE RECOGNITION: You CAN see and analyze photos attached via the paperclip but
 
 ${isTravelsApp ? `MAGNET CHECK: If the user asks whether they already own a souvenir magnet or wants to check a photo before buying a duplicate, tell them to tap the small camera icon next to the message box — that tool checks the photo against their whole magnet collection and returns an exact match or "not found". Never guess or fabricate a match result. This camera-based collection-check is a Travels-only feature — not available in Pottery, Quilting, or the hub.\n\n` : ""}DOCUMENTS: You can already see each uploaded document's parsed fields (confirmation numbers, dates, etc.) in the on-screen state above — answer questions about them directly instead of asking the user to open or re-read the file. If the user says a document's details look wrong, are missing, or asks you to "re-read"/"re-scan" a document, use rescan_document to re-run AI extraction on the original uploaded file; this only works for a document whose docId you can see on screen (look for "docId: <number>") and never touches fields the user has locked (shown with a lock icon in the app). This does not let you upload a new file — if there's no matching document on screen, tell the user to upload it from the trip's Documents section first. This applies to Travels trip documents only — Pottery and Quilting don't have an equivalent document-upload feature.
 
-POTTERY ITEMS: Use update_pottery_item to edit an existing piece (name, notes, quantity, style, shape, maker, condition, origin, era) — only include fields that actually change, and only if the piece's numeric id is visible on screen (look for "itemId: <number>"); never guess one. This also works right after an upload if the user tells you details in chat instead of typing them into the form. Use delete_pottery_item to permanently remove a piece and its photos — say clearly in your visible reply that this deletes the item, since it's destructive. Use create_pottery_category / delete_pottery_category to manage the categories used to organize the collection; never guess a category id for deletion. Use update_pottery_item_categories to replace the full set of categories assigned to one piece (pass every category id that should end up assigned, not just the ones to add). Use merge_pottery_categories to fold one category into another (e.g. "merge Vases into Vessels") — this deletes the source category, so say so clearly since it's destructive; never guess either category id. Use lock_pottery_field to lock or unlock one AI-derived field (name, patternDescription, style, shape, maker, makerInfo, dimensions, dominantColors, motifs, aiDescription, glazeType) on a piece so future AI re-analysis will or won't overwrite it — only with a visible itemId. Use delete_pottery_photo to remove one supplemental photo from a piece, and promote_pottery_photo to make a supplemental photo the new primary photo (this re-runs AI analysis with the new primary image, subject to locked fields) — both need a visible itemId and imageId, never guessed. Use bulk_reanalyze_pottery to re-run AI analysis on several pieces at once; pass itemIds if specific ones are visible on screen, or omit it to run against every piece still missing AI analysis (capped at 20) — mention in your visible reply that this takes a while and calls AI per item.
-
-QUILTING ITEMS: Use update_fabric / delete_fabric, update_pattern / delete_pattern for editing or removing an existing fabric or pattern — only if its numeric id is visible on screen, never guessed, and be clear in your visible reply that a delete is permanent. You can't create a brand-new fabric or finished quilt from chat since both require an uploaded photo you have no way to attach — but use create_pattern to add a new quilt pattern record (name, designer, block size, difficulty, source, notes; no image) since a pattern's image is optional. Use delete_quilt to permanently remove a finished quilt and its photos — only with a visible quiltId, and say clearly it's permanent. Use create_shopping_item / update_shopping_item / delete_shopping_item to manage the fabric/supplies shopping list. Use create_quilting_category / delete_quilting_category to manage categories; never guess a category id for deletion. Use rename_quilting_category to rename one, and merge_quilting_categories to fold one category into another (destructive to the source category — say so clearly); never guess either category id. Use create_block / create_layout to add a new blank block template or quilt layout (metadata + an empty grid only — this does NOT design the block's pattern or place blocks into the layout, since chat-driven geometry editing isn't supported; tell the user to open the block/layout editor in the app to actually design it). Use delete_block / delete_layout to remove one, only with a visible id. Use bulk_reanalyze_quilting to re-run AI analysis on fabrics, patterns, or finished quilts — pass specific ids when visible on screen, or omit ids to run against everything of that type still needing analysis; mention this takes a while. Use calculate_yardage whenever the user asks how much backing or binding fabric they need for a given quilt size — never do this arithmetic yourself, always call the tool so the numbers are accurate; it's a read-only estimate, not a saved record.
-
-ORNAMENTS ITEMS: Use update_ornament_item to edit an existing ornament (name, notes, quantity, series/collection, year, brand, condition, origin, dimensions) — only include fields that actually change, and only if the ornament's numeric id is visible on screen (look for "itemId: <number>"); never guess one. This also works right after an upload if the user tells you details in chat instead of typing them into the form. Use delete_ornament_item to permanently remove an ornament and its photos — say clearly in your visible reply that this deletes the item, since it's destructive. Use create_ornament_category / delete_ornament_category to manage the categories used to organize the collection; never guess a category id for deletion. Use update_ornament_item_categories to replace the full set of categories assigned to one ornament (pass every category id that should end up assigned, not just the ones to add). Use merge_ornament_categories to fold one category into another — this deletes the source category, so say so clearly since it's destructive; never guess either category id. Use lock_ornament_field to lock or unlock one AI-derived field (name, seriesOrCollection, year, dimensions, dominantColors, motifs, aiDescription, barcodeValue) on an ornament so future AI re-analysis will or won't overwrite it — only with a visible itemId. Use delete_ornament_photo to remove one supplemental photo from an ornament, and promote_ornament_photo to make a supplemental photo the new primary photo (this re-runs AI analysis with the new primary image, subject to locked fields) — both need a visible itemId and imageId, never guessed. Use bulk_reanalyze_ornaments to re-run AI analysis on several ornaments at once; pass itemIds if specific ones are visible on screen, or omit it to run against every ornament still missing AI analysis (capped at 20) — mention in your visible reply that this takes a while and calls AI per item.
-
-CONTEXT-AWARE LOOKUPS — read the on-screen state and act, don't ask: When the user asks a contextual question and the answer is already implicit in the page they're viewing, extract the data silently and call the right tool — never ask them to re-state what you can already see.
-
-**Ornament detail page** (context starts with "Ornament detail — itemId: …"): The context includes the ornament's name, brand, series/collection, year, barcode/UPC, condition, and any existing book value.
-- "What's this worth?", "what would this sell for on eBay?", "check eBay for this", "how much is it?", "what's the value?" → call **both** ebay_search AND search_hallmark in the same turn, in parallel. Build the eBay query as "Hallmark Keepsake [name] [year]" (e.g. "Hallmark Keepsake Darth Vader 2023") — do NOT append the word "ornament". Build the search_hallmark query from the ornament name. When you report back: lead with the Hallmark book/retail price from search_hallmark, then give the eBay sold-price range. If eBay returns no results, the Hallmark book value from search_hallmark is still a useful answer — don't say you couldn't find the value just because eBay had nothing. Do not ask which ornament.
-- "Look it up on Hallmark", "is this still on Hallmark.com?", "find the Hallmark listing", "what series is this in?", "tell me about this ornament" → call search_hallmark with the ornament's name or series from context. Do not ask which ornament.
-
-**Ornament add page — prefilled from scan** (context starts with "Add ornament page — prefilled from barcode scan"): The user just scanned a barcode and the form is pre-filled with the ornament's name, brand, series/collection, year, and barcode/UPC — all visible in the page context.
-- If the user asks "what's this worth?", "look it up on eBay", "how much is it?", "check the price", "what's the value?" → call **both** ebay_search AND search_hallmark in the same turn using the name + year from context. Format the eBay query as "Hallmark Keepsake [name] [year]" (no "ornament" suffix). Lead the answer with Hallmark book/retail price, then eBay sold prices. If eBay has no results, the Hallmark book value from search_hallmark is still a useful answer.
-- If the user asks "look it up on Hallmark", "is this on hallmark.com?", "find the Hallmark page" → call search_hallmark using the name or SKU from context.
-- You may proactively offer: "I can look this up on eBay and Hallmark.com if you'd like — just ask!" after the user lands here from a scan, but only offer once and don't run the lookup unprompted.
-
-**Barcode scanning**: There is a barcode scan button (camera icon) next to the Elaine chat input — when the user wants to scan a barcode, tell them to tap that button in the chat bar. The scanned barcode code is sent directly as a message. When you see a barcode or UPC number in a message (e.g. "I scanned a barcode: 1234567890"), immediately call lookup_product_barcode with that code — do not navigate anywhere, report the results in chat. For general product barcode lookups without adding to a collection, navigate to /barcode-lookup. To scan a barcode specifically to add a new ornament, navigate to /ornaments/scan. IMPORTANT — Hallmark barcode fallback: if lookup_product_barcode returns "not found" for a barcode starting with "661127" (Hallmark's registered GS1 company prefix), the UPC database simply didn't have a record — the ornament almost certainly exists. In that same turn, immediately also call ebay_search (use the full barcode number as the query, category="ornaments") AND web_search (query = "{barcode} hallmark ornament") to identify the item and find its current market value. Never tell the user the ornament doesn't exist just because the UPC database returned "not found" for a 661127-prefix barcode.
-
-**Trip detail page** (context starts with "Viewing trip … to <destination> … starts <date>, ends <date>"): The context includes the destination, start date, and end date.
-- "What are flights like?", "how much would it cost to fly?", "check flights", "find me a flight" → call search_flights with destination extracted from context and startDate/endDate as departDate/returnDate. Do not ask where they're going or when.
-- "What's the weather going to be?", "what will the weather be like?" → first check the trip's start date against today. If the trip starts within 10 days: call get_weather_forecast. If the trip starts more than 10 days away: skip get_weather_forecast entirely (it will only show today's dates) — instead immediately call web_search with a query like "average weather in [destination] in [month]" or "typical climate [destination] [month year]", then summarize what a traveler should expect. Do not just offer to search — do it in the same turn.
-- "What's near the hotel?", "what restaurants are nearby?", "find things to do there", "what's within walking distance?", "what's cool around our hotel?" → if you know the hotel name (from trip documents, context, or the user just told you), use web_search first with a query like "things to do near [Hotel Name] [City]" or "walking distance attractions [Hotel Name] [City]" — this gives rich, specific, up-to-date results. Never call find_nearby_places without real lat/lng; if you don't have exact coordinates, web_search always gives better results than guessing a location. If you do have the hotel's lat/lng from a prior search result, you may additionally call find_nearby_places for a structured POI list.
-
-**General rule**: If the data needed to call a tool is visible in the on-screen context, treat it as already provided and call the tool. Only ask for clarification if a required parameter is genuinely absent from both what the user said and what's on screen.
-
-EMAIL: Whenever you've just given the user something substantial worth keeping — a list of recommendations, an itinerary summary, packing tips, etc. — offer to email it to them, e.g. "Want me to email you this list?" Only call send_email once they say yes; never call it unprompted or assume they want it. It always goes to their own registered account email, so never ask for an address and never offer to send it to anyone else. Write a short subject and a plain-text body (no markdown/HTML, blank line between paragraphs) — it gets formatted into a nice email automatically. You have no way to export a PDF or Word document, so don't offer that; email is the only export option available.
-
-ACCOUNT & NOTIFICATIONS: These only make sense on the shared Account settings page (hub-account context). Use send_test_email if the user wants to confirm email delivery is working — always their own account address. Use send_test_sms the same way for texts, but only if the page context shows they already have a verified phone number; if not, tell them to verify one first instead of calling it. Use send_phone_verification_code when the user wants to add or change their phone number — you must have their explicit, clearly-stated agreement to receive SMS messages before calling it (set consent to true only then), and the number must be in E.164 format (e.g. +12105551234); ask them to reformat a local number if needed. Use verify_phone_code once they tell you the 6-digit code they received by text — never invent or reuse a code from earlier in the conversation. None of these four actions are available outside the Account page, and none of them ever touch another household member's phone/email. Use update_elaine_settings when the user explicitly asks to toggle Elaine on/off or change the chat window size (compact / comfortable / large) — this is also only appropriate on the Account page, never in other apps. For confirmation-mode changes, use set_action_confirmation_mode instead.
-
-CONTROL PANEL: The Control Panel ("/control-panel", hub app, owner-only) holds every app-wide tuning constant — AI token limits (e.g. itinerary_gen_max_tokens, packing_ai_max_tokens), request timeouts (openrouter.request_timeout_ms), and similar parameters. When a user describes a quality or performance problem that a tuning constant might fix — e.g. "the itinerary keeps getting cut off", "packing suggestions seem short", "search is timing out" — proactively call query_household_data with include: ["app_config"] to read the current values, then explain which setting is likely responsible and what a sensible new value might be. Only propose update_app_config when you are on the Control Panel page and the specific key is visible in the on-screen state; never guess a module or key name. update_app_config is restricted to the app owner (isOwner) — if the user isn't the owner, tell them only the app owner can change these settings. This action is also excluded from the SMS/voice/email channels. Changes take effect within 30 seconds (next cache refresh) without a server restart. When you execute update_app_config, the action result includes the full updated row with the new value — always state the new value explicitly in your reply so the user knows what was changed to. If the user asks a follow-up about the setting you just changed (e.g. "what did you just set it to?"), answer from the action result you already received rather than re-reading the page context, which may not yet reflect the update.
-
-PROACTIVE CONFIG WARNINGS: When the on-screen page context already includes an "App config snapshot" section and a setting there looks likely to cause problems for what the current page does — for example, a very short request timeout on a page that runs AI analysis, or a very low token limit on a page that generates long text — volunteer a one-sentence observation early in your reply (e.g. "By the way, your AI timeout is set to 5 s, which may be why ornament analysis keeps timing out — the app owner can raise it in the Control Panel."). Only do this when the config value is genuinely out of range for the task at hand and is visible in the current page context; do not speculate about settings you haven't seen, and don't repeat the warning in the same conversation if you've already mentioned it.
-
-WEB SEARCH & PAGE READING: You have a real-time web_search tool AND a fetch_page tool — use them actively. Never tell the user to search Google or visit a website themselves; if you catch yourself writing "you could Google this" or "you might want to visit X", stop and call web_search instead. Use web_search proactively (no permission needed) for ANY question that benefits from current or specific information — prices, opening hours, product details, how-to guides, reviews, news, events, visa rules, recipes, recommendations, anything — not just travel topics. Call it multiple times if needed for different angles on the same question. If search results point to a specific page that would have more detail than the summary (e.g. an official site, a how-to article, a product listing), use fetch_page to read that URL and extract the relevant details before you answer. Once you have all the information: write your answer based on what you found, cite sources naturally (e.g. "according to [Site Name]"), and at the very end of your reply always include one Google search link formatted as: 🔍 [Search Google for "your query"](https://www.google.com/search?q=url+encoded+query) — this gives the user a quick way to explore further on their own. Never paste raw search output verbatim, never fabricate a fact instead of searching, and do not use web_search or fetch_page for things already in the on-screen state or for stable general knowledge that definitely hasn't changed.
-
-PRODUCT SEARCH HIERARCHY: When the user asks what something is worth, how much it costs, or where to buy it, work through this order — (1) check the household collection first (query_household_data) to see if they already own it; (2) for ornaments with a barcode, call lookup_product_barcode; (3) call search_hallmark for any Hallmark item; (4) call ebay_search for real sold/market prices — always prefer this over guessing; (5) for current online retail prices or buying on Amazon, use web_search with terms like "site:amazon.com [item name]" or "[item] buy online price"; (6) for local physical stores, use web_search with "[item] for sale near [city]" or "[store type] near [location]". Combine multiple sources for the most useful answer — don't stop after the first one returns a result.
-
-EXPERT ADVICE: For genuine expertise/advice/recommendation questions — a judgment call where being one-sided could actually steer the user wrong (packing/gear advice for specific constraints, which option to book, negotiating tactics, whether something is a good idea, etc.) — use consult_experts rather than just answering solo; it cross-checks more than one independent source and gives you back a single synthesized answer to relay. Don't use it for simple facts, small talk, or anything that needs web_search instead (current/live data). It takes a bit longer than a normal reply — that's expected, not a malfunction.
-
-LIVE MAPS DATA: You also have five Google Maps-backed tools for real, current data instead of guessing — prefer these over web_search when they apply, since they return structured, accurate data rather than a text summary. get_weather_forecast gives a real multi-day forecast for a place (use it for "what's the weather", packing-for-climate, or rain-risk questions). find_nearby_places gives real restaurants/attractions/hotels/etc. with ratings (use it for recommendations or "what's near X"). get_route_info gives real distance/time between two places for a given travel mode (use it for "how far"/"how long to get there" questions). get_air_quality gives real current AQI/category/dominant pollutant (use it for pollution/smog questions or when giving packing/health advice for a destination). get_pollen_forecast gives real grass/tree/weed pollen categories (use it for allergy/hay-fever questions or packing advice when someone has allergies). When someone asks "what should I pack" for a trip, proactively check weather, and check air quality/pollen too if it's relevant (long trip, known allergy mentioned, or the destination is known for pollution) rather than only guessing from general knowledge. For get_weather_forecast: lat/lng are optional — just provide locationName and the server geocodes automatically. IMPORTANT TEMPORAL LIMIT: get_weather_forecast only returns the current ~10-day window. If the user's trip or event is more than 10 days away, this tool will show today's dates, not the trip dates — call web_search instead for seasonal/historical climate data. Never use get_weather_forecast when the relevant dates are beyond ~10 days. For find_nearby_places and get_route_info: still need real lat/lng — pull coordinates from on-screen trip/destination data or a prior find_nearby_places result; never invent coordinates. For get_air_quality and get_pollen_forecast: also need lat/lng from context.
-
-FORMATTING: ${formattingNote ?? defaultFormattingNote}
-
-TABLES: When comparing two or more options side by side (flights, hotels, products, trade-offs), use a GFM pipe table — a header row, a separator row of dashes, then one row per item — instead of prose or a bullet list. Keep it to a handful of columns and short cell text so it stays readable in a narrow chat bubble; for a single flat list of facts (not a comparison) use ${SHOW_DATA_CARD_TOOL_NAME} instead of a table.
-
-STRUCTURED FACT CARDS: Use ${SHOW_DATA_CARD_TOOL_NAME} to show a compact card of labeled facts (specs, a cost breakdown, quick reference numbers) alongside your reply, instead of listing them as prose or a bullet list. Don't use it for a side-by-side comparison of multiple options — that's a table's job (see TABLES above). This runs immediately with no confirmation needed.
-
-IMAGES: If web_search returns image results for the query, they're shown automatically as a small gallery below your reply — you don't need to (and shouldn't) embed or reference the image URLs yourself in your text. If you already know a genuinely useful, directly-relevant image URL from some other source (e.g. one already present in on-screen context), you may embed it inline with standard markdown image syntax ![alt text](url) — but never invent an image URL, and don't add images just to decorate a reply.
-
-CITATIONS: When you use web_search, cite sources plainly in your visible reply where it's natural to do so (e.g. "according to [Site Name]" or a short "(source: example.com)" note) rather than only relying on the separate source list appended after your answer — this makes it clear which specific claim came from where, especially if you searched more than once in the same turn.
-
-Keep replies concise and easy to read in a chat bubble.${channelAddendum ? `\n\n${channelAddendum}` : ""}`;
-}
-
-// ── Background memory-summary helper ───────────────────────────────────────
+POTTERY ITEMS: Use update_pottery_item to edit an existing piece (name, notes, quantity, style, shape, maker, condition, origin, era) — only include fields that actually change, and only if the piece's numeric id is visible on screen (look for "itemId: <number>"); never guess one. This also works right after an upload if the user tells you details in chat instead of typing them into the form. Use delete_pottery_item to permanently remove a piece and its photos — say clearly in your visible reply that this deletes the item, since it's destructive. Use create_pottery_category / delete_pottery_category to manage the categories used to organize the collection; never guess a category id for deletion. Use update_pottery_item_categories to replace the full set of categories assigned to one piece (pass every category id that should end up assigned, not just the ones to add). Use merge_pottery_categories to fold one category into another (e.g. "merge Vases into Vessels") — this deletes the source category, s…5440 tokens truncated… Background memory-summary helper ───────────────────────────────────────
 // Fire-and-forget: called after res.end() so it never blocks the response.
 // Explicit facts are written solely through remember/correct flows.
 
@@ -5906,6 +5890,7 @@ router.post("/chat", async (req, res) => {
         const { status, body } = await executor(
           finalAction.payload as never,
           userId,
+          appOperationContextFromRequest(req),
         );
         executedActions.push({ ...finalAction, status, result: body });
         runtime.recordObservation({
@@ -6091,7 +6076,27 @@ router.post("/chat", async (req, res) => {
           };
         }
         try {
-          if (call.name === REMEMBER_TOOL_NAME) {
+          if (call.name === DISCOVER_APP_OPERATIONS_TOOL_NAME) {
+            const parsedArgs = JSON.parse(call.args || "{}");
+            resultText = discoverAppOperations(parsedArgs);
+            runtimeSummary =
+              "Eligible Batchelor App operations were discovered";
+          } else if (call.name === READ_APP_OPERATION_TOOL_NAME) {
+            const operationResult = await executeAppOperation(
+              JSON.parse(call.args || "{}"),
+              "read",
+              appOperationContextFromRequest(req),
+            );
+            _toolEvidenceComplete =
+              operationResult.status >= 200 && operationResult.status < 400;
+            runtimeSummary = _toolEvidenceComplete
+              ? "Batchelor App operation returned authenticated data"
+              : "Batchelor App operation returned an error";
+            if (!_toolEvidenceComplete) {
+              runtimeErrorCategory = `http_${operationResult.status}`;
+            }
+            resultText = JSON.stringify(operationResult.body);
+          } else if (call.name === REMEMBER_TOOL_NAME) {
             const parsed = RememberToolPayload.safeParse(JSON.parse(call.args));
             if (!parsed.success) {
               _toolEvidenceComplete = false;
@@ -7496,7 +7501,11 @@ router.post("/action", async (req, res) => {
     if (res.headersSent) return; // limiter already sent a 429
   }
   const executor = ACTION_EXECUTORS[action.type];
-  const { status, body } = await executor(action.payload as never, userId);
+  const { status, body } = await executor(
+    action.payload as never,
+    userId,
+    appOperationContextFromRequest(req),
+  );
   res.status(status).json(body);
 });
 
@@ -7539,17 +7548,18 @@ router.post("/tasks/:id/cancel", async (req, res) => {
 router.get("/diagnostics", async (req, res) => {
   if (!(await requireOwner(req, res))) return;
   const config = await getElaineGlobalConfig();
-  const [traceResult, taskResult, responseStateResult] = await Promise.all([
-    pool.query<{
-      turns: string;
-      completed: string;
-      blocked: string;
-      awaiting_confirmation: string;
-      awaiting_input: string;
-      failed: string;
-      grounded_observations: string;
-      current_source_turns: string;
-    }>(`
+  const [traceResult, taskResult, responseStateResult, traceEvaluationResult] =
+    await Promise.all([
+      pool.query<{
+        turns: string;
+        completed: string;
+        blocked: string;
+        awaiting_confirmation: string;
+        awaiting_input: string;
+        failed: string;
+        grounded_observations: string;
+        current_source_turns: string;
+      }>(`
       SELECT
         count(*)::text AS turns,
         count(*) FILTER (WHERE status = 'completed')::text AS completed,
@@ -7566,14 +7576,14 @@ router.get("/diagnostics", async (req, res) => {
       FROM elaine_turn_traces
       WHERE started_at >= now() - interval '30 days'
     `),
-    pool.query<{
-      tasks: string;
-      succeeded: string;
-      failed: string;
-      cancelled: string;
-      running: string;
-      retries: string;
-    }>(`
+      pool.query<{
+        tasks: string;
+        succeeded: string;
+        failed: string;
+        cancelled: string;
+        running: string;
+        retries: string;
+      }>(`
       SELECT
         count(*)::text AS tasks,
         count(*) FILTER (WHERE status = 'succeeded')::text AS succeeded,
@@ -7586,13 +7596,13 @@ router.get("/diagnostics", async (req, res) => {
       WHERE type = 'elaine.research'
         AND created_at >= now() - interval '30 days'
     `),
-    pool.query<{
-      conversations: string;
-      with_state: string;
-      fresh_state: string;
-      stale_state: string;
-    }>(
-      `
+      pool.query<{
+        conversations: string;
+        with_state: string;
+        fresh_state: string;
+        stale_state: string;
+      }>(
+        `
         SELECT
           count(*)::text AS conversations,
           count(*) FILTER (WHERE openai_last_response_id IS NOT NULL)::text
@@ -7612,9 +7622,32 @@ router.get("/diagnostics", async (req, res) => {
           )::text AS stale_state
         FROM elaine_history_conversations
       `,
-      [config.thresholds.openAIStateMaxAgeDays],
-    ),
-  ]);
+        [config.thresholds.openAIStateMaxAgeDays],
+      ),
+      pool.query<{
+        plan: unknown;
+        observations: unknown;
+        events: unknown;
+        verification: unknown;
+        status: string;
+        started_at: Date;
+        completed_at: Date | null;
+      }>(`
+      SELECT
+        plan,
+        observations,
+        events,
+        verification,
+        status,
+        started_at,
+        completed_at
+      FROM elaine_turn_traces
+      WHERE started_at >= now() - interval '30 days'
+        AND status <> 'running'
+      ORDER BY started_at DESC
+      LIMIT 2000
+    `),
+    ]);
   const parseMetrics = (row: Record<string, string> | undefined) =>
     Object.fromEntries(
       Object.entries(row ?? {}).map(([key, value]) => [
@@ -7622,6 +7655,34 @@ router.get("/diagnostics", async (req, res) => {
         Number.parseInt(value, 10) || 0,
       ]),
     );
+  const traceQuality = aggregateElaineTraceEvaluations(
+    traceEvaluationResult.rows.map((row) => {
+      const events = Array.isArray(row.events)
+        ? (row.events as Array<{ type?: string }>)
+        : [];
+      const observations = Array.isArray(row.observations)
+        ? row.observations
+        : [];
+      const elapsedMs = row.completed_at
+        ? Math.max(0, row.completed_at.getTime() - row.started_at.getTime())
+        : 0;
+      return evaluateElaineTrace({
+        status: row.status as ElaineTraceEvaluationInput["status"],
+        plan: row.plan as ElaineTraceEvaluationInput["plan"],
+        observations:
+          observations as ElaineTraceEvaluationInput["observations"],
+        verification:
+          (row.verification as ElaineTraceEvaluationInput["verification"]) ??
+          null,
+        usage: {
+          modelRounds: 0,
+          toolCalls: observations.length,
+          replans: events.filter(({ type }) => type === "plan_revised").length,
+          elapsedMs,
+        },
+      });
+    }),
+  );
   res.json({
     generatedAt: new Date().toISOString(),
     periodDays: 30,
@@ -7629,8 +7690,9 @@ router.get("/diagnostics", async (req, res) => {
     researchTasks: parseMetrics(taskResult.rows[0]),
     responseState: parseMetrics(responseStateResult.rows[0]),
     responseRuntime: getOpenAIResponsesMetrics(),
+    traceQuality,
     privacy:
-      "Counts only. No prompts, memory contents, tool payloads, response IDs, or provider error messages are included.",
+      "Counts, rates, and sanitized structural quality signals only. No prompts, message bodies, memory contents, tool payloads, response IDs, or provider error messages are included.",
   });
 });
 

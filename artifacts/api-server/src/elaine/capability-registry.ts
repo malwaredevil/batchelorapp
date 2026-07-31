@@ -210,6 +210,15 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
     })[0]!,
     risk: "high",
   },
+  {
+    ...policies(["execute_app_operation"], {
+      ...ACTION_DEFAULTS,
+      domain: "hub",
+      executorPrefix: "appOperation",
+      channels: ["web"],
+    })[0]!,
+    risk: "high",
+  },
   ...policies(
     [
       "search_trip_documents",
@@ -381,6 +390,28 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
     audit: "runtime_observation",
     retry: "read_only",
     channels: ALL_READ_CHANNELS,
+  }),
+  ...policies(["discover_app_operations"], {
+    domain: "hub",
+    kind: "utility",
+    risk: "none",
+    auth: "session",
+    confirmation: "never",
+    executorPrefix: "appOperation",
+    audit: "runtime_observation",
+    retry: "safe",
+    channels: ["web"],
+  }),
+  ...policies(["read_app_operation"], {
+    domain: "hub",
+    kind: "read",
+    risk: "low",
+    auth: "session",
+    confirmation: "never",
+    executorPrefix: "appOperation",
+    audit: "runtime_observation",
+    retry: "read_only",
+    channels: ["web"],
   }),
   ...policies(["show_data_card"], {
     domain: "widgets",

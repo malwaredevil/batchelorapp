@@ -39,6 +39,8 @@ export const MODEL_VISIBLE_HARD_TOOL_NAMES = new Set<string>([
   "show_destination_card",
   "get_exchange_rate",
   "suggest_clothing_layers",
+  "discover_app_operations",
+  "read_app_operation",
 ]);
 
 export const MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS: Readonly<
@@ -79,6 +81,8 @@ export const MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS: Readonly<
   show_destination_card: "preparing that destination",
   get_exchange_rate: "checking exchange rates",
   suggest_clothing_layers: "preparing clothing recommendations",
+  discover_app_operations: "checking available app capabilities",
+  read_app_operation: "checking the Batchelor App",
 };
 
 export const SPECIALIZED_CURRENT_TOOL_NAMES = new Set<string>([

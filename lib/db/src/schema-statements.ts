@@ -1051,6 +1051,9 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE elaine_history_conversations ADD COLUMN IF NOT EXISTS is_widget_default boolean NOT NULL DEFAULT false`,
   `ALTER TABLE elaine_history_conversations ADD COLUMN IF NOT EXISTS summary text`,
   `ALTER TABLE elaine_history_conversations ADD COLUMN IF NOT EXISTS summarized_up_to_id integer`,
+  `ALTER TABLE elaine_history_conversations ADD COLUMN IF NOT EXISTS openai_last_response_id text`,
+  `ALTER TABLE elaine_history_conversations ADD COLUMN IF NOT EXISTS openai_state_model text`,
+  `ALTER TABLE elaine_history_conversations ADD COLUMN IF NOT EXISTS openai_state_updated_at timestamptz`,
   `CREATE UNIQUE INDEX IF NOT EXISTS elaine_history_conversations_widget_default_idx ON elaine_history_conversations (user_id) WHERE is_widget_default = true`,
 
   `CREATE TABLE IF NOT EXISTS elaine_history_messages (

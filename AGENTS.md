@@ -18,7 +18,8 @@ product — there is exactly one household with a handful of user accounts.
 - **Runtime:** Node 24, TypeScript 5.9, pnpm workspaces (v10)
 - **API:** Express 5, Drizzle ORM, PostgreSQL on Supabase
 - **Frontends:** Three React 18 + Vite SPAs (`modules`, `web`, `elaine`)
-- **AI:** OpenRouter (all LLM calls); Voyage (reranking); Jina (CLIP embeddings)
+- **AI:** OpenAI Responses (Elaine + selected reasoning); OpenRouter (fallback
+  and broad model access); Voyage (reranking); Jina (CLIP embeddings)
 - **Auth:** Session cookie (express-session + bcrypt) + Google OAuth
 - **Storage:** Supabase private buckets (`pottery`, `quilting`, `ornaments`, `travels`)
 - **Deployment:** Replit autoscale + path-based reverse proxy
@@ -67,7 +68,7 @@ All work happens on a named feature branch. Open a PR. Branch naming convention:
 - `feat/epic-242-elaine-completeness` — Campaign 2B
 - `feat/strategic-phase1` — Campaign 3
 
-### 2.4 Never add direct OpenAI SDK calls
+### 2.4 Never add ad-hoc direct OpenAI SDK calls
 
 ```typescript
 // BANNED — never do this in routes or elaine/ code:
@@ -75,9 +76,12 @@ import OpenAI from "openai";
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 ```
 
-All LLM calls (chat, vision, embeddings) go through OpenRouter via the shared
-client in `artifacts/api-server/src/lib/ai-client.ts`. Jina and Voyage are the
-only exceptions (they have their own dedicated clients).
+Direct OpenAI Responses calls must go through the shared client in
+`artifacts/api-server/src/lib/openai-responses.ts`; OpenRouter calls must go
+through `artifacts/api-server/src/lib/ai-client.ts`. Routes and Elaine runtime
+code consume those facades and must never construct provider clients or read
+provider keys directly. The owner AI Lab's image-edit client is a separate,
+pre-existing Images API exception. Jina and Voyage retain dedicated clients.
 
 ### 2.5 Never add raw fetch('/api/...') in frontend artifacts
 
@@ -170,10 +174,15 @@ exist only for insert attribution, never for access control.
 | `GET /api/travels/trips/:id/share?token=...`                                                                                             | Bearer token in query param      | ❌ No — intentional |
 | `GET /api/dev/screenshot-login`                                                                                                          | `NODE_ENV` guard                 | ❌ No — dev only    |
 
-### 4.3 OpenRouter is the Only AI Gateway
+### 4.3 AI Provider Routing Is Centralized
 
-`OPENAI_API_KEY` is present but unused — kept for potential future use. Do not suggest
-adding direct OpenAI calls or flag the key as dead code.
+Elaine's primary web chat and selected high-value reasoning/vision workflows
+use the OpenAI Responses API through `lib/openai-responses.ts`, with
+owner-controlled rollout flags and the existing OpenRouter implementation as
+fallback. Other LLM calls and embeddings remain on OpenRouter unless explicitly
+migrated through that shared facade. `OPENAI_API_KEY` is therefore live
+configuration, but it must never be logged, exposed to a frontend, or read by a
+route.
 
 ### 4.4 Gmail Access is Single-Owner Even Though Trips Are Shared
 

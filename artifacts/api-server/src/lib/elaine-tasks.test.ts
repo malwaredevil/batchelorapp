@@ -5,6 +5,10 @@ vi.mock("@workspace/db", () => ({
 }));
 vi.mock("./ai-client", () => ({ callModel: vi.fn() }));
 vi.mock("./elaine-config", () => ({ getElaineGlobalConfig: vi.fn() }));
+vi.mock("./openai-responses", () => ({
+  createOpenAIStableIdentifier: vi.fn(() => "test-identifier"),
+  generateOpenAIResponseTextWithFallback: vi.fn(),
+}));
 vi.mock("./jobs/queue", () => ({ enqueueJob: vi.fn() }));
 vi.mock("./web-search", () => ({ webSearch: vi.fn() }));
 

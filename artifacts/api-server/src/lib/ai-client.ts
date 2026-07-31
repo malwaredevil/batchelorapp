@@ -6,12 +6,12 @@ import { logger } from "./logger";
 import { circuitBreaker } from "./circuit-breaker";
 
 /**
- * Every AI call in this app goes through OpenRouter, using OpenRouter's model
- * identifiers (e.g. "google/gemini-2.5-flash"). This keeps token usage and
- * billing in one place instead of split across OpenAI, Gemini, and
- * OpenRouter accounts. There is intentionally no direct-provider fallback —
- * see `lib/reranker.ts` (Voyage) and `lib/visual-embed.ts` (Jina) for the two
- * specialized services OpenRouter can't provide, which remain direct calls.
+ * Shared OpenRouter facade for broad model access and resilient fallback.
+ * Elaine's primary web runtime and selected high-value workflows may first use
+ * the centralized direct Responses facade in `openai-responses.ts`; they fall
+ * back here without duplicating their existing OpenRouter implementation.
+ * Other chat, vision, and embedding calls continue to use this client.
+ * Voyage reranking and Jina visual embeddings remain specialized providers.
  *
  * We do NOT use "openrouter/auto": auto routes unpredictably and can land on
  * slow reasoning models, which blows the bulk-reanalyze request past the
@@ -89,6 +89,7 @@ export type OpenRouterServerTool =
 const REQUEST_TIMEOUT_MS_DEFAULT = 12_000;
 
 function makeOpenRouterClient(timeoutMs: number): OpenAI {
+  // openai-direct-ok — reviewed shared OpenRouter provider facade.
   return new OpenAI({
     apiKey: env.openrouterApiKey,
     baseURL: "https://openrouter.ai/api/v1",

@@ -4,6 +4,11 @@ packages:
   - lib/integrations/*
   - scripts
 
+allowBuilds:
+  "@sentry/cli": false
+  core-js: false
+  esbuild: true
+
 autoInstallPeers: false
 
 catalog:

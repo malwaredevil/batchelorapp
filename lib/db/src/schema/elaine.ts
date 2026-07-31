@@ -237,6 +237,14 @@ export const elaineHistoryConversations = pgTable(
     // covered by the summary — used to detect when the cache is stale.
     summary: text("summary"),
     summarizedUpToId: integer("summarized_up_to_id"),
+    // Durable pointer to OpenAI's retained Responses context. Local message
+    // history remains authoritative and is used to rebuild state if this
+    // nullable provider pointer is stale, expired, disabled, or unavailable.
+    openaiLastResponseId: text("openai_last_response_id"),
+    openaiStateModel: text("openai_state_model"),
+    openaiStateUpdatedAt: timestamp("openai_state_updated_at", {
+      withTimezone: true,
+    }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

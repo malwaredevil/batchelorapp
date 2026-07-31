@@ -107,13 +107,12 @@ const SECRETS: Array<{ name: string; purpose: string; required: boolean }> = [
   // ── AI providers ────────────────────────────────────────────────────────────
   {
     name: "OPENAI_API_KEY",
-    purpose:
-      "OpenAI API key (kept as backup; all traffic routes via OpenRouter)",
+    purpose: "OpenAI Responses API and owner AI Lab image editing",
     required: true,
   },
   {
     name: "OPENROUTER_API_KEY",
-    purpose: "OpenRouter — all LLM/AI chat/vision calls route here",
+    purpose: "OpenRouter — fallback and broad LLM/AI model gateway",
     required: true,
   },
   {

@@ -86,7 +86,7 @@ jobs:
           fi
           echo "✓ No restricted files in diff"
 
-      - name: "Ban: direct OpenAI SDK instantiation in server code"
+      - name: "Ban: ad-hoc direct OpenAI SDK instantiation in server code"
         run: |
           # Check each matching line + its adjacent lines for the exemption comment
           # (Prettier may reflow an inline comment to the next line, so we allow
@@ -109,15 +109,16 @@ jobs:
             echo "ERROR: Direct OpenAI SDK instantiation found in changed files:"
             echo "$VIOLATIONS"
             echo ""
-            echo "All LLM calls must go through OpenRouter via:"
+            echo "Provider calls must go through one of the shared facades:"
             echo "  artifacts/api-server/src/lib/ai-client.ts"
+            echo "  artifacts/api-server/src/lib/openai-responses.ts"
             echo ""
-            echo "Jina and Voyage are the only exceptions (they have their own clients)."
-            echo "Add '// openai-direct-ok' on the new OpenAI( line or an adjacent line."
+            echo "Jina, Voyage, and the owner AI Lab Images client have dedicated clients."
+            echo "Only a reviewed provider facade may use '// openai-direct-ok'."
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             exit 1
           fi
-          echo "✓ No direct OpenAI SDK instantiation found"
+          echo "✓ No ad-hoc direct OpenAI SDK instantiation found"
 
       - name: "Ban: passOnStoreError: true in rate limiters"
         run: |

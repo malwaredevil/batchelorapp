@@ -737,12 +737,30 @@ CREATE TABLE IF NOT EXISTS elaine_nudges (
 );
 
 CREATE TABLE IF NOT EXISTS elaine_history_conversations (
-  id          SERIAL PRIMARY KEY,
-  user_id     INTEGER NOT NULL,
-  title       TEXT NOT NULL DEFAULT 'New conversation',
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id                       SERIAL PRIMARY KEY,
+  user_id                  INTEGER NOT NULL,
+  title                    TEXT NOT NULL DEFAULT 'New conversation',
+  is_widget_default        BOOLEAN NOT NULL DEFAULT false,
+  summary                  TEXT,
+  summarized_up_to_id      INTEGER,
+  openai_last_response_id  TEXT,
+  openai_state_model       TEXT,
+  openai_state_updated_at  TIMESTAMPTZ,
+  created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE elaine_history_conversations
+  ADD COLUMN IF NOT EXISTS is_widget_default BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE elaine_history_conversations
+  ADD COLUMN IF NOT EXISTS summary TEXT;
+ALTER TABLE elaine_history_conversations
+  ADD COLUMN IF NOT EXISTS summarized_up_to_id INTEGER;
+ALTER TABLE elaine_history_conversations
+  ADD COLUMN IF NOT EXISTS openai_last_response_id TEXT;
+ALTER TABLE elaine_history_conversations
+  ADD COLUMN IF NOT EXISTS openai_state_model TEXT;
+ALTER TABLE elaine_history_conversations
+  ADD COLUMN IF NOT EXISTS openai_state_updated_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS elaine_history_messages (
   id                SERIAL PRIMARY KEY,
@@ -2541,7 +2559,19 @@ async function main() {
 
   summary["elaine_history_conversations"] = await copyTable(source, dest, {
     table: "elaine_history_conversations",
-    columns: ["id", "user_id", "title", "created_at", "updated_at"],
+    columns: [
+      "id",
+      "user_id",
+      "title",
+      "is_widget_default",
+      "summary",
+      "summarized_up_to_id",
+      "openai_last_response_id",
+      "openai_state_model",
+      "openai_state_updated_at",
+      "created_at",
+      "updated_at",
+    ],
     orderBy: "id",
   });
   await resetSequence(dest, "elaine_history_conversations", "id");

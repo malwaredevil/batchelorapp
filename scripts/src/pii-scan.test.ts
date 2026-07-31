@@ -465,7 +465,7 @@ console.log("\npii-scan.test: allowlist size snapshots");
 test("SAFE_DOMAINS size is exactly as expected (update if you add/remove an entry)", () => {
   // Count of entries in the SAFE_DOMAINS Set in pii-scan.ts.
   // Any addition to that set must be reflected here.
-  const EXPECTED_SAFE_DOMAINS_SIZE = 28;
+  const EXPECTED_SAFE_DOMAINS_SIZE = 33;
   assert.equal(
     SAFE_DOMAINS.size,
     EXPECTED_SAFE_DOMAINS_SIZE,

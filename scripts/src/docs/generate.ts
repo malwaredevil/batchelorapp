@@ -119,7 +119,8 @@ function generateJobs(): void {
 
 function generateProviders(): void {
   const providers = [
-    ["OpenRouter", "OPENROUTER_API_KEY", "AI gateway"],
+    ["OpenAI", "OPENAI_API_KEY", "Responses reasoning + image editing"],
+    ["OpenRouter", "OPENROUTER_API_KEY", "AI fallback/model gateway"],
     ["Jina", "JINA_API_KEY", "Embeddings/reader"],
     ["Voyage", "VOYAGE_API_KEY", "Reranking"],
     ["Apify", "APIFY_API_TOKEN", "Actor runs"],
@@ -148,7 +149,7 @@ function generateStorage(): void {
 function generateModelSlots(): void {
   writeGenerated(
     "model-slots.md",
-    `${generatedHeader("Generated AI model slot reference")}\n| Slot | Gateway | Notes |\n|---|---|---|\n| Elaine chat | OpenRouter | Defaults live in api-server config/app_config. |\n| Vision analysis | OpenRouter/Jina | OpenRouter vision and Jina CLIP embeddings. |\n| Reranking | Voyage | Voyage rerank calls for compare/search. |\n| Embeddings | Jina/vector | 1536-dimension pgvector fields where configured. |`,
+    `${generatedHeader("Generated AI model slot reference")}\n| Slot | Gateway | Notes |\n|---|---|---|\n| Elaine primary chat | OpenAI Responses | GPT-5.6 Sol with retained state; OpenRouter fallback. |\n| High-value reasoning/vision | OpenAI Responses | Owner-controlled GPT-5.6 roles; OpenRouter fallback. |\n| General AI calls | OpenRouter | Existing broad model gateway. |\n| Vision embeddings | Jina | Jina CLIP visual embeddings. |\n| Reranking | Voyage | Voyage rerank calls for compare/search. |\n| Text embeddings | OpenRouter/vector | 1536-dimension pgvector fields where configured. |`,
   );
 }
 

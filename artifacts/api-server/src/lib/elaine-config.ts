@@ -23,6 +23,12 @@ export interface ExtraModelsConfig {
   research: string;
   expertPanelAlt: string;
   embedding: string;
+  // Direct OpenAI Responses API model roles. Keep these separate from the
+  // OpenRouter model IDs above: they are sent to api.openai.com and may be
+  // independently rolled back from the admin configuration.
+  openAIReasoning: string;
+  openAIBalanced: string;
+  openAIFast: string;
   // Direct-provider specialized services (not OpenRouter) — small fixed
   // catalogs, but still admin-configurable rather than hardcoded.
   rerank: string; // Voyage reranker
@@ -40,6 +46,7 @@ export interface TimeoutsConfig {
   rerankerMs: number;
   geocodingMs: number;
   fusionMs: number;
+  openAIResponsesMs: number;
 }
 
 export interface FeaturesConfig {
@@ -47,6 +54,9 @@ export interface FeaturesConfig {
   enableSubagent: boolean;
   enableFusionPotteryExpert: boolean;
   enableFusionTravelDocFallback: boolean;
+  enableOpenAIResponses: boolean;
+  enableOpenAIAppWorkflows: boolean;
+  enableOpenAIResponsesFallback: boolean;
 }
 
 export interface ThresholdsConfig {
@@ -64,6 +74,15 @@ export interface ThresholdsConfig {
   potteryZoneAnalysisMaxTokens: number;
   potteryBackstampMaxTokens: number;
   travelDocExtractionMaxTokens: number;
+  // Responses max_output_tokens includes both hidden reasoning and visible
+  // output. Compaction is deliberately below the model context limit so
+  // stateful Elaine threads compact before they can fail from context growth.
+  openAIResponsesMaxOutputTokens: number;
+  openAICompactionThresholdTokens: number;
+  // Stored response IDs expire at the provider after 30 days by default.
+  // Treat them as stale one day earlier so Elaine can rebuild from durable
+  // local history without putting an expected expiration on the hot path.
+  openAIStateMaxAgeDays: number;
 }
 
 export interface ElaineGlobalConfig {
@@ -85,6 +104,9 @@ export const DEFAULT_MODELS: ExtraModelsConfig = {
   research: "perplexity/sonar",
   expertPanelAlt: "openai/gpt-5.1",
   embedding: "openai/text-embedding-3-small",
+  openAIReasoning: "gpt-5.6-sol",
+  openAIBalanced: "gpt-5.6-terra",
+  openAIFast: "gpt-5.6-luna",
   rerank: "rerank-2.5",
   visualEmbed: "jina-clip-v2",
   fusionModels: ["anthropic/claude-opus-4.8", "openai/gpt-5.1"],
@@ -96,6 +118,7 @@ export const DEFAULT_TIMEOUTS: TimeoutsConfig = {
   rerankerMs: 10_000,
   geocodingMs: 5_000,
   fusionMs: 20_000,
+  openAIResponsesMs: 60_000,
 };
 
 export const DEFAULT_FEATURES: FeaturesConfig = {
@@ -103,6 +126,9 @@ export const DEFAULT_FEATURES: FeaturesConfig = {
   enableSubagent: true,
   enableFusionPotteryExpert: false,
   enableFusionTravelDocFallback: false,
+  enableOpenAIResponses: true,
+  enableOpenAIAppWorkflows: true,
+  enableOpenAIResponsesFallback: true,
 };
 
 export const DEFAULT_THRESHOLDS: ThresholdsConfig = {
@@ -115,6 +141,9 @@ export const DEFAULT_THRESHOLDS: ThresholdsConfig = {
   potteryZoneAnalysisMaxTokens: 1024,
   potteryBackstampMaxTokens: 512,
   travelDocExtractionMaxTokens: 1000,
+  openAIResponsesMaxOutputTokens: 6_000,
+  openAICompactionThresholdTokens: 80_000,
+  openAIStateMaxAgeDays: 29,
 };
 
 const DEFAULTS: ElaineGlobalConfig = {

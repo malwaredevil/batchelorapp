@@ -23,6 +23,11 @@ import { callModel, getModels } from "../../lib/ai-client";
 import { downloadImageAsDataUrl } from "../../lib/storage";
 import { logger } from "../../lib/logger";
 import { z } from "zod/v4";
+import {
+  chatUserContentToResponseInput,
+  createOpenAIStableIdentifier,
+  generateOpenAIResponseTextWithFallback,
+} from "../../lib/openai-responses";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -200,16 +205,41 @@ router.post("/fabrics/:id/identity-research", aiLimiter, async (req, res) => {
         ...imageContent,
       ];
 
-      const completion = await callModel(models.smartVision, (client, model) =>
-        client.chat.completions.create({
-          model,
-          messages: [{ role: "user", content: userContent }],
-          max_tokens: 2000,
-          temperature: 0.1,
-        }),
-      );
-
-      const raw = completion.choices[0]?.message?.content ?? "[]";
+      const raw = (
+        await generateOpenAIResponseTextWithFallback(
+          {
+            scope: "app",
+            role: "reasoning",
+            instructions:
+              "Identify quilting fabrics cautiously from the supplied image and known metadata. Return only the requested JSON array. Do not invent identifiers; use null and low confidence when evidence is insufficient.",
+            input: chatUserContentToResponseInput(userContent, "original"),
+            reasoningEffort: "medium",
+            verbosity: "low",
+            maxOutputTokens: 5_000,
+            safetyIdentifier: createOpenAIStableIdentifier(
+              "safety",
+              req.session.userId!,
+            ),
+            promptCacheKey: createOpenAIStableIdentifier(
+              "cache",
+              "quilting-fabric-identity",
+            ),
+          },
+          async () => {
+            const completion = await callModel(
+              models.smartVision,
+              (client, model) =>
+                client.chat.completions.create({
+                  model,
+                  messages: [{ role: "user", content: userContent }],
+                  max_tokens: 2000,
+                  temperature: 0.1,
+                }),
+            );
+            return completion.choices[0]?.message?.content ?? "[]";
+          },
+        )
+      ).text;
       let candidates: unknown[] = [];
       try {
         const trimmed = raw

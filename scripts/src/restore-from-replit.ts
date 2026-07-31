@@ -1016,7 +1016,19 @@ async function main() {
 
   await copyTable(source, dest, {
     table: "elaine_history_conversations",
-    columns: ["id", "user_id", "title", "created_at", "updated_at"],
+    columns: [
+      "id",
+      "user_id",
+      "title",
+      "is_widget_default",
+      "summary",
+      "summarized_up_to_id",
+      "openai_last_response_id",
+      "openai_state_model",
+      "openai_state_updated_at",
+      "created_at",
+      "updated_at",
+    ],
     orderBy: "id",
   });
   await resetSequence(dest, "elaine_history_conversations", "id");

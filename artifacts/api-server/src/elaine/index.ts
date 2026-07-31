@@ -4735,7 +4735,7 @@ async function buildUserContext(
 function sanitizePageContext(raw: string | null | undefined): string {
   if (!raw) return "(no page context was shared for this screen)";
   return raw
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<script[\s\S]*?<\/script\s*>/gi, "") // \s* catches </script > variants (#179/#180)
     .replace(/<[^>]+>/g, " ")
     .replace(/&[a-zA-Z0-9#]+;/g, " ")
     .replace(

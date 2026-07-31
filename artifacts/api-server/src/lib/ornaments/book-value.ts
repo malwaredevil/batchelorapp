@@ -162,8 +162,8 @@ async function fetchPageTextDirect(url: string): Promise<string | null> {
     const html = await resp.text();
     // Strip scripts, styles, and tags to get rough plaintext
     const text = html
-      .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, " ")
-      .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, " ")
+      .replace(/<script\b[^<]*(?:(?!<\/script\s*>)<[^<]*)*<\/script\s*>/gi, " ") // \s* catches </script > variants (#241)
+      .replace(/<style\b[^<]*(?:(?!<\/style\s*>)<[^<]*)*<\/style\s*>/gi, " ")
       .replace(/<[^>]+>/g, " ")
       .replace(/\s+/g, " ")
       .trim();

@@ -63,7 +63,8 @@ const ALL_TABS: { id: Tab; label: string; icon: typeof Globe }[] = [
 
 function useFromParam() {
   const raw = new URLSearchParams(window.location.search).get("from") ?? "";
-  const from = raw || "/account";
+  // Only allow same-origin relative paths to prevent javascript: injection (#239/#240)
+  const from = raw.startsWith("/") ? raw : "/account";
   let label = "Back to account";
   if (raw && raw !== "/account") {
     if (raw.startsWith("/modules/")) {

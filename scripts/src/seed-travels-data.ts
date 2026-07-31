@@ -9,8 +9,13 @@
  */
 export {};
 
-const SUPABASE_URL =
-  process.env.SUPABASE_URL ?? "https://gadhlfluflknlwgmlmos.supabase.co";
+const SUPABASE_URL = process.env.SUPABASE_URL;
+if (!SUPABASE_URL) {
+  console.error(
+    "SUPABASE_URL is not set — provide it via env var (derivable from DATABASE_URL hostname)",
+  );
+  process.exit(1);
+}
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!SERVICE_KEY) {

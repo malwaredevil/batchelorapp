@@ -273,6 +273,25 @@ jobs:
       - run: pnpm --filter @workspace/app-shell run test
       - run: pnpm --filter @workspace/scripts run check-app-shell
 
+  secrets-scan:
+    name: Secrets / credential scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          version: 10
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - name: Scan all public files for credentials and secret patterns
+        run: pnpm --filter @workspace/scripts run check-public-file-secrets
+
   pii-scan:
     name: PII email scan
     runs-on: ubuntu-latest

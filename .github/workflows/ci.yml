@@ -17,8 +17,11 @@ jobs:
   typecheck:
     name: Typecheck
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
         with:
           version: 10
@@ -33,10 +36,13 @@ jobs:
     name: Build API server
     needs: [typecheck]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       NODE_ENV: production
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
         with:
           version: 10
@@ -51,12 +57,15 @@ jobs:
     name: Build modules frontend
     needs: [typecheck]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       NODE_ENV: production
       PORT: "3001"
       BASE_PATH: "/modules/"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
         with:
           version: 10
@@ -71,12 +80,15 @@ jobs:
     name: Build web frontend
     needs: [typecheck]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       NODE_ENV: production
       PORT: "3002"
       BASE_PATH: "/"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
         with:
           version: 10
@@ -91,12 +103,15 @@ jobs:
     name: Build elaine frontend
     needs: [typecheck]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       NODE_ENV: production
       PORT: "3003"
       BASE_PATH: "/elaine/"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
         with:
           version: 10
@@ -110,8 +125,11 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
         with:
           version: 10
@@ -125,8 +143,11 @@ jobs:
   app-config-drift:
     name: App-config drift guard
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
         with:
           version: 10
@@ -137,6 +158,24 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @workspace/api-server run lint:config
 
+  workflow-security:
+    name: Workflow security policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          version: 10
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @workspace/scripts run check-workflow-security
+
   composition-guard:
     name: Composition guard
     # Runs on every PR and every push to main.  This job is intentionally
@@ -144,8 +183,11 @@ jobs:
     # so that a composition violation surfaces as a clearly labelled failed job
     # in the GitHub UI rather than being buried inside lint output.
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
         with:
           version: 10
@@ -160,8 +202,11 @@ jobs:
   elaine-capability-parity:
     name: Elaine capability parity
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
         with:
           version: 10
@@ -176,8 +221,11 @@ jobs:
   test-api-server:
     name: API server tests
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
         with:
           version: 10
@@ -191,8 +239,11 @@ jobs:
   test-api-client:
     name: API client tests (getUploadErrorMessage)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
         with:
           version: 10
@@ -206,8 +257,11 @@ jobs:
   test-app-shell:
     name: Shared application shell tests
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
         with:
           version: 10
@@ -222,8 +276,11 @@ jobs:
   pii-scan:
     name: PII email scan
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
         with:
           version: 10
@@ -262,8 +319,11 @@ jobs:
   codegen-drift:
     name: Codegen drift
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
         with:
           version: 10
@@ -285,12 +345,15 @@ jobs:
     name: E2E critical-path (Chromium)
     needs: [typecheck]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       PORT: "4173"
       BASE_PATH: "/"
       NODE_ENV: production
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
         with:
           version: 10
@@ -315,8 +378,11 @@ jobs:
   guard-elaine-widget:
     name: Guard — Elaine widget globally mounted in modules
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - name: Verify GlobalElaineWidget is in modules App.tsx
         run: |
           if ! grep -q "GlobalElaineWidget" artifacts/modules/src/App.tsx; then
@@ -340,12 +406,15 @@ jobs:
     name: E2E smoke (modules)
     needs: [typecheck]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       PORT: "4174"
       BASE_PATH: "/modules/"
       NODE_ENV: production
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
         with:
           version: 10
@@ -371,12 +440,15 @@ jobs:
     name: E2E smoke (Elaine)
     needs: [typecheck]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       PORT: "4175"
       BASE_PATH: "/elaine/"
       NODE_ENV: production
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
         with:
           version: 10

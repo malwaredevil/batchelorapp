@@ -17,10 +17,12 @@ jobs:
   guardrails:
     name: Guardrails
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Resolve changed files
         id: diff
@@ -41,7 +43,7 @@ jobs:
           # Exclude this file itself from the diff so its own error-message text
           # doesn't trigger the check. Scan only newly-added lines.
           VIOLATIONS=$(git diff "$BASE"...HEAD \
-            -- ':!.github/workflows/guardrails.yml' ':!*.md' ':!*.txt' ':!*.sh' \
+            -- ':!.github/workflows/guardrails.yml' ':!*.md' ':!*.txt' \
             | grep "^+" \
             | grep -v "^+++" \
             | grep "drizzle-kit push" || true)
@@ -171,16 +173,19 @@ jobs:
           fi
           echo "✓ No destructive SQL in schema-statements diff"
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
         with:
           version: 10
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24
           cache: "pnpm"
 
       - run: pnpm install --frozen-lockfile
+
+      - name: "Security: GitHub workflow policy"
+        run: pnpm --filter @workspace/scripts run check-workflow-security
 
       - name: "Architecture: domain composition boundaries"
         run: pnpm --filter @workspace/scripts run check-domain-composition

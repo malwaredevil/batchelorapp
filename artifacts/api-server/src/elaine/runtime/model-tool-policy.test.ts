@@ -6,6 +6,8 @@ import {
 import { ELAINE_TOOL_POLICIES } from "../capability-registry";
 
 const IMPLEMENTED_MAIN_CHAT_HARD_TOOLS = [
+  "discover_app_operations",
+  "read_app_operation",
   "search_household_data",
   "show_trip_card",
   "show_pottery_item",

@@ -151,6 +151,7 @@ jobs:
           cache: "pnpm"
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @workspace/scripts run elaine:capability-parity
+      - run: pnpm --filter @workspace/scripts run elaine:operation-catalog
 
   test-api-server:
     name: API server tests

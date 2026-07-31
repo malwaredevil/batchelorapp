@@ -33,6 +33,8 @@
     "elaine:capability-parity": "tsx ./src/elaine-capability-parity.ts --check",
     "elaine:capability-report": "tsx ./src/elaine-capability-parity.ts --write-report",
     "elaine:capability-bootstrap": "tsx ./src/elaine-capability-parity.ts --bootstrap",
+    "elaine:operation-catalog": "tsx ./src/elaine-app-operation-catalog.ts --check",
+    "elaine:operation-catalog-write": "tsx ./src/elaine-app-operation-catalog.ts --write",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "tsx ./src/pii-scan.test.ts",
     "secret-audit": "python3 ../.local/secret-audit.py",

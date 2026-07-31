@@ -208,6 +208,16 @@ In `artifacts/api-server/src/routes/index.ts`, the email webhook router is mount
 **before** the session-gated `/elaine` router. This is intentional — reversing the order
 would make the webhook unreachable. Do not refactor route registration order.
 
+### 4.8 Elaine Universal App Operations Are OpenAPI-Governed
+
+Elaine's dedicated tools remain preferred. Reviewed JSON operations without a
+dedicated tool use `app-operation-tools.ts`, whose runtime catalog is generated
+from the committed OpenAPI specification and
+`website-operation-inventory.json`. Never add a model-supplied URL/method,
+direct database bypass, binary operation, or restricted-channel access to this
+bridge. After changing OpenAPI operations or the inventory, regenerate and
+check both the capability report and operation catalog.
+
 ---
 
 ## 5. Repository Structure

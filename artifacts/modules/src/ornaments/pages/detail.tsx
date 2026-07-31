@@ -11,6 +11,7 @@ import {
   TrendingDown,
   TrendingUp,
   Minus,
+  ScanBarcode,
 } from "lucide-react";
 import { ImageLightbox } from "@/quilting/components/image-lightbox";
 import { ItemImageGallery } from "@workspace/image-capture";
@@ -36,6 +37,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { CategorySelector } from "@/ornaments/components/category-selector";
+import { BarcodeScannerDialog } from "@/ornaments/components/barcode-scanner-dialog";
 import { generateInsurancePdf } from "@/ornaments/lib/pdf-export";
 import {
   AlertDialog,
@@ -99,6 +101,7 @@ export default function OrnamentDetail() {
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [barcodeScannerOpen, setBarcodeScannerOpen] = useState(false);
 
   const configSummary = useAppConfigSummary();
 
@@ -202,6 +205,15 @@ export default function OrnamentDetail() {
         categoryIds: selectedCategoryIds,
       },
     });
+  }
+
+  function handleScannedBarcode(barcode: string) {
+    if (isEditing) {
+      setDraft((current) => ({ ...current, barcode }));
+      toast.success("Barcode added to the draft. Save to keep it.");
+      return;
+    }
+    updateOrnament.mutate({ id, data: { barcodeValue: barcode } });
   }
 
   function toggleFieldLock(field: string) {
@@ -476,6 +488,16 @@ export default function OrnamentDetail() {
               <Button
                 variant="outline"
                 size="icon"
+                onClick={() => setBarcodeScannerOpen(true)}
+                title="Scan UPC / barcode"
+                aria-label="Scan UPC / barcode"
+                data-testid="button-scan-barcode"
+              >
+                <ScanBarcode className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
                 onClick={handleRefreshAll}
                 disabled={refreshAll.isPending}
                 title="Refresh all — AI analysis, book value, eBay prices, and AI appraisal"
@@ -651,14 +673,28 @@ export default function OrnamentDetail() {
               value={ornament.barcodeValue || "—"}
               editing={isEditing}
               editSlot={
-                <Input
-                  value={draft.barcode}
-                  onChange={(e) =>
-                    setDraft((d) => ({ ...d, barcode: e.target.value }))
-                  }
-                  placeholder="e.g. 661127022308"
-                  className="h-8 text-sm font-mono"
-                />
+                <div className="flex gap-2">
+                  <Input
+                    value={draft.barcode}
+                    onChange={(e) =>
+                      setDraft((d) => ({ ...d, barcode: e.target.value }))
+                    }
+                    placeholder="e.g. 661127022308"
+                    className="h-8 text-sm font-mono"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 shrink-0"
+                    onClick={() => setBarcodeScannerOpen(true)}
+                    title="Scan UPC / barcode"
+                    aria-label="Scan UPC / barcode"
+                    data-testid="button-edit-scan-barcode"
+                  >
+                    <ScanBarcode className="h-4 w-4" />
+                  </Button>
+                </div>
               }
               empty={!ornament.barcodeValue}
             />
@@ -994,6 +1030,12 @@ export default function OrnamentDetail() {
               )}
           </>
         }
+      />
+
+      <BarcodeScannerDialog
+        open={barcodeScannerOpen}
+        onOpenChange={setBarcodeScannerOpen}
+        onScanned={handleScannedBarcode}
       />
 
       <ImageLightbox

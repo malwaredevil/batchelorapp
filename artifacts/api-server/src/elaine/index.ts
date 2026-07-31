@@ -150,6 +150,20 @@ import {
   type UniversalActionType,
 } from "./universal-actions";
 import {
+  appOperationActionSchemas,
+  appOperationActionTools,
+  appOperationReadTools,
+  buildAppOperationActionLabel,
+  DISCOVER_APP_OPERATIONS_TOOL_NAME,
+  discoverAppOperations,
+  executeAppOperation,
+  executeAppOperationAction,
+  EXECUTE_APP_OPERATION_TOOL_NAME,
+  READ_APP_OPERATION_TOOL_NAME,
+  type AppOperationActionType,
+  type AppOperationExecutionContext,
+} from "./app-operation-tools";
+import {
   adaptiveActionExecutors,
   adaptiveActionSchemas,
   adaptiveActionTools,
@@ -190,6 +204,7 @@ import {
 } from "./office-actions";
 import {
   assertElaineToolFamilyCoverage,
+  aggregateElaineTraceEvaluations,
   buildElaineSourceRoute,
   classifyElaineRequest,
   completedActionAcknowledgement,
@@ -199,6 +214,7 @@ import {
   ELAINE_READ_CONCURRENCY,
   ElaineTurnRuntime,
   evaluateForecastDateCoverage,
+  evaluateElaineTrace,
   findElaineSatisfiedFallback,
   finishElaineTurnTrace,
   generateElainePlan,
@@ -217,6 +233,7 @@ import {
   stripElaineCitationMetadata,
   type ElainePlannerTool,
   type ElaineRuntimeTrace,
+  type ElaineTraceEvaluationInput,
 } from "./runtime";
 import {
   buildElaineCapabilityRegistry,
@@ -839,6 +856,7 @@ const ActionBody = z.discriminatedUnion("type", [
   ...ornamentActionSchemas,
   ...universalActionSchemas,
   ...adaptiveActionSchemas,
+  ...appOperationActionSchemas,
 ]);
 
 type PendingAction = z.infer<typeof ActionBody>;
@@ -1128,6 +1146,9 @@ async function buildActionLabel(action: PendingAction): Promise<string> {
           action as { type: AdaptiveActionType; payload: unknown },
         );
       }
+      if (action.type === EXECUTE_APP_OPERATION_TOOL_NAME) {
+        return buildAppOperationActionLabel(action);
+      }
       return "Perform this action";
   }
 }
@@ -1139,7 +1160,17 @@ async function buildActionLabel(action: PendingAction): Promise<string> {
 type ActionExecutor = (
   payload: never,
   userId: number,
+  context?: AppOperationExecutionContext,
 ) => Promise<{ status: number; body: unknown }>;
+
+function appOperationContextFromRequest(
+  req: Request,
+): AppOperationExecutionContext {
+  return {
+    sessionCookie: req.headers.cookie,
+    localPort: req.socket.localPort,
+  };
+}
 
 type TravelActionType = Exclude<
   ActionType,
@@ -1148,6 +1179,7 @@ type TravelActionType = Exclude<
   | OrnamentActionType
   | UniversalActionType
   | AdaptiveActionType
+  | AppOperationActionType
 >;
 
 const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
@@ -2344,6 +2376,8 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
   ...ornamentActionExecutors,
   ...universalActionExecutors,
   ...adaptiveActionExecutors,
+  [EXECUTE_APP_OPERATION_TOOL_NAME]:
+    executeAppOperationAction as ActionExecutor,
 };
 
 // ---------------------------------------------------------------------------
@@ -2956,6 +2990,7 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   ...ornamentActionTools,
   ...universalActionTools,
   ...adaptiveActionTools,
+  ...appOperationActionTools,
   {
     type: "function",
     function: {
@@ -3758,6 +3793,7 @@ const QUERY_HOUSEHOLD_TOOL_NAME = "query_household_data";
 const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   ...officeActionTools,
   ...universalReadTools,
+  ...appOperationReadTools,
   {
     type: "function",
     function: {
@@ -5906,6 +5942,7 @@ router.post("/chat", async (req, res) => {
         const { status, body } = await executor(
           finalAction.payload as never,
           userId,
+          appOperationContextFromRequest(req),
         );
         executedActions.push({ ...finalAction, status, result: body });
         runtime.recordObservation({
@@ -6091,7 +6128,27 @@ router.post("/chat", async (req, res) => {
           };
         }
         try {
-          if (call.name === REMEMBER_TOOL_NAME) {
+          if (call.name === DISCOVER_APP_OPERATIONS_TOOL_NAME) {
+            const parsedArgs = JSON.parse(call.args || "{}");
+            resultText = discoverAppOperations(parsedArgs);
+            runtimeSummary =
+              "Eligible Batchelor App operations were discovered";
+          } else if (call.name === READ_APP_OPERATION_TOOL_NAME) {
+            const operationResult = await executeAppOperation(
+              JSON.parse(call.args || "{}"),
+              "read",
+              appOperationContextFromRequest(req),
+            );
+            _toolEvidenceComplete =
+              operationResult.status >= 200 && operationResult.status < 400;
+            runtimeSummary = _toolEvidenceComplete
+              ? "Batchelor App operation returned authenticated data"
+              : "Batchelor App operation returned an error";
+            if (!_toolEvidenceComplete) {
+              runtimeErrorCategory = `http_${operationResult.status}`;
+            }
+            resultText = JSON.stringify(operationResult.body);
+          } else if (call.name === REMEMBER_TOOL_NAME) {
             const parsed = RememberToolPayload.safeParse(JSON.parse(call.args));
             if (!parsed.success) {
               _toolEvidenceComplete = false;
@@ -7496,7 +7553,11 @@ router.post("/action", async (req, res) => {
     if (res.headersSent) return; // limiter already sent a 429
   }
   const executor = ACTION_EXECUTORS[action.type];
-  const { status, body } = await executor(action.payload as never, userId);
+  const { status, body } = await executor(
+    action.payload as never,
+    userId,
+    appOperationContextFromRequest(req),
+  );
   res.status(status).json(body);
 });
 
@@ -7539,17 +7600,18 @@ router.post("/tasks/:id/cancel", async (req, res) => {
 router.get("/diagnostics", async (req, res) => {
   if (!(await requireOwner(req, res))) return;
   const config = await getElaineGlobalConfig();
-  const [traceResult, taskResult, responseStateResult] = await Promise.all([
-    pool.query<{
-      turns: string;
-      completed: string;
-      blocked: string;
-      awaiting_confirmation: string;
-      awaiting_input: string;
-      failed: string;
-      grounded_observations: string;
-      current_source_turns: string;
-    }>(`
+  const [traceResult, taskResult, responseStateResult, traceEvaluationResult] =
+    await Promise.all([
+      pool.query<{
+        turns: string;
+        completed: string;
+        blocked: string;
+        awaiting_confirmation: string;
+        awaiting_input: string;
+        failed: string;
+        grounded_observations: string;
+        current_source_turns: string;
+      }>(`
       SELECT
         count(*)::text AS turns,
         count(*) FILTER (WHERE status = 'completed')::text AS completed,
@@ -7566,14 +7628,14 @@ router.get("/diagnostics", async (req, res) => {
       FROM elaine_turn_traces
       WHERE started_at >= now() - interval '30 days'
     `),
-    pool.query<{
-      tasks: string;
-      succeeded: string;
-      failed: string;
-      cancelled: string;
-      running: string;
-      retries: string;
-    }>(`
+      pool.query<{
+        tasks: string;
+        succeeded: string;
+        failed: string;
+        cancelled: string;
+        running: string;
+        retries: string;
+      }>(`
       SELECT
         count(*)::text AS tasks,
         count(*) FILTER (WHERE status = 'succeeded')::text AS succeeded,
@@ -7586,13 +7648,13 @@ router.get("/diagnostics", async (req, res) => {
       WHERE type = 'elaine.research'
         AND created_at >= now() - interval '30 days'
     `),
-    pool.query<{
-      conversations: string;
-      with_state: string;
-      fresh_state: string;
-      stale_state: string;
-    }>(
-      `
+      pool.query<{
+        conversations: string;
+        with_state: string;
+        fresh_state: string;
+        stale_state: string;
+      }>(
+        `
         SELECT
           count(*)::text AS conversations,
           count(*) FILTER (WHERE openai_last_response_id IS NOT NULL)::text
@@ -7612,9 +7674,32 @@ router.get("/diagnostics", async (req, res) => {
           )::text AS stale_state
         FROM elaine_history_conversations
       `,
-      [config.thresholds.openAIStateMaxAgeDays],
-    ),
-  ]);
+        [config.thresholds.openAIStateMaxAgeDays],
+      ),
+      pool.query<{
+        plan: unknown;
+        observations: unknown;
+        events: unknown;
+        verification: unknown;
+        status: string;
+        started_at: Date;
+        completed_at: Date | null;
+      }>(`
+      SELECT
+        plan,
+        observations,
+        events,
+        verification,
+        status,
+        started_at,
+        completed_at
+      FROM elaine_turn_traces
+      WHERE started_at >= now() - interval '30 days'
+        AND status <> 'running'
+      ORDER BY started_at DESC
+      LIMIT 2000
+    `),
+    ]);
   const parseMetrics = (row: Record<string, string> | undefined) =>
     Object.fromEntries(
       Object.entries(row ?? {}).map(([key, value]) => [
@@ -7622,6 +7707,34 @@ router.get("/diagnostics", async (req, res) => {
         Number.parseInt(value, 10) || 0,
       ]),
     );
+  const traceQuality = aggregateElaineTraceEvaluations(
+    traceEvaluationResult.rows.map((row) => {
+      const events = Array.isArray(row.events)
+        ? (row.events as Array<{ type?: string }>)
+        : [];
+      const observations = Array.isArray(row.observations)
+        ? row.observations
+        : [];
+      const elapsedMs = row.completed_at
+        ? Math.max(0, row.completed_at.getTime() - row.started_at.getTime())
+        : 0;
+      return evaluateElaineTrace({
+        status: row.status as ElaineTraceEvaluationInput["status"],
+        plan: row.plan as ElaineTraceEvaluationInput["plan"],
+        observations:
+          observations as ElaineTraceEvaluationInput["observations"],
+        verification:
+          (row.verification as ElaineTraceEvaluationInput["verification"]) ??
+          null,
+        usage: {
+          modelRounds: 0,
+          toolCalls: observations.length,
+          replans: events.filter(({ type }) => type === "plan_revised").length,
+          elapsedMs,
+        },
+      });
+    }),
+  );
   res.json({
     generatedAt: new Date().toISOString(),
     periodDays: 30,
@@ -7629,8 +7742,9 @@ router.get("/diagnostics", async (req, res) => {
     researchTasks: parseMetrics(taskResult.rows[0]),
     responseState: parseMetrics(responseStateResult.rows[0]),
     responseRuntime: getOpenAIResponsesMetrics(),
+    traceQuality,
     privacy:
-      "Counts only. No prompts, memory contents, tool payloads, response IDs, or provider error messages are included.",
+      "Counts, rates, and sanitized structural quality signals only. No prompts, message bodies, memory contents, tool payloads, response IDs, or provider error messages are included.",
   });
 });
 

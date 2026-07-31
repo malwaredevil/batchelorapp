@@ -71,5 +71,19 @@ describe("Elaine capability registry", () => {
       confirmation: "action_mode",
       channels: ["web"],
     });
+    expect(ELAINE_TOOL_POLICIES["discover_app_operations"]).toMatchObject({
+      kind: "utility",
+      channels: ["web"],
+    });
+    expect(ELAINE_TOOL_POLICIES["read_app_operation"]).toMatchObject({
+      kind: "read",
+      channels: ["web"],
+    });
+    expect(ELAINE_TOOL_POLICIES["execute_app_operation"]).toMatchObject({
+      kind: "action",
+      risk: "high",
+      confirmation: "action_mode",
+      channels: ["web"],
+    });
   });
 });

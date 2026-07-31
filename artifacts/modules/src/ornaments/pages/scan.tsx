@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef } from "react";
 import { useLocation } from "wouter";
 import {
   Loader2,
@@ -16,63 +16,20 @@ import {
   useLookupBarcode,
   useExtractOrnamentBarcodePhoto,
 } from "@workspace/api-client-react";
-import {
-  BrowserMultiFormatReader,
-  NotFoundException,
-  BarcodeFormat,
-  DecodeHintType,
-} from "@zxing/library";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { usePageAssistantContext } from "@/ornaments/lib/assistant-context";
-
-/// <reference path="../types/barcode-detector.d.ts" />
-
-const BARCODE_FORMATS_ZXING = [
-  BarcodeFormat.UPC_A,
-  BarcodeFormat.UPC_E,
-  BarcodeFormat.EAN_13,
-  BarcodeFormat.EAN_8,
-  BarcodeFormat.CODE_128,
-  BarcodeFormat.CODE_39,
-];
-
-const BARCODE_FORMATS_NATIVE: NativeBarcodeFormat[] = [
-  "upc_a",
-  "upc_e",
-  "ean_13",
-  "ean_8",
-  "code_128",
-  "code_39",
-];
+import { useBarcodeCamera } from "@/ornaments/components/use-barcode-camera";
 
 export default function ScanPage() {
   const [_, setLocation] = useLocation();
   const lookupBarcode = useLookupBarcode();
   const extractBarcodePhoto = useExtractOrnamentBarcodePhoto();
 
-  const videoRef = useRef<HTMLVideoElement>(null);
-
-  // ZXing fallback reader (created only when BarcodeDetector is unavailable)
-  const codeReaderRef = useRef<BrowserMultiFormatReader | null>(null);
-
-  // Native BarcodeDetector (Chrome/Android — hardware-accelerated)
-  const detectorRef = useRef<BarcodeDetector | null>(null);
-
-  // Camera stream, managed manually for the BarcodeDetector path
-  const streamRef = useRef<MediaStream | null>(null);
-
-  // A ref (not state) so the rAF loop always sees the current value without
-  // a stale closure. Updated in sync with the `isScanning` state.
-  const isScanningRef = useRef(false);
-  const animFrameRef = useRef<number | null>(null);
-
   // Hidden file input for the "take a photo" escape hatch
   const photoInputRef = useRef<HTMLInputElement>(null);
 
-  const [isScanning, setIsScanning] = useState(false);
-  const [hasCamera, setHasCamera] = useState(true);
   const [manualCode, setManualCode] = useState("");
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [isPhotoExtracting, setIsPhotoExtracting] = useState(false);
@@ -90,156 +47,16 @@ export default function ScanPage() {
     `Barcode scanning page to quickly add an ornament. Uses device camera or manual UPC entry.`,
   );
 
-  // Determine which scanning engine to use on mount.
-  // BarcodeDetector (native, hardware-accelerated) is preferred when available.
-  // ZXing is the fallback for Safari/Firefox.
-  useEffect(() => {
-    let useBarcodeDetector = false;
-
-    if ("BarcodeDetector" in window) {
-      try {
-        detectorRef.current = new BarcodeDetector({
-          formats: BARCODE_FORMATS_NATIVE,
-        });
-        useBarcodeDetector = true;
-      } catch {
-        // Construction failed — fall through to ZXing
-      }
-    }
-
-    if (!useBarcodeDetector) {
-      const hints = new Map<DecodeHintType, unknown>();
-      hints.set(DecodeHintType.POSSIBLE_FORMATS, BARCODE_FORMATS_ZXING);
-      // 150ms decode interval (vs 500ms default) for fast lock-on
-      codeReaderRef.current = new BrowserMultiFormatReader(hints, 150);
-    }
-
-    navigator.mediaDevices
-      .enumerateDevices()
-      .then((devices) => {
-        const videoDevices = devices.filter((d) => d.kind === "videoinput");
-        setHasCamera(videoDevices.length > 0);
-        if (videoDevices.length > 0) {
-          startScanning();
-        }
-      })
-      .catch(() => setHasCamera(false));
-
-    return () => {
-      stopScanning();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // -------------------------------------------------------------------------
-  // BarcodeDetector rAF loop
-  // -------------------------------------------------------------------------
-  const barcodeDetectorLoop = useCallback(async () => {
-    if (!isScanningRef.current || !detectorRef.current || !videoRef.current) {
-      return;
-    }
-    // Video must have a frame to decode
-    if (videoRef.current.readyState < 2) {
-      animFrameRef.current = requestAnimationFrame(barcodeDetectorLoop);
-      return;
-    }
-    try {
-      const barcodes = await detectorRef.current.detect(videoRef.current);
-      // Re-check after the async detect() call in case we stopped while waiting
-      if (!isScanningRef.current) return;
-      if (barcodes.length > 0) {
-        handleScannedCode(barcodes[0].rawValue);
-        return;
-      }
-    } catch {
-      // Frame not ready or detect threw; continue to next frame
-    }
-    if (isScanningRef.current) {
-      animFrameRef.current = requestAnimationFrame(barcodeDetectorLoop);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // -------------------------------------------------------------------------
-  // Scanning lifecycle
-  // -------------------------------------------------------------------------
-  const startScanning = async () => {
-    if (!videoRef.current) return;
-    isScanningRef.current = true;
-    setIsScanning(true);
-
-    if (detectorRef.current) {
-      // BarcodeDetector path — set up camera stream manually
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: "environment",
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
-        });
-        streamRef.current = stream;
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-        requestAnimationFrame(barcodeDetectorLoop);
-      } catch {
-        isScanningRef.current = false;
-        setIsScanning(false);
-        setHasCamera(false);
-      }
-    } else if (codeReaderRef.current) {
-      // ZXing fallback — handles camera stream internally
-      try {
-        await codeReaderRef.current.decodeFromConstraints(
-          {
-            video: {
-              facingMode: "environment",
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-            },
-          },
-          videoRef.current,
-          (result, err) => {
-            if (result) {
-              handleScannedCode(result.getText());
-            }
-            if (err && !(err instanceof NotFoundException)) {
-              console.error(err);
-            }
-          },
-        );
-      } catch {
-        isScanningRef.current = false;
-        setIsScanning(false);
-        setHasCamera(false);
-      }
-    }
-  };
-
-  const stopScanning = () => {
-    isScanningRef.current = false;
-
-    if (animFrameRef.current !== null) {
-      cancelAnimationFrame(animFrameRef.current);
-      animFrameRef.current = null;
-    }
-
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    }
-
-    if (codeReaderRef.current) {
-      codeReaderRef.current.reset();
-    }
-
-    setIsScanning(false);
-  };
+  const { videoRef, isScanning, hasCamera, startScanning, stopScanning } =
+    useBarcodeCamera({
+      enabled: true,
+      onDetected: (barcode) => void handleScannedCode(barcode),
+    });
 
   // -------------------------------------------------------------------------
   // Lookup after a code is detected (camera scan or manual entry)
   // -------------------------------------------------------------------------
-  const handleScannedCode = async (code: string) => {
+  async function handleScannedCode(code: string) {
     if (isLookingUp) return;
     stopScanning();
     setIsLookingUp(true);
@@ -271,7 +88,7 @@ export default function ScanPage() {
     } finally {
       setIsLookingUp(false);
     }
-  };
+  }
 
   const handleScanAnother = () => {
     setScanResult(null);

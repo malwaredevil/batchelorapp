@@ -13,5 +13,6 @@ export * from "./scheduler";
 export * from "./source-policy";
 export * from "./tool-families";
 export * from "./trace-store";
+export * from "./trace-evaluator";
 export * from "./turn-runtime";
 export * from "./weather-coverage";

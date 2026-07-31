@@ -162,11 +162,26 @@ export default function Dashboard() {
     statsLoading || tripsLoading
       ? undefined
       : `Dashboard page (home screen): shows trip stats, a countdown to the next upcoming trip${
-          stats?.nextTrip ? ` (${stats.nextTrip.destination})` : ""
+          stats?.nextTrip ? ` (${stats.nextTrip.destination}, tripId: ${stats.nextTrip.id})` : ""
         }, ${pendingReminders.length} pending reminder(s), and every trip grouped by status. Trip counts by status: ${STATUS_ORDER.map(
           (s) =>
             `${STATUS_LABELS[s]}=${trips.filter((t) => t.status === s).length}`,
-        ).join(", ")}.`,
+        ).join(", ")}.\nAll trips (tripId — title, destination, status): ${
+          trips
+            .slice(0, 50)
+            .map(
+              (t) =>
+                `tripId: ${t.id} — "${t.title}"${t.destination ? `, ${t.destination}` : ""}, status: ${t.status}`,
+            )
+            .join("; ") || "none"
+        }.${
+          pendingReminders.length > 0
+            ? `\nPending reminders (reminderId — label): ${pendingReminders
+                .slice(0, 20)
+                .map((r: Reminder) => `reminderId: ${r.id} — "${r.title}"`)
+                .join("; ")}.`
+            : ""
+        }`,
   );
 
   const groupedTrips = STATUS_ORDER.reduce<Record<TripStatus, Trip[]>>(

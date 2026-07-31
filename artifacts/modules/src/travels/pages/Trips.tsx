@@ -1058,6 +1058,14 @@ export default function Trips() {
             .filter(([, bucket]) => bucket.length > 0)
             .map(([status, bucket]) => `${status}: ${bucket.length}`)
             .join(", ") || "none"
+        }.\nVisible trips (tripId — title, destination, status): ${
+          filtered
+            .slice(0, 50)
+            .map(
+              (t) =>
+                `tripId: ${t.id} — "${t.title}"${t.destination ? `, to ${t.destination}` : ""}${t.startDate ? `, ${t.startDate}` : ""}, status: ${t.status}`,
+            )
+            .join("; ") || "none"
         }.${configSummary ? `\n\n${configSummary}` : ""}`,
   );
 

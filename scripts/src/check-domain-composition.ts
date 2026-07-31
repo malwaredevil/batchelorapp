@@ -317,24 +317,45 @@ const requirements: Array<{
   },
 ];
 
+/**
+ * Check a single named-file requirement against already-loaded file contents.
+ *
+ * Exported so unit tests can exercise the Section 1 loop logic against
+ * synthetic file contents without touching the real filesystem.
+ *
+ * @param path     - The file path (used only for error message labels).
+ * @param contents - The file's text content (pass "" to simulate an empty file).
+ * @param req      - The requirement descriptor (includes, excludes, fix).
+ * @returns        An array of violation strings (empty when the file satisfies all requirements).
+ */
+export function checkRequirementContents(
+  path: string,
+  contents: string,
+  req: { includes: string[]; excludes?: string[]; fix?: string },
+): string[] {
+  const found: string[] = [];
+  for (const marker of req.includes) {
+    if (!contents.includes(marker)) {
+      found.push(
+        `${path}: missing ${JSON.stringify(marker)}` +
+          (req.fix ? `\n  FIX: ${req.fix}` : ""),
+      );
+    }
+  }
+  for (const marker of req.excludes ?? []) {
+    if (contents.includes(marker)) {
+      found.push(
+        `${path}: superseded local implementation ${JSON.stringify(marker)}` +
+          (req.fix ? `\n  FIX: ${req.fix}` : ""),
+      );
+    }
+  }
+  return found;
+}
+
 for (const requirement of requirements) {
   const contents = read(requirement.path);
-  for (const marker of requirement.includes) {
-    if (!contents.includes(marker)) {
-      violations.push(
-        `${requirement.path}: missing ${JSON.stringify(marker)}` +
-          (requirement.fix ? `\n  FIX: ${requirement.fix}` : ""),
-      );
-    }
-  }
-  for (const marker of requirement.excludes ?? []) {
-    if (contents.includes(marker)) {
-      violations.push(
-        `${requirement.path}: superseded local implementation ${JSON.stringify(marker)}` +
-          (requirement.fix ? `\n  FIX: ${requirement.fix}` : ""),
-      );
-    }
-  }
+  violations.push(...checkRequirementContents(requirement.path, contents, requirement));
 }
 
 // ────────────────────────────────────────────────────────────────────────────

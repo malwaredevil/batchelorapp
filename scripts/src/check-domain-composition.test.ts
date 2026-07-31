@@ -16,6 +16,7 @@ import {
   hasDirectOpenAIClient,
   hasInlineContextListBuilding,
   extractSharedLibImports,
+  checkRequirementContents,
 } from "./check-domain-composition.js";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -262,6 +263,150 @@ import { useAuth } from "@workspace/web-core/auth";
 test("returns empty array when no shared imports present", () => {
   const source = `import { useState } from "react";`;
   assert.deepEqual(extractSharedLibImports(source), []);
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Section 1 — checkRequirementContents
+// ────────────────────────────────────────────────────────────────────────────
+
+console.log("\ncheck-domain-composition.test: Section 1 — checkRequirementContents");
+
+test("reports a violation when a required string is missing", () => {
+  const violations = checkRequirementContents(
+    "some/file.ts",
+    "const x = 1;",
+    { includes: ["createFeatureRegistry"] },
+  );
+  assert.equal(violations.length, 1);
+  assert.ok(violations[0].includes("some/file.ts"), "violation message should contain the path");
+  assert.ok(violations[0].includes('"createFeatureRegistry"'), "violation message should quote the missing token");
+  assert.ok(violations[0].includes("missing"), "violation message should say 'missing'");
+});
+
+test("reports one violation per missing required string when multiple are absent", () => {
+  const violations = checkRequirementContents(
+    "some/file.ts",
+    "",
+    { includes: ["tokenA", "tokenB", "tokenC"] },
+  );
+  assert.equal(violations.length, 3, "one violation per missing token");
+});
+
+test("reports no violation when all required strings are present", () => {
+  const contents = `
+import { createFeatureRegistry } from "@workspace/web-core/feature-registry";
+export const registry = createFeatureRegistry({ features: [] });
+`;
+  const violations = checkRequirementContents(
+    "some/file.ts",
+    contents,
+    { includes: ["createFeatureRegistry"] },
+  );
+  assert.equal(violations.length, 0);
+});
+
+test("reports a violation when a forbidden (excludes) string is present", () => {
+  const contents = `
+async function resolveOrCreateCategories(db: Db) { return []; }
+`;
+  const violations = checkRequirementContents(
+    "routes/fabrics.ts",
+    contents,
+    {
+      includes: ["parseStringArray"],
+      excludes: ["function resolveOrCreateCategories"],
+    },
+  );
+  // two violations: one for missing include, one for forbidden exclude
+  const forbiddenViolation = violations.find((v) => v.includes("superseded local implementation"));
+  assert.ok(forbiddenViolation, "should report a forbidden-string violation");
+  assert.ok(
+    forbiddenViolation!.includes('"function resolveOrCreateCategories"'),
+    "violation should quote the forbidden token",
+  );
+});
+
+test("reports no violation for excludes when the forbidden string is absent", () => {
+  const contents = `
+import { parseStringArray, resolveOrCreateQuiltingCategories } from "@workspace/server-lib";
+`;
+  const violations = checkRequirementContents(
+    "routes/fabrics.ts",
+    contents,
+    {
+      includes: ["parseStringArray", "resolveOrCreateQuiltingCategories"],
+      excludes: ["function parseStringArray", "function resolveOrCreateCategories"],
+    },
+  );
+  assert.equal(violations.length, 0);
+});
+
+test("includes the FIX message in the violation when fix is provided", () => {
+  const fix = "Import createFeatureRegistry from @workspace/web-core/feature-registry.";
+  const violations = checkRequirementContents(
+    "some/file.ts",
+    "",
+    { includes: ["createFeatureRegistry"], fix },
+  );
+  assert.equal(violations.length, 1);
+  assert.ok(violations[0].includes("FIX:"), "violation should contain FIX: label");
+  assert.ok(violations[0].includes(fix), "violation should contain the full fix message");
+});
+
+test("omits the FIX line when no fix is provided", () => {
+  const violations = checkRequirementContents(
+    "some/file.ts",
+    "",
+    { includes: ["createFeatureRegistry"] },
+  );
+  assert.equal(violations.length, 1);
+  assert.ok(!violations[0].includes("FIX:"), "violation should not contain FIX: when fix is absent");
+});
+
+test("reports all required-string violations on an empty file", () => {
+  // Simulates a file that was accidentally cleared
+  const violations = checkRequirementContents(
+    "artifacts/modules/src/features/registry.ts",
+    "",
+    { includes: ["createFeatureRegistry"], fix: "Use createFeatureRegistry." },
+  );
+  assert.equal(violations.length, 1);
+  assert.ok(
+    violations[0].includes("artifacts/modules/src/features/registry.ts"),
+    "path should appear in violation",
+  );
+});
+
+test("reports violations on a file containing only whitespace", () => {
+  const violations = checkRequirementContents(
+    "some/file.ts",
+    "   \n\n\t  \n",
+    { includes: ["CollectionDetailHero", "CollectionDetailPanelStack"] },
+  );
+  assert.equal(violations.length, 2, "both missing tokens should be reported");
+});
+
+test("does not report an excludes violation on an empty file", () => {
+  // Empty file cannot contain a forbidden string — no false positive
+  const violations = checkRequirementContents(
+    "some/file.ts",
+    "",
+    {
+      includes: [],
+      excludes: ["async function queryHouseholdData"],
+    },
+  );
+  assert.equal(violations.length, 0, "empty file should not trigger an excludes violation");
+});
+
+test("handles a requirement with no excludes field (excludes is optional)", () => {
+  // Requirement with only includes (excludes omitted) should not throw
+  const violations = checkRequirementContents(
+    "some/file.ts",
+    "import { runAnalysisWithEvidence } from '@workspace/ai-lib';",
+    { includes: ["runAnalysisWithEvidence"] },
+  );
+  assert.equal(violations.length, 0);
 });
 
 // ────────────────────────────────────────────────────────────────────────────

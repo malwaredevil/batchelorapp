@@ -12,7 +12,9 @@ function source(relative: string) {
 describe("review remediation quality contracts", () => {
   it("bounds compressed uploads, decoded pixels, and output dimensions", () => {
     const upload = source("../../../../lib/upload-validation/src/index.ts");
-    expect(upload).toContain("25 * 1024 * 1024");
+    const policy = source("../../../../lib/upload-policy/src/index.ts");
+    expect(policy).toContain("STANDARD_UPLOAD_BYTES = 25 * 1024 * 1024");
+    expect(upload).toContain("MAX_UPLOAD_BYTES = STANDARD_UPLOAD_BYTES");
     expect(upload).toContain("MAX_INPUT_PIXELS = 50_000_000");
     expect(upload).toContain("MAX_STORAGE_DIMENSION = 4096");
     expect(upload).toContain("MAX_CONCURRENT_IMAGE_TRANSFORMS = 2");

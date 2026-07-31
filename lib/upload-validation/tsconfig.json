@@ -8,5 +8,6 @@
     "rootDir": "src",
     "types": ["node"]
   },
+  "references": [{ "path": "../upload-policy" }],
   "include": ["src"]
 }

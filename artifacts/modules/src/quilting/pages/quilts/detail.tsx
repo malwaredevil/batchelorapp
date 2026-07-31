@@ -37,6 +37,10 @@ import { TagSelector } from "@/quilting/components/tag-selector";
 import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
 import { downloadCollectionImage } from "@/quilting/lib/svg-export";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
+import {
+  CollectionDetailHero,
+  CollectionDetailPanelStack,
+} from "@workspace/collection-ui";
 
 type QuiltData = {
   id: number;
@@ -281,7 +285,7 @@ export default function QuiltDetail() {
         Quilts
       </Button>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <CollectionDetailHero>
         <div
           className="relative overflow-hidden rounded-2xl border border-card-border bg-muted cursor-zoom-in group"
           onClick={() => setLightboxOpen(true)}
@@ -455,187 +459,206 @@ export default function QuiltDetail() {
               </div>
             </div>
           )}
-          <section className="rounded-xl border border-card-border bg-card p-4">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Quilt details
-            </p>
-            {isEditing ? (
-              <div className="space-y-2">
+        </div>
+      </CollectionDetailHero>
+
+      <CollectionDetailPanelStack>
+        <section className="rounded-xl border border-card-border bg-card p-4">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Quilt details
+          </p>
+          {isEditing ? (
+            <div className="space-y-2">
+              <div>
+                <label className="mb-1 flex items-center text-xs text-muted-foreground">
+                  Name
+                  <LockButton
+                    field="name"
+                    lockedFields={lockedFields}
+                    onToggle={toggleLock}
+                  />
+                </label>
+                <Input
+                  value={d.name}
+                  onChange={(e) => set("name", e.target.value)}
+                  className="h-8 text-sm"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-muted-foreground">
+                  Completed
+                </label>
+                <Input
+                  value={d.dateCompleted}
+                  onChange={(e) => set("dateCompleted", e.target.value)}
+                  className="h-8 text-sm"
+                  placeholder="2024-06-01"
+                />
+              </div>
+              {!d.dateCompleted && (
                 <div>
-                  <label className="mb-1 flex items-center text-xs text-muted-foreground">
-                    Name
-                    <LockButton
-                      field="name"
-                      lockedFields={lockedFields}
-                      onToggle={toggleLock}
-                    />
+                  <label className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
+                    <span>WIP Progress</span>
+                    <span className="font-medium text-foreground">
+                      {d.completionPercentage}%
+                    </span>
+                  </label>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    step={5}
+                    value={d.completionPercentage}
+                    onChange={(e) =>
+                      set("completionPercentage", parseInt(e.target.value))
+                    }
+                    className="w-full accent-primary h-2 cursor-pointer"
+                  />
+                  <div className="flex justify-between text-[10px] text-muted-foreground/60 mt-0.5">
+                    <span>Not started</span>
+                    <span>Done</span>
+                  </div>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">
+                    Width (in)
                   </label>
                   <Input
-                    value={d.name}
-                    onChange={(e) => set("name", e.target.value)}
+                    value={d.sizeWidth}
+                    onChange={(e) => set("sizeWidth", e.target.value)}
+                    type="number"
                     className="h-8 text-sm"
                   />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs text-muted-foreground">
-                    Completed
+                    Height (in)
                   </label>
                   <Input
-                    value={d.dateCompleted}
-                    onChange={(e) => set("dateCompleted", e.target.value)}
-                    className="h-8 text-sm"
-                    placeholder="2024-06-01"
-                  />
-                </div>
-                {!d.dateCompleted && (
-                  <div>
-                    <label className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
-                      <span>WIP Progress</span>
-                      <span className="font-medium text-foreground">
-                        {d.completionPercentage}%
-                      </span>
-                    </label>
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      step={5}
-                      value={d.completionPercentage}
-                      onChange={(e) =>
-                        set("completionPercentage", parseInt(e.target.value))
-                      }
-                      className="w-full accent-primary h-2 cursor-pointer"
-                    />
-                    <div className="flex justify-between text-[10px] text-muted-foreground/60 mt-0.5">
-                      <span>Not started</span>
-                      <span>Done</span>
-                    </div>
-                  </div>
-                )}
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="mb-1 block text-xs text-muted-foreground">
-                      Width (in)
-                    </label>
-                    <Input
-                      value={d.sizeWidth}
-                      onChange={(e) => set("sizeWidth", e.target.value)}
-                      type="number"
-                      className="h-8 text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs text-muted-foreground">
-                      Height (in)
-                    </label>
-                    <Input
-                      value={d.sizeHeight}
-                      onChange={(e) => set("sizeHeight", e.target.value)}
-                      type="number"
-                      className="h-8 text-sm"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs text-muted-foreground">
-                    Recipient
-                  </label>
-                  <Input
-                    value={d.recipient}
-                    onChange={(e) => set("recipient", e.target.value)}
+                    value={d.sizeHeight}
+                    onChange={(e) => set("sizeHeight", e.target.value)}
+                    type="number"
                     className="h-8 text-sm"
                   />
                 </div>
               </div>
-            ) : (
-              <div className="space-y-2 text-sm">
-                {!q.dateCompleted && (q.completionPercentage ?? 0) > 0 && (
-                  <div>
-                    <div className="flex justify-between mb-1">
-                      <span className="text-muted-foreground">
-                        WIP Progress
-                      </span>
-                      <span className="font-medium">
-                        {q.completionPercentage ?? 0}%
-                      </span>
-                    </div>
-                    <div className="h-2 rounded-full bg-muted overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all"
-                        style={{
-                          width: `${q.completionPercentage ?? 0}%`,
-                          backgroundColor:
-                            (q.completionPercentage ?? 0) >= 80
-                              ? "#10b981"
-                              : (q.completionPercentage ?? 0) >= 40
-                                ? "#f59e0b"
-                                : "#f87171",
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
-                {q.dateCompleted && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Completed</span>
-                    <span className="font-medium">{q.dateCompleted}</span>
-                  </div>
-                )}
-                {q.sizeWidth && q.sizeHeight && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Size</span>
+              <div>
+                <label className="mb-1 block text-xs text-muted-foreground">
+                  Recipient
+                </label>
+                <Input
+                  value={d.recipient}
+                  onChange={(e) => set("recipient", e.target.value)}
+                  className="h-8 text-sm"
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2 text-sm">
+              {!q.dateCompleted && (q.completionPercentage ?? 0) > 0 && (
+                <div>
+                  <div className="flex justify-between mb-1">
+                    <span className="text-muted-foreground">WIP Progress</span>
                     <span className="font-medium">
-                      {q.sizeWidth}" × {q.sizeHeight}"
+                      {q.completionPercentage ?? 0}%
                     </span>
                   </div>
-                )}
-                {q.recipient && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Recipient</span>
-                    <span className="font-medium">{q.recipient}</span>
-                  </div>
-                )}
-              </div>
-            )}
-          </section>
-
-          {(q.dominantColors?.length ?? 0) > 0 && (
-            <section className="rounded-xl border border-card-border bg-card p-4">
-              <p className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Colours
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {q.dominantColors!.map((c) => (
-                  <div key={c} className="flex items-center gap-1.5">
-                    <span
-                      className="h-6 w-6 rounded-full border border-black/10 shadow-sm"
-                      style={{ backgroundColor: colorToHex(c) }}
+                  <div className="h-2 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${q.completionPercentage ?? 0}%`,
+                        backgroundColor:
+                          (q.completionPercentage ?? 0) >= 80
+                            ? "#10b981"
+                            : (q.completionPercentage ?? 0) >= 40
+                              ? "#f59e0b"
+                              : "#f87171",
+                      }}
                     />
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {c}
-                    </span>
                   </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          <section className="rounded-xl border border-card-border bg-card p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                <Tag className="h-3 w-3" /> Categories
-              </p>
-              {!catEditing && !isEditing && (
-                <button
-                  onClick={enterCatEdit}
-                  className="rounded p-0.5 text-muted-foreground/40 transition-colors hover:text-muted-foreground"
-                  title="Edit categories"
-                >
-                  <Pencil className="h-3 w-3" />
-                </button>
+                </div>
+              )}
+              {q.dateCompleted && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Completed</span>
+                  <span className="font-medium">{q.dateCompleted}</span>
+                </div>
+              )}
+              {q.sizeWidth && q.sizeHeight && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Size</span>
+                  <span className="font-medium">
+                    {q.sizeWidth}" × {q.sizeHeight}"
+                  </span>
+                </div>
+              )}
+              {q.recipient && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Recipient</span>
+                  <span className="font-medium">{q.recipient}</span>
+                </div>
               )}
             </div>
-            {isEditing ? (
+          )}
+        </section>
+
+        {(q.dominantColors?.length ?? 0) > 0 && (
+          <section className="rounded-xl border border-card-border bg-card p-4">
+            <p className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Colours
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {q.dominantColors!.map((c) => (
+                <div key={c} className="flex items-center gap-1.5">
+                  <span
+                    className="h-6 w-6 rounded-full border border-black/10 shadow-sm"
+                    style={{ backgroundColor: colorToHex(c) }}
+                  />
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {c}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        <section className="rounded-xl border border-card-border bg-card p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <Tag className="h-3 w-3" /> Categories
+            </p>
+            {!catEditing && !isEditing && (
+              <button
+                onClick={enterCatEdit}
+                className="rounded p-0.5 text-muted-foreground/40 transition-colors hover:text-muted-foreground"
+                title="Edit categories"
+              >
+                <Pencil className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+          {isEditing ? (
+            <TagSelector
+              allCategories={allCategories ?? []}
+              selectedIds={selectedCategoryIds}
+              onToggle={(id) =>
+                setSelectedCategoryIds((prev) =>
+                  prev.includes(id)
+                    ? prev.filter((x) => x !== id)
+                    : [...prev, id],
+                )
+              }
+              onCreated={(cat) =>
+                setSelectedCategoryIds((prev) => [...prev, cat.id])
+              }
+              disabled={updateQuilt.isPending}
+            />
+          ) : catEditing ? (
+            <>
               <TagSelector
                 allCategories={allCategories ?? []}
                 selectedIds={selectedCategoryIds}
@@ -646,199 +669,181 @@ export default function QuiltDetail() {
                       : [...prev, id],
                   )
                 }
-                onCreated={(cat) =>
-                  setSelectedCategoryIds((prev) => [...prev, cat.id])
-                }
+                onCreated={(cat) => {
+                  setSelectedCategoryIds((prev) => [...prev, cat.id]);
+                  setLocalNewCats((prev) =>
+                    prev.some((c) => c.id === cat.id) ? prev : [...prev, cat],
+                  );
+                }}
                 disabled={updateQuilt.isPending}
               />
-            ) : catEditing ? (
-              <>
-                <TagSelector
-                  allCategories={allCategories ?? []}
-                  selectedIds={selectedCategoryIds}
-                  onToggle={(id) =>
-                    setSelectedCategoryIds((prev) =>
-                      prev.includes(id)
-                        ? prev.filter((x) => x !== id)
-                        : [...prev, id],
-                    )
-                  }
-                  onCreated={(cat) => {
-                    setSelectedCategoryIds((prev) => [...prev, cat.id]);
-                    setLocalNewCats((prev) =>
-                      prev.some((c) => c.id === cat.id) ? prev : [...prev, cat],
-                    );
-                  }}
+              <div className="mt-3 flex gap-2">
+                <Button
+                  size="sm"
+                  onClick={handleSaveCategories}
                   disabled={updateQuilt.isPending}
-                />
-                <div className="mt-3 flex gap-2">
-                  <Button
-                    size="sm"
-                    onClick={handleSaveCategories}
-                    disabled={updateQuilt.isPending}
-                  >
-                    <Check className="mr-1.5 h-3.5 w-3.5" />
-                    {updateQuilt.isPending ? "Saving…" : "Save"}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setCatEditing(false)}
-                    disabled={updateQuilt.isPending}
-                  >
-                    <XIcon className="mr-1.5 h-3.5 w-3.5" />
-                    Cancel
-                  </Button>
-                </div>
-              </>
-            ) : q.categories.length > 0 ? (
-              <div className="flex flex-wrap gap-1.5">
-                {q.categories.map((cat) => (
-                  <Badge
-                    key={cat.id}
-                    variant="outline"
-                    className="border-transparent"
-                    style={(() => {
-                      const palette = cat.bgColor
-                        ? {
-                            bgColor: cat.bgColor,
-                            textColor: cat.textColor ?? "#fff",
-                          }
-                        : getCategoryPalette(cat.name);
-                      return {
-                        backgroundColor: palette.bgColor,
-                        color: palette.textColor,
-                      };
-                    })()}
-                  >
-                    {cat.name}
-                  </Badge>
-                ))}
+                >
+                  <Check className="mr-1.5 h-3.5 w-3.5" />
+                  {updateQuilt.isPending ? "Saving…" : "Save"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setCatEditing(false)}
+                  disabled={updateQuilt.isPending}
+                >
+                  <XIcon className="mr-1.5 h-3.5 w-3.5" />
+                  Cancel
+                </Button>
               </div>
-            ) : (
-              <p className="text-xs italic text-muted-foreground">
-                No categories — click <Pencil className="inline h-2.5 w-2.5" />{" "}
-                to add
-              </p>
-            )}
-          </section>
-
-          {q.linkedFabrics && q.linkedFabrics.length > 0 && (
-            <section className="rounded-xl border border-card-border bg-card p-4">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Fabrics used ({q.linkedFabrics.length})
-              </p>
-              {(() => {
-                const allColors = [
-                  ...new Set(
-                    q.linkedFabrics!.flatMap((f) => f.dominantColors ?? []),
-                  ),
-                ].filter(Boolean);
-                return allColors.length > 0 ? (
-                  <div className="mb-3">
-                    <p className="mb-1.5 text-xs text-muted-foreground">
-                      Colour palette
-                    </p>
-                    <div className="flex h-6 overflow-hidden rounded">
-                      {allColors.slice(0, 12).map((color, i) => (
-                        <div
-                          key={i}
-                          className="flex-1"
-                          style={{ backgroundColor: color }}
-                          title={color}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                ) : null;
-              })()}
-              <div className="grid grid-cols-2 gap-2">
-                {q.linkedFabrics.map((fabric) => (
-                  <a
-                    key={fabric.id}
-                    href={`/quilting/fabrics/${fabric.id}`}
-                    className="group flex items-center gap-2 overflow-hidden rounded-lg border border-card-border bg-background p-1.5 transition-colors hover:border-primary/40"
-                  >
-                    <img
-                      src={fabric.imageUrl}
-                      alt={fabric.name}
-                      className="h-10 w-10 shrink-0 rounded object-cover"
-                    />
-                    <div className="min-w-0">
-                      <p className="truncate text-xs font-medium leading-tight group-hover:text-primary">
-                        {fabric.name}
-                      </p>
-                      {fabric.colorway && (
-                        <p className="truncate text-xs text-muted-foreground">
-                          {fabric.colorway}
-                        </p>
-                      )}
-                      {fabric.dominantColors &&
-                        fabric.dominantColors.length > 0 && (
-                          <div className="mt-0.5 flex gap-0.5">
-                            {fabric.dominantColors.slice(0, 5).map((c, i) => (
-                              <div
-                                key={i}
-                                className="h-2 w-2 rounded-full border border-black/10"
-                                style={{ backgroundColor: c }}
-                                title={c}
-                              />
-                            ))}
-                          </div>
-                        )}
-                    </div>
-                  </a>
-                ))}
-              </div>
-            </section>
+            </>
+          ) : q.categories.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {q.categories.map((cat) => (
+                <Badge
+                  key={cat.id}
+                  variant="outline"
+                  className="border-transparent"
+                  style={(() => {
+                    const palette = cat.bgColor
+                      ? {
+                          bgColor: cat.bgColor,
+                          textColor: cat.textColor ?? "#fff",
+                        }
+                      : getCategoryPalette(cat.name);
+                    return {
+                      backgroundColor: palette.bgColor,
+                      color: palette.textColor,
+                    };
+                  })()}
+                >
+                  {cat.name}
+                </Badge>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs italic text-muted-foreground">
+              No categories — click <Pencil className="inline h-2.5 w-2.5" /> to
+              add
+            </p>
           )}
+        </section>
 
+        {q.linkedFabrics && q.linkedFabrics.length > 0 && (
           <section className="rounded-xl border border-card-border bg-card p-4">
-            <p className="mb-2 flex items-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Notes
-              {!isEditing && AI_FIELDS.includes("notes") && (
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Fabrics used ({q.linkedFabrics.length})
+            </p>
+            {(() => {
+              const allColors = [
+                ...new Set(
+                  q.linkedFabrics!.flatMap((f) => f.dominantColors ?? []),
+                ),
+              ].filter(Boolean);
+              return allColors.length > 0 ? (
+                <div className="mb-3">
+                  <p className="mb-1.5 text-xs text-muted-foreground">
+                    Colour palette
+                  </p>
+                  <div className="flex h-6 overflow-hidden rounded">
+                    {allColors.slice(0, 12).map((color, i) => (
+                      <div
+                        key={i}
+                        className="flex-1"
+                        style={{ backgroundColor: color }}
+                        title={color}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ) : null;
+            })()}
+            <div className="grid grid-cols-2 gap-2">
+              {q.linkedFabrics.map((fabric) => (
+                <a
+                  key={fabric.id}
+                  href={`/quilting/fabrics/${fabric.id}`}
+                  className="group flex items-center gap-2 overflow-hidden rounded-lg border border-card-border bg-background p-1.5 transition-colors hover:border-primary/40"
+                >
+                  <img
+                    src={fabric.imageUrl}
+                    alt={fabric.name}
+                    className="h-10 w-10 shrink-0 rounded object-cover"
+                  />
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-medium leading-tight group-hover:text-primary">
+                      {fabric.name}
+                    </p>
+                    {fabric.colorway && (
+                      <p className="truncate text-xs text-muted-foreground">
+                        {fabric.colorway}
+                      </p>
+                    )}
+                    {fabric.dominantColors &&
+                      fabric.dominantColors.length > 0 && (
+                        <div className="mt-0.5 flex gap-0.5">
+                          {fabric.dominantColors.slice(0, 5).map((c, i) => (
+                            <div
+                              key={i}
+                              className="h-2 w-2 rounded-full border border-black/10"
+                              style={{ backgroundColor: c }}
+                              title={c}
+                            />
+                          ))}
+                        </div>
+                      )}
+                  </div>
+                </a>
+              ))}
+            </div>
+          </section>
+        )}
+
+        <section className="rounded-xl border border-card-border bg-card p-4">
+          <p className="mb-2 flex items-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Notes
+            {!isEditing && AI_FIELDS.includes("notes") && (
+              <LockButton
+                field="notes"
+                lockedFields={lockedFields}
+                onToggle={toggleLock}
+              />
+            )}
+          </p>
+          {isEditing ? (
+            <>
+              <div className="mb-1 flex items-center">
                 <LockButton
                   field="notes"
                   lockedFields={lockedFields}
                   onToggle={toggleLock}
                 />
-              )}
-            </p>
-            {isEditing ? (
-              <>
-                <div className="mb-1 flex items-center">
-                  <LockButton
-                    field="notes"
-                    lockedFields={lockedFields}
-                    onToggle={toggleLock}
-                  />
-                  <span className="ml-1 text-xs text-muted-foreground">
-                    lock notes
-                  </span>
-                </div>
-                <Textarea
-                  value={d.notes}
-                  onChange={(e) => set("notes", e.target.value)}
-                  rows={4}
-                  className="text-sm"
-                  placeholder="Notes about this quilt…"
-                />
-              </>
-            ) : q.notes ? (
-              <p className="text-sm leading-relaxed">{q.notes}</p>
-            ) : (
-              <p className="text-xs text-muted-foreground italic">No notes</p>
-            )}
-          </section>
-
-          {!isEditing && (
-            <p className="flex items-center gap-1 text-xs text-muted-foreground/60">
-              <LockOpen className="h-3 w-3" />
-              Tap a lock icon to protect a field from AI updates.
-            </p>
+                <span className="ml-1 text-xs text-muted-foreground">
+                  lock notes
+                </span>
+              </div>
+              <Textarea
+                value={d.notes}
+                onChange={(e) => set("notes", e.target.value)}
+                rows={4}
+                className="text-sm"
+                placeholder="Notes about this quilt…"
+              />
+            </>
+          ) : q.notes ? (
+            <p className="text-sm leading-relaxed">{q.notes}</p>
+          ) : (
+            <p className="text-xs text-muted-foreground italic">No notes</p>
           )}
-        </div>
-      </div>
+        </section>
+
+        {!isEditing && (
+          <p className="flex items-center gap-1 text-xs text-muted-foreground/60">
+            <LockOpen className="h-3 w-3" />
+            Tap a lock icon to protect a field from AI updates.
+          </p>
+        )}
+      </CollectionDetailPanelStack>
     </div>
   );
 }

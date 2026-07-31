@@ -43,7 +43,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useQueryClient } from "@tanstack/react-query";
-import { getCategoryPalette, colorToHex } from "@workspace/web-core";
+import {
+  downloadText,
+  getCategoryPalette,
+  colorToHex,
+  normalizeDownloadStem,
+} from "@workspace/web-core";
 import { toast } from "sonner";
 import {
   useListBlocks,
@@ -694,19 +699,11 @@ function exportBlockAsJson(block: BlockSummary) {
     blockSizeInches: block.blockSizeInches ?? null,
     seamAllowanceInches: block.seamAllowanceInches ?? null,
   };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], {
-    type: "application/json",
-  });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download =
-    (block.name.trim() || "block").replace(/\s+/g, "-").toLowerCase() +
-    ".quilting.json";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  downloadText(
+    JSON.stringify(payload, null, 2),
+    `${normalizeDownloadStem(block.name, "block")}.quilting.json`,
+    "application/json",
+  );
   toast.success("Exported as .quilting.json");
 }
 

@@ -17,6 +17,10 @@ import {
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { usePageAssistantContext } from "@/ornaments/lib/assistant-context";
+import {
+  STANDARD_IMAGE_UPLOAD,
+  validateClientUpload,
+} from "@workspace/upload-policy";
 
 type ItemStatus = "queued" | "processing" | "done" | "error";
 
@@ -115,8 +119,9 @@ export default function CameraAddOrnament() {
     if (!f) return;
     e.target.value = "";
 
-    if (f.size > 100 * 1024 * 1024) {
-      toast.error("Photo is too large (max 100 MB).");
+    const validation = validateClientUpload(f, STANDARD_IMAGE_UPLOAD);
+    if (!validation.ok) {
+      toast.error(validation.message);
       return;
     }
 

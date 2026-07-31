@@ -35,6 +35,10 @@ import { ImagePicker } from "@/ornaments/components/image-picker";
 import { CategorySelector } from "@/ornaments/components/category-selector";
 import { usePageAssistantContext } from "@/ornaments/lib/assistant-context";
 import { useAppConfigSummary } from "@workspace/elaine-ui";
+import {
+  STANDARD_IMAGE_UPLOAD,
+  validateClientUpload,
+} from "@workspace/upload-policy";
 
 const addSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -200,11 +204,19 @@ export default function AddOrnament() {
                       <ImagePicker
                         value={field.value}
                         onChange={(file) => {
-                          if (file && file.size > 100 * 1024 * 1024) {
-                            toast.error(
-                              `${(file as File).name ?? "File"} — skipped (max 100 MB per file)`,
+                          if (file) {
+                            const validation = validateClientUpload(
+                              {
+                                name: (file as File).name ?? "Photo",
+                                size: file.size,
+                                type: file.type,
+                              },
+                              STANDARD_IMAGE_UPLOAD,
                             );
-                            return;
+                            if (!validation.ok) {
+                              toast.error(validation.message);
+                              return;
+                            }
                           }
                           field.onChange(file);
                         }}

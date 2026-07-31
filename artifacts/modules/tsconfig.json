@@ -27,6 +27,9 @@
       "path": "../../lib/collection-ui"
     },
     {
+      "path": "../../lib/upload-policy"
+    },
+    {
       "path": "../../lib/elaine-ui"
     },
     {

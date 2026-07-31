@@ -554,7 +554,7 @@ describe("Pottery POST /api/pottery/items/:id/images — upload rejection", () =
   });
 
   it("rejects a non-JPEG buffer (all-0xff bytes) via magic-byte check", async () => {
-    // Upload limit is now 100 MB; 11 MB passes the guard and multer.
+    // An 11 MB upload passes the shared 25 MB guard and multer limits.
     // The all-0xff buffer fails sniffImageType (JPEG needs 0xff 0xd8 0xff at bytes 0-2)
     // so the route rejects with 400 via the MIME magic-byte layer.
     // Item existence must succeed first so the route reaches the MIME check.
@@ -671,7 +671,7 @@ describe("Ornaments POST /api/ornaments/items/:id/images — upload rejection", 
   });
 
   it("rejects a non-JPEG buffer (all-0xff bytes) via magic-byte check", async () => {
-    // Upload limit is now 100 MB; 11 MB passes the guard and multer.
+    // An 11 MB upload passes the shared 25 MB guard and multer limits.
     // Item existence must succeed first so the route reaches the MIME check.
     selectQueue.push([{ id: 1 }]);
     const oversized = Buffer.alloc(11 * 1024 * 1024, 0xff);
@@ -777,8 +777,8 @@ describe("Travels POST /api/travels/trips/:id/photos — upload rejection", () =
     expect(res.status).toBe(400);
   });
 
-  it("rejects a file exceeding the 20 MB size limit", async () => {
-    const oversized = Buffer.alloc(21 * 1024 * 1024, 0xff);
+  it("rejects a file exceeding the shared 50 MB high-cap limit", async () => {
+    const oversized = Buffer.alloc(51 * 1024 * 1024, 0xff);
     const res = await request(travelsPhotosApp)
       .post("/api/travels/trips/1/photos")
       .attach("photo", oversized, {

@@ -38,6 +38,8 @@ import {
   isImageMimeType,
   stripMetadata,
 } from "@workspace/upload-validation";
+import { parseStringArray } from "../../lib/collection-parsing";
+import { resolveOrCreateQuiltingCategories as resolveOrCreateCategories } from "../../lib/quilting/resolve-categories";
 import {
   uploadImage,
   deleteImage,
@@ -55,8 +57,6 @@ const MAX_NAME = 200;
 const MAX_FIELD = 200;
 const MAX_NOTES = 4000;
 const MAX_LABEL = 100;
-const MAX_CATEGORIES = 50;
-const MAX_CATEGORY_NAME = 100;
 
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
@@ -75,76 +75,6 @@ function clamp(v: unknown, max: number): string | null {
   if (typeof v !== "string") return null;
   const t = v.trim();
   return t.length > 0 ? t.slice(0, max) : null;
-}
-
-function parseStringArray(raw: unknown): string[] {
-  if (Array.isArray(raw))
-    return raw.filter((v): v is string => typeof v === "string");
-  if (typeof raw === "string") {
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed))
-        return parsed.filter((v): v is string => typeof v === "string");
-    } catch {
-      return raw
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-    }
-  }
-  return [];
-}
-
-function isUniqueConstraintViolation(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as { code: string }).code === "23505"
-  );
-}
-
-/** Resolve category names → IDs, creating shared household categories as needed. */
-async function resolveOrCreateCategories(names: string[]): Promise<number[]> {
-  const unique: string[] = [];
-  const seen = new Set<string>();
-  for (const raw of names) {
-    if (typeof raw !== "string") continue;
-    const trimmed = raw.trim().slice(0, MAX_CATEGORY_NAME);
-    if (!trimmed || seen.has(trimmed)) continue;
-    seen.add(trimmed);
-    unique.push(trimmed);
-    if (unique.length >= MAX_CATEGORIES) break;
-  }
-  if (unique.length === 0) return [];
-
-  const existing = await db
-    .select({ name: categories.name, id: categories.id })
-    .from(categories)
-    .where(inArray(categories.name, unique));
-  const existingNames = new Set(existing.map((c) => c.name));
-  const existingIds = existing.map((c) => c.id);
-
-  const missing = unique.filter((n) => !existingNames.has(n));
-  if (missing.length > 0) {
-    try {
-      await db
-        .insert(categories)
-        .values(missing.map((name) => ({ name })))
-        .onConflictDoNothing();
-    } catch (err) {
-      if (!isUniqueConstraintViolation(err)) throw err;
-      // Created concurrently — the final lookup below will pick it up.
-    }
-  }
-
-  // Final batched lookup to resolve all ids (including concurrent inserts)
-  const all = await db
-    .select({ id: categories.id })
-    .from(categories)
-    .where(inArray(categories.name, unique));
-  const allIds = [...new Set([...existingIds, ...all.map((c) => c.id)])];
-  return allIds;
 }
 
 const router: IRouter = Router();

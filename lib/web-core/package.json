@@ -10,7 +10,8 @@
     "./use-mobile": "./src/use-mobile.tsx",
     "./colors": "./src/colors.ts",
     "./mount-app": "./src/mount-app.tsx",
-    "./not-found": "./src/not-found.tsx"
+    "./not-found": "./src/not-found.tsx",
+    "./download": "./src/download.ts"
   },
   "dependencies": {
     "@workspace/api-client-react": "workspace:*",

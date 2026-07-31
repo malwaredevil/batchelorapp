@@ -67,6 +67,14 @@ import {
 } from "@workspace/api-client-react";
 import { usePageAssistantContext } from "@/pottery/lib/assistant-context";
 import { ImageLightbox as SharedImageLightbox } from "@/quilting/components/image-lightbox";
+import {
+  STANDARD_IMAGE_UPLOAD,
+  validateClientUpload,
+} from "@workspace/upload-policy";
+import {
+  CollectionDetailHero,
+  CollectionDetailPanelStack,
+} from "@workspace/collection-ui";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -231,8 +239,9 @@ function ImageGallery({
 
   function handleCapture(captured: File) {
     setShowCamera(false);
-    if (captured.size > 100 * 1024 * 1024) {
-      toast.error(`${captured.name} — skipped (max 100 MB per file)`);
+    const validation = validateClientUpload(captured, STANDARD_IMAGE_UPLOAD);
+    if (!validation.ok) {
+      toast.error(validation.message);
       return;
     }
     setEditingFile(captured);
@@ -242,9 +251,9 @@ function ImageGallery({
     const file = e.target.files?.[0];
     if (e.target) e.target.value = "";
     if (!file) return;
-    const MAX_FILE_BYTES = 100 * 1024 * 1024;
-    if (file.size > MAX_FILE_BYTES) {
-      toast.error(`${file.name} — skipped (max 100 MB per file)`);
+    const validation = validateClientUpload(file, STANDARD_IMAGE_UPLOAD);
+    if (!validation.ok) {
+      toast.error(validation.message);
       return;
     }
     setEditingFile(file);
@@ -914,7 +923,7 @@ export default function PieceDetail() {
       </Button>
 
       {/* Hero */}
-      <div className="grid gap-6 md:grid-cols-2">
+      <CollectionDetailHero>
         {/* Image gallery */}
         <div className="space-y-4">
           <ImageGallery
@@ -1264,10 +1273,10 @@ export default function PieceDetail() {
             </div>
           )}
         </div>
-      </div>
+      </CollectionDetailHero>
 
       {/* Details panel */}
-      <div className="mt-6 space-y-4">
+      <CollectionDetailPanelStack>
         {editing ? (
           <div className="rounded-xl border border-card-border bg-card p-4">
             <h2 className="mb-4 text-sm font-semibold">Edit details</h2>
@@ -1456,7 +1465,7 @@ export default function PieceDetail() {
             </div>
           </div>
         )}
-      </div>
+      </CollectionDetailPanelStack>
     </div>
   );
 }

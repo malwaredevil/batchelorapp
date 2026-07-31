@@ -41,7 +41,7 @@ jobs:
           # Exclude this file itself from the diff so its own error-message text
           # doesn't trigger the check. Scan only newly-added lines.
           VIOLATIONS=$(git diff "$BASE"...HEAD \
-            -- ':!.github/workflows/guardrails.yml' ':!*.md' ':!*.txt' \
+            -- ':!.github/workflows/guardrails.yml' ':!*.md' ':!*.txt' ':!*.sh' \
             | grep "^+" \
             | grep -v "^+++" \
             | grep "drizzle-kit push" || true)

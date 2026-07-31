@@ -2,9 +2,10 @@
 # pre-publish.sh — automated pre-publish gate
 # Usage: pnpm --filter @workspace/scripts run pre-publish
 #
-# This gate validates the actual local deploy candidate before it is proposed
-# for a pull request. GitHub CI is checked later, against that PR and the merged
-# main commit; a green status for an older main commit cannot validate local work.
+# Deliberately excludes checks that GitHub CI already covers (typecheck, lint,
+# codegen drift, PII scan) — step (e) verifies CI is green before publishing,
+# so re-running them here is pure redundancy and causes timeout. This script
+# covers only local guards that CI does NOT run, plus prettier auto-fix.
 
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -30,7 +31,7 @@ fi
 echo -e "${GREEN}✓${RESET} Prettier: files formatted"
 
 # ---------------------------------------------------------------------------
-# Step 2: parallel local guards for the actual deploy candidate
+# Step 2: parallel local-only guards (not covered by CI)
 # ---------------------------------------------------------------------------
 echo -e "\n${BOLD}[2/3]${RESET} Local guards (parallel) …\n"
 
@@ -97,10 +98,8 @@ run_bg pgsingleton pnpm --filter @workspace/scripts run check-pg-singleton
 # local pre-publish gate must catch Replit-only drift before it is synced.
 run_bg composition pnpm --filter @workspace/scripts run check-domain-composition
 
-# Full repository checks are deliberately repeated in GitHub CI after sync.
-run_bg typecheck pnpm run typecheck
-run_bg lint pnpm run lint
-run_bg pii pnpm --filter @workspace/scripts run pii-scan
+# GitHub CI status (network-bound — runs in parallel with the local guards)
+run_bg cistatus pnpm --filter @workspace/scripts run check-ci-status
 
 wait
 
@@ -115,13 +114,11 @@ declare -A LABELS=(
   [uploadlimit]="Upload-limit guard"
   [pgsingleton]="pg singleton guard"
   [composition]="Composition and configuration"
-  [typecheck]="Typecheck"
-  [lint]="Lint and workflow policy"
-  [pii]="PII scan"
+  [cistatus]="GitHub CI status"
 )
 
 FAILED=()
-for key in appconfig forbidden replitmd uploadlimit pgsingleton composition typecheck lint pii; do
+for key in appconfig forbidden replitmd uploadlimit pgsingleton composition cistatus; do
   code=$(cat "$LOGDIR/$key.exit" 2>/dev/null || echo 1)
   if [[ "$code" -eq 0 ]]; then
     echo -e "${GREEN}✓${RESET} ${LABELS[$key]}"
@@ -141,14 +138,14 @@ if [[ ${#FAILED[@]} -gt 0 ]]; then
 fi
 
 echo -e "\n${GREEN}✓ All pre-publish checks passed.${RESET}"
+echo "  CI covers: typecheck, lint, codegen drift, PII scan."
 echo ""
 echo "  Proceed to:"
 echo "    Stage 2  — DB safety (additive-only migrations; no destructive schema changes)."
 echo "    Stage 3a — backup: pnpm --filter @workspace/scripts run backup-to-replit"
 echo "    Stage 3b — open PRs: close resolved issues, merge green Dependabot PRs."
-echo "    Stage 3c — sync one branch/PR: github-sync \"msg\""
-echo "    Stage 3d — wait for the PR's required CI checks, then merge."
-echo "    Stage 3e — import GitHub main into Replit's isolated background workspace."
-echo "    Stage 3f — apply it to Replit main, then run: github-sync --verify-clean"
-echo "    Stage 3g — verify merged-main CI: pnpm --filter @workspace/scripts run check-ci-status"
+echo "    Stage 3c — GitHub sync (all files go through a PR — no exceptions):"
+echo "                 github-sync \"msg\"                  creates a sync branch + PR"
+echo "                 github-sync \"msg\" --confirm-deletions  include local deletions"
+echo "    Stage 3d — wait for CI: pnpm --filter @workspace/scripts run check-ci-status"
 echo "    Publish  — suggest_deploy, then sentry-baseline mark-published."

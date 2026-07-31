@@ -59,10 +59,16 @@ These paths must never appear in any PR diff:
 
 The `guardrails` CI workflow will fail the PR if any of these appear.
 
-### 2.3 Never push directly to main
+### 2.3 Never push directly to main — no exceptions, including workflow files
 
-All work happens on a named feature branch. Open a PR. Branch naming convention:
+All work happens on a named `sync/…` or `feat/…` branch. Open a PR. This applies
+to every file in the repository, including `.github/workflows/` files. There is no
+direct-to-main escape hatch. Branch protection enforces this at the GitHub level
+(`enforce_admins: true`, `strict: true`) — even an admin token cannot bypass it.
 
+Branch naming convention:
+
+- `sync/<date>-<slug>` — GitHub sync batches (created automatically by `github-sync.ts`)
 - `feat/batch-quick-wins` — Campaign 1
 - `feat/epic-241-search-quality` — Campaign 2A
 - `feat/epic-242-elaine-completeness` — Campaign 2B

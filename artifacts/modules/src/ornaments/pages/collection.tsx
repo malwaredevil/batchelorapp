@@ -323,7 +323,7 @@ export default function Collection() {
 
   usePageAssistantContext(
     "ornaments-collection",
-    `Main collection page showing ${filteredItems.length} of ${items.length} ornaments. Search: "${debouncedSearch}". Category filter: ${filterCategoryIds.size > 0 ? [...filterCategoryIds].join(", ") : "none"}. Color filter: ${activeColor ?? "none"}.${configSummary ? `\n\n${configSummary}` : ""}`,
+    `Main collection page showing ${filteredItems.length} of ${data?.total ?? items.length} ornaments. Search: "${debouncedSearch}". Category filter: ${filterCategoryIds.size > 0 ? [...filterCategoryIds].join(", ") : "none"}. Color filter: ${activeColor ?? "none"}. Year filter: ${selectedYear ?? "none"}.\nVisible ornaments (itemId — name, key details): ${filteredItems.slice(0, 50).map((item) => `itemId: ${item.id} — "${item.name || "Unnamed"}"${item.brand ? `, brand: ${item.brand}` : ""}${item.year ? `, year: ${item.year}` : ""}${item.seriesOrCollection ? `, series: ${item.seriesOrCollection}` : ""}${item.categories?.length ? `, categories: ${item.categories.map((c) => c.name).join(", ")} (categoryIds: ${item.categories.map((c) => c.id).join(", ")})` : ""}`).join("; ") || "none"}.${configSummary ? `\n\n${configSummary}` : ""}`,
   );
 
   // Year filter dropdown (passed as extraControls to the search bar)

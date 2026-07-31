@@ -14,6 +14,10 @@ import {
 import { Loader2, Package, Layers, TrendingUp } from "lucide-react";
 import { colorToHex } from "@/pottery/lib/colors";
 import { usePageAssistantContext } from "@/pottery/lib/assistant-context";
+import {
+  formatElaineContextList,
+  formatElaineContextEntity,
+} from "@workspace/elaine-ui";
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 
@@ -301,17 +305,7 @@ export default function StatsPage() {
     "pottery-stats",
     isLoading
       ? undefined
-      : `Collection Stats page: ${stats?.totalItems ?? 0} total pieces (${uniqueCount} unique items) across ${timelineData.length} tracked years. Top motifs: ${
-          stats?.topMotifs
-            .slice(0, 5)
-            .map((m) => `${m.label} (${m.count})`)
-            .join(", ") || "none"
-        }. Shape breakdown: ${shapeData.map((s) => `${s.name} (${s.value})`).join(", ") || "none"}. Size distribution: ${sizeData.map((s) => `${s.name} (${s.value})`).join(", ") || "none"}. Top glaze colours: ${
-          stats?.topColors
-            .slice(0, 8)
-            .map((c) => `${c.label} (${c.count})`)
-            .join(", ") || "none"
-        }.`,
+      : `Collection Stats page: ${stats?.totalItems ?? 0} total pieces (${uniqueCount} unique items) across ${timelineData.length} tracked years. ${formatElaineContextList(stats?.topMotifs ?? [], { label: "Top motifs", formatItem: (m) => `${m.label} (${m.count})`, limit: 5 })}. ${formatElaineContextList(shapeData, { label: "Shape breakdown", formatItem: (s) => `${s.name} (${s.value})` })}. ${formatElaineContextList(sizeData, { label: "Size distribution", formatItem: (s) => `${s.name} (${s.value})` })}. ${formatElaineContextList(stats?.topColors ?? [], { label: "Top glaze colours", formatItem: (c) => `${c.label} (${c.count})`, limit: 8 })}.`,
   );
 
   if (isLoading) {

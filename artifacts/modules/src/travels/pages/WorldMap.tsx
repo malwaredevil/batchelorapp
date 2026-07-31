@@ -21,6 +21,10 @@ import {
 } from "lucide-react";
 import { usePageAssistantContext } from "@/travels/lib/assistant-context";
 import {
+  formatElaineContextList,
+  formatElaineContextEntity,
+} from "@workspace/elaine-ui";
+import {
   loadGoogleMaps,
   svgToMarkerContent,
 } from "@/travels/lib/google-maps-loader";
@@ -469,7 +473,7 @@ export default function WorldMap() {
     "world-map",
     isLoading
       ? undefined
-      : `World Map page: an interactive map plotting every trip and wishlist destination as color-coded pins/stars (booked=green, planning=orange, completed=red, wishlist=yellow star). Showing ${trips.length} trip(s) and ${wishlistItems.length} wishlist destination(s).`,
+      : `World Map page: an interactive map plotting every trip and wishlist destination as color-coded pins/stars (booked=green, planning=orange, completed=red, wishlist=yellow star). ${formatElaineContextList(trips, { label: "Trips on map", formatItem: (t) => formatElaineContextEntity({ entity: "trip", id: t.id, label: t.title, details: [t.destination, t.status] }), limit: 20 })}. ${formatElaineContextList(wishlistItems, { label: "Wishlist destinations on map", formatItem: (w) => formatElaineContextEntity({ entity: "wishlist", id: w.id, label: w.destination }), limit: 20 })}.`,
   );
 
   // Geocode wishlist items that have no coordinates, persisting results back to server

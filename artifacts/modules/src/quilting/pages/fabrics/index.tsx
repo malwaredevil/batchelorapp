@@ -71,7 +71,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
-import { useAppConfigSummary } from "@workspace/elaine-ui";
+import {
+  useAppConfigSummary,
+  formatElaineContextList,
+  formatElaineContextEntity,
+} from "@workspace/elaine-ui";
 
 const FABRICS_LIST_SS_KEY = "quilting-fabrics-list-state";
 
@@ -770,12 +774,7 @@ export default function Fabrics() {
     "quilting-fabrics",
     isLoading
       ? undefined
-      : `Fabrics page: ${fabrics?.length ?? 0} fabric(s) in the stash${hasFilter ? ` (${sorted?.length ?? 0} shown after filters)` : ""}. Print types: ${printTypes.join(", ") || "none"}. Categories: ${allCategories.map((c) => c.name).join(", ") || "none"}. Visible fabrics: ${
-          (sorted ?? [])
-            .slice(0, 30)
-            .map((f) => `${f.name} (fabricId: ${f.id})`)
-            .join(", ") || "none"
-        }.${configSummary ? `\n\n${configSummary}` : ""}`,
+      : `Fabrics page: ${fabrics?.length ?? 0} fabric(s) in the stash${hasFilter ? ` (${sorted?.length ?? 0} shown after filters)` : ""}. ${formatElaineContextList(printTypes, { label: "Print types", formatItem: (p) => p })}. ${formatElaineContextList(allCategories, { label: "Categories", formatItem: (c) => c.name })}. ${formatElaineContextList((sorted ?? []).slice(0, 30), { label: "Visible fabrics", formatItem: (f) => formatElaineContextEntity({ entity: "fabric", id: f.id, label: f.name }) })}.${configSummary ? `\n\n${configSummary}` : ""}`,
   );
 
   return (

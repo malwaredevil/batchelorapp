@@ -67,6 +67,10 @@ import { MagnetCheckDialog } from "@/travels/components/MagnetCheckDialog";
 import { ReminderEditDialog } from "@/travels/components/ReminderEditDialog";
 import { AttachmentPickerDialog } from "@/travels/components/AttachmentPickerDialog";
 import { usePageAssistantContext } from "@/travels/lib/assistant-context";
+import {
+  formatElaineContextList,
+  formatElaineContextEntity,
+} from "@workspace/elaine-ui";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import {
   DndContext,
@@ -3378,19 +3382,7 @@ export default function TripDetail({ id }: { id: number }) {
             : "No documents attached to this trip yet.") +
           "\n" +
           (reminders.length > 0
-            ? `Reminders: ${reminders
-                .slice(0, 20)
-                .map(
-                  (r) =>
-                    `"${r.title}" (reminderId: ${r.id}${r.dueDate ? `, due ${r.dueDate}` : ", no due date"}, ${
-                      r.done ? "done" : "not done"
-                    }, ${r.syncToCalendar ? "synced to calendar" : "NOT synced to calendar"}, recipients: ${
-                      r.recipientEmails && r.recipientEmails.length > 0
-                        ? r.recipientEmails.join(", ")
-                        : "none"
-                    })`,
-                )
-                .join("; ")}.`
+            ? `${formatElaineContextList(reminders, { label: "Reminders", formatItem: (r) => formatElaineContextEntity({ entity: "reminder", id: r.id, label: r.title, details: [r.dueDate ? `due ${r.dueDate}` : "no due date", r.done ? "done" : "not done", r.syncToCalendar ? "synced to calendar" : "NOT synced to calendar", `recipients: ${r.recipientEmails && r.recipientEmails.length > 0 ? r.recipientEmails.join(", ") : "none"}`] }), limit: 20 })}.`
             : "No reminders yet for this trip.") +
           "\n" +
           (localItinerary?.days && localItinerary.days.length > 0

@@ -71,6 +71,64 @@ Every implementation and pre-publish review must answer:
 - Copying a server query and changing only table names when a typed adapter or a
   shared policy function would remain coherent.
 
+## Automated detection
+
+`scripts/src/check-domain-composition.ts` runs two complementary sections.
+
+### Section 1 — Named-file requirements
+
+Specific files must contain (or must not contain) designated string tokens.
+These protect boundaries that have been explicitly established. When you create
+a new shared mechanism, add a named-file requirement in the **same change**.
+
+### Section 2 — General pattern scans
+
+Source directories are walked and every file is tested regardless of whether it
+was named when the check was written. These scans catch new violations before
+they ship.
+
+| What is scanned                                    | What triggers a violation                                                                       | Correct pattern                                                                         |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| All `.ts` / `.tsx` files                           | `Sentry.init(` outside `lib/web-core/src/sentry.ts` or `artifacts/api-server/src/instrument.ts` | `initBrowserMonitoring()` from `@workspace/web-core/sentry`                             |
+| `artifacts/api-server/src/routes/**/*.ts`          | `new OpenAI(` in a route handler                                                                | `getOpenRouterClient()` / `callModel()` from `lib/ai-client.ts`                         |
+| All `.tsx` page files not in the legacy-exempt set | `usePageAssistantContext` present without `@workspace/elaine-ui` import                         | `formatElaineContextList()` + `formatElaineContextEntity()` from `@workspace/elaine-ui` |
+
+### Migration candidates
+
+The following pages predate the Elaine context formatting rule and still use
+inline `.join()` / `.slice().map()`. They are in the general-scan exempt set
+and tracked as migration candidates. When each is migrated, remove it from
+`ELAINE_CONTEXT_LEGACY_EXEMPT` in the check script so future changes to that
+page are covered.
+
+**Ornaments:** `camera-add`, `hallmark-events`, `scan`, `stats`
+**Pottery:** `categories`, `compare`, `detail`, `scan`, `stats`
+**Quilting:** `blocks/cut-pattern`, `blocks/designer`, `blocks/detail`,
+`blocks/index`, `blocks/whole-quilt-list`, `blocks/whole-quilt`, `categories`,
+`compare`, `fabrics/detail`, `layouts/composer`, `layouts/detail`,
+`layouts/index`, `library/blocks`, `patterns/add`, `patterns/detail`,
+`patterns/index`, `quilts/add`, `quilts/detail`, `quilts/index`,
+`shopping/index`, `tools/yardage`
+**Travels:** `Destinations`, `Documents`, `Explore`, `GmailReview`,
+`TripDetail`, `Wishlist`, `WorldMap`
+**Hub:** `AppLauncher`, `control-panel`, `google-apis-demo`
+
+### Enrollment rule
+
+Every new shared mechanism in `lib/*` must be enrolled in this check in the
+**same change** that creates it. A shared function or component without an
+enrolled boundary is incomplete — the next agent or contributor will not know
+it exists and may duplicate it. The check script header explains how to add
+both named-file requirements and general scans.
+
+### Failure reporting
+
+Every violation message contains a `FIX:` clause that explains exactly what to
+do. The check also prints a reference to this document. Do not work around a
+failure by adding an exemption unless the file genuinely predates the rule; in
+that case add it to the appropriate `LEGACY_EXEMPT` set with a comment and a
+migration note.
+
 The automated check is intentionally a boundary check, not a complete design
 review. Passing it does not permit copy/paste architecture that the review
 questions would reject.

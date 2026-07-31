@@ -36,16 +36,34 @@ if (!TOKEN) {
 
 const rawArgs = process.argv.slice(2);
 const confirmDeletions = rawArgs.includes("--confirm-deletions");
+// --direct-to-main bypasses the branch+PR flow and pushes straight to main.
+// Use ONLY for GitHub Actions workflow-file changes (GitHub requires those to
+// exist on main before they execute) and genuine emergency hotfixes.
+const directToMain = rawArgs.includes("--direct-to-main");
 const commitMessage = rawArgs
-  .filter((a) => a !== "--confirm-deletions")
+  .filter((a) => a !== "--confirm-deletions" && a !== "--direct-to-main")
   .join(" ")
   .trim();
 if (!commitMessage) {
   console.error(
-    'Usage: pnpm --filter @workspace/scripts run github-sync "commit message" [--confirm-deletions]\n' +
-      "  --confirm-deletions  Required to actually remove files from GitHub that are missing locally.",
+    'Usage: pnpm --filter @workspace/scripts run github-sync "commit message" [--confirm-deletions] [--direct-to-main]\n' +
+      "  --confirm-deletions  Required to actually remove files from GitHub that are missing locally.\n" +
+      "  --direct-to-main     Push directly to main instead of opening a PR (emergency / workflow-file changes only).",
   );
   process.exit(1);
+}
+
+/**
+ * Convert a free-form string to a URL-safe branch-name slug.
+ * Lowercases, collapses non-alphanumeric runs to hyphens, trims leading/trailing
+ * hyphens, and caps at 48 chars so the full branch name stays under Git's 250-char limit.
+ */
+function slugify(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48);
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -467,11 +485,67 @@ async function main() {
   });
   console.log(`commit: ${newCommit.sha.slice(0, 8)}`);
 
-  await gh("PATCH", `/git/refs/heads/${BRANCH}`, { sha: newCommit.sha });
+  if (directToMain) {
+    // Emergency path: update main directly without a PR.
+    // Intended for GitHub Actions workflow-file changes (which GitHub requires
+    // to live on main before they execute) and genuine one-line hotfixes that
+    // cannot wait for a full CI run on a PR.  Avoid for routine syncs.
+    await gh("PATCH", `/git/refs/heads/${BRANCH}`, { sha: newCommit.sha });
+    console.log(
+      `\n✓ Pushed directly to ${REPO}@${BRANCH} — single commit, single CI run triggered.`,
+    );
+    console.log(`  https://github.com/${REPO}/commit/${newCommit.sha}`);
+    return;
+  }
+
+  // Normal path: create a sync branch, push the commit there, and open a PR
+  // so that CI runs before anything lands on main.  Merge the PR after all
+  // checks are green.
+  const now = new Date();
+  const datePart = now.toISOString().slice(0, 10).replace(/-/g, ""); // YYYYMMDD
+  const timePart = now.toISOString().slice(11, 16).replace(":", ""); // HHmm
+  const syncBranch = `sync/${datePart}-${timePart}-${slugify(commitMessage)}`;
+
+  // Create the new branch pointing at the new commit (not main HEAD — the commit
+  // is already built on top of main HEAD as its parent, so the branch just
+  // needs to point at it).
+  await gh("POST", "/git/refs", {
+    ref: `refs/heads/${syncBranch}`,
+    sha: newCommit.sha,
+  });
+  console.log(`branch: ${syncBranch}`);
+
+  // Build a PR body that CI tools and human reviewers can both parse.
+  const prBody =
+    `## Sync PR\n\n` +
+    `**Commit:** \`${newCommit.sha.slice(0, 8)}\`  \n` +
+    `**Files changed:** ${changedFiles.length} modified` +
+    (deletedFiles.length > 0 ? `, ${deletedFiles.length} deleted` : "") +
+    `\n\n---\n\n` +
+    commitMessage +
+    `\n\n---\n\n` +
+    `> Created automatically by \`github-sync.ts\`.\n` +
+    `> Merge after **all CI checks are green**.\n` +
+    `> For workflow-file-only changes that must land directly on main, re-run with \`--direct-to-main\`.`;
+
+  const pr = await gh<{ number: number; html_url: string }>("POST", "/pulls", {
+    title: commitMessage,
+    head: syncBranch,
+    base: BRANCH,
+    body: prBody,
+  });
+
   console.log(
-    `\n✓ Pushed to ${REPO}@${BRANCH} — single commit, single CI run triggered.`,
+    `\n✓ Sync PR #${pr.number} opened — ${changedFiles.length} file(s) changed`,
   );
-  console.log(`  https://github.com/${REPO}/commit/${newCommit.sha}`);
+  console.log(`  PR:     ${pr.html_url}`);
+  console.log(`  Commit: https://github.com/${REPO}/commit/${newCommit.sha}`);
+  console.log(
+    `\n  CI is now running on the PR. Merge when all checks are green.`,
+  );
+  console.log(
+    `  The composition guard runs in the "Composition guard" and "Lint" CI jobs.`,
+  );
 }
 
 main().catch((e) => {

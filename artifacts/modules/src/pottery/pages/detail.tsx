@@ -66,6 +66,10 @@ import {
   useDeletePotteryImage,
 } from "@workspace/api-client-react";
 import { usePageAssistantContext } from "@/pottery/lib/assistant-context";
+import {
+  formatElaineContextList,
+  formatElaineContextEntity,
+} from "@workspace/elaine-ui";
 import { ImageLightbox as SharedImageLightbox } from "@/quilting/components/image-lightbox";
 import {
   STANDARD_IMAGE_UPLOAD,
@@ -869,7 +873,7 @@ export default function PieceDetail() {
     "pottery-detail",
     isLoading || !item
       ? undefined
-      : `Pottery Piece Detail page: viewing piece "${item.name}" (itemId: ${item.id})${editing ? " — currently in edit mode with unsaved field changes" : ""}. ${item.maker ? `Maker: ${item.maker}. ` : ""}${item.style ? `Style: ${item.style}. ` : ""}${item.shape ? `Shape: ${item.shape}. ` : ""}${item.dimensions ? `Dimensions: ${item.dimensions}. ` : ""}Quantity: ${item.quantity ?? 1}. ${item.categories.length ? `Categories: ${item.categories.map((c) => c.name).join(", ")} (categoryIds: ${item.categories.map((c) => c.id).join(", ")}). ` : "Uncategorized. "}${item.dominantColors.length ? `Colors: ${item.dominantColors.join(", ")}. ` : ""}${item.motifs.length ? `Motifs: ${item.motifs.join(", ")}. ` : ""}${item.patternDescription ? `Pattern: ${item.patternDescription}. ` : ""}Photos: ${1 + item.images.length} (1 primary + ${item.images.length} supplemental, imageIds: ${item.images.map((im) => im.id).join(", ") || "none"}). ${item.lockedFields?.length ? `Locked fields (AI won't overwrite): ${item.lockedFields.join(", ")}. ` : "No fields are locked. "}Available categories to assign (name=id): ${allCategories.map((c) => `${c.name}=${c.id}`).join(", ") || "none"}.`,
+      : `Pottery Piece Detail page: ${formatElaineContextEntity({ entity: "item", id: item.id, label: item.name })}${editing ? " — currently in edit mode with unsaved field changes" : ""}. ${item.maker ? `Maker: ${item.maker}. ` : ""}${item.style ? `Style: ${item.style}. ` : ""}${item.shape ? `Shape: ${item.shape}. ` : ""}${item.dimensions ? `Dimensions: ${item.dimensions}. ` : ""}Quantity: ${item.quantity ?? 1}. ${item.categories.length ? `${formatElaineContextList(item.categories, { label: "Categories", formatItem: (c) => formatElaineContextEntity({ entity: "category", id: c.id, label: c.name }) })}. ` : "Uncategorized. "}${item.dominantColors.length ? `Colors: ${item.dominantColors.join(", ")}. ` : ""}${item.motifs.length ? `Motifs: ${item.motifs.join(", ")}. ` : ""}${item.patternDescription ? `Pattern: ${item.patternDescription}. ` : ""}Photos: ${1 + item.images.length} (1 primary + ${item.images.length} supplemental, imageIds: ${item.images.map((im) => im.id).join(", ") || "none"}). ${item.lockedFields?.length ? `Locked fields (AI won't overwrite): ${item.lockedFields.join(", ")}. ` : "No fields are locked. "}${formatElaineContextList(allCategories ?? [], { label: "Available categories to assign", formatItem: (c) => formatElaineContextEntity({ entity: "category", id: c.id, label: c.name }) })}.`,
   );
 
   // ---------------------------------------------------------------------------

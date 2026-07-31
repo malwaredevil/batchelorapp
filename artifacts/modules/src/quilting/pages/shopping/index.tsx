@@ -42,6 +42,10 @@ import {
   getGetShoppingStatsQueryKey,
 } from "@workspace/api-client-react";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
+import {
+  formatElaineContextList,
+  formatElaineContextEntity,
+} from "@workspace/elaine-ui";
 
 type Status = "want" | "ordered" | "bought";
 
@@ -411,15 +415,7 @@ export default function Shopping() {
     "quilting-shopping",
     isLoading
       ? undefined
-      : `Shopping List page: ${items?.length ?? 0} item(s). Visible items: ${
-          (items ?? [])
-            .slice(0, 30)
-            .map(
-              (i: { id: number; name: string; status: string }) =>
-                `${i.name} (id: ${i.id}, status: ${i.status})`,
-            )
-            .join(", ") || "none"
-        }.`,
+      : `Shopping List page: ${items?.length ?? 0} item(s). ${formatElaineContextList(items ?? [], { label: "Visible items", formatItem: (i: { id: number; name: string; status: string }) => formatElaineContextEntity({ entity: "shoppingItem", id: i.id, label: i.name, details: [`status: ${i.status}`] }), limit: 30 })}.`,
   );
 
   const filtered =

@@ -15,7 +15,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: PR body must reference a GitHub issue
-        if: github.actor != 'dependabot[bot]'
+        # Skip for Dependabot (automated dependency updates) and automated sync
+        # PRs (sync/* branches created by github-sync.ts — these batch-commit
+        # Replit workspace changes and are not tied to a single feature issue).
+        if: github.actor != 'dependabot[bot]' && !startsWith(github.head_ref, 'sync/')
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_TITLE: ${{ github.event.pull_request.title }}
@@ -40,11 +43,13 @@ jobs:
         env:
           BRANCH: ${{ github.head_ref }}
         run: |
-          if echo "$BRANCH" | grep -qE "^(feat|fix|chore|perf|refactor|security|docs)/"; then
+          # sync/* branches are created by github-sync.ts (automated Replit→GitHub
+          # syncs) and follow their own naming scheme (sync/YYYYMMDD-HHmm-slug).
+          if echo "$BRANCH" | grep -qE "^(feat|fix|chore|perf|refactor|security|docs|sync)/"; then
             echo "✓ Branch name '$BRANCH' follows convention"
           else
             echo "⚠ WARNING: Branch name '$BRANCH' does not follow the convention:"
-            echo "  feat/*, fix/*, chore/*, perf/*, refactor/*, security/*, docs/*"
+            echo "  feat/*, fix/*, chore/*, perf/*, refactor/*, security/*, docs/*, sync/*"
             echo ""
             echo "This is a warning only — the PR is not blocked."
           fi

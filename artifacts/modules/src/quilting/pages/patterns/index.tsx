@@ -40,6 +40,10 @@ import type { QuiltingCategory } from "@workspace/api-client-react";
 import { downloadCollectionImage } from "@/quilting/lib/svg-export";
 import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
+import {
+  formatElaineContextList,
+  formatElaineContextEntity,
+} from "@workspace/elaine-ui";
 import { useCollectionPage } from "@/quilting/hooks/useCollectionPage";
 import { CollectionPageShell } from "@/quilting/components/CollectionPageShell";
 import { QuickEditPatternSheet } from "@/quilting/components/quick-edit-pattern-sheet";
@@ -452,12 +456,7 @@ export default function Patterns() {
     "quilting-patterns",
     isLoading
       ? undefined
-      : `Patterns page: ${patterns?.length ?? 0} pattern(s) saved${pageState.hasFilter ? ` (${pageState.sorted?.length ?? 0} shown after filters)` : ""}. Visible patterns: ${
-          (pageState.sorted ?? [])
-            .slice(0, 30)
-            .map((p) => `${p.name} (patternId: ${p.id})`)
-            .join(", ") || "none"
-        }.`,
+      : `Patterns page: ${patterns?.length ?? 0} pattern(s) saved${pageState.hasFilter ? ` (${pageState.sorted?.length ?? 0} shown after filters)` : ""}. ${formatElaineContextList(pageState.sorted ?? [], { label: "Visible patterns", formatItem: (p) => formatElaineContextEntity({ entity: "pattern", id: p.id, label: p.name }), limit: 30 })}.`,
   );
 
   const domainFilterPills =

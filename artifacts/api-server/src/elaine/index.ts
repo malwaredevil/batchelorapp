@@ -111,6 +111,7 @@ import {
 } from "../lib/ornaments/hallmark-search";
 import { lookupBarcode } from "../lib/ornaments/barcode";
 import { lookupFlightPrices } from "../lib/travels/flights";
+import { removeWishlistItemExecutor } from "./travel-wishlist-executors";
 import { fetchJsonSafe } from "../lib/ssrf-safe-fetch";
 import { consultExperts } from "../lib/expert-consult";
 import {
@@ -1368,24 +1369,8 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
 
   remove_wishlist_item: (async (
     payload: z.infer<typeof RemoveWishlistItemActionPayload>,
-    userId: number,
   ) => {
-    const [existing] = await db
-      .select({ id: travelsWishlist.id })
-      .from(travelsWishlist)
-      .where(eq(travelsWishlist.id, payload.wishlistId));
-    if (!existing)
-      return { status: 404, body: { error: "Wishlist item not found" } };
-    await db
-      .delete(travelsWishlist)
-      .where(eq(travelsWishlist.id, payload.wishlistId));
-    return {
-      status: 200,
-      body: {
-        type: "remove_wishlist_item",
-        result: { id: payload.wishlistId },
-      },
-    };
+    return removeWishlistItemExecutor(payload.wishlistId);
   }) as ActionExecutor,
 
   update_wishlist_item: (async (

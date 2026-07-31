@@ -3,6 +3,10 @@ import { Link, useLocation, useParams } from "wouter";
 import { useRegisterNavGuard } from "@/quilting/lib/nav-guard";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
 import {
+  formatElaineContextList,
+  formatElaineContextEntity,
+} from "@workspace/elaine-ui";
+import {
   ArrowLeft,
   Save,
   RotateCw,
@@ -738,7 +742,9 @@ export default function LayoutComposer() {
   usePageAssistantContext(
     "quilting-layout-composer",
     `Layout Composer page (layout ${
-      isNew ? "creation" : `edit, id ${layoutId}`
+      isNew
+        ? "creation"
+        : `editing ${formatElaineContextEntity({ entity: "layout", id: layoutId!, label: existing?.name ?? "" })}`
     }). This is a visual grid tool for arranging blocks into a quilt layout, cell-by-cell, plus sashing/border/cornerstone options — it cannot be operated via chat. If the user wants to design or edit a layout's actual grid content here, tell them to use this page directly; you can create/delete layouts by name+size via tools, but you cannot arrange blocks or edit the grid content.`,
   );
 

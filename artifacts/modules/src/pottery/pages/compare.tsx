@@ -13,6 +13,10 @@ import { VerdictPill, type Verdict } from "@/pottery/components/verdict";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { usePageAssistantContext } from "@/pottery/lib/assistant-context";
+import {
+  formatElaineContextList,
+  formatElaineContextEntity,
+} from "@workspace/elaine-ui";
 
 function VerdictCard({
   title,
@@ -208,7 +212,7 @@ export default function Compare() {
   usePageAssistantContext(
     "pottery-compare",
     result
-      ? `Compare a Photo page: analysis complete. Summary: ${result.summary} Owns same pattern: ${result.ownsSamePattern}. Owns exact piece: ${result.ownsExactPiece}. ${result.matches.length} closest match(es) in the collection: ${result.matches.map((m) => `itemId ${m.item.id} "${m.item.name}" (${Math.round(m.similarity * 100)}% match)`).join("; ") || "none"}.`
+      ? `Compare a Photo page: analysis complete. Summary: ${result.summary} Owns same pattern: ${result.ownsSamePattern}. Owns exact piece: ${result.ownsExactPiece}. ${result.matches.length} closest match(es) in the collection: ${formatElaineContextList(result.matches, { label: "Matches", formatItem: (m) => formatElaineContextEntity({ entity: "item", id: m.item.id, label: m.item.name, details: [`${Math.round(m.similarity * 100)}% match`] }), emptyLabel: "none" })}.`
       : compare.isPending
         ? "Compare a Photo page: analyzing an uploaded photo against the collection…"
         : `Compare a Photo page: upload or take a photo to check whether the household already owns this piece or its pattern. ${file ? "A photo is selected, ready to run." : "No photo selected yet."}`,

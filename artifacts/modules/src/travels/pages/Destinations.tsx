@@ -24,6 +24,10 @@ import {
   Video,
 } from "lucide-react";
 import { usePageAssistantContext } from "@/travels/lib/assistant-context";
+import {
+  formatElaineContextList,
+  formatElaineContextEntity,
+} from "@workspace/elaine-ui";
 
 function AerialViewPanel({ destination }: { destination: string }) {
   const { data, isLoading, error } = useQuery({
@@ -918,7 +922,7 @@ export default function Destinations() {
           search.trim()
             ? ` User is currently searching for "${search.trim()}".`
             : ""
-        }${filterPerson.length > 0 ? ` Filtered to traveler(s): ${filterPerson.join(", ")}.` : ""}`,
+        }${filterPerson.length > 0 ? ` ${formatElaineContextList(filterPerson, { label: "Filtered to traveler(s)", formatItem: (name) => name })}.` : ""} ${formatElaineContextList(filtered.flatMap((g) => g.trips).slice(0, 15), { label: "Trips in view", formatItem: (t) => formatElaineContextEntity({ entity: "trip", id: t.id, label: t.title, details: [t.destination, t.status].filter(Boolean) }) })}.`,
   );
 
   return (

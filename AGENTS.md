@@ -235,18 +235,53 @@ tests. See `docs/shared-application-shell.md` for the contract.
 ### 4.10 Composition and Configuration Is the Default Architecture
 
 After the absolute safety, data-integrity, and security rules above, this is the
-highest-priority design rule for all new and changed code. Batchelor App is one
-application: implement a shared mechanism once, then let domains and SPA bundles
-configure or extend it through typed props, callbacks, adapters, slots, and small
-wrappers. Do not copy a component, formatter, provider setup, query policy, API
-wrapper, upload flow, or page structure into another domain.
+**highest-priority design rule** for all new and changed code. "Write Once, Use
+Everywhere." Batchelor App is one application: implement a shared mechanism once,
+then let domains and SPA bundles configure or extend it through typed props,
+callbacks, adapters, slots, and small wrappers. This rule is **hardwired** and
+applies to every feature, repair, refactor, PR review, GitHub sync, and
+pre-publishing task.
 
-Before writing code, search the monorepo for the same behavior. Put multi-domain
-behavior in the narrowest appropriate shared package or focused server library;
-keep only genuine domain fields and actions in the domain. When a change creates
-a boundary worth preserving, update `scripts/src/check-domain-composition.ts`.
-Run that check after relevant changes. See
-`docs/composition-and-configuration.md` for the decision order and examples.
+#### Mandatory search-first checklist — complete every step before writing code
+
+1. **Search** — `grep -r "<the behavior>" artifacts/ lib/` to find any existing
+   implementation.
+2. **Reuse** — if it exists in one place, import and configure it; never copy it.
+3. **Extract** — if it exists in two or more places, extract it to the narrowest
+   appropriate `lib/*` package and replace all copies before adding your feature.
+4. **Implement once** — if it is genuinely new, implement it in `lib/*` (or a
+   focused server lib for server-only code); wire in domain differences through
+   configuration, not branching.
+5. **Enroll** — add a boundary to `scripts/src/check-domain-composition.ts` in
+   the **same PR/commit** that creates the shared mechanism. Do not merge
+   without the enrolled check.
+6. **Verify** — run `pnpm --filter @workspace/scripts run check-domain-composition`
+   before committing. Fix all reported violations; each message contains a
+   `FIX:` clause.
+
+#### Specifically prohibited patterns (the automated guard detects these)
+
+| Prohibited                                                               | Correct alternative                                                                     |
+| ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| `Sentry.init(` in any SPA file                                           | `initBrowserMonitoring()` from `@workspace/web-core/sentry`                             |
+| `new OpenAI(` in `routes/**`                                             | `getOpenRouterClient()` / `callModel()` from `lib/ai-client.ts`                         |
+| `usePageAssistantContext` in a new `.tsx` without `@workspace/elaine-ui` | `formatElaineContextList()` + `formatElaineContextEntity()` from `@workspace/elaine-ui` |
+| Inline `.join()` / `.slice().map()` to build Elaine context              | `formatElaineContextList()` from `@workspace/elaine-ui`                                 |
+| Local `Sentry.replayIntegration` config                                  | Stays in `lib/web-core/src/sentry.ts` only                                              |
+| Route handler reimplementing household data query                        | `queryHouseholdData()` / `searchHouseholdData()` from elaine shared fns                 |
+
+#### Enforcement gates (all three must pass; none can be skipped)
+
+1. **`pnpm run lint`** — `check-domain-composition` is the last step; any
+   violation fails the lint run.
+2. **`scripts/src/pre-publish.sh`** — runs `check-domain-composition` as a
+   blocking parallel gate before sync or publish.
+3. **GitHub CI Guardrails workflow** — runs the same check on every PR; the PR
+   cannot merge until it passes.
+
+See `docs/composition-and-configuration.md` for the decision order, review
+questions, accepted/rejected examples, and the current list of protected
+boundaries and migration candidates.
 
 ---
 

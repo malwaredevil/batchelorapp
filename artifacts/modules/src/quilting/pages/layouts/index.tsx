@@ -57,6 +57,10 @@ import {
 } from "@workspace/api-client-react";
 import type { QuiltingCategory } from "@workspace/api-client-react";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
+import {
+  formatElaineContextList,
+  formatElaineContextEntity,
+} from "@workspace/elaine-ui";
 import { buildFabricUrlMap } from "@/quilting/components/FabricPicker";
 import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
 import { CategoryEditDialog } from "@/quilting/components/CategoryEditDialog";
@@ -852,15 +856,7 @@ export default function Layouts() {
     "quilting-layouts",
     isLoading
       ? undefined
-      : `Layout Designer list page: ${layoutList?.length ?? 0} saved layout(s). Visible layouts: ${
-          (layoutList ?? [])
-            .slice(0, 30)
-            .map(
-              (l: { id: number; name: string }) =>
-                `${l.name} (layoutId: ${l.id})`,
-            )
-            .join(", ") || "none"
-        }. You have create_layout / delete_layout action tools — but they only create/remove a blank grid layout with metadata, they cannot design the actual block arrangement; direct the user to the designer here for that.`,
+      : `Layout Designer list page: ${layoutList?.length ?? 0} saved layout(s). ${formatElaineContextList(layoutList ?? [], { label: "Visible layouts", formatItem: (l: { id: number; name: string }) => formatElaineContextEntity({ entity: "layout", id: l.id, label: l.name }), limit: 30 })}. You have create_layout / delete_layout action tools — but they only create/remove a blank grid layout with metadata, they cannot design the actual block arrangement; direct the user to the designer here for that.`,
   );
 
   const fabricUrlMap = useMemo(

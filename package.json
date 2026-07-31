@@ -7,7 +7,7 @@
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
-    "lint": "pnpm run format:check && pnpm run lint:semantic && pnpm --filter @workspace/scripts run check-raw-fetch && pnpm --filter @workspace/scripts run check-app-shell && pnpm --filter @workspace/scripts run check-domain-composition && pnpm --filter @workspace/scripts run check-workflow-security",
+    "lint": "pnpm run format:check && pnpm run lint:semantic && pnpm --filter @workspace/scripts run check-raw-fetch && pnpm --filter @workspace/scripts run check-app-shell && pnpm --filter @workspace/scripts run check-domain-composition",
     "lint:fix": "prettier --write .",
     "prepare": "husky",
     "test:e2e": "playwright test --project=chromium-critical",

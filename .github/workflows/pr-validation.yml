@@ -13,7 +13,6 @@ jobs:
   pr-validation:
     name: PR Validation
     runs-on: ubuntu-latest
-    timeout-minutes: 5
     steps:
       - name: PR body must reference a GitHub issue
         # Skip for Dependabot (automated dependency updates) and automated sync

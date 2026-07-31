@@ -8821,9 +8821,12 @@ async function executeRestrictedSoftTool(
           })
           .from(travelsTrips)
           .where(
-            or(
-              ilike(travelsTrips.title, pat),
-              ilike(travelsTrips.destination, pat),
+            and(
+              isNull(travelsTrips.deletedAt),
+              or(
+                ilike(travelsTrips.title, pat),
+                ilike(travelsTrips.destination, pat),
+              ),
             ),
           )
           .orderBy(desc(travelsTrips.startDate))

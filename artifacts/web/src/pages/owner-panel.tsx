@@ -61,9 +61,30 @@ const ALL_TABS: { id: Tab; label: string; icon: typeof Globe }[] = [
   { id: "ai-lab", label: "Lab", icon: FlaskConical },
 ];
 
+/**
+ * Sanitize the ?from= query-parameter into a safe same-origin href.
+ * Uses the URL constructor to normalize the value and compares origins,
+ * which prevents javascript: URIs, protocol-relative paths (//evil.com),
+ * and any other absolute-URL tricks. (#239/#240)
+ */
+function sanitizeFromHref(raw: string): string {
+  if (!raw) return "/account";
+  try {
+    const url = new URL(raw, window.location.origin);
+    if (url.origin === window.location.origin) {
+      // Return only the pathname — discarding search/hash eliminates tainted
+      // components from the href while preserving same-origin navigation. (#239/#240)
+      return url.pathname;
+    }
+  } catch {
+    // Invalid URL — fall through to default
+  }
+  return "/account";
+}
+
 function useFromParam() {
   const raw = new URLSearchParams(window.location.search).get("from") ?? "";
-  const from = raw || "/account";
+  const from = sanitizeFromHref(raw);
   let label = "Back to account";
   if (raw && raw !== "/account") {
     if (raw.startsWith("/modules/")) {

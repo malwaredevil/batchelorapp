@@ -22,6 +22,7 @@ import {
   hasSentryInit,
   hasDirectOpenAIClient,
   hasInlineContextListBuilding,
+  hasLabeledEntityIdInContext,
   extractSharedLibImports,
   checkRequirementContents,
   checkRequirementFile,
@@ -555,6 +556,90 @@ test("script exits non-zero when a Sentry.init() violation is injected", () => {
       // best-effort cleanup
     }
   }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Scan E — hasLabeledEntityIdInContext
+// ────────────────────────────────────────────────────────────────────────────
+
+console.log("\ncheck-domain-composition.test: Scan E — hasLabeledEntityIdInContext");
+
+test("detects threadId: ${selectedThreadId} pattern (real violation)", () => {
+  const source = `
+import { useAppConfigSummary } from "@workspace/elaine-ui";
+usePageAssistantContext("office-gmail", \`threadId: \${selectedThreadId}\`);
+`;
+  assert.equal(hasLabeledEntityIdInContext(source), true);
+});
+
+test("detects fabricId: ${fabric.id} pattern (real violation)", () => {
+  const source = `
+usePageAssistantContext("fabric-detail", \`fabricId: \${fabric.id}\`);
+`;
+  assert.equal(hasLabeledEntityIdInContext(source), true);
+});
+
+test("detects bare id: ${item.id} label pattern", () => {
+  const source = `
+usePageAssistantContext("item-page", \`Current item — id: \${item.id}, name: \${item.name}\`);
+`;
+  assert.equal(hasLabeledEntityIdInContext(source), true);
+});
+
+test("does NOT flag when formatElaineContextEntity is imported", () => {
+  const source = `
+import { formatElaineContextEntity } from "@workspace/elaine-ui";
+usePageAssistantContext("gmail", \`threadId: \${selectedThreadId}\`);
+`;
+  assert.equal(hasLabeledEntityIdInContext(source), false);
+});
+
+test("does NOT flag a URL path interpolation (no label prefix)", () => {
+  const source = `
+usePageAssistantContext("fabric-add", "Add Fabric page.");
+navigate(\`/quilting/fabrics/\${fabric.id}\`);
+`;
+  assert.equal(hasLabeledEntityIdInContext(source), false);
+});
+
+test("does NOT flag href attribute interpolation (no label prefix)", () => {
+  const source = `
+usePageAssistantContext("compare", "Compare page.");
+const link = \`/quilting/fabrics/\${match.fabric.id}\`;
+`;
+  assert.equal(hasLabeledEntityIdInContext(source), false);
+});
+
+test("does NOT flag htmlFor attribute with id suffix (no colon-dollar pattern)", () => {
+  const source = `
+usePageAssistantContext("yardage", "Yardage Calculator page.");
+return <label htmlFor={\`blocks-\${r.fabric.id}\`}>Blocks</label>;
+`;
+  assert.equal(hasLabeledEntityIdInContext(source), false);
+});
+
+test("does NOT flag a multi-line JSX conditional containing Id variables", () => {
+  // e.g. ${dragOverId === panel.id && ...} spans multiple lines so [^}\n]+ won't match
+  const source = `
+usePageAssistantContext("designer", "Designer page.");
+const cls = \`\${
+  dragOverId === panel.id && dragPanelId !== panel.id
+    ? "border-primary"
+    : "border-border"
+}\`;
+`;
+  assert.equal(hasLabeledEntityIdInContext(source), false);
+});
+
+test("does NOT flag when usePageAssistantContext is absent", () => {
+  const source = `
+const label = \`threadId: \${selectedThreadId}\`;
+`;
+  assert.equal(hasLabeledEntityIdInContext(source), false);
+});
+
+test("does NOT flag an empty file", () => {
+  assert.equal(hasLabeledEntityIdInContext(""), false);
 });
 
 // ────────────────────────────────────────────────────────────────────────────

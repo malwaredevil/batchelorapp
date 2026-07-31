@@ -253,6 +253,8 @@ const requirements: Array<{
 
   // ── Domain pages that have been migrated must use the shared entity formatter
   ...[
+    // Migrated in task #472 — Office Gmail page surfaces the open thread ID
+    "artifacts/modules/src/office/pages/gmail.tsx",
     // Migrated in task #469 — detail pages that surface a single entity ID
     "artifacts/modules/src/quilting/pages/layouts/composer.tsx",
     "artifacts/modules/src/quilting/pages/blocks/cut-pattern.tsx",
@@ -706,6 +708,81 @@ for (const [name, artifacts] of exportArtifacts) {
       "        is needed.  Do not skip the comment — it is the audit trail.\n" +
       "  See docs/composition-and-configuration.md §Enrollment rule.",
   );
+}
+
+// ── Scan E: usePageAssistantContext must not hard-code labeled entity IDs ─────
+//
+// A page that calls usePageAssistantContext and contains a labeled entity-ID
+// interpolation — e.g.
+//   `threadId: ${selectedThreadId}`
+//   `fabricId: ${fabric.id}`
+// — is bypassing formatElaineContextEntity.  The developer has correctly
+// signalled that this is an entity reference (by naming it) but skipped the
+// formatter.  Elaine sees the bare ID without the surrounding context
+// (entity type, display label, noun) that the formatter provides.
+//
+// Detection — the "labeled entity ID" heuristic targets the exact pattern that
+// matters without producing false-positives from URL path segments or JSX
+// attribute values:
+//
+//   Pattern: \b(id|[a-z][a-zA-Z]*Id)\s*:\s*\${…}
+//
+//   Matches (real violations):
+//     threadId: ${selectedThreadId}        ← explicit label in context string
+//     fabricId: ${fabric.id}              ← explicit label in context string
+//     id: ${item.id}                      ← bare id label in context string
+//
+//   Does NOT match (non-violations):
+//     navigate(`/route/${item.id}`)        ← URL path, no label prefix
+//     href={`/route/${item.id}`}           ← JSX attribute, no label prefix
+//     htmlFor={`label-${item.id}`}         ← JSX attribute, no label prefix
+//     ${dragOverId === panel.id && …}      ← multi-line JSX expression
+//
+// Three conditions must ALL be true to fire:
+//   (a) file calls usePageAssistantContext, AND
+//   (b) file contains the labeled-entity-ID pattern above, AND
+//   (c) file does NOT import formatElaineContextEntity.
+//
+// Migrated pages in Section 1 are already protected by named-file requirements
+// and will also be caught here if they regress.
+//
+// DO NOT add an exempt set here.  Migrate labeled entity-ID patterns to use
+// formatElaineContextEntity from @workspace/elaine-ui instead.
+
+/**
+ * Scan E detector — exported for unit tests.
+ * Returns true if the source uses usePageAssistantContext with a labeled
+ * entity-ID interpolation (e.g. `threadId: ${id}`) but does NOT import
+ * formatElaineContextEntity.
+ *
+ * Uses [^}\n]+ to avoid spanning across multi-line JSX expressions (which
+ * would produce false-positives from JSX conditionals containing Id variables).
+ */
+export function hasLabeledEntityIdInContext(contents: string): boolean {
+  // Matches `wordId: ${expr}` or `id: ${expr}` on a single line.
+  const LABELED_ENTITY_ID_RE = /\b(?:[a-z][a-zA-Z]*Id|id)\s*:\s*\$\{[^}\n]+\}/;
+  return (
+    contents.includes("usePageAssistantContext") &&
+    LABELED_ENTITY_ID_RE.test(contents) &&
+    !contents.includes("formatElaineContextEntity")
+  );
+}
+
+for (const file of pageFiles) {
+  const contents = read(file);
+  if (hasLabeledEntityIdInContext(contents)) {
+    violations.push(
+      `${file}: uses usePageAssistantContext with a labeled inline entity-ID` +
+        ` interpolation (e.g. \`threadId: \${selectedThreadId}\`) but does not` +
+        ` call formatElaineContextEntity\n` +
+        "  FIX: Import formatElaineContextEntity from '@workspace/elaine-ui' and\n" +
+        "       use it to embed the entity reference in the context string, e.g.:\n" +
+        "         formatElaineContextEntity({ entity: 'Thread', id: selectedThreadId, label: subject })\n" +
+        "       This gives Elaine the entity type and display label alongside the ID\n" +
+        "       so she can invoke the correct operation unambiguously.\n" +
+        "       See lib/elaine-ui/src/page-context-formatters.ts for the full API.",
+    );
+  }
 }
 
 // ────────────────────────────────────────────────────────────────────────────

@@ -35,7 +35,7 @@ import { ThreadList, type LayoutMode } from "../components/gmail/ThreadList";
 import { ThreadView } from "../components/gmail/ThreadView";
 import { ComposeModal } from "../components/gmail/ComposeModal";
 import { usePageAssistantContext } from "../lib/assistant-context";
-import { useAppConfigSummary } from "@workspace/elaine-ui";
+import { useAppConfigSummary, formatElaineContextEntity } from "@workspace/elaine-ui";
 import { useAddBackgroundTask } from "@/lib/background-tasks";
 
 // This is a general-purpose email client for the household member's own
@@ -345,7 +345,7 @@ export default function OfficeGmailPage() {
             ? ` ${threadListData.threads.length} thread(s) loaded in the current page.`
             : "") +
           (selectedThreadId && threadData
-            ? ` A thread is open: "${threadData.messages[0]?.subject ?? "(no subject)"}" with ${threadData.messages.length} message(s). threadId: ${selectedThreadId}`
+            ? ` A thread is open: ${formatElaineContextEntity({ entity: "Thread", id: selectedThreadId, label: threadData.messages[0]?.subject ?? "(no subject)" })} with ${threadData.messages.length} message(s).`
             : "") +
           (configSummary ? `\n\n${configSummary}` : "")
       : `On the Office Gmail page. The user's Gmail account is not connected yet.${configSummary ? `\n\n${configSummary}` : ""}`,

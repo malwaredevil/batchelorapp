@@ -232,6 +232,22 @@ not belong in the global shell. After changing SPA chrome or auth-root wiring,
 run `pnpm --filter @workspace/scripts run check-app-shell` and the app-shell
 tests. See `docs/shared-application-shell.md` for the contract.
 
+### 4.10 Composition and Configuration Is the Default Architecture
+
+After the absolute safety, data-integrity, and security rules above, this is the
+highest-priority design rule for all new and changed code. Batchelor App is one
+application: implement a shared mechanism once, then let domains and SPA bundles
+configure or extend it through typed props, callbacks, adapters, slots, and small
+wrappers. Do not copy a component, formatter, provider setup, query policy, API
+wrapper, upload flow, or page structure into another domain.
+
+Before writing code, search the monorepo for the same behavior. Put multi-domain
+behavior in the narrowest appropriate shared package or focused server library;
+keep only genuine domain fields and actions in the domain. When a change creates
+a boundary worth preserving, update `scripts/src/check-domain-composition.ts`.
+Run that check after relevant changes. See
+`docs/composition-and-configuration.md` for the decision order and examples.
+
 ---
 
 ## 5. Repository Structure

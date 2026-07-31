@@ -31,6 +31,10 @@ import {
 import TripTimeline from "@/travels/components/TripTimeline";
 import { ReminderEditDialog } from "@/travels/components/ReminderEditDialog";
 import { usePageAssistantContext } from "@/travels/lib/assistant-context";
+import {
+  formatElaineContextEntity,
+  formatElaineContextList,
+} from "@workspace/elaine-ui";
 
 const STATUS_ORDER: TripStatus[] = [
   "active",
@@ -168,20 +172,30 @@ export default function Dashboard() {
         }, ${pendingReminders.length} pending reminder(s), and every trip grouped by status. Trip counts by status: ${STATUS_ORDER.map(
           (s) =>
             `${STATUS_LABELS[s]}=${trips.filter((t) => t.status === s).length}`,
-        ).join(", ")}.\nAll trips (tripId — title, destination, status): ${
-          trips
-            .slice(0, 50)
-            .map(
-              (t) =>
-                `tripId: ${t.id} — "${t.title}"${t.destination ? `, ${t.destination}` : ""}, status: ${t.status}`,
-            )
-            .join("; ") || "none"
-        }.${
+        ).join(", ")}.\n${formatElaineContextList(trips, {
+          label: "All trips (tripId — title, destination, status)",
+          formatItem: (trip) =>
+            formatElaineContextEntity({
+              entity: "trip",
+              id: trip.id,
+              label: trip.title,
+              details: [
+                trip.destination && trip.destination,
+                `status: ${trip.status}`,
+              ],
+            }),
+        })}.${
           pendingReminders.length > 0
-            ? `\nPending reminders (reminderId — label): ${pendingReminders
-                .slice(0, 20)
-                .map((r: Reminder) => `reminderId: ${r.id} — "${r.title}"`)
-                .join("; ")}.`
+            ? `\n${formatElaineContextList(pendingReminders, {
+                label: "Pending reminders (reminderId — label)",
+                limit: 20,
+                formatItem: (reminder: Reminder) =>
+                  formatElaineContextEntity({
+                    entity: "reminder",
+                    id: reminder.id,
+                    label: reminder.title,
+                  }),
+              })}.`
             : ""
         }`,
   );

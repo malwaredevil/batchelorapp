@@ -72,7 +72,9 @@ function sanitizeFromHref(raw: string): string {
   try {
     const url = new URL(raw, window.location.origin);
     if (url.origin === window.location.origin) {
-      return url.pathname + url.search + url.hash;
+      // Return only the pathname — discarding search/hash eliminates tainted
+      // components from the href while preserving same-origin navigation. (#239/#240)
+      return url.pathname;
     }
   } catch {
     // Invalid URL — fall through to default

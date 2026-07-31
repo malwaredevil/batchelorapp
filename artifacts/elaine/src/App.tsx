@@ -6,12 +6,11 @@ import { Loader2 } from "lucide-react";
 import { Toaster } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth, redirectToMainLogin } from "@/lib/auth";
-import { AuthProvider as WebCoreAuthProvider } from "@workspace/web-core/auth";
+import { ThemePreferenceSync } from "@workspace/app-shell";
 import { MessengerNotification } from "@workspace/messenger-ui";
 import {
   ElainePageContextProvider,
   ThemeProvider,
-  useTheme,
   CommandPalette,
 } from "@workspace/elaine-ui";
 import { Header } from "@/components/Header";
@@ -39,19 +38,6 @@ function Splash() {
   );
 }
 
-// Applies the user's saved theme preference once they're loaded, so the
-// choice follows the account across every sub-app (light remains default).
-// Mirrors the Hub's ThemeSync so Elaine never feels like a separate product.
-function ThemeSync() {
-  const { user } = useAuth();
-  const { setTheme } = useTheme();
-  useEffect(() => {
-    const pref = user?.themePreference;
-    if (pref === "light" || pref === "dark") setTheme(pref);
-  }, [user?.themePreference, setTheme]);
-  return null;
-}
-
 function Routes() {
   const { user, isLoading } = useAuth();
 
@@ -72,7 +58,7 @@ function Routes() {
   return (
     <>
       <div className="min-h-screen bg-background">
-        <ThemeSync />
+        <ThemePreferenceSync />
         <Header />
         <InstallBanner />
         <main>
@@ -96,29 +82,27 @@ function App() {
         <TooltipProvider>
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
             <AuthProvider>
-              <WebCoreAuthProvider>
-                <ElainePageContextProvider>
-                  <Sentry.ErrorBoundary
-                    fallback={
-                      <div className="flex min-h-screen items-center justify-center bg-background">
-                        <div className="text-center space-y-3">
-                          <p className="text-muted-foreground">
-                            Something went wrong.
-                          </p>
-                          <button
-                            onClick={() => window.location.reload()}
-                            className="text-sm text-primary underline"
-                          >
-                            Reload page
-                          </button>
-                        </div>
+              <ElainePageContextProvider>
+                <Sentry.ErrorBoundary
+                  fallback={
+                    <div className="flex min-h-screen items-center justify-center bg-background">
+                      <div className="text-center space-y-3">
+                        <p className="text-muted-foreground">
+                          Something went wrong.
+                        </p>
+                        <button
+                          onClick={() => window.location.reload()}
+                          className="text-sm text-primary underline"
+                        >
+                          Reload page
+                        </button>
                       </div>
-                    }
-                  >
-                    <Routes />
-                  </Sentry.ErrorBoundary>
-                </ElainePageContextProvider>
-              </WebCoreAuthProvider>
+                    </div>
+                  }
+                >
+                  <Routes />
+                </Sentry.ErrorBoundary>
+              </ElainePageContextProvider>
             </AuthProvider>
           </WouterRouter>
           <Toaster richColors position="top-right" />

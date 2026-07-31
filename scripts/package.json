@@ -13,6 +13,7 @@
     "seed-travels": "tsx ./src/seed-travels-data.ts",
     "seed-quilting-block-templates": "tsx ./src/seed-quilting-block-templates.ts",
     "check-ci-status": "tsx ./src/check-ci-status.ts",
+    "check-app-shell": "node --import tsx ./src/check-app-shell.ts",
     "check-raw-fetch": "tsx ./src/check-raw-fetch.ts",
     "check-pg-singleton": "tsx ./src/check-pg-singleton.ts",
     "check-upload-limits": "tsx ./src/check-upload-limits.ts",

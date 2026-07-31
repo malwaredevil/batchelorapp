@@ -18,6 +18,9 @@
   },
   "references": [
     {
+      "path": "../../lib/app-shell"
+    },
+    {
       "path": "../../lib/api-client-react"
     }
   ]

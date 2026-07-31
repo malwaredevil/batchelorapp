@@ -1,0 +1,38 @@
+{
+  "name": "@workspace/app-shell",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@workspace/api-client-react": "workspace:*",
+    "@workspace/elaine-ui": "workspace:*",
+    "@workspace/messenger-ui": "workspace:*",
+    "@workspace/ui": "workspace:*",
+    "@workspace/web-core": "workspace:*",
+    "lucide-react": "catalog:"
+  },
+  "peerDependencies": {
+    "@tanstack/react-query": "*",
+    "react": ">=18",
+    "react-dom": ">=18",
+    "sonner": "*"
+  },
+  "devDependencies": {
+    "@tanstack/react-query": "catalog:",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "jsdom": "^29.1.1",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "sonner": "^2.0.7",
+    "vitest": "^3.2.6"
+  }
+}

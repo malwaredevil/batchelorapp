@@ -11,6 +11,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ThemePreferenceSync } from "@workspace/app-shell";
 import {
   AuthProvider,
   useAuth,
@@ -222,6 +223,7 @@ function Routes() {
   return (
     <>
       <ScrollToTop />
+      <ThemePreferenceSync />
       <BackgroundTaskProvider>
         <ModuleShell>
           <BulkAddProvider>

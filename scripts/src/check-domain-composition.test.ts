@@ -17,6 +17,7 @@ import {
   hasInlineContextListBuilding,
   extractSharedLibImports,
   checkRequirementContents,
+  checkRequirementFile,
 } from "./check-domain-composition.js";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -407,6 +408,69 @@ test("handles a requirement with no excludes field (excludes is optional)", () =
     { includes: ["runAnalysisWithEvidence"] },
   );
   assert.equal(violations.length, 0);
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Section 1 — checkRequirementFile (missing-file wrapper)
+// ────────────────────────────────────────────────────────────────────────────
+
+console.log("\ncheck-domain-composition.test: Section 1 — checkRequirementFile");
+
+test("returns a structured violation when the file does not exist", () => {
+  const result = checkRequirementFile({
+    path: "some/nonexistent/file.ts",
+    includes: ["createFeatureRegistry"],
+    fix: "Use createFeatureRegistry.",
+  });
+  assert.equal(result.length, 1, "exactly one violation should be returned");
+  assert.ok(
+    result[0].includes("some/nonexistent/file.ts"),
+    "violation should contain the file path",
+  );
+  assert.ok(
+    result[0].includes("file not found or unreadable"),
+    'violation should say "file not found or unreadable"',
+  );
+});
+
+test("does not throw — missing file produces a violation, not an ENOENT crash", () => {
+  // The process must not exit or throw — wrap to confirm
+  let threw = false;
+  try {
+    checkRequirementFile({
+      path: "definitely/does/not/exist.ts",
+      includes: ["anything"],
+    });
+  } catch {
+    threw = true;
+  }
+  assert.equal(threw, false, "checkRequirementFile must not throw on a missing file");
+});
+
+test("returns content violations (not a missing-file violation) when file exists and tokens are absent", () => {
+  // Use a file that is guaranteed to exist in this repo
+  const result = checkRequirementFile({
+    path: "scripts/src/check-domain-composition.ts",
+    includes: ["THIS_TOKEN_DOES_NOT_EXIST_IN_THE_FILE_12345"],
+  });
+  assert.equal(result.length, 1, "one violation for the missing token");
+  assert.ok(
+    result[0].includes("missing"),
+    "violation should say 'missing', not 'file not found'",
+  );
+  assert.ok(
+    !result[0].includes("file not found or unreadable"),
+    "should not produce a file-not-found violation when file exists",
+  );
+});
+
+test("returns no violations when file exists and all tokens are present", () => {
+  // checkRequirementFile on a real file with a token that is definitely in it
+  const result = checkRequirementFile({
+    path: "scripts/src/check-domain-composition.ts",
+    includes: ["checkRequirementFile"],
+  });
+  assert.equal(result.length, 0, "no violations when token is present in the file");
 });
 
 // ────────────────────────────────────────────────────────────────────────────

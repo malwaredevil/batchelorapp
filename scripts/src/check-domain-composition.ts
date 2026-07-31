@@ -318,6 +318,32 @@ const requirements: Array<{
 ];
 
 /**
+ * Read a named-file requirement from disk and check its contents.
+ *
+ * Exported so unit tests can verify that a deleted or unreadable file produces
+ * a structured violation (with the path clearly named) rather than an ENOENT
+ * crash that looks identical to a broken CI run.
+ *
+ * @param req - The full requirement descriptor (including path).
+ * @returns   An array of violation strings.  If the file cannot be read,
+ *            returns exactly one violation: "<path>: file not found or unreadable".
+ */
+export function checkRequirementFile(req: {
+  path: string;
+  includes: string[];
+  excludes?: string[];
+  fix?: string;
+}): string[] {
+  let contents: string;
+  try {
+    contents = read(req.path);
+  } catch {
+    return [`${req.path}: file not found or unreadable`];
+  }
+  return checkRequirementContents(req.path, contents, req);
+}
+
+/**
  * Check a single named-file requirement against already-loaded file contents.
  *
  * Exported so unit tests can exercise the Section 1 loop logic against
@@ -354,8 +380,7 @@ export function checkRequirementContents(
 }
 
 for (const requirement of requirements) {
-  const contents = read(requirement.path);
-  violations.push(...checkRequirementContents(requirement.path, contents, requirement));
+  violations.push(...checkRequirementFile(requirement));
 }
 
 // ────────────────────────────────────────────────────────────────────────────

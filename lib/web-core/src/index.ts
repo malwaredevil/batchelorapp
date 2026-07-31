@@ -8,3 +8,4 @@ export * from "./mount-app";
 export * from "./not-found";
 export * from "./feature-registry";
 export * from "./download";
+export * from "./sentry";

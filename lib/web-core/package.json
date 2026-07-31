@@ -11,7 +11,8 @@
     "./colors": "./src/colors.ts",
     "./mount-app": "./src/mount-app.tsx",
     "./not-found": "./src/not-found.tsx",
-    "./download": "./src/download.ts"
+    "./download": "./src/download.ts",
+    "./sentry": "./src/sentry.ts"
   },
   "dependencies": {
     "@workspace/api-client-react": "workspace:*",
@@ -19,10 +20,12 @@
     "tailwind-merge": "catalog:"
   },
   "peerDependencies": {
+    "@sentry/react": ">=10",
     "react": ">=18",
     "react-dom": ">=18"
   },
   "devDependencies": {
+    "@sentry/react": "^10.66.0",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:"
   }

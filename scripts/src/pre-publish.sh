@@ -94,6 +94,10 @@ run_bg uploadlimit pnpm --filter @workspace/scripts run check-upload-limits
 # pg Pool/Client singleton guard
 run_bg pgsingleton pnpm --filter @workspace/scripts run check-pg-singleton
 
+# Composition-and-configuration architecture guard. CI also runs this, but the
+# local pre-publish gate must catch Replit-only drift before it is synced.
+run_bg composition pnpm --filter @workspace/scripts run check-domain-composition
+
 # GitHub CI status (network-bound — runs in parallel with the local guards)
 run_bg cistatus pnpm --filter @workspace/scripts run check-ci-status
 
@@ -109,11 +113,12 @@ declare -A LABELS=(
   [replitmd]="replit.md guard"
   [uploadlimit]="Upload-limit guard"
   [pgsingleton]="pg singleton guard"
+  [composition]="Composition and configuration"
   [cistatus]="GitHub CI status"
 )
 
 FAILED=()
-for key in appconfig forbidden replitmd uploadlimit pgsingleton cistatus; do
+for key in appconfig forbidden replitmd uploadlimit pgsingleton composition cistatus; do
   code=$(cat "$LOGDIR/$key.exit" 2>/dev/null || echo 1)
   if [[ "$code" -eq 0 ]]; then
     echo -e "${GREEN}✓${RESET} ${LABELS[$key]}"

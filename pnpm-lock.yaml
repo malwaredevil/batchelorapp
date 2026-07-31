@@ -1819,6 +1819,9 @@ importers:
         specifier: 'catalog:'
         version: 3.5.0
     devDependencies:
+      '@sentry/react':
+        specifier: ^10.66.0
+        version: 10.66.0(react@19.1.0)
       '@types/react':
         specifier: 'catalog:'
         version: 19.2.14

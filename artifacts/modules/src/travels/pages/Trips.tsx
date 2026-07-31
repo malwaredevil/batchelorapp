@@ -51,7 +51,11 @@ import {
 import { toast } from "sonner";
 import { MagnetCheckDialog } from "@/travels/components/MagnetCheckDialog";
 import { usePageAssistantContext } from "@/travels/lib/assistant-context";
-import { useAppConfigSummary } from "@workspace/elaine-ui";
+import {
+  formatElaineContextEntity,
+  formatElaineContextList,
+  useAppConfigSummary,
+} from "@workspace/elaine-ui";
 
 // ---------------------------------------------------------------------------
 // AI Trip Planner dialog — streaming SSE response from POST /travels/trips/plan
@@ -1058,15 +1062,20 @@ export default function Trips() {
             .filter(([, bucket]) => bucket.length > 0)
             .map(([status, bucket]) => `${status}: ${bucket.length}`)
             .join(", ") || "none"
-        }.\nVisible trips (tripId — title, destination, status): ${
-          filtered
-            .slice(0, 50)
-            .map(
-              (t) =>
-                `tripId: ${t.id} — "${t.title}"${t.destination ? `, to ${t.destination}` : ""}${t.startDate ? `, ${t.startDate}` : ""}, status: ${t.status}`,
-            )
-            .join("; ") || "none"
-        }.${configSummary ? `\n\n${configSummary}` : ""}`,
+        }.\n${formatElaineContextList(filtered, {
+          label: "Visible trips (tripId — title, destination, status)",
+          formatItem: (trip) =>
+            formatElaineContextEntity({
+              entity: "trip",
+              id: trip.id,
+              label: trip.title,
+              details: [
+                trip.destination && `to ${trip.destination}`,
+                trip.startDate && trip.startDate,
+                `status: ${trip.status}`,
+              ],
+            }),
+        })}.${configSummary ? `\n\n${configSummary}` : ""}`,
   );
 
   return (

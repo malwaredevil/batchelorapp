@@ -38,7 +38,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { usePageAssistantContext } from "@/ornaments/lib/assistant-context";
-import { useAppConfigSummary } from "@workspace/elaine-ui";
+import {
+  formatElaineContextEntity,
+  formatElaineContextList,
+  useAppConfigSummary,
+} from "@workspace/elaine-ui";
 import { Button } from "@/components/ui/button";
 import { CollectionErrorState } from "@workspace/collection-ui";
 import { DominantColorDots } from "@/components/collection/DominantColorDots";
@@ -323,15 +327,26 @@ export default function Collection() {
 
   usePageAssistantContext(
     "ornaments-collection",
-    `Main collection page showing ${filteredItems.length} of ${data?.total ?? items.length} ornaments. Search: "${debouncedSearch}". Category filter: ${filterCategoryIds.size > 0 ? [...filterCategoryIds].join(", ") : "none"}. Color filter: ${activeColor ?? "none"}. Year filter: ${selectedYear ?? "none"}.\nVisible ornaments (itemId — name, key details): ${
-      filteredItems
-        .slice(0, 50)
-        .map(
-          (item) =>
-            `itemId: ${item.id} — "${item.name || "Unnamed"}"${item.brand ? `, brand: ${item.brand}` : ""}${item.year ? `, year: ${item.year}` : ""}${item.seriesOrCollection ? `, series: ${item.seriesOrCollection}` : ""}${item.categories?.length ? `, categories: ${item.categories.map((c) => c.name).join(", ")} (categoryIds: ${item.categories.map((c) => c.id).join(", ")})` : ""}`,
-        )
-        .join("; ") || "none"
-    }.${configSummary ? `\n\n${configSummary}` : ""}`,
+    `Main collection page showing ${filteredItems.length} of ${data?.total ?? items.length} ornaments. Search: "${debouncedSearch}". Category filter: ${filterCategoryIds.size > 0 ? [...filterCategoryIds].join(", ") : "none"}. Color filter: ${activeColor ?? "none"}. Year filter: ${selectedYear ?? "none"}.\n${formatElaineContextList(
+      filteredItems,
+      {
+        label: "Visible ornaments (itemId — name, key details)",
+        formatItem: (item) =>
+          formatElaineContextEntity({
+            entity: "item",
+            id: item.id,
+            label: item.name || "Unnamed",
+            details: [
+              item.brand && `brand: ${item.brand}`,
+              item.year ? `year: ${item.year}` : undefined,
+              item.seriesOrCollection && `series: ${item.seriesOrCollection}`,
+              item.categories?.length
+                ? `categories: ${item.categories.map((category) => category.name).join(", ")} (categoryIds: ${item.categories.map((category) => category.id).join(", ")})`
+                : undefined,
+            ],
+          }),
+      },
+    )}.${configSummary ? `\n\n${configSummary}` : ""}`,
   );
 
   // Year filter dropdown (passed as extraControls to the search bar)
@@ -681,7 +696,7 @@ export default function Collection() {
           <h2 className="text-xl font-serif font-bold text-foreground">
             No ornaments found
           </h2>
-          <p className="text-muted-foreground mt-2 max-w-md">
+          <p className="text-muted-foreground mt-2 max-md">
             {search || filterCategoryIds.size > 0
               ? "Try adjusting your search or filters to find what you're looking for."
               : "Your collection is empty. Start by adding your first hallmark keepsake."}

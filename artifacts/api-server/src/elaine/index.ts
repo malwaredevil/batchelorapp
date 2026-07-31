@@ -9119,11 +9119,14 @@ async function executeRestrictedSoftTool(
           })
           .from(travelsTrips)
           .where(
-            inArray(travelsTrips.status, [
-              "planning",
-              "booked",
-              "in_progress",
-            ] as string[]),
+            and(
+              isNull(travelsTrips.deletedAt),
+              inArray(travelsTrips.status, [
+                "planning",
+                "booked",
+                "in_progress",
+              ] as string[]),
+            ),
           )
           .orderBy(travelsTrips.startDate);
         const formatRange = (start: string | null, end: string | null) => {

@@ -66,27 +66,11 @@ run_bg appconfig pnpm --filter @workspace/api-server run lint:config
   fi
 ) > "$LOGDIR/forbidden.log" 2>&1; echo $? > "$LOGDIR/forbidden.exit" &
 
-# replit.md private-content guard
-(
-  PRIVATE_PATTERNS=(
-    "sentry-baseline write [0-9]"
-    "screenshotToken"
-    "gadhlfluflknlwgmlmos"
-    "RESEND_WEBHOOK_SECRET"
-  )
-  REPLIT_MD="$ROOT/replit.md"
-  LEAKED=()
-  for pat in "${PRIVATE_PATTERNS[@]}"; do
-    if grep -qE "$pat" "$REPLIT_MD" 2>/dev/null; then
-      LEAKED+=("$pat")
-    fi
-  done
-  if [[ ${#LEAKED[@]} -gt 0 ]]; then
-    echo "replit.md contains private content — move to .local/ops-runbook.md:"
-    printf '  • %s\n' "${LEAKED[@]}"
-    exit 1
-  fi
-) > "$LOGDIR/replitmd.log" 2>&1; echo $? > "$LOGDIR/replitmd.exit" &
+# Secrets / credential scan — replaces the old narrow replitmd guard.
+# Checks ALL public files (everything github-sync would push) for credential-like
+# content: API keys, tokens, project IDs, and env-var literal values.
+# Complements pii-scan (which covers email + phone PII).
+run_bg secretsscan pnpm --filter @workspace/scripts run check-public-file-secrets
 
 # Upload-limit guard
 run_bg uploadlimit pnpm --filter @workspace/scripts run check-upload-limits
@@ -110,7 +94,7 @@ echo ""
 declare -A LABELS=(
   [appconfig]="App-config drift"
   [forbidden]="Forbidden filenames"
-  [replitmd]="replit.md guard"
+  [secretsscan]="Secrets / credential scan"
   [uploadlimit]="Upload-limit guard"
   [pgsingleton]="pg singleton guard"
   [composition]="Composition and configuration"
@@ -118,7 +102,7 @@ declare -A LABELS=(
 )
 
 FAILED=()
-for key in appconfig forbidden replitmd uploadlimit pgsingleton composition cistatus; do
+for key in appconfig forbidden secretsscan uploadlimit pgsingleton composition cistatus; do
   code=$(cat "$LOGDIR/$key.exit" 2>/dev/null || echo 1)
   if [[ "$code" -eq 0 ]]; then
     echo -e "${GREEN}✓${RESET} ${LABELS[$key]}"

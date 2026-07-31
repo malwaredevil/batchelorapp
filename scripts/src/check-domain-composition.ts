@@ -371,6 +371,15 @@ const allSourceFiles = [
 // integration configuration have been duplicated.  The shared function
 // initBrowserMonitoring() in lib/web-core/src/sentry.ts is the single owner.
 //
+
+/**
+ * Scan A detector — exported for unit tests.
+ * Returns true if the source contains a direct Sentry.init() call.
+ */
+export function hasSentryInit(contents: string): boolean {
+  return contents.includes("Sentry.init(");
+}
+
 const SENTRY_INIT_ALLOWED = new Set([
   "lib/web-core/src/sentry.ts",           // THE shared implementation
   "artifacts/api-server/src/instrument.ts", // server-side Sentry (separate concern)
@@ -379,7 +388,7 @@ const SENTRY_INIT_ALLOWED = new Set([
 for (const file of allSourceFiles) {
   if (SENTRY_INIT_ALLOWED.has(file)) continue;
   const contents = read(file);
-  if (contents.includes("Sentry.init(")) {
+  if (hasSentryInit(contents)) {
     violations.push(
       `${file}: contains Sentry.init() outside the two permitted files\n` +
         "  FIX: Remove the local Sentry.init() block. In SPA bundles, call\n" +
@@ -398,13 +407,22 @@ for (const file of allSourceFiles) {
 // timeout, retry logic) into the route — the same duplication the facade was
 // introduced to prevent.
 //
+
+/**
+ * Scan B detector — exported for unit tests.
+ * Returns true if the source instantiates an OpenAI client directly.
+ */
+export function hasDirectOpenAIClient(contents: string): boolean {
+  return contents.includes("new OpenAI(");
+}
+
 const routeSourceFiles = walkFiles("artifacts/api-server/src/routes", [".ts"]).filter(
   (f) => !f.endsWith(".test.ts") && !f.endsWith(".spec.ts"),
 );
 
 for (const file of routeSourceFiles) {
   const contents = read(file);
-  if (contents.includes("new OpenAI(")) {
+  if (hasDirectOpenAIClient(contents)) {
     violations.push(
       `${file}: instantiates an OpenAI client directly in a route handler\n` +
         "  FIX: Import getOpenRouterClient() or callModel() from lib/ai-client.ts\n" +
@@ -436,12 +454,14 @@ const pageFiles = allSourceFiles.filter(
       f.startsWith("artifacts/elaine/src/")),
 );
 
-for (const file of pageFiles) {
-  const contents = read(file);
-  // Detect inline entity-list building inside context strings.
-  // The `|| "none"` suffix is the canonical indicator that a .join() is producing
-  // an entity list for the context string (not for JSX rendering).  This keeps
-  // the check precise and avoids false-positives from incidental JSX .join() calls.
+/**
+ * Scan C detector — exported for unit tests.
+ * Returns true if the source uses usePageAssistantContext with an inline
+ * .join()-based entity list but does NOT import the shared formatters.
+ */
+export function hasInlineContextListBuilding(contents: string): boolean {
+  // The `|| "none"` suffix is the canonical indicator that a .join() is
+  // producing an entity list for the context string (not for JSX rendering).
   const hasInlineListPattern =
     contents.includes('.join(", ") || "none"') ||
     contents.includes('.join("; ") || "none"') ||
@@ -449,12 +469,17 @@ for (const file of pageFiles) {
     contents.includes(".join(';') || \"none\"") ||
     contents.includes(".join(', ') || 'none'") ||
     contents.includes(".join('; ') || 'none'");
-  if (
+  return (
     contents.includes("usePageAssistantContext") &&
     hasInlineListPattern &&
     !contents.includes("formatElaineContextList") &&
     !contents.includes("formatElaineContextEntity")
-  ) {
+  );
+}
+
+for (const file of pageFiles) {
+  const contents = read(file);
+  if (hasInlineContextListBuilding(contents)) {
     violations.push(
       `${file}: uses usePageAssistantContext with inline .join() list-building but does not call formatElaineContextList or formatElaineContextEntity\n` +
         "  FIX: Import and use formatElaineContextList / formatElaineContextEntity\n" +
@@ -562,7 +587,7 @@ function topLevelArtifact(filePath: string): string | null {
  * @workspace/web-core/* in a source file and return them as an array of
  * export names.
  */
-function extractSharedLibImports(source: string): string[] {
+export function extractSharedLibImports(source: string): string[] {
   // Matches: import { ... } from '@workspace/elaine-ui'
   //          import { ... } from '@workspace/web-core/sentry'
   // Skips:   import type { ... } (type-only — no runtime coupling)

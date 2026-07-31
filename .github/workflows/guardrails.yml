@@ -93,9 +93,15 @@ jobs:
           # (Prettier may reflow an inline comment to the next line, so we allow
           # the comment on the preceding or following line as well — same 3-line
           # window pattern used by check-raw-fetch.ts.)
+          #
+          # Scope: artifacts/api-server/src/ only.  Test files and detector scripts
+          # (e.g. scripts/src/check-domain-composition.ts and its test suite) contain
+          # the string "new OpenAI(" as test fixtures or as the literal pattern they
+          # scan for — those are legitimate and must not be flagged here.
           VIOLATIONS=""
           while IFS= read -r file; do
             case "$file" in *.ts|*.tsx) ;; *) continue ;; esac
+            case "$file" in artifacts/api-server/src/*) ;; *) continue ;; esac
             while IFS= read -r match; do
               linenum=$(echo "$match" | cut -d: -f1)
               start=$((linenum - 1)); [ $start -lt 1 ] && start=1

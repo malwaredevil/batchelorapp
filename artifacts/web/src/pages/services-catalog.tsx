@@ -39,10 +39,22 @@ const SERVICES: ServiceEntry[] = [
     ],
   },
   {
-    name: "OpenRouter",
-    purpose: "Unified AI gateway (LLM routing)",
+    name: "OpenAI",
+    purpose: "Direct Responses API (GPT-5.6 Sol / Terra / Luna)",
     usedFor:
-      "Powers virtually all AI features: Elaine assistant chat, item analysis (pottery, ornaments), fabric/pattern analysis, birthday emails, document extraction from travel attachments, and Elaine's sub-agent reasoning.",
+      "Primary reasoning layer for Elaine assistant chat (stateful continuation via stored responses) and selected high-value app workflows: travel document extraction, pottery analysis and attribution, quilting fabric identity, durable research synthesis. Controlled by owner rollout flags in Global Config. Falls back to OpenRouter when disabled or on provider error.",
+    implementedIn: [
+      "artifacts/api-server/src/lib/openai-responses.ts",
+      "artifacts/api-server/src/elaine/runtime/responses-state.ts",
+    ],
+    modules: ["Pottery", "Quilting", "Travels", "Elaine", "All"],
+    env: ["OPENAI_API_KEY"],
+  },
+  {
+    name: "OpenRouter",
+    purpose: "Unified AI gateway (LLM routing) — fallback provider",
+    usedFor:
+      "Fallback for all AI features when the direct OpenAI Responses provider is disabled or returns an error: Elaine assistant chat, item analysis (pottery, ornaments), fabric/pattern analysis, birthday emails, document extraction from travel attachments, and Elaine's sub-agent reasoning.",
     implementedIn: ["artifacts/api-server/src/lib/ai-client.ts"],
     modules: ["Pottery", "Quilting", "Ornaments", "Travels", "Elaine", "All"],
     env: ["OPENROUTER_API_KEY"],

@@ -1,13 +1,17 @@
 /**
- * github-sync.ts — batch-push all changed files to GitHub in a single commit.
+ * github-sync.ts — batch-push all changed files to GitHub as a single PR.
  *
  * Usage:
  *   pnpm --filter @workspace/scripts run github-sync "commit message"
  *
  * Rules enforced here:
+ * - ALL changes — including .github/workflows/ files — go through a sync/…
+ *   branch and a pull request. There is no direct-to-main path. Branch
+ *   protection (enforce_admins: true, strict: true) enforces this at GitHub
+ *   level too; even the admin token cannot bypass it.
  * - Detects changed files by comparing local content to GitHub HEAD blobs
  *   (no git commands — the sandbox blocks git writes).
- * - ALL changed files go into ONE commit via the Git Data API (never per-file).
+ * - ALL changed files go into ONE commit (never per-file).
  * - Prettier --write is run on every changed file before the blobs are created.
  * - A single CI run is triggered. Never loop the Contents API per file.
  * - Excluded: .local/, .agents/, .upm/, .cache/, dist/, threat_model.md,
@@ -36,25 +40,27 @@ if (!TOKEN) {
 
 const rawArgs = process.argv.slice(2);
 const confirmDeletions = rawArgs.includes("--confirm-deletions");
-const verifyClean = rawArgs.includes("--verify-clean");
-const commitMessage = rawArgs
-  .filter((a) => a !== "--confirm-deletions" && a !== "--verify-clean")
-  .join(" ")
-  .trim();
-if (!commitMessage && !verifyClean) {
+
+// --direct-to-main is permanently removed. Every change — including
+// .github/workflows/ files — goes through a branch + PR.
+if (rawArgs.includes("--direct-to-main")) {
   console.error(
-    'Usage: pnpm --filter @workspace/scripts run github-sync "commit message" [--confirm-deletions]\n' +
-      "       pnpm --filter @workspace/scripts run github-sync --verify-clean\n" +
-      "  --confirm-deletions  Required to actually remove files from GitHub that are missing locally.\n" +
-      "  --verify-clean       Read-only check that local managed files exactly match GitHub main.",
+    `\n🚫  --direct-to-main is no longer supported.\n` +
+      `All changes, including .github/workflows/ files, must go through a PR.\n` +
+      `Run: pnpm --filter @workspace/scripts run github-sync "commit message"\n` +
+      `Branch protection (enforce_admins: true) enforces this at the GitHub level too.`,
   );
   process.exit(1);
 }
 
-if (rawArgs.includes("--direct-to-main")) {
+const commitMessage = rawArgs
+  .filter((a) => a !== "--confirm-deletions")
+  .join(" ")
+  .trim();
+if (!commitMessage) {
   console.error(
-    "🚫 Direct-to-main sync has been removed. Every repository change, including " +
-      "GitHub workflow changes, must use one branch and pull request.",
+    'Usage: pnpm --filter @workspace/scripts run github-sync "commit message" [--confirm-deletions]\n' +
+      "  --confirm-deletions  Required to actually remove files from GitHub that are missing locally.",
   );
   process.exit(1);
 }
@@ -72,6 +78,7 @@ function slugify(s: string): string {
     .slice(0, 48);
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function gh<T>(method: string, apiPath: string, body?: unknown): Promise<T> {
   return new Promise((res, rej) => {
     const data = body ? JSON.stringify(body) : undefined;
@@ -343,14 +350,6 @@ async function main() {
     process.exit(0);
   }
 
-  if (verifyClean) {
-    console.error("🚫 Local managed files do not match GitHub main:");
-    for (const file of changedFiles) console.error(`  changed: ${file}`);
-    for (const file of deletedFiles)
-      console.error(`  missing locally: ${file}`);
-    process.exit(1);
-  }
-
   if (deletedFiles.length > 0) {
     console.log(`\nFiles to delete from GitHub (${deletedFiles.length}):`);
     deletedFiles.forEach((f) => console.log(`  - ${f}`));
@@ -484,6 +483,10 @@ async function main() {
     });
   }
 
+  // All changes — including .github/workflows/ files — go through a PR.
+  // Branch protection (enforce_admins: true, strict: true) enforces this at
+  // the GitHub level; even an admin token cannot bypass it.
+
   // Helper — build a Git tree + commit and return both SHAs.
   const makeCommit = async (
     parentSha: string,
@@ -510,7 +513,6 @@ async function main() {
     commitSha: string,
     changed: number,
     deleted: number,
-    bodyPrefix: string,
   ): Promise<void> => {
     const now = new Date();
     const datePart = now.toISOString().slice(0, 10).replace(/-/g, "");
@@ -525,7 +527,6 @@ async function main() {
 
     const prBody =
       `## Sync PR\n\n` +
-      bodyPrefix +
       `**Commit:** \`${commitSha.slice(0, 8)}\`  \n` +
       `**Files changed:** ${changed} modified` +
       (deleted > 0 ? `, ${deleted} deleted` : "") +
@@ -533,8 +534,8 @@ async function main() {
       commitMessage +
       `\n\n---\n\n` +
       `> Created automatically by \`github-sync.ts\`.\n` +
-      `> **Merge only after all required CI checks are green.**\n` +
-      `> All repository changes, including workflow files, use this PR-only route.`;
+      `> **Merge only after all CI checks are green.**\n` +
+      `> All files — including any .github/workflows/ changes — are reviewed via PR.`;
 
     const pr = await gh<{ number: number; html_url: string }>(
       "POST",
@@ -560,15 +561,14 @@ async function main() {
     );
   };
 
-  // One batch, one branch, one PR. Branch protection and required checks are
-  // the authority for landing changes on main; this helper never bypasses them.
+  // All changes go through a PR — single path, no exceptions.
   const { sha: newCommitSha } = await makeCommit(
     headSha,
     headCommit.tree.sha,
     treeEntries,
     commitMessage,
   );
-  await openSyncPR(newCommitSha, changedFiles.length, deletedFiles.length, "");
+  await openSyncPR(newCommitSha, changedFiles.length, deletedFiles.length);
 }
 
 main().catch((e) => {

@@ -8886,7 +8886,13 @@ async function executeRestrictedSoftTool(
           })
           .from(potteryItems)
           .where(
-            or(ilike(potteryItems.name, pat), ilike(potteryItems.maker, pat)),
+            and(
+              isNull(potteryItems.deletedAt),
+              or(
+                ilike(potteryItems.name, pat),
+                ilike(potteryItems.maker, pat),
+              ),
+            ),
           )
           .limit(5);
         if (rows.length > 0) {
@@ -8912,9 +8918,12 @@ async function executeRestrictedSoftTool(
           })
           .from(ornamentsItems)
           .where(
-            or(
-              ilike(ornamentsItems.name, pat),
-              ilike(ornamentsItems.seriesOrCollection, pat),
+            and(
+              isNull(ornamentsItems.deletedAt),
+              or(
+                ilike(ornamentsItems.name, pat),
+                ilike(ornamentsItems.seriesOrCollection, pat),
+              ),
             ),
           )
           .limit(5);
@@ -8941,10 +8950,13 @@ async function executeRestrictedSoftTool(
           })
           .from(fabrics)
           .where(
-            or(
-              ilike(fabrics.name, pat),
-              ilike(fabrics.designer, pat),
-              ilike(fabrics.manufacturer, pat),
+            and(
+              isNull(fabrics.deletedAt),
+              or(
+                ilike(fabrics.name, pat),
+                ilike(fabrics.designer, pat),
+                ilike(fabrics.manufacturer, pat),
+              ),
             ),
           )
           .limit(5);
@@ -8970,9 +8982,12 @@ async function executeRestrictedSoftTool(
           })
           .from(quiltPatterns)
           .where(
-            or(
-              ilike(quiltPatterns.name, pat),
-              ilike(quiltPatterns.designer, pat),
+            and(
+              isNull(quiltPatterns.deletedAt),
+              or(
+                ilike(quiltPatterns.name, pat),
+                ilike(quiltPatterns.designer, pat),
+              ),
             ),
           )
           .limit(5);
@@ -8997,7 +9012,9 @@ async function executeRestrictedSoftTool(
             dateCompleted: finishedQuilts.dateCompleted,
           })
           .from(finishedQuilts)
-          .where(ilike(finishedQuilts.name, pat))
+          .where(
+            and(isNull(finishedQuilts.deletedAt), ilike(finishedQuilts.name, pat)),
+          )
           .limit(5);
         if (rows.length > 0) {
           const lines = rows.map(

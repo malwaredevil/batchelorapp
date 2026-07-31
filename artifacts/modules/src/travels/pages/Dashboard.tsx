@@ -162,7 +162,9 @@ export default function Dashboard() {
     statsLoading || tripsLoading
       ? undefined
       : `Dashboard page (home screen): shows trip stats, a countdown to the next upcoming trip${
-          stats?.nextTrip ? ` (${stats.nextTrip.destination}, tripId: ${stats.nextTrip.id})` : ""
+          stats?.nextTrip
+            ? ` (${stats.nextTrip.destination}, tripId: ${stats.nextTrip.id})`
+            : ""
         }, ${pendingReminders.length} pending reminder(s), and every trip grouped by status. Trip counts by status: ${STATUS_ORDER.map(
           (s) =>
             `${STATUS_LABELS[s]}=${trips.filter((t) => t.status === s).length}`,

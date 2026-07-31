@@ -349,9 +349,7 @@ export default function Categories() {
   usePageAssistantContext(
     "ornaments-categories",
     `Categories management page. Current categories (categoryId: name): ${
-      categories
-        ?.map((c) => `${c.id}: "${c.name}"`)
-        .join(", ") || "none"
+      categories?.map((c) => `${c.id}: "${c.name}"`).join(", ") || "none"
     }.`,
   );
 

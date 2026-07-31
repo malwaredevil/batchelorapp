@@ -6,11 +6,18 @@
  * is needed.  Each scan's detector function is imported and exercised against
  * synthetic source strings representing known-violation and known-good patterns.
  *
+ * Also includes integration tests that spawn the full script as a child process
+ * to confirm exit-code behaviour: exit 0 on a clean repo, non-zero when a
+ * real violation is injected into a watched directory.
+ *
  * Run via:
  *   pnpm --filter @workspace/scripts run test
  */
 
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { writeFileSync, unlinkSync } from "node:fs";
+import { join } from "node:path";
 import {
   hasSentryInit,
   hasDirectOpenAIClient,
@@ -471,6 +478,83 @@ test("returns no violations when file exists and all tokens are present", () => 
     includes: ["checkRequirementFile"],
   });
   assert.equal(result.length, 0, "no violations when token is present in the file");
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Integration tests — spawn the script as a child process
+//
+// These tests confirm that the script's violation-reporting loop and
+// process.exitCode = 1 branch are actually wired up.  The unit tests above
+// verify that individual detector functions return correct booleans; these
+// tests verify that the *process* exits 0 on a clean repo and non-zero when
+// a real violation is present.  If the exit-code branch were accidentally
+// removed, all unit tests would still pass while the gate silently stopped
+// enforcing anything.
+// ────────────────────────────────────────────────────────────────────────────
+
+console.log("\ncheck-domain-composition.test: Integration — process exit codes");
+
+const root = join(import.meta.dirname, "../..");
+// scripts/ dir — where tsx is installed and where the npm script runs from
+const scriptsCwd = join(import.meta.dirname, "..");
+const scriptPath = join(import.meta.dirname, "check-domain-composition.ts");
+
+function runScript() {
+  return spawnSync("node", ["--import", "tsx", scriptPath], {
+    cwd: scriptsCwd,
+    encoding: "utf8",
+    env: process.env,
+  });
+}
+
+test("script exits 0 against the real (clean) repo", () => {
+  const result = runScript();
+  if (result.status !== 0) {
+    const stderr = result.stderr?.trim() ?? "";
+    const stdout = result.stdout?.trim() ?? "";
+    throw new Error(
+      `Expected exit 0 but got ${result.status}.\nstdout: ${stdout}\nstderr: ${stderr}`,
+    );
+  }
+  assert.equal(result.status, 0);
+});
+
+// Temporary violation file written into a directory walked by Scan A
+// (artifacts/modules/src) so the Sentry.init() pattern is detected.
+// The filename does NOT end in .test.ts / .spec.ts so it is not excluded.
+const TEMP_VIOLATION_FILE = join(
+  root,
+  "artifacts/modules/src/_temp_composition_guard_test_fixture.ts",
+);
+
+test("script exits non-zero when a Sentry.init() violation is injected", () => {
+  writeFileSync(
+    TEMP_VIOLATION_FILE,
+    [
+      "// Temporary test fixture injected by check-domain-composition.test.ts",
+      "// This file is cleaned up after the test regardless of outcome.",
+      'import * as Sentry from "@sentry/react";',
+      'Sentry.init({ dsn: "https://test@sentry.io/0" });',
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  try {
+    const result = runScript();
+    assert.notEqual(
+      result.status,
+      0,
+      `Expected non-zero exit when a Sentry.init() violation is present, but script exited ${result.status}`,
+    );
+  } finally {
+    // Always clean up, even if the assertion fails, so the real clean-repo
+    // test doesn't break on subsequent runs.
+    try {
+      unlinkSync(TEMP_VIOLATION_FILE);
+    } catch {
+      // best-effort cleanup
+    }
+  }
 });
 
 // ────────────────────────────────────────────────────────────────────────────

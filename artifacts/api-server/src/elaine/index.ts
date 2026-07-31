@@ -6914,10 +6914,12 @@ router.post("/chat", async (req, res) => {
             if (include.includes("pottery")) {
               const [row] = await db
                 .select({ total: count() })
-                .from(potteryItems);
+                .from(potteryItems)
+                .where(isNull(potteryItems.deletedAt));
               const recent = await db
                 .select({ name: potteryItems.name })
                 .from(potteryItems)
+                .where(isNull(potteryItems.deletedAt))
                 .orderBy(desc(potteryItems.createdAt))
                 .limit(3);
               parts.push(
@@ -6931,13 +6933,16 @@ router.post("/chat", async (req, res) => {
             if (include.includes("quilting")) {
               const [fabRow] = await db
                 .select({ total: count() })
-                .from(fabrics);
+                .from(fabrics)
+                .where(isNull(fabrics.deletedAt));
               const [patRow] = await db
                 .select({ total: count() })
-                .from(quiltPatterns);
+                .from(quiltPatterns)
+                .where(isNull(quiltPatterns.deletedAt));
               const [quiltRow] = await db
                 .select({ total: count() })
-                .from(finishedQuilts);
+                .from(finishedQuilts)
+                .where(isNull(finishedQuilts.deletedAt));
               parts.push(
                 `Quilting stash: ${fabRow?.total ?? 0} fabrics, ${patRow?.total ?? 0} patterns, ${quiltRow?.total ?? 0} finished quilts.`,
               );
@@ -6946,10 +6951,12 @@ router.post("/chat", async (req, res) => {
             if (include.includes("ornaments")) {
               const [ornRow] = await db
                 .select({ total: count() })
-                .from(ornamentsItems);
+                .from(ornamentsItems)
+                .where(isNull(ornamentsItems.deletedAt));
               const ornRecent = await db
                 .select({ name: ornamentsItems.name })
                 .from(ornamentsItems)
+                .where(isNull(ornamentsItems.deletedAt))
                 .orderBy(desc(ornamentsItems.createdAt))
                 .limit(3);
               parts.push(
@@ -9025,10 +9032,14 @@ async function executeRestrictedSoftTool(
       const parts: string[] = [];
 
       if (include.includes("pottery")) {
-        const [row] = await db.select({ total: count() }).from(potteryItems);
+        const [row] = await db
+          .select({ total: count() })
+          .from(potteryItems)
+          .where(isNull(potteryItems.deletedAt));
         const recent = await db
           .select({ name: potteryItems.name })
           .from(potteryItems)
+          .where(isNull(potteryItems.deletedAt))
           .orderBy(desc(potteryItems.createdAt))
           .limit(3);
         parts.push(
@@ -9039,13 +9050,18 @@ async function executeRestrictedSoftTool(
         );
       }
       if (include.includes("quilting")) {
-        const [fabRow] = await db.select({ total: count() }).from(fabrics);
+        const [fabRow] = await db
+          .select({ total: count() })
+          .from(fabrics)
+          .where(isNull(fabrics.deletedAt));
         const [patRow] = await db
           .select({ total: count() })
-          .from(quiltPatterns);
+          .from(quiltPatterns)
+          .where(isNull(quiltPatterns.deletedAt));
         const [quiltRow] = await db
           .select({ total: count() })
-          .from(finishedQuilts);
+          .from(finishedQuilts)
+          .where(isNull(finishedQuilts.deletedAt));
         parts.push(
           `Quilting stash: ${fabRow?.total ?? 0} fabrics, ${patRow?.total ?? 0} patterns, ${quiltRow?.total ?? 0} finished quilts.`,
         );
@@ -9053,10 +9069,12 @@ async function executeRestrictedSoftTool(
       if (include.includes("ornaments")) {
         const [ornRow] = await db
           .select({ total: count() })
-          .from(ornamentsItems);
+          .from(ornamentsItems)
+          .where(isNull(ornamentsItems.deletedAt));
         const ornRecent = await db
           .select({ name: ornamentsItems.name })
           .from(ornamentsItems)
+          .where(isNull(ornamentsItems.deletedAt))
           .orderBy(desc(ornamentsItems.createdAt))
           .limit(3);
         parts.push(

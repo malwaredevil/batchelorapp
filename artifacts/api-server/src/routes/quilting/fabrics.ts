@@ -534,7 +534,7 @@ router.get("/fabrics/:id/pairings", async (req, res) => {
   const rows = await db
     .select(cols)
     .from(fabrics)
-    .where(inArray(fabrics.id, topIds));
+    .where(and(inArray(fabrics.id, topIds), isNull(fabrics.deletedAt)));
   const serialized = await Promise.all(
     rows.map((r) =>
       serializeFabric(r as Omit<FabricRow, "embedding" | "visualEmbedding">),

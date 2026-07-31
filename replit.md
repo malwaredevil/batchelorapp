@@ -46,7 +46,26 @@ Combined pnpm monorepo serving both the Pottery and Quilting collection apps und
 
 ## Architecture decisions
 
-- **Composition and configuration is the highest-priority design rule after safety and data integrity.** Before changing code, search the entire monorepo for the same component, formatter, provider setup, query policy, API wrapper, upload flow, or page structure. Implement a multi-domain mechanism once in the narrowest appropriate shared package or focused server library. Domains should supply typed configuration, callbacks, adapters, slots, and small wrappers. Do not copy and rename shared behavior. If a genuinely domain-specific extension is required, keep it small and explain why it cannot use the shared contract. Run `pnpm --filter @workspace/scripts run check-domain-composition` after every relevant change and update that check when establishing a new shared boundary. This rule applies to repairs made during the pre-publishing checklist too. See `docs/composition-and-configuration.md`.
+- **Composition and configuration is the highest-priority design rule after safety and data integrity.** "Write Once, Use Everywhere." Every feature, repair, refactor, PR review, GitHub sync, and pre-publishing task begins with a monorepo-wide search for existing shared behavior. This rule is hardwired and takes precedence from here on.
+
+  **Mandatory search-first workflow — do this before writing any code:**
+  1. `grep -r "the thing you are about to implement" artifacts/ lib/` — find any existing implementation.
+  2. If it exists in one place: import and configure it; never copy it.
+  3. If it exists in two or more places already: extract it to the narrowest appropriate `lib/*` package first, then replace both copies.
+  4. If it is genuinely new: implement it once in `lib/*` (or a focused server library for server-only code), then wire in domain-specific behavior through typed props, callbacks, adapters, slots, or small wrappers.
+  5. If the new shared mechanism is worth protecting: add a boundary to `scripts/src/check-domain-composition.ts` **in the same change** — not a follow-up.
+  6. Run `pnpm --filter @workspace/scripts run check-domain-composition` before committing.
+
+  **Specific banned patterns — the automated guard detects these in any file:**
+  - `Sentry.init(` anywhere except `lib/web-core/src/sentry.ts` and `artifacts/api-server/src/instrument.ts`. Use `initBrowserMonitoring()` from `@workspace/web-core/sentry` in all SPA bundles.
+  - `new OpenAI(` in any file under `artifacts/api-server/src/routes/`. Route handlers must import `getOpenRouterClient()` or `callModel()` from `lib/ai-client.ts`.
+  - `usePageAssistantContext` in a new `.tsx` page file without importing `formatElaineContextList` from `@workspace/elaine-ui`. Never build the context string with inline `.join()` or `.slice().map()`.
+
+  **Enrollment rule:** Every new `lib/*` export that two or more domains will consume must have a corresponding boundary in `check-domain-composition.ts` added in the same PR/commit. A shared mechanism without an enrolled check is incomplete.
+
+  **Pre-publishing:** `pre-publish.sh` runs `check-domain-composition` as a blocking parallel gate. No sync or publish may proceed if it fails. This rule applies to repairs and refactors made during the pre-publishing checklist too.
+
+  See `docs/composition-and-configuration.md` for the full decision order, review questions, accepted/rejected examples, and the list of currently protected boundaries.
 
 - **Pottery, quilting, and travels data are fully household-shared.** Every authenticated user can view, create, edit, and delete any record in these apps — there is no per-user ownership boundary. `user_id` columns are retained only for insert attribution (who created a record), never used to filter/scope reads, writes, or deletes. This is intentional: the app has one household, not per-user tenants. See `threat_model.md` for the full security implications.
 - **One Supabase, two namespaced table sets.** Pottery and quilting already share one Supabase project. The merge adds nothing to the DB — just consolidates the code that talks to it.

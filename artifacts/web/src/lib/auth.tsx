@@ -1,27 +1,3 @@
-import { createContext, useContext, type ReactNode } from "react";
-import { useGetCurrentUser } from "@workspace/api-client-react";
-import type { AuthUser } from "@workspace/api-client-react";
-
-interface AuthContextValue {
-  user: AuthUser | null;
-  isLoading: boolean;
-}
-
-const AuthContext = createContext<AuthContextValue>({
-  user: null,
-  isLoading: true,
-});
-
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const { data, isLoading } = useGetCurrentUser();
-
-  return (
-    <AuthContext.Provider value={{ user: data ?? null, isLoading }}>
-      {children}
-    </AuthContext.Provider>
-  );
-}
-
-export function useAuth() {
-  return useContext(AuthContext);
-}
+// Compatibility import for existing Hub pages. The implementation and context
+// are authoritative in web-core so all SPAs consume the same auth contract.
+export * from "@workspace/web-core/auth";

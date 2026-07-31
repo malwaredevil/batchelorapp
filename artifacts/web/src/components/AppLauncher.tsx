@@ -7,13 +7,10 @@ import {
   ArrowRight,
   Activity,
   Settings,
-  Sun,
-  Moon,
   PlusCircle,
   LayoutGrid,
   X,
   Check,
-  LogOut,
   ChevronDown,
   Package,
   Scissors,
@@ -24,18 +21,13 @@ import {
   Sparkles,
   MessageCircle,
   SlidersHorizontal,
-  ShieldCheck,
-  Mail,
-  CalendarDays,
   Gift,
   Tag,
   Sparkle,
   GripVertical,
 } from "lucide-react";
-import { AppSwitcher } from "@workspace/elaine-ui";
-import { MessengerNavIcon } from "@workspace/messenger-ui";
+import { ApplicationHeader } from "@workspace/app-shell";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -51,11 +43,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useTheme } from "@workspace/elaine-ui";
 import { useWidgets, type WidgetSlot, type RssSlot } from "@/hooks/use-widgets";
 import { RssFeedWidget } from "@/components/widgets";
 import { useAuth } from "@/lib/auth";
@@ -78,13 +67,6 @@ import {
 import { usePageAssistantContext } from "@/lib/assistant-context";
 
 const base = import.meta.env.BASE_URL;
-
-function initialsFrom(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
 
 const ADD_ACTIONS = [
   { label: "Pottery piece", href: `${base}pottery/add` },
@@ -665,7 +647,6 @@ function HallmarkEventStatTile() {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 export function AppLauncher() {
-  const { isDark, toggleTheme } = useTheme();
   const {
     slots,
     appCardOrder,
@@ -686,9 +667,6 @@ export function AppLauncher() {
 
   const displayName = user?.displayName?.trim() || user?.email || "there";
   const firstName = displayName.split(/[\s@]/)[0] || displayName;
-  const initials = initialsFrom(
-    user?.displayName?.trim() || user?.email || "?",
-  );
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [customizing, setCustomizing] = useState(false);
@@ -942,137 +920,26 @@ export function AppLauncher() {
     window.location.href = href;
   }
 
-  async function signOut() {
-    try {
-      await fetch(`${base}api/auth/logout`, {
-        method: "POST",
-        credentials: "include",
-      });
-    } finally {
-      window.location.href = base;
-    }
-  }
-
   return (
     <div className="min-h-screen bg-background text-foreground font-sans flex flex-col overflow-x-hidden">
-      {/* Header — max-w-6xl matches pottery/quilting shells */}
-      <header className="sticky top-0 z-10 bg-background/80 backdrop-blur-md border-b border-border">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
-          <AppSwitcher currentAppId="hub" />
-
-          <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setSearchOpen(true)}
-              className="hidden md:flex items-center gap-2 text-muted-foreground border-border"
-            >
-              <Search className="w-4 h-4" />
-              <span>Global search...</span>
-              <kbd className="hidden lg:inline-flex h-5 items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium ml-2">
-                <span className="text-xs">⌘</span>K
-              </kbd>
-            </Button>
-
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleTheme}
-              aria-label="Toggle dark mode"
-              className="text-muted-foreground hover:text-foreground"
-            >
-              {isDark ? (
-                <Sun className="w-5 h-5" />
-              ) : (
-                <Moon className="w-5 h-5" />
-              )}
-            </Button>
-
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => {
-                window.location.href = "/modules/office/gmail";
-              }}
-              aria-label="Open Gmail"
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <Mail className="w-5 h-5" />
-            </Button>
-
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => {
-                window.location.href = "/modules/office/calendar";
-              }}
-              aria-label="Calendar"
-              title="Calendar"
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <CalendarDays className="w-5 h-5" />
-            </Button>
-
-            <MessengerNavIcon
-              buttonClassName="text-muted-foreground hover:text-foreground"
-              iconSize={20}
-            />
-
-            <DropdownMenu modal={false}>
-              <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-3 pl-3 border-l border-border outline-none">
-                  <div className="flex-col items-end hidden sm:flex">
-                    <span className="text-sm font-medium leading-none">
-                      {displayName}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {user?.email}
-                    </span>
-                  </div>
-                  <Avatar className="h-9 w-9 border border-border">
-                    <AvatarFallback className="bg-primary text-primary-foreground">
-                      {initials}
-                    </AvatarFallback>
-                  </Avatar>
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel>
-                  <div className="flex flex-col">
-                    <span className="font-medium">{displayName}</span>
-                    <span className="text-xs font-normal text-muted-foreground">
-                      {user?.email}
-                    </span>
-                  </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => navigate(`${base}account`)}>
-                  <Settings className="w-4 h-4 mr-2" />
-                  Account settings
-                </DropdownMenuItem>
-                {user?.isOwner && (
-                  <DropdownMenuItem
-                    onSelect={() => {
-                      window.location.href = `/owner-panel?from=${encodeURIComponent(window.location.pathname + window.location.search)}`;
-                    }}
-                  >
-                    <ShieldCheck className="w-4 h-4 mr-2" />
-                    Owner Panel
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onSelect={signOut}
-                  className="text-destructive focus:text-destructive"
-                >
-                  <LogOut className="w-4 h-4 mr-2" />
-                  Sign out
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-      </header>
+      <ApplicationHeader
+        currentAppId="hub"
+        globalIconSize={20}
+        primaryAction={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setSearchOpen(true)}
+            className="hidden md:flex items-center gap-2 text-muted-foreground border-border"
+          >
+            <Search className="w-4 h-4" />
+            <span>Global search...</span>
+            <kbd className="hidden lg:inline-flex h-5 items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium ml-2">
+              <span className="text-xs">⌘</span>K
+            </kbd>
+          </Button>
+        }
+      />
 
       {/* Global search */}
       <CommandDialog open={searchOpen} onOpenChange={setSearchOpen}>

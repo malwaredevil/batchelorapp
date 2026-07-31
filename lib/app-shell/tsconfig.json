@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "declarationMap": true,
+    "emitDeclarationOnly": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "jsx": "react-jsx",
+    "lib": ["dom", "es2022"]
+  },
+  "references": [
+    { "path": "../api-client-react" },
+    { "path": "../web-core" },
+    { "path": "../ui" },
+    { "path": "../elaine-ui" },
+    { "path": "../messenger-ui" }
+  ],
+  "include": ["src"]
+}

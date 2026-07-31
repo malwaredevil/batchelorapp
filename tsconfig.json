@@ -13,6 +13,9 @@
       "path": "./lib/web-core"
     },
     {
+      "path": "./lib/app-shell"
+    },
+    {
       "path": "./lib/api-zod"
     },
     {

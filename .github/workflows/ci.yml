@@ -183,6 +183,22 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @workspace/api-client-react run test
 
+  test-app-shell:
+    name: Shared application shell tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+        with:
+          version: 10
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @workspace/app-shell run test
+      - run: pnpm --filter @workspace/scripts run check-app-shell
+
   pii-scan:
     name: PII email scan
     runs-on: ubuntu-latest

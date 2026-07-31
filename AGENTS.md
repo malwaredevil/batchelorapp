@@ -218,6 +218,20 @@ direct database bypass, binary operation, or restricted-channel access to this
 bridge. After changing OpenAPI operations or the inventory, regenerate and
 check both the capability report and operation catalog.
 
+### 4.9 Global App Chrome Uses the Shared Application Shell
+
+Hub, Modules, and Elaine are separate SPA bundles but one user experience.
+Global header behavior lives in `lib/app-shell` and must be composed through
+`ApplicationHeader`. Never create an artifact-local global `<header>`, account
+menu, Owner Panel item, theme control, communication shortcut, or sign-out
+implementation.
+
+Apps supply specialized navigation and actions through the shell's typed slots.
+Domain-specific toolbars, page-local headers, dialogs, and printable headers do
+not belong in the global shell. After changing SPA chrome or auth-root wiring,
+run `pnpm --filter @workspace/scripts run check-app-shell` and the app-shell
+tests. See `docs/shared-application-shell.md` for the contract.
+
 ---
 
 ## 5. Repository Structure
@@ -248,6 +262,7 @@ artifacts/
   elaine/              # React SPA: Elaine AI chat UI
 
 lib/
+  app-shell/           # Shared global header, account menu, theme preference sync
   api-client-react/    # TanStack Query hooks (Orval-generated + hand-written)
   api-spec/            # OpenAPI spec (YAML sources → merged openapi.yaml)
   api-zod/             # Zod schemas (Orval-generated)

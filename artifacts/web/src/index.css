@@ -3,6 +3,7 @@
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
 @source "../../../lib/ui/src";
+@source "../../../lib/app-shell/src";
 @source "../../../lib/web-core/src";
 @source "../../../lib/elaine-ui/src";
 @source "../../../lib/messenger-ui/src";

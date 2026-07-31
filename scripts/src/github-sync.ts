@@ -36,19 +36,25 @@ if (!TOKEN) {
 
 const rawArgs = process.argv.slice(2);
 const confirmDeletions = rawArgs.includes("--confirm-deletions");
-// --direct-to-main bypasses the branch+PR flow and pushes straight to main.
-// Use ONLY for GitHub Actions workflow-file changes (GitHub requires those to
-// exist on main before they execute) and genuine emergency hotfixes.
-const directToMain = rawArgs.includes("--direct-to-main");
+const verifyClean = rawArgs.includes("--verify-clean");
 const commitMessage = rawArgs
-  .filter((a) => a !== "--confirm-deletions" && a !== "--direct-to-main")
+  .filter((a) => a !== "--confirm-deletions" && a !== "--verify-clean")
   .join(" ")
   .trim();
-if (!commitMessage) {
+if (!commitMessage && !verifyClean) {
   console.error(
-    'Usage: pnpm --filter @workspace/scripts run github-sync "commit message" [--confirm-deletions] [--direct-to-main]\n' +
+    'Usage: pnpm --filter @workspace/scripts run github-sync "commit message" [--confirm-deletions]\n' +
+      "       pnpm --filter @workspace/scripts run github-sync --verify-clean\n" +
       "  --confirm-deletions  Required to actually remove files from GitHub that are missing locally.\n" +
-      "  --direct-to-main     Push directly to main instead of opening a PR (emergency / workflow-file changes only).",
+      "  --verify-clean       Read-only check that local managed files exactly match GitHub main.",
+  );
+  process.exit(1);
+}
+
+if (rawArgs.includes("--direct-to-main")) {
+  console.error(
+    "🚫 Direct-to-main sync has been removed. Every repository change, including " +
+      "GitHub workflow changes, must use one branch and pull request.",
   );
   process.exit(1);
 }
@@ -66,7 +72,6 @@ function slugify(s: string): string {
     .slice(0, 48);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function gh<T>(method: string, apiPath: string, body?: unknown): Promise<T> {
   return new Promise((res, rej) => {
     const data = body ? JSON.stringify(body) : undefined;
@@ -338,6 +343,14 @@ async function main() {
     process.exit(0);
   }
 
+  if (verifyClean) {
+    console.error("🚫 Local managed files do not match GitHub main:");
+    for (const file of changedFiles) console.error(`  changed: ${file}`);
+    for (const file of deletedFiles)
+      console.error(`  missing locally: ${file}`);
+    process.exit(1);
+  }
+
   if (deletedFiles.length > 0) {
     console.log(`\nFiles to delete from GitHub (${deletedFiles.length}):`);
     deletedFiles.forEach((f) => console.log(`  - ${f}`));
@@ -471,47 +484,6 @@ async function main() {
     });
   }
 
-  // ── Categorise changes: workflow files vs everything else ─────────────────
-  //
-  // Hard-enforced routing rule (also documented in replit.md §Stage 3c and
-  // replit.md §Gotchas):
-  //
-  //   .github/workflows/*.yml  →  MUST go directly to main (--direct-to-main).
-  //                               GitHub only executes the workflow version that
-  //                               lives on main; a branch copy is silently ignored.
-  //
-  //   Everything else          →  MUST go through a PR so CI validates changes
-  //                               against the (already-updated) workflow definitions
-  //                               before they land on main.
-  //
-  //   Mixed batch (both kinds, no --direct-to-main flag)  →  auto-split:
-  //       Step 1: push workflow files directly to main.
-  //       Step 2: open a PR for all other files (CI now uses the new workflows).
-  //
-  //   --direct-to-main + non-workflow files  →  hard error, aborted immediately.
-  const wfEntries = treeEntries.filter((e) =>
-    (e.path ?? "").startsWith(".github/"),
-  );
-  const otherEntries = treeEntries.filter(
-    (e) => !(e.path ?? "").startsWith(".github/"),
-  );
-  const hasWorkflow = wfEntries.length > 0;
-  const hasOther = otherEntries.length > 0;
-
-  // Hard guard: --direct-to-main is strictly for .github/ workflow files.
-  if (directToMain && hasOther) {
-    const nonWfPaths = otherEntries.map((e) => `  ${e.path ?? ""}`).join("\n");
-    console.error(
-      `\n🚫  ABORTED: --direct-to-main is only permitted for .github/workflows/ files.\n` +
-        `The following non-workflow files must go through a PR:\n${nonWfPaths}\n\n` +
-        `Run github-sync WITHOUT --direct-to-main.\n` +
-        `When both workflow and non-workflow files are present the script will\n` +
-        `auto-split: push workflow files to main first, then open a PR for the\n` +
-        `remaining files so CI runs against the freshly-updated workflow definitions.`,
-    );
-    process.exit(1);
-  }
-
   // Helper — build a Git tree + commit and return both SHAs.
   const makeCommit = async (
     parentSha: string,
@@ -561,8 +533,8 @@ async function main() {
       commitMessage +
       `\n\n---\n\n` +
       `> Created automatically by \`github-sync.ts\`.\n` +
-      `> **Merge only after all CI checks are green.**\n` +
-      `> This PR contains no workflow files — workflow-file-only changes use \`--direct-to-main\`.`;
+      `> **Merge only after all required CI checks are green.**\n` +
+      `> All repository changes, including workflow files, use this PR-only route.`;
 
     const pr = await gh<{ number: number; html_url: string }>(
       "POST",
@@ -588,72 +560,8 @@ async function main() {
     );
   };
 
-  // ── Case 1: auto-split (workflow + other files, no --direct-to-main) ──────
-  if (hasWorkflow && hasOther) {
-    console.log(
-      `\nAuto-split: ${wfEntries.length} workflow file(s) + ${otherEntries.length} other file(s).`,
-    );
-
-    // Step 1 — push workflow files directly to main.
-    console.log(`\n  [1/2] Pushing workflow files directly to main …`);
-    const { sha: wfSha, treeSha: wfTreeSha } = await makeCommit(
-      headSha,
-      headCommit.tree.sha,
-      wfEntries,
-      commitMessage + " [workflow files]",
-    );
-    await gh("PATCH", `/git/refs/heads/${BRANCH}`, { sha: wfSha });
-    console.log(
-      `  ✓ Workflow files on main: https://github.com/${REPO}/commit/${wfSha}`,
-    );
-
-    // Step 2 — PR for all other files, parented on the workflow commit so the
-    // PR branch includes the updated workflow definitions as its base.
-    console.log(
-      `\n  [2/2] Opening PR for ${otherEntries.length} non-workflow file(s) …`,
-    );
-    const { sha: otherSha } = await makeCommit(
-      wfSha,
-      wfTreeSha,
-      otherEntries,
-      commitMessage,
-    );
-    const nonWfChanged = changedFiles.filter(
-      (f) => !f.startsWith(".github/"),
-    ).length;
-    const nonWfDeleted = deletedFiles.filter(
-      (f) => !f.startsWith(".github/"),
-    ).length;
-    const autoSplitPrefix =
-      `> **Auto-split sync:** workflow files were pushed directly to main first\n` +
-      `> so CI here runs against the updated workflow definitions.\n\n`;
-    await openSyncPR(otherSha, nonWfChanged, nonWfDeleted, autoSplitPrefix);
-
-    console.log(
-      `\n  Auto-split summary:\n` +
-        `    Workflow files → main: https://github.com/${REPO}/commit/${wfSha}\n` +
-        `    Other files    → PR above (CI uses the updated workflow definitions)`,
-    );
-    return;
-  }
-
-  // ── Case 2: direct-to-main (workflow files only, --direct-to-main flag) ───
-  if (directToMain) {
-    const { sha: newCommitSha } = await makeCommit(
-      headSha,
-      headCommit.tree.sha,
-      treeEntries,
-      commitMessage,
-    );
-    await gh("PATCH", `/git/refs/heads/${BRANCH}`, { sha: newCommitSha });
-    console.log(
-      `\n✓ Pushed directly to ${REPO}@${BRANCH} — single commit, single CI run triggered.`,
-    );
-    console.log(`  https://github.com/${REPO}/commit/${newCommitSha}`);
-    return;
-  }
-
-  // ── Case 3: normal PR mode (no workflow files, no --direct-to-main) ───────
+  // One batch, one branch, one PR. Branch protection and required checks are
+  // the authority for landing changes on main; this helper never bypasses them.
   const { sha: newCommitSha } = await makeCommit(
     headSha,
     headCommit.tree.sha,

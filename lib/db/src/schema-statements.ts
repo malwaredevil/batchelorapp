@@ -2982,4 +2982,25 @@ END $$`,
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS comm_checks_check_date_unique
      ON comm_checks (check_date)`,
+
+  // ── Elaine scheduled-actions table (Task #511) ────────────────────────────
+  // Durable future-action scheduler: Elaine writes a row when the user asks
+  // her to call/message someone at a future time. A background job polls
+  // every minute and fires due rows, then marks them fired/failed/cancelled.
+  `CREATE TABLE IF NOT EXISTS elaine_scheduled_actions (
+     id                    SERIAL PRIMARY KEY,
+     scheduled_for         TIMESTAMPTZ NOT NULL,
+     action_type           TEXT NOT NULL,
+     action_payload        JSONB NOT NULL DEFAULT '{}',
+     initiated_by_user_id  INTEGER NOT NULL,
+     target_contact_id     INTEGER,
+     status                TEXT NOT NULL DEFAULT 'pending',
+     fired_at              TIMESTAMPTZ,
+     error                 TEXT,
+     created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS elaine_scheduled_actions_status_scheduled_for_idx
+     ON elaine_scheduled_actions (status, scheduled_for)`,
+  `CREATE INDEX IF NOT EXISTS elaine_scheduled_actions_user_id_idx
+     ON elaine_scheduled_actions (initiated_by_user_id)`,
 ];

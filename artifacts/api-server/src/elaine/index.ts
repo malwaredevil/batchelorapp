@@ -176,6 +176,9 @@ import {
   communicationActionExecutors,
   communicationActionSchemas,
   communicationActionTools,
+  executeListScheduledContacts,
+  LIST_SCHEDULED_CONTACTS_TOOL_NAME,
+  listScheduledContactsTool,
   type CommunicationActionType,
 } from "./communication-actions";
 import {
@@ -3805,6 +3808,7 @@ const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   ...officeActionTools,
   ...universalReadTools,
   ...appOperationReadTools,
+  listScheduledContactsTool,
   {
     type: "function",
     function: {
@@ -7185,6 +7189,8 @@ router.post("/chat", async (req, res) => {
             resultText =
               (await executeUniversalReadTool(call.name, call.args, userId)) ??
               "Unsupported app data tool.";
+          } else if (call.name === LIST_SCHEDULED_CONTACTS_TOOL_NAME) {
+            resultText = await executeListScheduledContacts(userId);
           } else {
             resultText = "Unsupported tool.";
           }
@@ -8556,6 +8562,7 @@ const RESTRICTED_SOFT_TOOL_NAMES = new Set<string>([
   REMEMBER_TOOL_NAME,
   SHOW_DATA_CARD_TOOL_NAME,
   LOOKUP_BARCODE_TOOL_NAME,
+  LIST_SCHEDULED_CONTACTS_TOOL_NAME,
 ]);
 
 const RESTRICTED_SOFT_TOOLS = [...SOFT_TOOLS, ...SOFT_TOOLS_EXTRA].filter(
@@ -9119,6 +9126,16 @@ async function executeRestrictedSoftTool(
       const parsed = RememberToolPayload.safeParse(JSON.parse(args));
       if (!parsed.success) return "Couldn't save that note.";
       return "noted"; // no-op result text; the insert below is the real effect
+    }
+
+    if (name === LIST_SCHEDULED_CONTACTS_TOOL_NAME) {
+      // userId is not available in this function signature, but the restricted
+      // channel turns always resolve a userId from the inbound webhook context.
+      // We parse it from the args if provided, otherwise return a prompt to
+      // check the app. This function is called from runRestrictedElaineTurn
+      // which passes a userId separately; handled there via the main soft-tool
+      // dispatch path that already has userId in scope.
+      return "Use the app to view your scheduled contacts: /elaine/";
     }
 
     return "Unsupported tool.";

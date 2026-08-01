@@ -360,6 +360,47 @@ export const elaineTurnTraces = pgTable(
 export type ElaineTurnTraceRow = typeof elaineTurnTraces.$inferSelect;
 export type InsertElaineTurnTrace = typeof elaineTurnTraces.$inferInsert;
 
+// Durable future-action scheduler — Elaine writes a row here when the user
+// asks her to call or message someone "at a time" in the future. A background
+// job polls every minute and fires any due row, then marks it fired/failed.
+// Rows are scoped to the user who initiated them; cancel sets status='cancelled'.
+export const elaineScheduledActions = pgTable(
+  "elaine_scheduled_actions",
+  {
+    id: serial("id").primaryKey(),
+    scheduledFor: timestamp("scheduled_for", {
+      withTimezone: true,
+    }).notNull(),
+    actionType: text("action_type").notNull(),
+    actionPayload: jsonb("action_payload")
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    initiatedByUserId: integer("initiated_by_user_id").notNull(),
+    targetContactId: integer("target_contact_id"),
+    // pending → fired (success) | failed (error) | cancelled (user-cancelled)
+    status: text("status").notNull().default("pending"),
+    firedAt: timestamp("fired_at", { withTimezone: true }),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("elaine_scheduled_actions_status_scheduled_for_idx").on(
+      table.status,
+      table.scheduledFor,
+    ),
+    index("elaine_scheduled_actions_user_id_idx").on(
+      table.initiatedByUserId,
+    ),
+  ],
+).enableRLS();
+
+export type ElaineScheduledActionRow =
+  typeof elaineScheduledActions.$inferSelect;
+export type InsertElaineScheduledAction =
+  typeof elaineScheduledActions.$inferInsert;
+
 // Daily morning brief — one personalised summary per user per UTC day.
 // Cached in this table; dismissed flag hides the card until regenerated.
 export const elaineDailyBriefs = pgTable("elaine_daily_briefs", {

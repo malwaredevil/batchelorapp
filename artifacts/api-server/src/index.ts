@@ -10,6 +10,7 @@ import { startErrorRateSummary } from "./lib/error-tracker";
 import { startBirthdayScheduler } from "./lib/birthday-scheduler";
 import { startMonitoringScheduler } from "./lib/monitoring-scheduler";
 import { startCommCheckScheduler } from "./lib/comm-check-scheduler";
+import { startScheduledActionsRunner } from "./lib/elaine-scheduled-actions-runner";
 import { startJobWorker, stopAllJobWorkers } from "./lib/jobs/worker";
 import {
   markBucketsReady,
@@ -76,6 +77,7 @@ async function initializeRuntime(): Promise<void> {
     startBirthdayScheduler(),
     startMonitoringScheduler(),
     startCommCheckScheduler(),
+    startScheduledActionsRunner(),
   );
   startJobWorker("slack");
   startJobWorker("maintenance");

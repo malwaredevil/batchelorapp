@@ -14,8 +14,7 @@ export default defineConfig({
         "postgresql://test:test@localhost:5432/testdb",
       SESSION_SECRET:
         process.env.SESSION_SECRET ?? "ci-test-session-secret-placeholder",
-      SUPABASE_URL:
-        process.env.SUPABASE_URL ?? "https://ci-test.supabase.co",
+      SUPABASE_URL: process.env.SUPABASE_URL ?? "https://ci-test.supabase.co",
       SUPABASE_SERVICE_ROLE_KEY:
         process.env.SUPABASE_SERVICE_ROLE_KEY ?? "ci-test-service-role-key",
       OPENROUTER_API_KEY:

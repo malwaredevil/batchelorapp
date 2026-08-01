@@ -15,7 +15,9 @@
   },
   "devDependencies": {
     "@tanstack/react-query": "catalog:",
-    "@types/react": "catalog:"
+    "@types/react": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit"

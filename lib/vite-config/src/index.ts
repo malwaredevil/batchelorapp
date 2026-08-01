@@ -123,7 +123,7 @@ export async function createWorkspaceViteConfig(
           replacement: path.resolve(artifactDir, "..", "..", "attached_assets"),
         },
       ],
-      dedupe: ["react", "react-dom"],
+      dedupe: ["react", "react-dom", "@tanstack/react-query", "@tanstack/query-core"],
     },
     root: path.resolve(artifactDir),
     define: {

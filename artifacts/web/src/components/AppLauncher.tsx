@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { Component, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import {
   Search,
   Plus,
@@ -501,6 +502,31 @@ function AppHeroCard({
 // calendar is connected or no upcoming events are found within 90 days.
 // Compact stat-square–sized tile. Yellow while counting down, red when live.
 // Rotates through multiple upcoming events every 4 seconds.
+
+/**
+ * Generic silent error boundary — renders null if a child throws.
+ * Used to contain hook failures in individual stat-tiles and widget bodies
+ * so they hide themselves rather than crashing the whole page.
+ */
+class SilentErrorBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  render() {
+    if (this.state.hasError) return null;
+    return this.props.children;
+  }
+}
+
+// Keep the old alias so the stat-tile usage below doesn't need changing.
+const StatTileErrorBoundary = SilentErrorBoundary;
 
 // Stable 90-day query window — computed once per page load so the query key
 // doesn't change on every render.
@@ -1204,7 +1230,9 @@ export function AppLauncher() {
                     extraBlock={cfg.extraBlock}
                     statTile={
                       appId === "ornaments" ? (
-                        <HallmarkEventStatTile />
+                        <StatTileErrorBoundary>
+                          <HallmarkEventStatTile />
+                        </StatTileErrorBoundary>
                       ) : undefined
                     }
                     arranging={arranging}
@@ -1330,7 +1358,7 @@ export function AppLauncher() {
                         <Icon className="w-4 h-4 text-primary" />
                         {w.title}
                       </div>
-                      {w.body}
+                      <SilentErrorBoundary>{w.body}</SilentErrorBoundary>
                     </div>
                   );
                 })}

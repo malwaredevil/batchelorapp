@@ -1,13 +1,12 @@
+export { crossAppUrl } from "@workspace/web-core/cross-app";
+
 /**
- * Base URL for links that may cross SPA boundaries (/, /modules/, /elaine/).
+ * Base URL for links that cross SPA boundaries from the Hub app (/, /modules/,
+ * /elaine/).  The Hub's BASE_URL is "/" so this gives a root-anchored prefix
+ * when on a raw dev port (e.g. https://<domain>:3000) and "/" otherwise.
  *
- * Path-based routing between artifacts only exists on the PORTLESS origin
- * (Replit's proxy in dev, the real domain in prod). If the app is opened via
- * a raw mapped dev port (e.g. https://<repl-domain>:3000 → the hub's Vite
- * server only), relative links like "modules/office/" 404 because no other
- * artifact is reachable on that port. Anchoring cross-app links to
- * `protocol//hostname/` (dropping any port) fixes that case and is a no-op
- * everywhere else.
+ * For cross-app links in Modules or Elaine, use `crossAppUrl(path)` from
+ * `@workspace/web-core/cross-app` directly.
  */
 export function crossAppBase(): string {
   if (typeof window === "undefined") return import.meta.env.BASE_URL;

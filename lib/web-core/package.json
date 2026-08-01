@@ -12,7 +12,8 @@
     "./mount-app": "./src/mount-app.tsx",
     "./not-found": "./src/not-found.tsx",
     "./download": "./src/download.ts",
-    "./sentry": "./src/sentry.ts"
+    "./sentry": "./src/sentry.ts",
+    "./cross-app": "./src/cross-app.ts"
   },
   "dependencies": {
     "@workspace/api-client-react": "workspace:*",

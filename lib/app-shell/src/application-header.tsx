@@ -30,6 +30,7 @@ import {
   DropdownMenuTrigger,
 } from "@workspace/ui";
 import { cn } from "@workspace/web-core/utils";
+import { crossAppUrl } from "@workspace/web-core/cross-app";
 
 /** Prevents a MessengerNavIcon crash from taking down the whole app header. */
 class MessengerErrorBoundary extends Component<
@@ -89,7 +90,7 @@ export function AccountMenu({
   user,
   signingOut = false,
   onNavigate = (href) => {
-    window.location.href = href;
+    window.location.href = crossAppUrl(href);
   },
   onSignOut = () => undefined,
   className,
@@ -205,7 +206,7 @@ export function ApplicationHeader({
       },
       onSuccess: () => {
         queryClient.setQueryData(getGetCurrentUserQueryKey(), null);
-        window.location.href = "/login";
+        window.location.href = crossAppUrl("/login");
       },
       onError: () => toast.error("Could not sign out. Please try again."),
     },
@@ -265,7 +266,7 @@ export function ApplicationHeader({
               variant="ghost"
               size="icon"
               onClick={() => {
-                window.location.href = "/modules/office/gmail";
+                window.location.href = crossAppUrl("/modules/office/gmail");
               }}
               aria-label="Open Gmail"
               className="text-muted-foreground hover:text-foreground"
@@ -276,7 +277,7 @@ export function ApplicationHeader({
               variant="ghost"
               size="icon"
               onClick={() => {
-                window.location.href = "/modules/office/calendar";
+                window.location.href = crossAppUrl("/modules/office/calendar");
               }}
               aria-label="Calendar"
               className="text-muted-foreground hover:text-foreground"

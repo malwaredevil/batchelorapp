@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { crossAppUrl } from "@workspace/web-core/cross-app";
 import { toast } from "sonner";
 import { Brain, ArrowRight } from "lucide-react";
 import {
@@ -196,7 +197,7 @@ export function ElaineSettingsCard({
       </div>
 
       <a
-        href="/elaine/memory"
+        href={crossAppUrl("/elaine/memory")}
         className="flex items-center justify-between gap-3 rounded-lg border border-card-border p-4 hover:border-primary/30 hover:bg-muted/30 transition-colors group"
       >
         <div className="flex items-center gap-3">

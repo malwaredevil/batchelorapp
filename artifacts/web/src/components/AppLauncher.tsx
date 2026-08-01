@@ -526,7 +526,12 @@ class SilentErrorBoundary extends Component<
   componentDidCatch(error: Error, info: { componentStack: string }) {
     // Log errors that are silenced so they remain visible in the console even
     // though the boundary renders null instead of crashing the page.
-    console.error("[SilentErrorBoundary] Caught error:", error.message, "\nComponent stack:", info.componentStack);
+    console.error(
+      "[SilentErrorBoundary] Caught error:",
+      error.message,
+      "\nComponent stack:",
+      info.componentStack,
+    );
   }
   render() {
     if (this.state.hasError) return null;
@@ -557,7 +562,7 @@ function HallmarkEventStatTile() {
   const connectedCals = Array.isArray(connectedCalsRaw) ? connectedCalsRaw : [];
   const hallmarkCal = connectedCals.find((c) => c.isHallmarkCalendar) ?? null;
 
-  const { data: gcalEvents = [] } = useListConnectedCalendarEvents(
+  const { data: gcalEventsRaw } = useListConnectedCalendarEvents(
     hallmarkCal?.id ?? 0,
     HM_TILE_RANGE_START,
     HM_TILE_RANGE_END,
@@ -573,6 +578,8 @@ function HallmarkEventStatTile() {
     },
   );
 
+  // Array.isArray (not `?? []`) — see connectedCalsRaw comment above.
+  const gcalEvents = Array.isArray(gcalEventsRaw) ? gcalEventsRaw : [];
   const upcoming = gcalEvents
     .map((e) => {
       const startDate = e.start.slice(0, 10);

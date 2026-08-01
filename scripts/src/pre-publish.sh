@@ -30,6 +30,8 @@ if [ -f "$ARCH_DOC" ]; then
   # Doc is gitignored (.agents/) — use file mtime vs last structural commit.
   DOC_TS=$(stat -c %Y "$ARCH_DOC" 2>/dev/null || echo 0)
   CODE_TS=$(git log -1 --format=%ct -- artifacts lib scripts .replit 2>/dev/null || echo 0)
+  DOC_TS=${DOC_TS:-0}
+  CODE_TS=${CODE_TS:-0}
   if [ "$CODE_TS" -gt "$DOC_TS" ]; then
     echo -e "${BOLD}⚠ NOTE${RESET}: $ARCH_DOC is older than the latest structural code change."
     echo "  If routing/artifacts/shared-lib/scripts structure changed, update it before publishing."

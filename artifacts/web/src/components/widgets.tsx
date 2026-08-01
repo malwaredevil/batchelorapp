@@ -455,7 +455,7 @@ export function NotesWidget() {
     },
   });
 
-  const recent = (notes ?? []).slice(0, 4);
+  const recent = Array.isArray(notes) ? notes.slice(0, 4) : [];
 
   if (mode === "create") {
     return (

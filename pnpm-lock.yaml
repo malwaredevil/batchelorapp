@@ -833,6 +833,12 @@ importers:
       dompurify:
         specifier: '>=3.4.12 <4'
         version: 3.4.12
+      jsdom:
+        specifier: ^29.1.1
+        version: 29.1.1(@noble/hashes@1.8.0)
+      vitest:
+        specifier: ^3.2.6
+        version: 3.2.6(@types/node@25.6.2)(jiti@2.7.0)(jsdom@29.1.1(@noble/hashes@1.8.0))(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.21.0)(yaml@2.9.0)
     devDependencies:
       '@hookform/resolvers':
         specifier: ^3.10.0

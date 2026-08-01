@@ -817,6 +817,79 @@ test("returns no findings for a file with only safe-domain emails", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Integration tests — process exit codes
+// ---------------------------------------------------------------------------
+//
+// These tests confirm that the script's violation-reporting branch actually
+// wires up process.exit(1) when findings are detected.  Unit tests above verify
+// the detector logic; these verify that the *process* exits non-zero.
+
+console.log("\npii-scan.test: Integration — process exit codes");
+
+import { spawnSync } from "node:child_process";
+import { join } from "node:path";
+
+const REPO_ROOT = path.join(import.meta.dirname, "../..");
+const scriptsCwd = join(import.meta.dirname, "..");
+const piiScriptPath = join(import.meta.dirname, "pii-scan.ts");
+
+function runPiiScan() {
+  return spawnSync("node", ["--import", "tsx", piiScriptPath], {
+    cwd: scriptsCwd,
+    encoding: "utf8",
+    env: process.env,
+  });
+}
+
+// A real non-safe email in a scanned file location.
+const PII_FIXTURE_PATH = join(
+  REPO_ROOT,
+  "lib",
+  "_temp_pii_scan_test_fixture_delete_me.ts",
+);
+
+test("script exits 0 against the real (clean) repo", () => {
+  const result = runPiiScan();
+  if (result.status !== 0) {
+    const stderr = result.stderr?.trim() ?? "";
+    const stdout = result.stdout?.trim() ?? "";
+    throw new Error(
+      `Expected exit 0 but got ${result.status}.\nstdout: ${stdout}\nstderr: ${stderr}`,
+    );
+  }
+  assert.equal(result.status, 0);
+});
+
+test("script exits non-zero when a real PII email is injected into a scanned file", () => {
+  // Write a temp file with a real-looking non-safe email address.
+  // The file goes into lib/ which is scanned by pii-scan.ts.
+  fs.writeFileSync(
+    PII_FIXTURE_PATH,
+    [
+      "// Temporary PII scan test fixture — cleaned up automatically.",
+      "// DO NOT COMMIT this file.",
+      "const userEmail = 'john.doe@realperson-household.com';",
+      "",
+    ].join("\n"),
+    "utf-8",
+  );
+  try {
+    const result = runPiiScan();
+    assert.notEqual(
+      result.status,
+      0,
+      `Expected non-zero exit when PII email is present, but got ${result.status}`,
+    );
+  } finally {
+    try {
+      fs.unlinkSync(PII_FIXTURE_PATH);
+    } catch {
+      // best-effort cleanup
+    }
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
 

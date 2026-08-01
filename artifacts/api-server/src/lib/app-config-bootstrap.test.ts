@@ -32,6 +32,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { makeEagerSelectBuilder } from "../test-helpers/db-mock";
+import { logger } from "./logger";
 
 // ── DB operation recorders ───────────────────────────────────────────────────
 //
@@ -262,6 +263,30 @@ describe("bootstrapDefaults() — orphan pruning", () => {
     // The .where() clause must have received at least one argument (the NOT IN condition).
     expect(deleteCalls).toHaveLength(1);
     expect(deleteCalls[0].whereArgCount).toBeGreaterThan(0);
+  });
+
+  it("logs logger.warn for each orphaned DB row before pruning it", async () => {
+    // Push an orphan row (module + key NOT in APP_CONFIG_DEFAULTS) as the
+    // first SELECT result so bootstrapDefaults() sees it in the orphan-check
+    // query and fires logger.warn before issuing the DELETE.
+    const ORPHAN_MODULE = "deprecated_module";
+    const ORPHAN_KEY = "old_setting_never_in_defaults";
+
+    // Step 1 orphan pre-select returns the orphan row.
+    selectQueue.push([{ module: ORPHAN_MODULE, key: ORPHAN_KEY }]);
+    // Step 3 pre-fetch — no current rows (no label drift).
+    selectQueue.push([]);
+    // Final getAllRows() result.
+    selectQueue.push([makeRow("openrouter", "request_timeout_ms", "12000")]);
+
+    const { getAllConfig } = await import("./app-config");
+    await getAllConfig();
+
+    // The orphan row must have triggered a logger.warn call.
+    expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(
+      { module: ORPHAN_MODULE, key: ORPHAN_KEY },
+      "app-config: orphaned DB row (no matching APP_CONFIG_DEFAULTS entry) — will be pruned",
+    );
   });
 
   it("stale row is absent from getAllConfig() result after bootstrap", async () => {

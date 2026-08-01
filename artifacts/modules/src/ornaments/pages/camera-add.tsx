@@ -153,6 +153,12 @@ export default function CameraAddOrnament() {
 
     // Prefill sessionStorage so /ornaments/add can pick it up.
     if (result.found) {
+      // Warn the user if a previous barcode's data is being replaced.
+      if (sessionStorage.getItem("ornament-add-prefill")) {
+        toast.info("Barcode data updated — previous scan replaced.", {
+          duration: 4000,
+        });
+      }
       sessionStorage.setItem(
         "ornament-add-prefill",
         JSON.stringify({

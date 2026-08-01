@@ -409,6 +409,18 @@ export function ImagePicker({ file, onSelect, disabled }: ImagePickerProps) {
     onSelect(captured);
   }
 
+  function handleDrop(e: React.DragEvent<HTMLElement>) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (disabled) return;
+    const file = e.dataTransfer.files?.[0] ?? null;
+    onSelect(file);
+  }
+
+  function handleDragOver(e: React.DragEvent<HTMLElement>) {
+    e.preventDefault();
+  }
+
   return (
     <>
       {showCamera && (
@@ -428,7 +440,7 @@ export function ImagePicker({ file, onSelect, disabled }: ImagePickerProps) {
         data-testid="input-image"
       />
 
-      <div className="w-full">
+      <div className="w-full" onDrop={handleDrop} onDragOver={handleDragOver}>
         {preview ? (
           <div>
             <div className="relative overflow-hidden rounded-xl border border-card-border bg-muted">

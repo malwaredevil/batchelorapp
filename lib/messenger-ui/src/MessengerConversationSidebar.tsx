@@ -85,14 +85,20 @@ export function MessengerConversationSidebar({
   const [hoveredId, setHoveredId] = useState<number | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
 
-  const { data: allConversations = [], isLoading } = useListConversations({
+  const { data: allConversationsRaw, isLoading } = useListConversations({
     query: {
       queryKey: getListConversationsQueryKey(),
       refetchInterval: 5_000,
     } as UseQueryOptions<MessengerConversationSummary[]>,
   });
+  // Defensive: guard against non-array (e.g. HTML SPA fallback mis-routed by dev proxy).
+  const allConversations = Array.isArray(allConversationsRaw)
+    ? allConversationsRaw
+    : [];
 
-  const { data: members = [] } = useListHouseholdMembers();
+  const { data: membersRaw } = useListHouseholdMembers();
+  // Defensive: guard against non-array (e.g. HTML SPA fallback mis-routed by dev proxy).
+  const members = Array.isArray(membersRaw) ? membersRaw : [];
 
   const active = allConversations.filter((c) => !c.archivedAt);
   const archived = allConversations.filter((c) => !!c.archivedAt);

@@ -17,6 +17,7 @@ import {
   useAuth,
   redirectToMainLogin,
 } from "@workspace/web-core/auth";
+import { crossAppUrl } from "@workspace/web-core/cross-app";
 import { ModuleShell } from "@/components/module-shell";
 import { BackgroundTaskProvider } from "@/lib/background-tasks";
 import {
@@ -171,7 +172,7 @@ function Splash() {
 
 function Home() {
   useEffect(() => {
-    window.location.href = "/";
+    window.location.href = crossAppUrl("/");
   }, []);
   return <Splash />;
 }

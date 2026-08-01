@@ -17,6 +17,8 @@
   },
   "devDependencies": {
     "@types/react": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
     "vitest": "^3.2.6"
   }
 }

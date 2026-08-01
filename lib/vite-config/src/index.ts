@@ -123,7 +123,12 @@ export async function createWorkspaceViteConfig(
           replacement: path.resolve(artifactDir, "..", "..", "attached_assets"),
         },
       ],
-      dedupe: ["react", "react-dom"],
+      dedupe: [
+        "react",
+        "react-dom",
+        "@tanstack/react-query",
+        "@tanstack/query-core",
+      ],
     },
     root: path.resolve(artifactDir),
     define: {
@@ -152,6 +157,22 @@ export async function createWorkspaceViteConfig(
       allowedHosts: true,
       fs: {
         strict: true,
+      },
+      // In the Replit IDE preview the browser accesses artifacts via an
+      // internal proxy (port 3000) that routes "/" to this Vite dev server
+      // rather than forwarding "/api/..." to the API server directly. Without
+      // this proxy Vite's SPA fallback returns the index.html shell with
+      // status 200 for every /api/... path, causing customFetch to interpret
+      // it as a successful "text" response and store the raw HTML string in
+      // the TanStack Query cache. Components that then call .map()/.find() on
+      // the cached string throw a TypeError ("items.map is not a function"),
+      // which React 19's dev-mode error replay surfaces as "Invalid hook call"
+      // — masking the actual cause.
+      proxy: {
+        "/api": {
+          target: "http://localhost:8080",
+          changeOrigin: false,
+        },
       },
     },
     preview: {

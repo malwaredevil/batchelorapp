@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { crossAppBase } from "@/lib/cross-app";
+import { Component, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import {
   Search,
   Plus,
@@ -70,41 +72,45 @@ import {
   formatElaineContextEntity,
 } from "@workspace/elaine-ui";
 
-const base = import.meta.env.BASE_URL;
+const base = crossAppBase();
 
 const ADD_ACTIONS = [
-  { label: "Pottery piece", href: `${base}pottery/add` },
-  { label: "Fabric", href: `${base}quilting/fabrics/add` },
-  { label: "Pattern", href: `${base}quilting/patterns/add` },
-  { label: "Quilt", href: `${base}quilting/quilts/add` },
+  { label: "Pottery piece", href: `${base}modules/pottery/add` },
+  { label: "Fabric", href: `${base}modules/quilting/fabrics/add` },
+  { label: "Pattern", href: `${base}modules/quilting/patterns/add` },
+  { label: "Quilt", href: `${base}modules/quilting/quilts/add` },
 ];
 
 const POTTERY_QUICK_LINKS = [
-  { label: "Collection", icon: Package, href: `${base}pottery/` },
-  { label: "Compare", icon: Camera, href: `${base}pottery/compare` },
+  { label: "Collection", icon: Package, href: `${base}modules/pottery/` },
+  { label: "Compare", icon: Camera, href: `${base}modules/pottery/compare` },
   {
     label: "Maintenance",
     icon: FlaskConical,
-    href: `${base}pottery/maintenance`,
+    href: `${base}modules/pottery/maintenance`,
   },
 ];
 
 const QUILTING_QUICK_LINKS = [
-  { label: "Fabrics", icon: Shirt, href: `${base}quilting/fabrics` },
-  { label: "Blocks", icon: Scissors, href: `${base}quilting/blocks` },
-  { label: "Layouts", icon: Layers, href: `${base}quilting/layouts` },
+  { label: "Fabrics", icon: Shirt, href: `${base}modules/quilting/fabrics` },
+  { label: "Blocks", icon: Scissors, href: `${base}modules/quilting/blocks` },
+  { label: "Layouts", icon: Layers, href: `${base}modules/quilting/layouts` },
 ];
 
 const TRAVELS_QUICK_LINKS = [
-  { label: "Home", icon: Activity, href: `${base}travels/` },
-  { label: "Trips", icon: Layers, href: `${base}travels/trips` },
-  { label: "Explore", icon: Rss, href: `${base}travels/explore` },
+  { label: "Home", icon: Activity, href: `${base}modules/travels/` },
+  { label: "Trips", icon: Layers, href: `${base}modules/travels/trips` },
+  { label: "Explore", icon: Rss, href: `${base}modules/travels/explore` },
 ];
 
 const ORNAMENTS_QUICK_LINKS = [
-  { label: "Collection", icon: Gift, href: `${base}ornaments/` },
-  { label: "Categories", icon: Tag, href: `${base}ornaments/categories` },
-  { label: "Stats", icon: Activity, href: `${base}ornaments/stats` },
+  { label: "Collection", icon: Gift, href: `${base}modules/ornaments/` },
+  {
+    label: "Categories",
+    icon: Tag,
+    href: `${base}modules/ornaments/categories`,
+  },
+  { label: "Stats", icon: Activity, href: `${base}modules/ornaments/stats` },
 ];
 
 /**
@@ -502,6 +508,41 @@ function AppHeroCard({
 // Compact stat-square–sized tile. Yellow while counting down, red when live.
 // Rotates through multiple upcoming events every 4 seconds.
 
+/**
+ * Generic silent error boundary — renders null if a child throws.
+ * Used to contain hook failures in individual stat-tiles and widget bodies
+ * so they hide themselves rather than crashing the whole page.
+ */
+class SilentErrorBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error: Error, info: { componentStack: string }) {
+    // Log errors that are silenced so they remain visible in the console even
+    // though the boundary renders null instead of crashing the page.
+    console.error(
+      "[SilentErrorBoundary] Caught error:",
+      error.message,
+      "\nComponent stack:",
+      info.componentStack,
+    );
+  }
+  render() {
+    if (this.state.hasError) return null;
+    return this.props.children;
+  }
+}
+
+// Keep the old alias so the stat-tile usage below doesn't need changing.
+const StatTileErrorBoundary = SilentErrorBoundary;
+
 // Stable 90-day query window — computed once per page load so the query key
 // doesn't change on every render.
 const _hmToday = new Date();
@@ -515,10 +556,14 @@ function HallmarkEventStatTile() {
   const now = Date.now();
   const [index, setIndex] = useState(0);
 
-  const { data: connectedCals = [] } = useListConnectedCalendars();
+  const { data: connectedCalsRaw } = useListConnectedCalendars();
+  // Defensive: guard against non-array data (e.g. from a mis-routed dev proxy
+  // returning an HTML page). The default = [] on destructuring only fires for
+  // undefined, not for other non-array values.
+  const connectedCals = Array.isArray(connectedCalsRaw) ? connectedCalsRaw : [];
   const hallmarkCal = connectedCals.find((c) => c.isHallmarkCalendar) ?? null;
 
-  const { data: gcalEvents = [] } = useListConnectedCalendarEvents(
+  const { data: gcalEventsRaw } = useListConnectedCalendarEvents(
     hallmarkCal?.id ?? 0,
     HM_TILE_RANGE_START,
     HM_TILE_RANGE_END,
@@ -534,6 +579,8 @@ function HallmarkEventStatTile() {
     },
   );
 
+  // Array.isArray (not `?? []`) — see connectedCalsRaw comment above.
+  const gcalEvents = Array.isArray(gcalEventsRaw) ? gcalEventsRaw : [];
   const upcoming = gcalEvents
     .map((e) => {
       const startDate = e.start.slice(0, 10);
@@ -589,6 +636,7 @@ function HallmarkEventStatTile() {
 
   return (
     <div
+      data-testid="hallmark-event-tile"
       role="link"
       tabIndex={0}
       title={current.title}
@@ -704,8 +752,10 @@ export function AppLauncher() {
     upcomingEventsRangeEnd,
   );
   const upcomingEventsTotal =
-    (connectedCalendarsData ?? []).length > 0
-      ? (allCalendarEventsData?.length ?? null)
+    Array.isArray(connectedCalendarsData) && connectedCalendarsData.length > 0
+      ? Array.isArray(allCalendarEventsData)
+        ? allCalendarEventsData.length
+        : null
       : null;
 
   function liveStats(
@@ -730,10 +780,9 @@ export function AppLauncher() {
           href: `${base}modules/pottery/`,
         },
         {
-          value:
-            potteryCategoriesData != null
-              ? String(potteryCategoriesData.length)
-              : "—",
+          value: Array.isArray(potteryCategoriesData)
+            ? String(potteryCategoriesData.length)
+            : "—",
           label: "Categories",
           href: `${base}modules/pottery/categories`,
         },
@@ -810,7 +859,7 @@ export function AppLauncher() {
     if (appId === "office") {
       return [
         {
-          value: notesData != null ? String(notesData.length) : "—",
+          value: Array.isArray(notesData) ? String(notesData.length) : "—",
           label: "Notes",
           href: `${base}modules/office/notes`,
         },
@@ -841,8 +890,9 @@ export function AppLauncher() {
           href: `${base}elaine/`,
         },
         {
-          value:
-            elaineMemoryData != null ? String(elaineMemoryData.length) : "—",
+          value: Array.isArray(elaineMemoryData)
+            ? String(elaineMemoryData.length)
+            : "—",
           label: "Memory",
           href: `${base}elaine/`,
         },
@@ -957,7 +1007,8 @@ export function AppLauncher() {
                 value={app.name}
                 onSelect={() => {
                   setSearchOpen(false);
-                  navigate(app.href);
+                  // Cross-SPA navigation must be a full page load
+                  window.location.href = app.href;
                 }}
               >
                 <LayoutGrid className="w-4 h-4 mr-2" />
@@ -970,7 +1021,7 @@ export function AppLauncher() {
               value="Add Pottery piece"
               onSelect={() => {
                 setSearchOpen(false);
-                navigate(`${base}pottery/add`);
+                window.location.href = `${base}modules/pottery/add`;
               }}
             >
               <Plus className="w-4 h-4 mr-2" />
@@ -980,7 +1031,7 @@ export function AppLauncher() {
               value="Add Fabric"
               onSelect={() => {
                 setSearchOpen(false);
-                navigate(`${base}quilting/fabrics/add`);
+                window.location.href = `${base}modules/quilting/fabrics/add`;
               }}
             >
               <Plus className="w-4 h-4 mr-2" />
@@ -990,7 +1041,7 @@ export function AppLauncher() {
               value="Do I own this?"
               onSelect={() => {
                 setSearchOpen(false);
-                navigate(`${base}pottery/compare`);
+                window.location.href = `${base}modules/pottery/compare`;
               }}
             >
               <Camera className="w-4 h-4 mr-2" />
@@ -1000,7 +1051,7 @@ export function AppLauncher() {
               value="Shopping List"
               onSelect={() => {
                 setSearchOpen(false);
-                navigate(`${base}quilting/shopping`);
+                window.location.href = `${base}modules/quilting/shopping`;
               }}
             >
               <ShoppingBag className="w-4 h-4 mr-2" />
@@ -1036,7 +1087,9 @@ export function AppLauncher() {
                 {ADD_ACTIONS.map((a) => (
                   <DropdownMenuItem
                     key={a.href}
-                    onSelect={() => navigate(a.href)}
+                    onSelect={() => {
+                      window.location.href = a.href;
+                    }}
                   >
                     <Plus className="w-4 h-4 mr-2 text-muted-foreground" />
                     {a.label}
@@ -1055,13 +1108,17 @@ export function AppLauncher() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem
-                  onSelect={() => navigate(`${base}pottery/compare`)}
+                  onSelect={() => {
+                    window.location.href = `${base}modules/pottery/compare`;
+                  }}
                 >
                   <Camera className="w-4 h-4 mr-2 text-muted-foreground" />
                   Pottery piece
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onSelect={() => navigate(`${base}quilting/compare`)}
+                  onSelect={() => {
+                    window.location.href = `${base}modules/quilting/compare`;
+                  }}
                 >
                   <Camera className="w-4 h-4 mr-2 text-muted-foreground" />
                   Fabric
@@ -1071,7 +1128,9 @@ export function AppLauncher() {
 
             <Button
               variant="outline"
-              onClick={() => navigate(`${base}quilting/shopping`)}
+              onClick={() => {
+                window.location.href = `${base}modules/quilting/shopping`;
+              }}
             >
               <ShoppingBag className="w-4 h-4 mr-2" />
               Shopping List
@@ -1204,7 +1263,9 @@ export function AppLauncher() {
                     extraBlock={cfg.extraBlock}
                     statTile={
                       appId === "ornaments" ? (
-                        <HallmarkEventStatTile />
+                        <StatTileErrorBoundary>
+                          <HallmarkEventStatTile />
+                        </StatTileErrorBoundary>
                       ) : undefined
                     }
                     arranging={arranging}
@@ -1330,7 +1391,7 @@ export function AppLauncher() {
                         <Icon className="w-4 h-4 text-primary" />
                         {w.title}
                       </div>
-                      {w.body}
+                      <SilentErrorBoundary>{w.body}</SilentErrorBoundary>
                     </div>
                   );
                 })}

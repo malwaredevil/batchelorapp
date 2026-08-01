@@ -92,6 +92,7 @@ Combined pnpm monorepo serving both the Pottery and Quilting collection apps und
 - Legacy pre-migration rows with NULL `user_id` were backfilled to the owner account (`app_users.isOwner=true`) as the attributed creator
 - Single combined domain: app.batchelor.app (target), pottery.batchelor.app + quilting.batchelor.app (decommissioned after go-live)
 - When the user has queued multiple feature requests, don't silently barrel from one to the next. If a step needs something from the user (a manual action, a confirmation, a choice), stop and ask a simple yes/no or short question via user_query before proceeding — don't let the queue push past unanswered questions.
+- **Architecture roadmap maintenance (standard procedure for ALL code changes):** `.agents/architecture/ARCHITECTURE.md` is the agent-internal map of URL routing, artifacts/ports, shared-lib consumers, scripts, env layout, and debug fast-paths (never synced to GitHub — `.agents/` is excluded). Whenever a change touches routing, artifact structure, workflows, shared libs, API contracts, scripts, or environment configuration, update that doc in the same commit. `pre-publish.sh` Step 0 warns when the doc is older than the latest structural change.
 - Pre-publish checklist — run this automatically every time before creating a checkpoint (or immediately after), without waiting to be asked. Gated in stages; do not move to the next stage until the current one passes:
 
   **Session start — always do these first, in order:**

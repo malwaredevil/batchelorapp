@@ -1,3 +1,4 @@
+import { crossAppBase } from "@/lib/cross-app";
 import {
   Wind,
   Package,
@@ -52,7 +53,7 @@ import {
   TravelWishlistWidget,
 } from "@/components/widgets";
 
-const base = import.meta.env.BASE_URL;
+const base = crossAppBase();
 
 export type AppStat = { value: string; label: string };
 

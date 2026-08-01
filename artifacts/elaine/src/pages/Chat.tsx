@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getTripPhotoImageUrl } from "@workspace/api-client-react";
+import { crossAppUrl } from "@workspace/web-core/cross-app";
 import {
   getElaineConversationMessagesFn,
   getElaineDailyBriefQueryKey,
@@ -442,7 +443,10 @@ export default function Chat() {
               </p>
               <div className="grid grid-cols-2 gap-2">
                 {images.map((img, i) => (
-                  <a key={i} href={`/modules/travels/trips/${img.tripId}`}>
+                  <a
+                    key={i}
+                    href={crossAppUrl(`/modules/travels/trips/${img.tripId}`)}
+                  >
                     <div className="group overflow-hidden rounded-lg border border-border/50">
                       <img
                         src={img.src}

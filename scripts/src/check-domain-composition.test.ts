@@ -859,7 +859,7 @@ test("script exits non-zero when a bare .id context-string violation is injected
       "// This file is cleaned up after the test regardless of outcome.",
       'import { usePageAssistantContext } from "@/lib/assistant-context";',
       "const item = { id: 1, name: 'test' };",
-      "usePageAssistantContext(\"item-page\", `Item: ${item.id}`);",
+      'usePageAssistantContext("item-page", `Item: ${item.id}`);',
       "",
     ].join("\n"),
     "utf8",

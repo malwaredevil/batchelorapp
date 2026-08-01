@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Component, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   CalendarDays,
@@ -30,6 +30,21 @@ import {
   DropdownMenuTrigger,
 } from "@workspace/ui";
 import { cn } from "@workspace/web-core/utils";
+
+/** Prevents a MessengerNavIcon crash from taking down the whole app header. */
+class MessengerErrorBoundary extends Component<
+  { children: ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    if (this.state.failed) return null;
+    return this.props.children;
+  }
+}
 
 function currentReturnPath() {
   return window.location.pathname + window.location.search;
@@ -263,10 +278,12 @@ export function ApplicationHeader({
               />
             </Button>
             {notificationAction}
-            <MessengerNavIcon
-              buttonClassName="text-muted-foreground hover:text-foreground"
-              iconSize={globalIconSize}
-            />
+            <MessengerErrorBoundary>
+              <MessengerNavIcon
+                buttonClassName="text-muted-foreground hover:text-foreground"
+                iconSize={globalIconSize}
+              />
+            </MessengerErrorBoundary>
           </div>
           <AccountMenu
             user={currentUser}

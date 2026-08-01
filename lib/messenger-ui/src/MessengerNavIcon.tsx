@@ -10,7 +10,10 @@ import {
 } from "lucide-react";
 import { useAuth } from "@workspace/web-core/auth";
 import { useMessengerUnreadCount } from "./useMessengerUnreadCount";
-import { useMessengerNewMessageDetector } from "./useMessengerNewMessageDetector";
+import {
+  useMessengerNewMessageDetector,
+  type NewMessageEvent,
+} from "./useMessengerNewMessageDetector";
 import {
   MessengerToastContainer,
   type MessengerToastItem,
@@ -333,25 +336,29 @@ export function MessengerNavIcon({
   }, [isOpen]);
 
   // ── Toasts ─────────────────────────────────────────────────────────────────
+  // NOTE: keep this useCallback declaration OUTSIDE the useMessengerNewMessageDetector
+  // call — React's hook detector flags hooks embedded inside argument objects.
+  const handleNewMessage = useCallback((event: NewMessageEvent) => {
+    if (!event.body) return;
+    const id = `toast-${++toastIdCounter}`;
+    setToasts((prev) =>
+      [
+        ...prev,
+        {
+          id,
+          convId: event.convId,
+          convName: event.convName,
+          senderName: event.senderName,
+          body: event.body,
+        },
+      ].slice(-3),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useMessengerNewMessageDetector({
     currentUserId,
     enabled: !isOpen && currentUserId > 0,
-    onNewMessage: useCallback((event) => {
-      if (!event.body) return;
-      const id = `toast-${++toastIdCounter}`;
-      setToasts((prev) =>
-        [
-          ...prev,
-          {
-            id,
-            convId: event.convId,
-            convName: event.convName,
-            senderName: event.senderName,
-            body: event.body,
-          },
-        ].slice(-3),
-      );
-    }, []),
+    onNewMessage: handleNewMessage,
   });
 
   const dismissToast = useCallback((id: string) => {

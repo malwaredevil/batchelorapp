@@ -10,7 +10,12 @@
  */
 
 import { and, eq, lte } from "drizzle-orm";
-import { db, elaineScheduledActions } from "@workspace/db";
+import {
+  db,
+  elaineScheduledActions,
+  elaineHistoryConversations,
+  elaineHistoryMessages,
+} from "@workspace/db";
 import { fireCallContact, fireMessageContact } from "../elaine/communication-actions";
 import { logger } from "./logger";
 
@@ -101,6 +106,23 @@ async function runDueScheduledActions(): Promise<void> {
             .update(elaineScheduledActions)
             .set({ status: "failed", error: errorText })
             .where(eq(elaineScheduledActions.id, row.id));
+
+          // Notify the user in chat (best-effort — never block the scheduler).
+          if (contactName) {
+            const failMsg =
+              row.actionType === "call_contact"
+                ? `I tried to call ${contactName} as scheduled, but the call didn't connect — you may want to try again.`
+                : `I tried to send your message to ${contactName} as scheduled, but it didn't go through — you may want to try again.`;
+            await appendScheduledActionChatMessage(
+              row.initiatedByUserId,
+              failMsg,
+            ).catch((chatErr) =>
+              logger.warn(
+                { scheduledActionId: row.id, chatErr },
+                "elaine-scheduler: could not append failure chat message",
+              ),
+            );
+          }
           return;
         }
 
@@ -112,6 +134,23 @@ async function runDueScheduledActions(): Promise<void> {
           },
           "elaine-scheduler: scheduled action fired successfully",
         );
+
+        // Notify the user in chat that the action was delivered (best-effort).
+        if (contactName) {
+          const successMsg =
+            row.actionType === "call_contact"
+              ? `I just called ${contactName} as scheduled.`
+              : `I just sent your message to ${contactName} as scheduled.`;
+          await appendScheduledActionChatMessage(
+            row.initiatedByUserId,
+            successMsg,
+          ).catch((chatErr) =>
+            logger.warn(
+              { scheduledActionId: row.id, chatErr },
+              "elaine-scheduler: could not append success chat message",
+            ),
+          );
+        }
       } catch (err) {
         const errorText = err instanceof Error ? err.message : String(err);
         logger.error(
@@ -122,6 +161,29 @@ async function runDueScheduledActions(): Promise<void> {
           .update(elaineScheduledActions)
           .set({ status: "failed", error: errorText })
           .where(eq(elaineScheduledActions.id, row.id));
+
+        // Notify the user in chat that the action failed (best-effort).
+        const contactNameForErr =
+          (
+            row.actionPayload as {
+              contactName?: string;
+            } | null
+          )?.contactName ?? "";
+        if (contactNameForErr) {
+          const failMsg =
+            row.actionType === "call_contact"
+              ? `I tried to call ${contactNameForErr} as scheduled, but something went wrong — you may want to try again.`
+              : `I tried to send your message to ${contactNameForErr} as scheduled, but something went wrong — you may want to try again.`;
+          await appendScheduledActionChatMessage(
+            row.initiatedByUserId,
+            failMsg,
+          ).catch((chatErr) =>
+            logger.warn(
+              { scheduledActionId: row.id, chatErr },
+              "elaine-scheduler: could not append error chat message",
+            ),
+          );
+        }
       }
     }),
   );
@@ -147,4 +209,58 @@ export function startScheduledActionsRunner(): () => void {
   interval.unref();
 
   return () => clearInterval(interval);
+}
+
+/**
+ * Appends a brief assistant message to the user's widget-default Elaine
+ * conversation so the user can see in chat when a scheduled action was
+ * delivered (or failed).  Mirrors the insert pattern used by the turn runtime
+ * in elaine/index.ts.
+ *
+ * If the user has never used the widget we create the shared household thread
+ * here, exactly as the turn runtime would — so the first visible message is
+ * the delivery confirmation rather than nothing.
+ */
+async function appendScheduledActionChatMessage(
+  userId: number,
+  content: string,
+): Promise<void> {
+  // Resolve (or lazily create) the isWidgetDefault=true conversation.
+  let convId: number | null = null;
+
+  const [existing] = await db
+    .select({ id: elaineHistoryConversations.id })
+    .from(elaineHistoryConversations)
+    .where(
+      and(
+        eq(elaineHistoryConversations.userId, userId),
+        eq(elaineHistoryConversations.isWidgetDefault, true),
+      ),
+    )
+    .limit(1);
+
+  if (existing) {
+    convId = existing.id;
+  } else {
+    const [newConv] = await db
+      .insert(elaineHistoryConversations)
+      .values({ userId, title: "Household", isWidgetDefault: true })
+      .returning({ id: elaineHistoryConversations.id });
+    convId = newConv?.id ?? null;
+  }
+
+  if (convId === null) return;
+
+  await db.insert(elaineHistoryMessages).values({
+    conversationId: convId,
+    userId,
+    role: "assistant",
+    content,
+    attachmentUrls: [],
+  });
+
+  await db
+    .update(elaineHistoryConversations)
+    .set({ updatedAt: new Date() })
+    .where(eq(elaineHistoryConversations.id, convId));
 }

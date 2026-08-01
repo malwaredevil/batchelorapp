@@ -1,3 +1,4 @@
+import { crossAppBase } from "@/lib/cross-app";
 import { Component, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
@@ -71,7 +72,7 @@ import {
   formatElaineContextEntity,
 } from "@workspace/elaine-ui";
 
-const base = import.meta.env.BASE_URL;
+const base = crossAppBase();
 
 const ADD_ACTIONS = [
   { label: "Pottery piece", href: `${base}modules/pottery/add` },

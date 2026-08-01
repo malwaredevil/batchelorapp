@@ -1,3 +1,4 @@
+import { crossAppBase } from "@/lib/cross-app";
 import { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -42,7 +43,7 @@ import {
   type OfficeNote,
 } from "@workspace/api-client-react";
 
-const base = import.meta.env.BASE_URL;
+const base = crossAppBase();
 
 // ── Live: Pottery stats ──────────────────────────────────────────────────────
 export function PotteryStatsWidget() {

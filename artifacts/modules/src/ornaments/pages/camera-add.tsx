@@ -27,6 +27,10 @@ import {
   validateClientUpload,
 } from "@workspace/upload-policy";
 import { useBarcodeCamera } from "@/ornaments/components/use-barcode-camera";
+import {
+  createOrnamentPhotoQueue,
+  deriveHandleDoneRoute,
+} from "./camera-add-logic";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -75,9 +79,10 @@ export default function CameraAddOrnament() {
     PendingConfirmation[]
   >([]);
 
-  const ornamentIdRef = useRef<number | null>(null);
-  const processingRef = useRef(false);
-  const waitlistRef = useRef<QueueItem[]>([]);
+  // The serial photo queue — created once per mount, holds ornamentId internally.
+  const queueRef = useRef(
+    createOrnamentPhotoQueue(createOrnamentFromImage, uploadOrnamentImage),
+  );
 
   const lookupBarcode = useLookupBarcode();
   const deleteOrnament = useDeleteOrnament();
@@ -201,21 +206,16 @@ export default function CameraAddOrnament() {
 
   // ── Photo processing queue ────────────────────────────────────────────────
 
-  async function processItem(item: QueueItem) {
-    processingRef.current = true;
-    setItems((prev) =>
-      prev.map((i) =>
-        i.clientId === item.clientId ? { ...i, status: "processing" } : i,
-      ),
-    );
-
-    try {
-      const formData = new FormData();
-      formData.append("image", item.file!);
-
-      if (ornamentIdRef.current === null) {
-        const result = await createOrnamentFromImage(formData);
-        ornamentIdRef.current = result.id;
+  function schedulePhoto(item: QueueItem) {
+    queueRef.current.schedulePhoto(item.file!, {
+      onProcessingStart: () => {
+        setItems((prev) =>
+          prev.map((i) =>
+            i.clientId === item.clientId ? { ...i, status: "processing" } : i,
+          ),
+        );
+      },
+      onCreate: (id, name) => {
         queryClient.invalidateQueries({ queryKey: getListOrnamentsQueryKey() });
         queryClient.invalidateQueries({
           queryKey: getGetOrnamentStatsQueryKey(),
@@ -223,12 +223,12 @@ export default function CameraAddOrnament() {
         setItems((prev) =>
           prev.map((i) =>
             i.clientId === item.clientId
-              ? { ...i, status: "done", label: result.name ?? "Ornament" }
+              ? { ...i, status: "done", label: name ?? "Ornament" }
               : i,
           ),
         );
-      } else {
-        await uploadOrnamentImage(ornamentIdRef.current, formData);
+      },
+      onUpload: () => {
         setItems((prev) =>
           prev.map((i) =>
             i.clientId === item.clientId
@@ -236,34 +236,21 @@ export default function CameraAddOrnament() {
               : i,
           ),
         );
-      }
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : "Upload failed";
-      setItems((prev) =>
-        prev.map((i) =>
-          i.clientId === item.clientId ? { ...i, status: "error" } : i,
-        ),
-      );
-      setErrorBanner(errorMsg);
-      Sentry.captureException(err, {
-        extra: { ornamentId: ornamentIdRef.current },
-      });
-      toast.error("Upload failed — try again.", { duration: 5000 });
-    } finally {
-      processingRef.current = false;
-      const next = waitlistRef.current.shift();
-      if (next) {
-        processItem(next);
-      }
-    }
-  }
-
-  function scheduleItem(item: QueueItem) {
-    if (!processingRef.current) {
-      processItem(item);
-    } else {
-      waitlistRef.current.push(item);
-    }
+      },
+      onError: (err) => {
+        const errorMsg = err instanceof Error ? err.message : "Upload failed";
+        setItems((prev) =>
+          prev.map((i) =>
+            i.clientId === item.clientId ? { ...i, status: "error" } : i,
+          ),
+        );
+        setErrorBanner(errorMsg);
+        Sentry.captureException(err, {
+          extra: { ornamentId: queueRef.current.getOrnamentId() },
+        });
+        toast.error("Upload failed — try again.", { duration: 5000 });
+      },
+    });
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -279,12 +266,9 @@ export default function CameraAddOrnament() {
 
       const clientId = crypto.randomUUID();
       const preview = URL.createObjectURL(f);
-      const photoCount =
-        items.filter((i) => i.kind === "photo").length +
-        waitlistRef.current.filter((i) => i.kind === "photo").length +
-        1;
+      const photoCount = items.filter((i) => i.kind === "photo").length + 1;
       const label =
-        ornamentIdRef.current !== null
+        queueRef.current.getOrnamentId() !== null
           ? `Supplemental photo ${photoCount}`
           : undefined;
       const item: QueueItem = {
@@ -297,7 +281,7 @@ export default function CameraAddOrnament() {
       };
 
       setItems((prev) => [item, ...prev]);
-      scheduleItem(item);
+      schedulePhoto(item);
     }
   }
 
@@ -306,21 +290,29 @@ export default function CameraAddOrnament() {
   const hasAnyPhotos = items.some((i) => i.kind === "photo");
 
   async function handleDone() {
-    if (ornamentIdRef.current !== null) {
-      navigate(`/ornaments/ornament/${ornamentIdRef.current}?edit=1`);
-    } else if (hasAnyPhotos) {
-      navigate(`/ornaments/ornament/${ornamentIdRef.current}?edit=1`);
-    } else {
-      // Only barcodes scanned — sessionStorage prefill already written on confirm.
-      navigate("/ornaments/add");
+    const stillProcessing = items.some(
+      (i) =>
+        i.kind === "photo" &&
+        (i.status === "processing" || i.status === "queued"),
+    );
+    const result = deriveHandleDoneRoute(
+      queueRef.current.getOrnamentId(),
+      hasAnyPhotos,
+      stillProcessing,
+    );
+    if (result.kind === "blocked") {
+      toast.info("Still saving — please wait a moment.", { duration: 3000 });
+      return;
     }
+    navigate(result.to);
   }
 
   async function handleCancel() {
-    if (ornamentIdRef.current !== null) {
+    const id = queueRef.current.getOrnamentId();
+    if (id !== null) {
       setCancelLoading(true);
       try {
-        await deleteOrnament.mutateAsync({ id: ornamentIdRef.current });
+        await deleteOrnament.mutateAsync({ id });
         queryClient.invalidateQueries({ queryKey: getListOrnamentsQueryKey() });
       } catch {
         // best-effort

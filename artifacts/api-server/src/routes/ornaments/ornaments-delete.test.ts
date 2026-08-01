@@ -162,14 +162,16 @@ vi.mock("@workspace/db", async (importOriginal) => {
   const mockDb = {
     select: vi.fn(() => {
       selectCallCount += 1;
-      return makeEagerBuilder(selectCallCount === 1 && itemRow ? [itemRow] : []);
+      return makeEagerBuilder(
+        selectCallCount === 1 && itemRow ? [itemRow] : [],
+      );
     }),
     update: vi.fn((table: unknown) => {
       const tableName = String(
-        (table as { _: { name?: string }; _config?: { name?: string } })
-          ?._?.name ??
-        (table as Record<string, unknown>)?.tableName ??
-        "unknown",
+        (table as { _: { name?: string }; _config?: { name?: string } })?._
+          ?.name ??
+          (table as Record<string, unknown>)?.tableName ??
+          "unknown",
       );
       const builder = {
         set(payload: Record<string, unknown>) {
@@ -295,9 +297,7 @@ describe("DELETE /ornaments/items/:id — soft-delete semantics", () => {
 
 describe("purge-deleted.ts — ornament storage cleanup coverage", () => {
   const source = readFileSync(
-    fileURLToPath(
-      new URL("../../lib/purge-deleted.ts", import.meta.url),
-    ),
+    fileURLToPath(new URL("../../lib/purge-deleted.ts", import.meta.url)),
     "utf8",
   );
 

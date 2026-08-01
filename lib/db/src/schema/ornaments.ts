@@ -390,9 +390,7 @@ export const ornamentUpcCorrections = pgTable(
       .defaultNow()
       .notNull(),
   },
-  (table) => [
-    index("idx_ornament_upc_corrections_barcode").on(table.barcode),
-  ],
+  (table) => [index("idx_ornament_upc_corrections_barcode").on(table.barcode)],
 );
 
 export type OrnamentUpcCorrectionRow =

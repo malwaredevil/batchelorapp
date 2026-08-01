@@ -289,6 +289,7 @@ async function main() {
   await dest.query("TRUNCATE ornaments_barcode_cache CASCADE");
   await dest.query("TRUNCATE hallmark_ornaments CASCADE");
   await dest.query("TRUNCATE ornaments_hallmark_events CASCADE");
+  await dest.query("TRUNCATE ornament_upc_corrections CASCADE");
 
   await copyTable(source, dest, {
     table: "ornaments_categories",
@@ -418,6 +419,24 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "ornaments_hallmark_events", "id");
+
+  await copyTable(source, dest, {
+    table: "ornament_upc_corrections",
+    columns: [
+      "id",
+      "barcode",
+      "corrected_name",
+      "corrected_brand",
+      "corrected_series_or_collection",
+      "corrected_year",
+      "wrong_name",
+      "wrong_brand",
+      "submitted_by",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "ornament_upc_corrections", "id");
 
   // ── Office ────────────────────────────────────────────────────────────────
   await dest.query("TRUNCATE office_notes CASCADE");

@@ -569,6 +569,47 @@ export default function OrnamentDetail() {
         heroContent={
           !isEditing ? (
             <div className="space-y-4">
+              {(ornament.brand ||
+                ornament.year ||
+                ornament.dimensions ||
+                consensus != null) && (
+                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                  {ornament.brand && (
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                        Brand
+                      </p>
+                      <p className="text-sm">{ornament.brand}</p>
+                    </div>
+                  )}
+                  {ornament.year && (
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                        Year
+                      </p>
+                      <p className="text-sm">{ornament.year}</p>
+                    </div>
+                  )}
+                  {ornament.dimensions && (
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                        Dimensions
+                      </p>
+                      <p className="text-sm">{ornament.dimensions}</p>
+                    </div>
+                  )}
+                  {consensus != null && (
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                        Consensus Est. Value
+                      </p>
+                      <p className="text-sm font-medium">
+                        {formatCurrency(consensus)}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
               {ornament.notes && (
                 <p className="text-sm leading-relaxed text-muted-foreground">
                   {ornament.notes}
@@ -613,47 +654,45 @@ export default function OrnamentDetail() {
         }
         fields={
           <>
-            <CollectionDetailField
-              label="Brand"
-              value={ornament.brand || "—"}
-              locked={lockedFields.includes("brand")}
-              onToggleLock={
-                !isEditing ? () => toggleFieldLock("brand") : undefined
-              }
-              editing={isEditing}
-              editSlot={
-                <Input
-                  value={draft.brand}
-                  onChange={(e) =>
-                    setDraft((d) => ({ ...d, brand: e.target.value }))
+            {isEditing && (
+              <>
+                <CollectionDetailField
+                  label="Brand"
+                  value={ornament.brand || "—"}
+                  locked={lockedFields.includes("brand")}
+                  editing
+                  editSlot={
+                    <Input
+                      value={draft.brand}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, brand: e.target.value }))
+                      }
+                      placeholder="e.g. Hallmark"
+                      className="h-8 text-sm"
+                    />
                   }
-                  placeholder="e.g. Hallmark"
-                  className="h-8 text-sm"
+                  empty={!ornament.brand}
                 />
-              }
-              empty={!ornament.brand}
-            />
-            <CollectionDetailField
-              label="Year"
-              value={ornament.year?.toString() ?? "—"}
-              locked={lockedFields.includes("year")}
-              onToggleLock={
-                !isEditing ? () => toggleFieldLock("year") : undefined
-              }
-              editing={isEditing}
-              editSlot={
-                <Input
-                  type="number"
-                  value={draft.year}
-                  onChange={(e) =>
-                    setDraft((d) => ({ ...d, year: e.target.value }))
+                <CollectionDetailField
+                  label="Year"
+                  value={ornament.year?.toString() ?? "—"}
+                  locked={lockedFields.includes("year")}
+                  editing
+                  editSlot={
+                    <Input
+                      type="number"
+                      value={draft.year}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, year: e.target.value }))
+                      }
+                      placeholder="e.g. 2023"
+                      className="h-8 text-sm"
+                    />
                   }
-                  placeholder="e.g. 2023"
-                  className="h-8 text-sm"
+                  empty={!ornament.year}
                 />
-              }
-              empty={!ornament.year}
-            />
+              </>
+            )}
             {isEditing && (
               <>
                 <CollectionDetailField
@@ -691,26 +730,25 @@ export default function OrnamentDetail() {
                 />
               </>
             )}
-            <CollectionDetailField
-              label="Dimensions"
-              value={ornament.dimensions || "—"}
-              locked={lockedFields.includes("dimensions")}
-              onToggleLock={
-                !isEditing ? () => toggleFieldLock("dimensions") : undefined
-              }
-              editing={isEditing}
-              editSlot={
-                <Input
-                  value={draft.dimensions}
-                  onChange={(e) =>
-                    setDraft((d) => ({ ...d, dimensions: e.target.value }))
-                  }
-                  placeholder="e.g. 4×3×2 in"
-                  className="h-8 text-sm"
-                />
-              }
-              empty={!ornament.dimensions}
-            />
+            {isEditing && (
+              <CollectionDetailField
+                label="Dimensions"
+                value={ornament.dimensions || "—"}
+                locked={lockedFields.includes("dimensions")}
+                editing
+                editSlot={
+                  <Input
+                    value={draft.dimensions}
+                    onChange={(e) =>
+                      setDraft((d) => ({ ...d, dimensions: e.target.value }))
+                    }
+                    placeholder="e.g. 4×3×2 in"
+                    className="h-8 text-sm"
+                  />
+                }
+                empty={!ornament.dimensions}
+              />
+            )}
             <CollectionDetailField
               label="Barcode / UPC"
               value={ornament.barcodeValue || "—"}

@@ -131,7 +131,62 @@ Never swap these. Never hardcode either connection string.
 
 ---
 
-## 3. Required Commands — run these at the right times
+## 3. Feature Completion Gate — mandatory before every "done"
+
+**This applies to every feature, fix, refactor, and task — no exceptions. Do not declare work complete until all four checks pass.**
+
+### 3a. Visual verification (non-skippable)
+
+Take a screenshot of every page or component that was added or changed. Use Method 1:
+
+```bash
+# Step 1: get token and domain (run in parallel)
+TOKEN=$(printenv DEV_SCREENSHOT_TOKEN)   # plain env var — NOT a secret
+DOMAIN=$REPLIT_DEV_DOMAIN
+```
+
+```typescript
+// Step 2: screenshot (batch independent pages into one response)
+Screenshot({ source: { type: "externalUrl",
+  url: `https://${DOMAIN}/<path>?screenshotToken=${TOKEN}` } })
+```
+
+Page paths: `/` (hub), `/modules/pottery`, `/modules/quilting`, `/modules/travels`,
+`/modules/ornaments`, `/modules/office`, `/elaine`, `/owner`.
+
+Full reference: `.agents/memory/screenshot-tool-cookie-bypass.md`
+
+**Broken image rule:** scan every screenshot for `<img>` elements showing alt text or
+broken-image icons. Any broken image is a real bug — fix it before declaring done.
+Confirm with `curl -I "https://$REPLIT_DEV_DOMAIN/api/..."` that the endpoint returns
+200 + valid bytes. Never assume it is a screenshot-tool artifact.
+
+**If a page cannot be reached by direct URL** (e.g. only accessible through a multi-step
+flow or modal): verify via `curl` against the API endpoint + document why a screenshot
+wasn't taken.
+
+### 3b. Tests pass
+
+```bash
+pnpm run typecheck
+pnpm --filter @workspace/api-server run test   # after any api-server change
+```
+
+### 3c. No raw fetch violations
+
+```bash
+pnpm --filter @workspace/scripts run check-raw-fetch
+```
+
+### 3d. Code review
+
+Deep-read everything added or changed. Verify it works as intended, not just that it
+typechecks. Diff Replit vs GitHub (`git diff`) if unsure what changed. Check for
+architectural duplication — search for sibling implementations before adding new ones.
+
+---
+
+## 4. Required Commands — run these at the right times
 
 ```bash
 # After ANY TypeScript change — must pass before committing:

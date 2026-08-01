@@ -628,6 +628,7 @@ function HallmarkEventStatTile() {
 
   return (
     <div
+      data-testid="hallmark-event-tile"
       role="link"
       tabIndex={0}
       title={current.title}

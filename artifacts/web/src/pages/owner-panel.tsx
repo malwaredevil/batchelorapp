@@ -358,7 +358,11 @@ export default function OwnerPanel() {
 
         {safeTab === "google-apis" && isOwner && <GoogleApisDemoContent />}
 
-        {safeTab === "services" && isOwner && <ServicesCatalogContent />}
+        {safeTab === "services" && isOwner && (
+          <ServicesCatalogContent
+            onNavigateToIntegrations={() => navigateTab("integrations")}
+          />
+        )}
 
         {safeTab === "integrations" && isOwner && <IntegrationsContent />}
 

@@ -423,10 +423,38 @@ router.get("/", async (_req, res) => {
   res.json({ ...data, fromCache: false });
 });
 
+/**
+ * GET /cached
+ *
+ * Read-only: returns the in-process cached result if one exists and has not
+ * expired. Returns 204 No Content when no valid cache is available.
+ *
+ * This endpoint NEVER triggers a fresh health-check run — it is safe to call
+ * from any read-only view (e.g. the Services Catalog) without incurring
+ * external API calls.
+ */
+router.get("/cached", (_req, res) => {
+  const now = Date.now();
+  if (_cache && _cache.expiresAt > now) {
+    res.json({ ..._cache.data, fromCache: true });
+    return;
+  }
+  res.status(204).end();
+});
+
 // Explicit bust — POST to force a fresh check even within the cache window.
 router.post("/bust", (_req, res) => {
   _cache = null;
   res.json({ ok: true });
 });
+
+// ---------------------------------------------------------------------------
+// Test helpers (not exported to production callers — only used in test files)
+// ---------------------------------------------------------------------------
+
+/** @internal Inject a cache entry for unit tests without running real checks. */
+export function _setTestCache(entry: { data: CachedResult; expiresAt: number } | null): void {
+  _cache = entry;
+}
 
 export default router;

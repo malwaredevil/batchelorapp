@@ -146,7 +146,12 @@ describe("createOrnamentPhotoQueue — duplicate prevention", () => {
 
     // Schedule 3 photos synchronously — processing starts are synchronous
     const onProcessingStart = vi.fn();
-    const noop = { onProcessingStart, onCreate: vi.fn(), onUpload: vi.fn(), onError: vi.fn() };
+    const noop = {
+      onProcessingStart,
+      onCreate: vi.fn(),
+      onUpload: vi.fn(),
+      onError: vi.fn(),
+    };
 
     queue.schedulePhoto(makeFile("a.jpg"), noop);
     // First photo: processing starts immediately (synchronous, before first await).
@@ -156,7 +161,9 @@ describe("createOrnamentPhotoQueue — duplicate prevention", () => {
   it("processes photos serially: second does not start until first completes", async () => {
     const order: string[] = [];
     let resolveFirst!: () => void;
-    const firstDone = new Promise<void>((r) => { resolveFirst = r; });
+    const firstDone = new Promise<void>((r) => {
+      resolveFirst = r;
+    });
 
     const create = vi.fn().mockImplementation(async () => {
       // Slow first upload
@@ -171,11 +178,18 @@ describe("createOrnamentPhotoQueue — duplicate prevention", () => {
     const queue = createOrnamentPhotoQueue(create, upload);
 
     let p2Done = false;
-    const cb1 = { onProcessingStart: vi.fn(), onCreate: vi.fn(), onUpload: vi.fn(), onError: vi.fn() };
+    const cb1 = {
+      onProcessingStart: vi.fn(),
+      onCreate: vi.fn(),
+      onUpload: vi.fn(),
+      onError: vi.fn(),
+    };
     const cb2 = {
       onProcessingStart: vi.fn(),
       onCreate: vi.fn(),
-      onUpload: vi.fn().mockImplementation(() => { p2Done = true; }),
+      onUpload: vi.fn().mockImplementation(() => {
+        p2Done = true;
+      }),
       onError: vi.fn(),
     };
 
@@ -203,8 +217,12 @@ describe("createOrnamentPhotoQueue — duplicate prevention", () => {
     // (ornamentId never got set from the failed first).
     let doneCount = 0;
     let resolveAll!: () => void;
-    const allDone = new Promise<void>((r) => { resolveAll = r; });
-    const tick = () => { if (++doneCount === 2) resolveAll(); };
+    const allDone = new Promise<void>((r) => {
+      resolveAll = r;
+    });
+    const tick = () => {
+      if (++doneCount === 2) resolveAll();
+    };
 
     const callbacks = {
       onProcessingStart: vi.fn(),
@@ -236,7 +254,10 @@ describe("deriveHandleDoneRoute", () => {
 
   it("navigates to ornament detail when id is set", () => {
     const r = deriveHandleDoneRoute(42, true, false);
-    expect(r).toEqual({ kind: "navigate", to: "/ornaments/ornament/42?edit=1" });
+    expect(r).toEqual({
+      kind: "navigate",
+      to: "/ornaments/ornament/42?edit=1",
+    });
   });
 
   it("navigates to /ornaments/add for a barcode-only session", () => {

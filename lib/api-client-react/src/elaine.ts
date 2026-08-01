@@ -1186,6 +1186,7 @@ export interface ElaineFeaturesConfig {
   enableOpenAIResponses: boolean;
   enableOpenAIAppWorkflows: boolean;
   enableOpenAIResponsesFallback: boolean;
+  enableBuiltinWebSearch: boolean;
 }
 
 export interface ElaineThresholdsConfig {

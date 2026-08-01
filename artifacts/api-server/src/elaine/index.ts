@@ -5608,6 +5608,21 @@ router.post("/chat", async (req, res) => {
     ...SOFT_TOOLS,
     ...SOFT_TOOLS_EXTRA,
   ];
+
+  // When the Responses API is active and the built-in web search feature is
+  // enabled, remove the custom web_search function tool from the Responses API
+  // tool list — the native built-in replaces it.  The full allAssistantTools
+  // list (including web_search) is kept for the OpenRouter fallback path.
+  const useBuiltinWS = Boolean(
+    useOpenAIResponses && elaineConfig.features.enableBuiltinWebSearch,
+  );
+  const responsesApiTools = useBuiltinWS
+    ? allAssistantTools.filter(
+        (t) =>
+          !(t.type === "function" && t.function.name === WEB_SEARCH_TOOL_NAME),
+      )
+    : allAssistantTools;
+
   let nextForcedToolName: string | null = null;
   let suppressToolsNextRound = false;
 
@@ -5705,12 +5720,13 @@ router.post("/chat", async (req, res) => {
               "cache",
               `elaine:${histConvId ?? userId}`,
             ),
-            tools: allAssistantTools,
+            tools: responsesApiTools,
             toolChoice: suppressTools
               ? "none"
               : forcedToolName
                 ? { type: "function", name: forcedToolName }
                 : "auto",
+            useBuiltinWebSearch: useBuiltinWS,
             config: elaineConfig,
             onTextDelta: (delta) => {
               rawContent += delta;
@@ -5752,6 +5768,13 @@ router.post("/chat", async (req, res) => {
             args: toolCall.arguments,
           });
         });
+        // Collect source URLs from built-in web_search calls. Unlike the
+        // function-tool path, these arrive directly in the round result
+        // (the provider executed the search internally) — no separate hard
+        // tool execution step is needed.
+        if (directResult.webSearchCitations.length > 0) {
+          allCitations.push(...directResult.webSearchCitations);
+        }
       } else {
         await runOpenRouterRound();
       }
@@ -8187,6 +8210,7 @@ const AdminConfigBody = z.object({
       enableOpenAIResponses: z.boolean().optional(),
       enableOpenAIAppWorkflows: z.boolean().optional(),
       enableOpenAIResponsesFallback: z.boolean().optional(),
+      enableBuiltinWebSearch: z.boolean().optional(),
     })
     .partial()
     .optional(),

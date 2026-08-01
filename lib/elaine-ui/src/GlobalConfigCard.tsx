@@ -385,6 +385,14 @@ export function GlobalConfigCard() {
               setFeatures({ ...features, enableOpenAIResponsesFallback: v })
             }
           />
+          <ToggleField
+            label="Use built-in web search (OpenAI native)"
+            hint="Elaine searches via OpenAI's native tool instead of Perplexity/OpenRouter, giving richer citations and one fewer API hop. Disable to revert to Perplexity."
+            checked={features.enableBuiltinWebSearch}
+            onChange={(v) =>
+              setFeatures({ ...features, enableBuiltinWebSearch: v })
+            }
+          />
         </div>
       </Section>
 

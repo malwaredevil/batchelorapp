@@ -3,8 +3,10 @@ import OpenAI from "openai";
 import type {
   EasyInputMessage,
   FunctionTool,
+  WebSearchTool,
   ResponseCreateParams,
   ResponseFunctionToolCall,
+  ResponseFunctionWebSearch,
   ResponseInput,
   ResponseInputContent,
   Response,
@@ -42,6 +44,8 @@ export interface OpenAIResponseRoundResult {
   model: string;
   text: string;
   functionCalls: OpenAIResponseFunctionCall[];
+  /** Source URLs collected from built-in web_search tool calls this round. */
+  webSearchCitations: string[];
   usage: ResponseUsage | null;
 }
 
@@ -151,6 +155,49 @@ export function createOpenAIStableIdentifier(
     .digest("hex");
 }
 
+/**
+ * Pure: build the Responses API `tools` parameter from Chat function tools
+ * and the optional built-in web search flag.
+ *
+ * - When `useBuiltinWebSearch` is true, appends `{type:"web_search"}` and
+ *   the caller must already have excluded the custom `web_search` function
+ *   tool from `chatTools` to avoid presenting both to the model.
+ * - Returns `undefined` (not an empty array) when there are no tools so the
+ *   API doesn't receive an empty tools array.
+ */
+export function buildResponsesToolsParam(
+  chatTools: OpenAI.Chat.Completions.ChatCompletionTool[] | undefined,
+  useBuiltinWebSearch: boolean,
+): ResponseCreateParams["tools"] {
+  const functionTools = chatTools ? chatToolsToResponsesTools(chatTools) : [];
+  if (!useBuiltinWebSearch) {
+    return functionTools.length > 0
+      ? (functionTools as ResponseCreateParams["tools"])
+      : undefined;
+  }
+  const builtin: WebSearchTool = {
+    type: "web_search" as const,
+    search_context_size: "medium",
+  };
+  return [...functionTools, builtin] as ResponseCreateParams["tools"];
+}
+
+/**
+ * Pure: extract HTTP source URLs from a completed `web_search_call` output
+ * item. Only `Search` actions carry sources; `OpenPage` and `Find` do not.
+ * Returns an empty array for non-Search actions or when no sources are set.
+ */
+export function extractWebSearchCallSources(
+  item: ResponseFunctionWebSearch,
+): string[] {
+  if (item.action.type !== "search") return [];
+  const sources = item.action.sources;
+  if (!Array.isArray(sources)) return [];
+  return sources
+    .filter((s) => s.type === "url" && typeof s.url === "string" && s.url)
+    .map((s) => s.url);
+}
+
 export function chatToolsToResponsesTools(
   tools: OpenAI.Chat.Completions.ChatCompletionTool[],
 ): FunctionTool[] {
@@ -253,6 +300,14 @@ export interface StreamOpenAIResponseRoundOptions extends SharedRequestOptions {
   tools?: OpenAI.Chat.Completions.ChatCompletionTool[];
   toolChoice?: ToolChoiceOptions | { type: "function"; name: string };
   onTextDelta?: (delta: string) => void;
+  /**
+   * When true, adds the native `web_search` built-in tool to the Responses
+   * request and collects source URLs from `web_search_call` output items into
+   * `OpenAIResponseRoundResult.webSearchCitations`. The caller is responsible
+   * for excluding the custom web_search function tool from `tools` so the
+   * model doesn't see both simultaneously.
+   */
+  useBuiltinWebSearch?: boolean;
 }
 
 function createBaseParams(
@@ -307,15 +362,23 @@ export async function streamOpenAIResponseRound(
       "openai-responses",
       async (): Promise<OpenAIResponseRoundResult> => {
         const params = createBaseParams(options, config);
+        const allTools = buildResponsesToolsParam(
+          options.tools,
+          options.useBuiltinWebSearch ?? false,
+        );
+
         const stream = await client.responses.create({
           ...params,
           stream: true,
           parallel_tool_calls: true,
-          tools: options.tools
-            ? chatToolsToResponsesTools(options.tools)
-            : undefined,
+          tools: allTools,
           tool_choice: options.toolChoice,
           stream_options: { include_obfuscation: false },
+          // Request source URLs for built-in web search calls so we can
+          // surface them as citations in the chat UI.
+          include: options.useBuiltinWebSearch
+            ? (["web_search_call.action.sources"] as ResponseCreateParams["include"])
+            : undefined,
         });
 
         let completedResponse: {
@@ -325,21 +388,30 @@ export async function streamOpenAIResponseRound(
         } | null = null;
         let text = "";
         const functionCalls: OpenAIResponseFunctionCall[] = [];
+        const webSearchCitations: string[] = [];
 
         for await (const event of stream) {
           if (event.type === "response.output_text.delta") {
             text += event.delta;
             options.onTextDelta?.(event.delta);
-          } else if (
-            event.type === "response.output_item.done" &&
-            event.item.type === "function_call"
-          ) {
-            const item = event.item as ResponseFunctionToolCall;
-            functionCalls.push({
-              callId: item.call_id,
-              name: item.name,
-              arguments: item.arguments,
-            });
+          } else if (event.type === "response.output_item.done") {
+            if (event.item.type === "function_call") {
+              const item = event.item as ResponseFunctionToolCall;
+              functionCalls.push({
+                callId: item.call_id,
+                name: item.name,
+                arguments: item.arguments,
+              });
+            } else if (
+              options.useBuiltinWebSearch &&
+              event.item.type === "web_search_call"
+            ) {
+              webSearchCitations.push(
+                ...extractWebSearchCallSources(
+                  event.item as ResponseFunctionWebSearch,
+                ),
+              );
+            }
           } else if (event.type === "response.completed") {
             completedResponse = {
               id: event.response.id,
@@ -377,6 +449,7 @@ export async function streamOpenAIResponseRound(
           model: completedResponse.model,
           text,
           functionCalls,
+          webSearchCitations,
           usage: completedResponse.usage,
         };
       },
@@ -519,6 +592,7 @@ export async function generateOpenAIResponseText(
       model: response.model,
       text: response.output_text,
       functionCalls: [],
+      webSearchCitations: [],
       usage: response.usage ?? null,
     };
   } catch (err) {

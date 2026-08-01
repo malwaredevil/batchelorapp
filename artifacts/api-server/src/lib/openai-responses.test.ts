@@ -6,13 +6,16 @@ vi.mock("./elaine-config", () => ({
 vi.mock("./env", () => ({ env: { openaiApiKey: undefined } }));
 
 import {
+  buildResponsesToolsParam,
   chatUserContentToResponseInput,
   chatToolsToResponsesTools,
   createOpenAIStableIdentifier,
+  extractWebSearchCallSources,
   isRecoverableOpenAIStateError,
   messagesToResponseInput,
   resolveOpenAIResponsesModel,
 } from "./openai-responses";
+import type { ResponseFunctionWebSearch } from "openai/resources/responses/responses";
 import type { ElaineGlobalConfig } from "./elaine-config";
 
 const config: ElaineGlobalConfig = {
@@ -50,6 +53,7 @@ const config: ElaineGlobalConfig = {
     enableOpenAIResponses: true,
     enableOpenAIAppWorkflows: true,
     enableOpenAIResponsesFallback: true,
+    enableBuiltinWebSearch: true,
   },
   thresholds: {
     potterySimilarityYes: 0.9,
@@ -182,6 +186,120 @@ describe("OpenAI Responses provider helpers", () => {
         content: "Hi",
         phase: "final_answer",
       },
+    ]);
+  });
+});
+
+const SAMPLE_FUNCTION_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "navigate",
+    description: "Navigate to a page",
+    parameters: { type: "object", properties: {}, required: [] },
+  },
+};
+
+describe("buildResponsesToolsParam", () => {
+  it("returns undefined when there are no tools and built-in is off", () => {
+    expect(buildResponsesToolsParam(undefined, false)).toBeUndefined();
+    expect(buildResponsesToolsParam([], false)).toBeUndefined();
+  });
+
+  it("returns undefined when there are no function tools and built-in is off", () => {
+    expect(buildResponsesToolsParam([], false)).toBeUndefined();
+  });
+
+  it("returns only converted function tools when built-in is off", () => {
+    const result = buildResponsesToolsParam([SAMPLE_FUNCTION_TOOL], false);
+    expect(result).toHaveLength(1);
+    expect((result as { type: string }[])[0].type).toBe("function");
+  });
+
+  it("appends web_search built-in when flag is on with no function tools", () => {
+    const result = buildResponsesToolsParam(undefined, true) as {
+      type: string;
+      search_context_size?: string;
+    }[];
+    expect(result).toHaveLength(1);
+    expect(result[0].type).toBe("web_search");
+    expect(result[0].search_context_size).toBe("medium");
+  });
+
+  it("appends web_search built-in after function tools when flag is on", () => {
+    const result = buildResponsesToolsParam(
+      [SAMPLE_FUNCTION_TOOL],
+      true,
+    ) as { type: string; name?: string }[];
+    expect(result).toHaveLength(2);
+    expect(result[0].type).toBe("function");
+    expect(result[1].type).toBe("web_search");
+  });
+
+  it("does NOT include built-in when flag is off even with function tools present", () => {
+    const result = buildResponsesToolsParam(
+      [SAMPLE_FUNCTION_TOOL],
+      false,
+    ) as { type: string }[];
+    expect(result.every((t) => t.type !== "web_search")).toBe(true);
+  });
+});
+
+describe("extractWebSearchCallSources", () => {
+  it("returns empty array for non-Search action types", () => {
+    const item = {
+      id: "ws_1",
+      type: "web_search_call" as const,
+      status: "completed" as const,
+      action: { type: "open_page" as const, url: "https://example.com" },
+    } satisfies ResponseFunctionWebSearch;
+    expect(extractWebSearchCallSources(item)).toEqual([]);
+  });
+
+  it("returns empty array when sources are absent on a Search action", () => {
+    const item = {
+      id: "ws_1",
+      type: "web_search_call" as const,
+      status: "completed" as const,
+      action: { type: "search" as const, queries: ["paris weather"] },
+    } satisfies ResponseFunctionWebSearch;
+    expect(extractWebSearchCallSources(item)).toEqual([]);
+  });
+
+  it("extracts url-type sources from a completed Search action", () => {
+    const item = {
+      id: "ws_1",
+      type: "web_search_call" as const,
+      status: "completed" as const,
+      action: {
+        type: "search" as const,
+        queries: ["paris weather"],
+        sources: [
+          { type: "url" as const, url: "https://weather.com/paris" },
+          { type: "url" as const, url: "https://bbc.com/weather" },
+        ],
+      },
+    } satisfies ResponseFunctionWebSearch;
+    expect(extractWebSearchCallSources(item)).toEqual([
+      "https://weather.com/paris",
+      "https://bbc.com/weather",
+    ]);
+  });
+
+  it("skips sources with empty or missing urls", () => {
+    const item = {
+      id: "ws_1",
+      type: "web_search_call" as const,
+      status: "completed" as const,
+      action: {
+        type: "search" as const,
+        sources: [
+          { type: "url" as const, url: "https://good.example.com" },
+          { type: "url" as const, url: "" },
+        ],
+      },
+    } satisfies ResponseFunctionWebSearch;
+    expect(extractWebSearchCallSources(item)).toEqual([
+      "https://good.example.com",
     ]);
   });
 });

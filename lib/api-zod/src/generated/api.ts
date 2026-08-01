@@ -5113,6 +5113,28 @@ export const LookupBarcodeResponse = zod.object({
 
 
 /**
+ * @summary Submit a correction when a barcode lookup returned wrong information
+ */
+export const reportBarcodeCorrectionBodyBarcodeMax = 30;
+
+
+
+export const ReportBarcodeCorrectionBody = zod.object({
+  "barcode": zod.string().min(1).max(reportBarcodeCorrectionBodyBarcodeMax),
+  "wrongName": zod.string().nullish(),
+  "wrongBrand": zod.string().nullish(),
+  "correctedName": zod.string().nullish(),
+  "correctedBrand": zod.string().nullish(),
+  "correctedSeriesOrCollection": zod.string().nullish(),
+  "correctedYear": zod.number().nullish()
+})
+
+export const ReportBarcodeCorrectionResponse = zod.object({
+  "success": zod.boolean()
+})
+
+
+/**
  * @summary Extract a barcode number from a photo using AI vision (escape hatch when camera scan fails)
  */
 export const ExtractOrnamentBarcodePhotoBody = zod.object({

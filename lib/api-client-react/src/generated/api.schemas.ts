@@ -2411,6 +2411,24 @@ export interface OrnamentsBarcodeLookupResult {
   hallmarkProductUrl?: string | null;
 }
 
+export interface OrnamentsBarcodeCorrectionInput {
+  /**
+     * @minLength 1
+     * @maxLength 30
+     */
+  barcode: string;
+  wrongName?: string | null;
+  wrongBrand?: string | null;
+  correctedName?: string | null;
+  correctedBrand?: string | null;
+  correctedSeriesOrCollection?: string | null;
+  correctedYear?: number | null;
+}
+
+export interface OrnamentsBarcodeCorrectionResult {
+  success: boolean;
+}
+
 export interface OrnamentsBarcodePhotoInput {
   /** A base64 data URL of the image (e.g. data:image/jpeg;base64,...) */
   imageDataUrl: string;

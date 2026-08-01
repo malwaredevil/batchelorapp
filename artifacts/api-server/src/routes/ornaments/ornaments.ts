@@ -48,6 +48,8 @@ import {
   LookupBarcodeResponse,
   LookupOrnamentBookValueParams,
   LookupOrnamentBookValueResponse,
+  ReportBarcodeCorrectionBody,
+  ReportBarcodeCorrectionResponse,
 } from "@workspace/api-zod";
 import { requireAuth } from "../../middleware/auth";
 import {
@@ -444,6 +446,28 @@ router.post("/items/lookup-barcode", async (req, res) => {
     }),
   );
 });
+
+// User-submitted correction when a barcode lookup returned wrong data.
+// Stored in ornament_upc_corrections for future lookup prioritisation.
+// Registered before /items/:id/* routes to avoid path ambiguity.
+router.post(
+  "/items/report-barcode-correction",
+  requireAuth,
+  async (req, res) => {
+    const body = ReportBarcodeCorrectionBody.parse(req.body);
+    await db.execute(sql`
+    INSERT INTO ornament_upc_corrections
+      (barcode, wrong_name, wrong_brand, corrected_name, corrected_brand,
+       corrected_series_or_collection, corrected_year, submitted_by)
+    VALUES
+      (${body.barcode}, ${body.wrongName ?? null}, ${body.wrongBrand ?? null},
+       ${body.correctedName ?? null}, ${body.correctedBrand ?? null},
+       ${body.correctedSeriesOrCollection ?? null}, ${body.correctedYear ?? null},
+       ${req.session.userId})
+  `);
+    res.json(ReportBarcodeCorrectionResponse.parse({ success: true }));
+  },
+);
 
 // AI-powered barcode extraction from a user-supplied photo.
 // Used as an escape hatch when the native BarcodeDetector API and ZXing

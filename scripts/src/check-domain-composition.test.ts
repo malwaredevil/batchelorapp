@@ -713,6 +713,43 @@ navigate(\`/quilting/fabrics/\${fabric.id}\`);
   assert.equal(hasBareEntityIdInContext(source), false);
 });
 
+test("detects ${item.id} at the start of a context template (backtick-preceded)", () => {
+  // A context string that IS just the bare ID: usePageAssistantContext("p", `${item.id}`)
+  // The `${` is immediately after the opening backtick of the template literal.
+  // This is a real violation — the context string contains only a bare entity ID.
+  const source = `
+usePageAssistantContext("detail", \`\${item.id}\`);
+`;
+  assert.equal(hasBareEntityIdInContext(source), true);
+});
+
+test("does NOT flag URL query param ?id=${design.id} (navigate call)", () => {
+  // navigate(`/quilt/designer?id=${design.id}`) — ${} preceded by = in ?id=
+  const source = `
+usePageAssistantContext("whole-quilt-list", \`\${designs.length} saved designs.\`);
+navigate(\`/quilting/whole-quilt/designer?id=\${design.id}\`);
+`;
+  assert.equal(hasBareEntityIdInContext(source), false);
+});
+
+test("does NOT flag JSX template attribute suffix (htmlFor with id)", () => {
+  // htmlFor={`blocks-${r.fabric.id}`} — ${} preceded by -
+  const source = `
+usePageAssistantContext("yardage", "Yardage Calculator page.");
+return <label htmlFor={\`blocks-\${r.fabric.id}\`}>Blocks</label>;
+`;
+  assert.equal(hasBareEntityIdInContext(source), false);
+});
+
+test("does NOT flag display label Fabric #${id} (hash prefix)", () => {
+  // `Fabric #${f.id}` — ${} preceded by #
+  const source = `
+usePageAssistantContext("owner-panel", "Owner Panel page.");
+const label = \`Fabric #\${f.id}\`;
+`;
+  assert.equal(hasBareEntityIdInContext(source), false);
+});
+
 test("does NOT flag when usePageAssistantContext is absent", () => {
   const source = `
 const url = \`/trips/\${trip.id}\`;
@@ -803,6 +840,40 @@ test("script exits non-zero when an inline .join() context-list violation is inj
   } finally {
     try {
       unlinkSync(TEMP_CONTEXT_VIOLATION_FILE);
+    } catch {
+      // best-effort cleanup
+    }
+  }
+});
+
+const TEMP_BARE_ID_VIOLATION_FILE = join(
+  root,
+  "artifacts/modules/src/_temp_composition_guard_test_f_fixture.tsx",
+);
+
+test("script exits non-zero when a bare .id context-string violation is injected (Scan F)", () => {
+  writeFileSync(
+    TEMP_BARE_ID_VIOLATION_FILE,
+    [
+      "// Temporary test fixture injected by check-domain-composition.test.ts",
+      "// This file is cleaned up after the test regardless of outcome.",
+      'import { usePageAssistantContext } from "@/lib/assistant-context";',
+      "const item = { id: 1, name: 'test' };",
+      'usePageAssistantContext("item-page", `Item: ${item.id}`);',
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  try {
+    const result = runScript();
+    assert.notEqual(
+      result.status,
+      0,
+      `Expected non-zero exit for bare .id violation, but script exited ${result.status}`,
+    );
+  } finally {
+    try {
+      unlinkSync(TEMP_BARE_ID_VIOLATION_FILE);
     } catch {
       // best-effort cleanup
     }

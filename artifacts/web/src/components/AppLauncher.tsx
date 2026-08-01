@@ -739,8 +739,10 @@ export function AppLauncher() {
     upcomingEventsRangeEnd,
   );
   const upcomingEventsTotal =
-    (connectedCalendarsData ?? []).length > 0
-      ? (allCalendarEventsData?.length ?? null)
+    Array.isArray(connectedCalendarsData) && connectedCalendarsData.length > 0
+      ? Array.isArray(allCalendarEventsData)
+        ? allCalendarEventsData.length
+        : null
       : null;
 
   function liveStats(
@@ -765,10 +767,9 @@ export function AppLauncher() {
           href: `${base}modules/pottery/`,
         },
         {
-          value:
-            potteryCategoriesData != null
-              ? String(potteryCategoriesData.length)
-              : "—",
+          value: Array.isArray(potteryCategoriesData)
+            ? String(potteryCategoriesData.length)
+            : "—",
           label: "Categories",
           href: `${base}modules/pottery/categories`,
         },
@@ -845,7 +846,7 @@ export function AppLauncher() {
     if (appId === "office") {
       return [
         {
-          value: notesData != null ? String(notesData.length) : "—",
+          value: Array.isArray(notesData) ? String(notesData.length) : "—",
           label: "Notes",
           href: `${base}modules/office/notes`,
         },
@@ -876,8 +877,9 @@ export function AppLauncher() {
           href: `${base}elaine/`,
         },
         {
-          value:
-            elaineMemoryData != null ? String(elaineMemoryData.length) : "—",
+          value: Array.isArray(elaineMemoryData)
+            ? String(elaineMemoryData.length)
+            : "—",
           label: "Memory",
           href: `${base}elaine/`,
         },

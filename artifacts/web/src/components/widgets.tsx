@@ -57,7 +57,7 @@ export function PotteryStatsWidget() {
       v: stats?.uniqueItems != null ? String(stats.uniqueItems) : "—",
       l: "Unique",
     },
-    { v: cats != null ? String(cats.length) : "—", l: "Categories" },
+    { v: Array.isArray(cats) ? String(cats.length) : "—", l: "Categories" },
   ];
   return (
     <div className="space-y-2">

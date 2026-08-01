@@ -61,6 +61,11 @@ export interface FeaturesConfig {
   // web_search tool instead of the custom Perplexity/OpenRouter function tool,
   // eliminating the extra OpenRouter hop and giving richer citation data.
   enableBuiltinWebSearch: boolean;
+  // When true and Responses API is active, request a reasoning summary from
+  // the model and surface it as a collapsible "Thinking…" disclosure in the
+  // chat UI. Summaries are also persisted so users can re-read them after a
+  // page refresh.
+  showReasoningSummary: boolean;
 }
 
 export interface ThresholdsConfig {
@@ -134,6 +139,7 @@ export const DEFAULT_FEATURES: FeaturesConfig = {
   enableOpenAIAppWorkflows: true,
   enableOpenAIResponsesFallback: true,
   enableBuiltinWebSearch: true,
+  showReasoningSummary: true,
 };
 
 export const DEFAULT_THRESHOLDS: ThresholdsConfig = {

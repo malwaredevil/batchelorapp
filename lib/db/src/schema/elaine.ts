@@ -284,6 +284,9 @@ export const elaineHistoryMessages = pgTable(
     attachmentUrls: jsonb("attachment_urls")
       .notNull()
       .default(sql`'[]'::jsonb`),
+    /** Model-produced reasoning summary for the assistant turn, null for user
+     *  messages and older rows written before this column existed. */
+    reasoningSummary: text("reasoning_summary"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

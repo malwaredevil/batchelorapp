@@ -393,6 +393,14 @@ export function GlobalConfigCard() {
               setFeatures({ ...features, enableBuiltinWebSearch: v })
             }
           />
+          <ToggleField
+            label="Show Elaine's reasoning in chat"
+            hint={`Displays a collapsible "Thinking\u2026" summary above each reply so you can follow Elaine's logic. Disable to hide the disclosure while keeping extended reasoning on.`}
+            checked={features.showReasoningSummary}
+            onChange={(v) =>
+              setFeatures({ ...features, showReasoningSummary: v })
+            }
+          />
         </div>
       </Section>
 

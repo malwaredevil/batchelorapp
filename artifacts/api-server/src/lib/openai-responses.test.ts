@@ -54,6 +54,7 @@ const config: ElaineGlobalConfig = {
     enableOpenAIAppWorkflows: true,
     enableOpenAIResponsesFallback: true,
     enableBuiltinWebSearch: true,
+    showReasoningSummary: true,
   },
   thresholds: {
     potterySimilarityYes: 0.9,
@@ -198,6 +199,185 @@ const SAMPLE_FUNCTION_TOOL = {
     parameters: { type: "object", properties: {}, required: [] },
   },
 };
+
+import {
+  buildReasoningParam,
+  accumulateReasoningSummaryEvent,
+  finalizeReasoningSummary,
+} from "./openai-responses";
+
+// ─── buildReasoningParam ─────────────────────────────────────────────────────
+
+describe("buildReasoningParam", () => {
+  it("defaults effort to 'low' and context to 'all_turns'", () => {
+    const p = buildReasoningParam({});
+    expect(p.effort).toBe("low");
+    expect(p.context).toBe("all_turns");
+    expect(p.summary).toBeUndefined();
+  });
+
+  it("includes summary:'detailed' when showReasoningSummary is true", () => {
+    const p = buildReasoningParam({ showReasoningSummary: true });
+    expect(p.summary).toBe("detailed");
+  });
+
+  it("omits summary when showReasoningSummary is false", () => {
+    const p = buildReasoningParam({ showReasoningSummary: false });
+    expect(p.summary).toBeUndefined();
+  });
+
+  it("omits summary when showReasoningSummary is undefined", () => {
+    const p = buildReasoningParam({ reasoningEffort: "high" });
+    expect(p.summary).toBeUndefined();
+  });
+
+  it("passes through the caller's reasoningEffort", () => {
+    const p = buildReasoningParam({ reasoningEffort: "medium" });
+    expect(p.effort).toBe("medium");
+  });
+});
+
+// ─── accumulateReasoningSummaryEvent ─────────────────────────────────────────
+
+describe("accumulateReasoningSummaryEvent", () => {
+  it("returns null and ignores non-summary events", () => {
+    const parts = new Map<number, string>();
+    expect(
+      accumulateReasoningSummaryEvent(parts, {
+        type: "response.output_text.delta",
+        delta: "hello",
+      }),
+    ).toBeNull();
+    expect(parts.size).toBe(0);
+  });
+
+  it("accumulates delta events into the correct index and returns the delta", () => {
+    const parts = new Map<number, string>();
+    expect(
+      accumulateReasoningSummaryEvent(parts, {
+        type: "response.reasoning_summary_text.delta",
+        summary_index: 0,
+        delta: "The",
+      }),
+    ).toBe("The");
+    expect(
+      accumulateReasoningSummaryEvent(parts, {
+        type: "response.reasoning_summary_text.delta",
+        summary_index: 0,
+        delta: " user",
+      }),
+    ).toBe(" user");
+    expect(parts.get(0)).toBe("The user");
+  });
+
+  it("defaults summary_index to 0 when absent", () => {
+    const parts = new Map<number, string>();
+    accumulateReasoningSummaryEvent(parts, {
+      type: "response.reasoning_summary_text.delta",
+      delta: "hi",
+    });
+    expect(parts.get(0)).toBe("hi");
+  });
+
+  it("replaces a partial delta buffer when done event arrives for the same index", () => {
+    const parts = new Map<number, string>();
+    // Two deltas
+    accumulateReasoningSummaryEvent(parts, {
+      type: "response.reasoning_summary_text.delta",
+      summary_index: 0,
+      delta: "Th",
+    });
+    accumulateReasoningSummaryEvent(parts, {
+      type: "response.reasoning_summary_text.delta",
+      summary_index: 0,
+      delta: "e",
+    });
+    // Done event provides the authoritative full text for this index
+    accumulateReasoningSummaryEvent(parts, {
+      type: "response.reasoning_summary_text.done",
+      summary_index: 0,
+      text: "The authoritative text",
+    });
+    expect(parts.get(0)).toBe("The authoritative text");
+  });
+
+  it("keeps multiple parts isolated by summary_index", () => {
+    const parts = new Map<number, string>();
+    accumulateReasoningSummaryEvent(parts, {
+      type: "response.reasoning_summary_text.delta",
+      summary_index: 0,
+      delta: "Part A",
+    });
+    accumulateReasoningSummaryEvent(parts, {
+      type: "response.reasoning_summary_text.delta",
+      summary_index: 1,
+      delta: "Part B",
+    });
+    expect(parts.get(0)).toBe("Part A");
+    expect(parts.get(1)).toBe("Part B");
+  });
+
+  it("done event for one index does not overwrite another index", () => {
+    const parts = new Map<number, string>();
+    accumulateReasoningSummaryEvent(parts, {
+      type: "response.reasoning_summary_text.delta",
+      summary_index: 0,
+      delta: "Part A delta",
+    });
+    accumulateReasoningSummaryEvent(parts, {
+      type: "response.reasoning_summary_text.delta",
+      summary_index: 1,
+      delta: "Part B delta",
+    });
+    // Done arrives only for index 1
+    accumulateReasoningSummaryEvent(parts, {
+      type: "response.reasoning_summary_text.done",
+      summary_index: 1,
+      text: "Part B final",
+    });
+    expect(parts.get(0)).toBe("Part A delta"); // untouched
+    expect(parts.get(1)).toBe("Part B final"); // replaced by done
+  });
+});
+
+// ─── finalizeReasoningSummary ─────────────────────────────────────────────────
+
+describe("finalizeReasoningSummary", () => {
+  it("returns undefined for an empty parts map", () => {
+    expect(finalizeReasoningSummary(new Map())).toBeUndefined();
+  });
+
+  it("returns undefined when all parts are whitespace-only", () => {
+    const parts = new Map([[0, "   "], [1, "\n\n"]]);
+    expect(finalizeReasoningSummary(parts)).toBeUndefined();
+  });
+
+  it("returns the single part's text", () => {
+    const parts = new Map([[0, "I reasoned carefully."]]);
+    expect(finalizeReasoningSummary(parts)).toBe("I reasoned carefully.");
+  });
+
+  it("joins multiple parts in summary_index order regardless of insertion order", () => {
+    const parts = new Map<number, string>();
+    parts.set(1, "Second paragraph.");
+    parts.set(0, "First paragraph.");
+    const result = finalizeReasoningSummary(parts);
+    expect(result).toBe("First paragraph.\n\nSecond paragraph.");
+  });
+
+  it("trims leading/trailing whitespace from the final joined string", () => {
+    const parts = new Map([[0, "  hello  "]]);
+    expect(finalizeReasoningSummary(parts)).toBe("hello");
+  });
+
+  it("correctly handles a three-part summary out of order", () => {
+    const parts = new Map<number, string>();
+    parts.set(2, "C");
+    parts.set(0, "A");
+    parts.set(1, "B");
+    expect(finalizeReasoningSummary(parts)).toBe("A\n\nB\n\nC");
+  });
+});
 
 describe("buildResponsesToolsParam", () => {
   it("returns undefined when there are no tools and built-in is off", () => {

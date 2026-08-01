@@ -295,6 +295,8 @@ type ChatMessage = {
   content: string;
   attachmentUrls?: AttachmentRef[];
   runtimeTrace?: ElaineRuntimeTrace;
+  /** Reasoning summary for assistant turns — undefined for user messages. */
+  reasoningSummary?: string;
 };
 
 // A single image/PDF attachment stored alongside a user message. `name` is
@@ -4603,6 +4605,7 @@ router.get("/conversations/:id/messages", async (req, res) => {
       ...(tracesByMessage.has(m.id)
         ? { runtimeTrace: tracesByMessage.get(m.id) }
         : {}),
+      ...(m.reasoningSummary ? { reasoningSummary: m.reasoningSummary } : {}),
       createdAt: m.createdAt.toISOString(),
     })),
   );
@@ -5451,6 +5454,8 @@ router.post("/chat", async (req, res) => {
     ? storedOpenAIState!.responseId
     : null;
   let finalOpenAIResponseId: string | null = null;
+  /** Reasoning summary from the last Responses API round that produced one. */
+  let finalReasoningSummary: string | null = null;
 
   const responseUserContent: string | ResponseInputContent[] =
     hasImages || hasPdfs || hasPageScreenshot
@@ -5727,10 +5732,16 @@ router.post("/chat", async (req, res) => {
                 ? { type: "function", name: forcedToolName }
                 : "auto",
             useBuiltinWebSearch: useBuiltinWS,
+            showReasoningSummary: Boolean(
+              elaineConfig.features.showReasoningSummary,
+            ),
             config: elaineConfig,
             onTextDelta: (delta) => {
               rawContent += delta;
               sendEvent("delta", { text: delta });
+            },
+            onReasoningSummaryDelta: (delta) => {
+              sendEvent("reasoning_summary", { delta });
             },
           });
 
@@ -5774,6 +5785,9 @@ router.post("/chat", async (req, res) => {
         // tool execution step is needed.
         if (directResult.webSearchCitations.length > 0) {
           allCitations.push(...directResult.webSearchCitations);
+        }
+        if (directResult.reasoningSummary) {
+          finalReasoningSummary = directResult.reasoningSummary;
         }
       } else {
         await runOpenRouterRound();
@@ -7378,7 +7392,14 @@ router.post("/chat", async (req, res) => {
           ? { attachmentUrls: allAttachmentUrls }
           : {}),
       },
-      { role: "assistant" as const, content, runtimeTrace: finalTrace },
+      {
+        role: "assistant" as const,
+        content,
+        runtimeTrace: finalTrace,
+        ...(finalReasoningSummary
+          ? { reasoningSummary: finalReasoningSummary }
+          : {}),
+      },
     ] satisfies ChatMessage[]
   ).slice(-50);
 
@@ -7401,6 +7422,7 @@ router.post("/chat", async (req, res) => {
           role: "assistant",
           content,
           attachmentUrls: [],
+          reasoningSummary: finalReasoningSummary ?? null,
         },
       ])
       .returning({
@@ -7477,6 +7499,7 @@ router.post("/chat", async (req, res) => {
     messages: updatedHistory,
     conversationId: histConvId,
     runtimeTrace: finalTrace,
+    reasoningSummary: finalReasoningSummary ?? null,
   });
   res.end();
 
@@ -8211,6 +8234,7 @@ const AdminConfigBody = z.object({
       enableOpenAIAppWorkflows: z.boolean().optional(),
       enableOpenAIResponsesFallback: z.boolean().optional(),
       enableBuiltinWebSearch: z.boolean().optional(),
+      showReasoningSummary: z.boolean().optional(),
     })
     .partial()
     .optional(),

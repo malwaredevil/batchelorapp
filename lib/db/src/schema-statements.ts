@@ -3003,4 +3003,11 @@ END $$`,
      ON elaine_scheduled_actions (status, scheduled_for)`,
   `CREATE INDEX IF NOT EXISTS elaine_scheduled_actions_user_id_idx
      ON elaine_scheduled_actions (initiated_by_user_id)`,
+
+  // ── Elaine reasoning-summary column (Task #541) ──────────────────────────────
+  // Persists the model's reasoning summary so the "Thinking…" disclosure
+  // survives page refreshes. NULL for user messages and all rows written
+  // before this column was added.
+  `ALTER TABLE elaine_history_messages
+     ADD COLUMN IF NOT EXISTS reasoning_summary TEXT`,
 ];

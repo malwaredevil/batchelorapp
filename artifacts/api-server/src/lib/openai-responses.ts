@@ -46,6 +46,12 @@ export interface OpenAIResponseRoundResult {
   functionCalls: OpenAIResponseFunctionCall[];
   /** Source URLs collected from built-in web_search tool calls this round. */
   webSearchCitations: string[];
+  /**
+   * Model-produced reasoning summary for this round, present only when
+   * `showReasoningSummary` was requested. Undefined when the model emitted no
+   * summary (e.g. a fast/acknowledgement turn).
+   */
+  reasoningSummary?: string;
   usage: ResponseUsage | null;
 }
 
@@ -294,12 +300,24 @@ interface SharedRequestOptions {
   safetyIdentifier?: string;
   promptCacheKey?: string;
   config?: ElaineGlobalConfig;
+  /**
+   * When true, requests a "detailed" reasoning summary from the model and
+   * returns it in `OpenAIResponseRoundResult.reasoningSummary`. Has no effect
+   * on models that don't support reasoning summaries.
+   */
+  showReasoningSummary?: boolean;
 }
 
 export interface StreamOpenAIResponseRoundOptions extends SharedRequestOptions {
   tools?: OpenAI.Chat.Completions.ChatCompletionTool[];
   toolChoice?: ToolChoiceOptions | { type: "function"; name: string };
   onTextDelta?: (delta: string) => void;
+  /**
+   * Called with each incremental reasoning-summary token as it arrives.
+   * Only invoked when `showReasoningSummary` is also true. Lets the caller
+   * stream the thinking disclosure live while the model is still reasoning.
+   */
+  onReasoningSummaryDelta?: (delta: string) => void;
   /**
    * When true, adds the native `web_search` built-in tool to the Responses
    * request and collects source URLs from `web_search_call` output items into
@@ -308,6 +326,74 @@ export interface StreamOpenAIResponseRoundOptions extends SharedRequestOptions {
    * model doesn't see both simultaneously.
    */
   useBuiltinWebSearch?: boolean;
+}
+
+/**
+ * Build the `reasoning` request param from caller options.
+ * Exported so tests can verify the shape without mocking the OpenAI client.
+ */
+export function buildReasoningParam(options: {
+  reasoningEffort?: ReasoningEffort;
+  showReasoningSummary?: boolean;
+}): { effort: ReasoningEffort; context: "all_turns"; summary?: "detailed" } {
+  return {
+    effort: options.reasoningEffort ?? "low",
+    context: "all_turns",
+    // "detailed" gives richer context than "concise" and is the right choice
+    // for a user-facing disclosure.
+    ...(options.showReasoningSummary ? { summary: "detailed" } : {}),
+  };
+}
+
+/**
+ * Accumulate a single OpenAI reasoning-summary stream event into a per-index
+ * buffer map. The OpenAI Responses API can emit multiple independent summary
+ * parts each with its own `summary_index`; treating them as one flat string
+ * would lose all but the last part's `.done` text.
+ *
+ * Call this for every `response.reasoning_summary_text.delta` and
+ * `response.reasoning_summary_text.done` event from the stream.
+ *
+ * @param parts   Mutable map from `summary_index` → accumulated text.
+ * @param event   Any stream event (non-summary events are silently ignored).
+ * @returns       The incremental delta string if the event was a `.delta` event
+ *                (for forwarding to `onReasoningSummaryDelta`), otherwise null.
+ */
+export function accumulateReasoningSummaryEvent(
+  parts: Map<number, string>,
+  event: { type: string; summary_index?: number; delta?: string; text?: string },
+): string | null {
+  const idx = event.summary_index ?? 0;
+  if (event.type === "response.reasoning_summary_text.delta") {
+    const delta = event.delta ?? "";
+    parts.set(idx, (parts.get(idx) ?? "") + delta);
+    return delta;
+  }
+  if (event.type === "response.reasoning_summary_text.done") {
+    // Replace this part's accumulated buffer with the authoritative full text
+    // from the `.done` event — guarantees the final value is correct even if
+    // a delta was dropped or repeated.
+    parts.set(idx, event.text ?? "");
+  }
+  return null;
+}
+
+/**
+ * Produce the final combined reasoning-summary string from all accumulated
+ * parts, sorted by summary_index and joined with a blank line.  Returns
+ * undefined when no parts have been accumulated (so callers can treat
+ * absence and empty string the same way).
+ */
+export function finalizeReasoningSummary(
+  parts: Map<number, string>,
+): string | undefined {
+  if (parts.size === 0) return undefined;
+  const combined = [...parts.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([, text]) => text)
+    .join("\n\n")
+    .trim();
+  return combined || undefined;
 }
 
 function createBaseParams(
@@ -322,10 +408,7 @@ function createBaseParams(
     max_output_tokens:
       options.maxOutputTokens ??
       config.thresholds.openAIResponsesMaxOutputTokens,
-    reasoning: {
-      effort: options.reasoningEffort ?? "low",
-      context: "all_turns",
-    },
+    reasoning: buildReasoningParam(options),
     text: { verbosity: options.verbosity ?? "medium" },
     context_management: [
       {
@@ -389,9 +472,20 @@ export async function streamOpenAIResponseRound(
         let text = "";
         const functionCalls: OpenAIResponseFunctionCall[] = [];
         const webSearchCitations: string[] = [];
+        // Per-summary-index accumulation buffers. The OpenAI Responses API can
+        // emit multiple independent summary parts (each with its own
+        // summary_index). Storing them separately prevents a later part's
+        // `.done` event from overwriting an earlier part's text.
+        const reasoningSummaryParts = new Map<number, string>();
 
         for await (const event of stream) {
-          if (event.type === "response.output_text.delta") {
+          const summaryDelta = accumulateReasoningSummaryEvent(
+            reasoningSummaryParts,
+            event as { type: string; summary_index?: number; delta?: string; text?: string },
+          );
+          if (summaryDelta !== null) {
+            options.onReasoningSummaryDelta?.(summaryDelta);
+          } else if (event.type === "response.output_text.delta") {
             text += event.delta;
             options.onTextDelta?.(event.delta);
           } else if (event.type === "response.output_item.done") {
@@ -450,6 +544,7 @@ export async function streamOpenAIResponseRound(
           text,
           functionCalls,
           webSearchCitations,
+          reasoningSummary: finalizeReasoningSummary(reasoningSummaryParts),
           usage: completedResponse.usage,
         };
       },

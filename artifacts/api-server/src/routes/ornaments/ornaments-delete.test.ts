@@ -24,6 +24,7 @@ vi.mock("../../lib/logger", () => ({
 
 // ── Rate limiters (pass-through) ──────────────────────────────────────────────
 vi.mock("../../middleware/rateLimit", () => ({
+  adminLimiter: (_req: unknown, _res: unknown, next: () => void) => next(),
   aiLimiter: (_req: unknown, _res: unknown, next: () => void) => next(),
   bulkAiLimiter: (_req: unknown, _res: unknown, next: () => void) => next(),
   supplementalUploadLimiter: (_req: unknown, _res: unknown, next: () => void) =>

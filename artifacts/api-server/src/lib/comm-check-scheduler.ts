@@ -4,6 +4,7 @@ import { db, pool, appUsers } from "@workspace/db";
 import { sendSms } from "./sms";
 import { openDmChannel, postSlackMessage, slackConfigured } from "./slack";
 import { logger } from "./logger";
+import { getConfig } from "./app-config";
 
 // ---------------------------------------------------------------------------
 // Daily comms check scheduler.
@@ -98,8 +99,11 @@ async function sendCommCheckEmail(
 ): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) throw new Error("RESEND_API_KEY not set");
-  const from =
-    process.env.RESEND_FROM_EMAIL ?? "Batchelor App <elaine@app.batchelor.app>";
+  const from = await getConfig(
+    "email",
+    "general_from_email",
+    "Batchelor App <elaine@app.batchelor.app>",
+  );
   const resend = new Resend(apiKey);
   const { error } = await resend.emails.send({
     from,

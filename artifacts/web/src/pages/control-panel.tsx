@@ -28,6 +28,7 @@ import { useAuth } from "@/lib/auth";
 import { usePageAssistantContext } from "@/lib/assistant-context";
 
 const MODULE_LABELS: Record<string, string> = {
+  email: "Email",
   web_search: "Web Search",
   openrouter: "OpenRouter",
   ornaments: "Ornaments",

@@ -267,7 +267,8 @@ export function ThreadView({
       if (m.isUnread) toExpand.add(m.id);
     }
     setExpandedIds(toExpand);
-  }, [thread?.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [thread?.id]); // thread.messages intentionally excluded — only re-expand when thread changes, not on every message append
 
   function toggleExpand(id: string) {
     setExpandedIds((prev) => {

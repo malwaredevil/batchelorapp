@@ -2789,6 +2789,12 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE travels_reminders
      ADD COLUMN IF NOT EXISTS slack_recipient_user_ids INTEGER[] NOT NULL DEFAULT '{}'`,
 
+  // Voice call reminder recipients: app_users.id values (must have a verified
+  // phone number) who should receive an outbound TTS voice call alert for
+  // this reminder. Falls back to SMS if the call fails.
+  `ALTER TABLE travels_reminders
+     ADD COLUMN IF NOT EXISTS call_recipient_user_ids INTEGER[] NOT NULL DEFAULT '{}'`,
+
   // Webhook delivery dedup log for the Slack Events API.
   // Keyed by Slack's event_id — recorded before any side effect so retried
   // deliveries (Slack retries up to 3× via X-Slack-Retry-Num) are no-ops.
@@ -2976,4 +2982,32 @@ END $$`,
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS comm_checks_check_date_unique
      ON comm_checks (check_date)`,
+
+  // ── Elaine scheduled-actions table (Task #511) ────────────────────────────
+  // Durable future-action scheduler: Elaine writes a row when the user asks
+  // her to call/message someone at a future time. A background job polls
+  // every minute and fires due rows, then marks them fired/failed/cancelled.
+  `CREATE TABLE IF NOT EXISTS elaine_scheduled_actions (
+     id                    SERIAL PRIMARY KEY,
+     scheduled_for         TIMESTAMPTZ NOT NULL,
+     action_type           TEXT NOT NULL,
+     action_payload        JSONB NOT NULL DEFAULT '{}',
+     initiated_by_user_id  INTEGER NOT NULL,
+     target_contact_id     INTEGER,
+     status                TEXT NOT NULL DEFAULT 'pending',
+     fired_at              TIMESTAMPTZ,
+     error                 TEXT,
+     created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS elaine_scheduled_actions_status_scheduled_for_idx
+     ON elaine_scheduled_actions (status, scheduled_for)`,
+  `CREATE INDEX IF NOT EXISTS elaine_scheduled_actions_user_id_idx
+     ON elaine_scheduled_actions (initiated_by_user_id)`,
+
+  // ── Elaine reasoning-summary column (Task #541) ──────────────────────────────
+  // Persists the model's reasoning summary so the "Thinking…" disclosure
+  // survives page refreshes. NULL for user messages and all rows written
+  // before this column was added.
+  `ALTER TABLE elaine_history_messages
+     ADD COLUMN IF NOT EXISTS reasoning_summary TEXT`,
 ];

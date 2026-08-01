@@ -80,6 +80,7 @@ vi.mock("../middleware/auth", () => ({
 // ── Rate limiters ─────────────────────────────────────────────────────────────
 
 vi.mock("../middleware/rateLimit", () => ({
+  adminLimiter: (_req: unknown, _res: unknown, next: () => void) => next(),
   phoneVerifyLimiter: (_req: unknown, _res: unknown, next: () => void) =>
     next(),
   aiLimiter: (_req: unknown, _res: unknown, next: () => void) => next(),

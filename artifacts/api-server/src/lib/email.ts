@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { logger } from "./logger";
+import { getConfig } from "./app-config";
 
 let resend: Resend | null = null;
 
@@ -14,16 +15,12 @@ function getResend(): Resend {
   return resend;
 }
 
+// Requires only RESEND_API_KEY; sender addresses are now configurable via the
+// Control Panel (email module) and fall back to defaults, so the legacy
+// RESEND_FROM_EMAIL env var is no longer a prerequisite for email to function.
 export function resendConfigured(): boolean {
-  return !!process.env.RESEND_API_KEY && !!process.env.RESEND_FROM_EMAIL;
+  return !!process.env.RESEND_API_KEY;
 }
-
-// Dedicated sender for Travels reminder alerts. Defaults to the verified
-// app.batchelor.app domain with a friendly display name; can be overridden
-// via RESEND_REMINDER_FROM_EMAIL.
-const REMINDER_FROM_EMAIL =
-  process.env.RESEND_REMINDER_FROM_EMAIL ||
-  "Batchelor Travels <travel.alert@app.batchelor.app>";
 
 // Alert type is now derived from the reminder's own configurable
 // alert_days_before array rather than a fixed 14/7/3-day set — any
@@ -48,7 +45,11 @@ export async function sendReminderAlertEmail(
   alertType: ReminderAlertType,
   dueDate: string,
 ): Promise<void> {
-  const from = REMINDER_FROM_EMAIL;
+  const from = await getConfig(
+    "email",
+    "reminder_from_email",
+    "Batchelor Travels <travel.alert@app.batchelor.app>",
+  );
 
   const days = parseInt(alertType, 10);
   const label = alertLabel(isNaN(days) ? 0 : days);
@@ -110,12 +111,6 @@ export async function sendReminderAlertEmail(
   }
 }
 
-// Dedicated sender for Elaine assistant-composed emails (e.g. "email me that
-// list of things to do"). Defaults to the verified app.batchelor.app domain;
-// can be overridden via ELAINE_FROM_EMAIL.
-const ELAINE_FROM_EMAIL =
-  process.env.ELAINE_FROM_EMAIL || "Elaine <elaine@app.batchelor.app>";
-
 function escapeHtml(input: string): string {
   return input
     .replace(/&/g, "&amp;")
@@ -135,7 +130,11 @@ export async function sendAssistantEmail(
   subject: string,
   body: string,
 ): Promise<void> {
-  const from = ELAINE_FROM_EMAIL;
+  const from = await getConfig(
+    "email",
+    "elaine_from_email",
+    "Elaine <elaine@app.batchelor.app>",
+  );
 
   const paragraphsHtml = body
     .split(/\n{2,}/)
@@ -201,7 +200,11 @@ export async function sendElaineEmailReply(
   body: string,
   inReplyToMessageId?: string | null,
 ): Promise<string | undefined> {
-  const from = ELAINE_FROM_EMAIL;
+  const from = await getConfig(
+    "email",
+    "elaine_from_email",
+    "Elaine <elaine@app.batchelor.app>",
+  );
 
   const paragraphsHtml = body
     .split(/\n{2,}/)
@@ -264,7 +267,11 @@ export async function sendBirthdayEmail(
   toEmail: string,
   displayName: string | null,
 ): Promise<void> {
-  const from = ELAINE_FROM_EMAIL;
+  const from = await getConfig(
+    "email",
+    "elaine_from_email",
+    "Elaine <elaine@app.batchelor.app>",
+  );
   const name = displayName ?? toEmail.split("@")[0];
 
   const { error } = await getResend().emails.send({
@@ -320,10 +327,11 @@ export async function sendBirthdayEmail(
 // email" button. Uses the same sender as password-reset emails since that's
 // the one guaranteed to be configured whenever resendConfigured() is true.
 export async function sendTestEmail(toEmail: string): Promise<void> {
-  const from = process.env.RESEND_FROM_EMAIL;
-  if (!from) {
-    throw new Error("RESEND_FROM_EMAIL environment variable is not set.");
-  }
+  const from = await getConfig(
+    "email",
+    "general_from_email",
+    "Batchelor App <elaine@app.batchelor.app>",
+  );
 
   const { error } = await getResend().emails.send({
     from,
@@ -371,10 +379,11 @@ export async function sendPasswordResetEmail(
   toEmail: string,
   resetUrl: string,
 ): Promise<void> {
-  const from = process.env.RESEND_FROM_EMAIL;
-  if (!from) {
-    throw new Error("RESEND_FROM_EMAIL environment variable is not set.");
-  }
+  const from = await getConfig(
+    "email",
+    "general_from_email",
+    "Batchelor App <elaine@app.batchelor.app>",
+  );
 
   const { error } = await getResend().emails.send({
     from,

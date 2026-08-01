@@ -863,6 +863,7 @@ export interface Reminder {
   done: boolean;
   recipientEmails: string[];
   smsRecipientUserIds?: number[];
+  callRecipientUserIds?: number[];
   syncToCalendar: boolean;
   googleEventId?: string | null;
   alertDaysBefore?: number[];
@@ -875,6 +876,7 @@ export interface CreateReminderBody {
   dueDate?: string;
   recipientEmails?: string[];
   smsRecipientUserIds?: number[];
+  callRecipientUserIds?: number[];
   syncToCalendar?: boolean;
   alertDaysBefore?: number[];
 }
@@ -886,6 +888,7 @@ export interface UpdateReminderBody {
   done?: boolean;
   recipientEmails?: string[];
   smsRecipientUserIds?: number[];
+  callRecipientUserIds?: number[];
   syncToCalendar?: boolean;
   alertDaysBefore?: number[];
 }

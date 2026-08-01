@@ -79,6 +79,8 @@ export function useElaineChat({
   const [actionDone, setActionDone] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
+  const [streamingReasoningSummary, setStreamingReasoningSummary] =
+    useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const [runtimeTrace, setRuntimeTrace] = useState<ElaineRuntimeTrace | null>(
     null,
@@ -251,6 +253,7 @@ export function useElaineChat({
         attachmentUrls:
           m.attachmentUrls.length > 0 ? m.attachmentUrls : undefined,
         ...(m.runtimeTrace ? { runtimeTrace: m.runtimeTrace } : {}),
+        ...(m.reasoningSummary ? { reasoningSummary: m.reasoningSummary } : {}),
       })) as AssistantMessage[],
     );
   }
@@ -366,6 +369,7 @@ export function useElaineChat({
     setExecutedActions([]);
     setActionDone(false);
     setStreamingContent("");
+    setStreamingReasoningSummary("");
     setStatusMessage("");
     setRuntimeTrace(null);
     const optimisticAttachmentRefs = [
@@ -415,6 +419,9 @@ export function useElaineChat({
           onDelta: (text) => {
             setStatusMessage("");
             setStreamingContent((prev) => prev + text);
+          },
+          onReasoningSummaryDelta: (delta) => {
+            setStreamingReasoningSummary((prev) => prev + delta);
           },
           onResponseReset: () => setStreamingContent(""),
           onAction: (action) => setPendingActions((prev) => [...prev, action]),
@@ -469,6 +476,7 @@ export function useElaineChat({
       setRuntimeTrace(null);
     } finally {
       setStreamingContent("");
+      setStreamingReasoningSummary("");
       setStatusMessage("");
       setRuntimeTrace(null);
       setIsStreaming(false);
@@ -597,6 +605,7 @@ export function useElaineChat({
     actionDone,
     isStreaming,
     streamingContent,
+    streamingReasoningSummary,
     statusMessage,
     runtimeTrace,
     endRef,

@@ -189,6 +189,43 @@ export const APP_CONFIG_DEFAULTS: AppConfigDefault[] = [
     description:
       "AbortSignal.timeout value for Voyage AI rerank calls (fabric Compare).",
   },
+
+  // ── email ─────────────────────────────────────────────────────────────────
+  // Default values seed from legacy env vars so existing deployments that used
+  // ELAINE_FROM_EMAIL / RESEND_REMINDER_FROM_EMAIL / RESEND_FROM_EMAIL keep their
+  // current behaviour on first boot; once stored in config the env vars are no
+  // longer consulted at send time.
+  {
+    module: "email",
+    key: "elaine_from_email",
+    value: process.env.ELAINE_FROM_EMAIL ?? "Elaine <elaine@app.batchelor.app>",
+    type: "string",
+    label: "Elaine sender address",
+    description:
+      "From address for emails sent by Elaine (assistant emails, replies, birthday emails). Format: Display Name <address@domain>",
+  },
+  {
+    module: "email",
+    key: "reminder_from_email",
+    value:
+      process.env.RESEND_REMINDER_FROM_EMAIL ??
+      "Batchelor Travels <travel.alert@app.batchelor.app>",
+    type: "string",
+    label: "Travel reminder sender address",
+    description:
+      "From address for Travels trip reminder alert emails. Format: Display Name <address@domain>",
+  },
+  {
+    module: "email",
+    key: "general_from_email",
+    value:
+      process.env.RESEND_FROM_EMAIL ??
+      "Batchelor App <elaine@app.batchelor.app>",
+    type: "string",
+    label: "General sender address",
+    description:
+      "From address for password-reset, test, and comms-check emails. Seeded from RESEND_FROM_EMAIL on first boot; editable in the Control Panel thereafter.",
+  },
 ];
 
 // ── Cache ─────────────────────────────────────────────────────────────────

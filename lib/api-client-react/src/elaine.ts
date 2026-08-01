@@ -176,6 +176,9 @@ export interface AssistantMessage {
   attachmentUrls?: Array<AttachmentRef | string>;
   /** Sanitized plan/progress trace for the assistant turn. */
   runtimeTrace?: ElaineRuntimeTrace;
+  /** Model-produced reasoning summary for this assistant turn. Absent when
+   *  the model emitted no reasoning or the feature is disabled. */
+  reasoningSummary?: string | null;
 }
 
 export type TravelActionType =
@@ -393,6 +396,8 @@ export interface AssistantChatResponse {
   /** ID of the named conversation this turn was saved to. */
   conversationId?: number;
   runtimeTrace?: ElaineRuntimeTrace;
+  /** Reasoning summary for the current turn, if the model produced one. */
+  reasoningSummary?: string | null;
 }
 
 export interface AssistantSettings {
@@ -530,6 +535,9 @@ export interface AssistantChatStreamCallbacks {
   onWidget?: (widget: ChatWidget) => void;
   onRuntime?: (event: ElaineRuntimeEventEnvelope) => void;
   onDone?: (result: AssistantChatResponse) => void;
+  /** Called with each incremental reasoning-summary token while the model is
+   *  still thinking. The full summary arrives in `onDone` as well. */
+  onReasoningSummaryDelta?: (delta: string) => void;
 }
 
 function parseSseDataLines(rawEvent: string): string | null {
@@ -642,6 +650,11 @@ export async function streamElaineMessage(
       switch (eventType) {
         case "delta":
           callbacks.onDelta?.((data as { text: string }).text);
+          break;
+        case "reasoning_summary":
+          callbacks.onReasoningSummaryDelta?.(
+            (data as { delta: string }).delta,
+          );
           break;
         case "response_reset":
           callbacks.onResponseReset?.();
@@ -976,6 +989,8 @@ export interface ConversationMessage {
   content: string;
   attachmentUrls: Array<AttachmentRef | string>;
   runtimeTrace?: ElaineRuntimeTrace;
+  /** Model-produced reasoning summary for assistant turns. */
+  reasoningSummary?: string | null;
   createdAt: string;
 }
 
@@ -1186,6 +1201,8 @@ export interface ElaineFeaturesConfig {
   enableOpenAIResponses: boolean;
   enableOpenAIAppWorkflows: boolean;
   enableOpenAIResponsesFallback: boolean;
+  enableBuiltinWebSearch: boolean;
+  showReasoningSummary: boolean;
 }
 
 export interface ElaineThresholdsConfig {

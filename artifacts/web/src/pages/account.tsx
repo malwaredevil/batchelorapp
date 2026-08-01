@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -188,6 +188,17 @@ function PhoneCard() {
   const [code, setCode] = useState("");
   const [codeSent, setCodeSent] = useState(false);
   const [smsConsent, setSmsConsent] = useState(false);
+  // Pre-populate with the user's current verified number so the "Send
+  // verification code" button enables as soon as the consent checkbox is
+  // checked, without the user having to retype a number they already have.
+  const didPrefill = useRef(false);
+  useEffect(() => {
+    if (!didPrefill.current && user?.phoneNumber && phoneNumber === "") {
+      setPhoneNumber(user.phoneNumber);
+      didPrefill.current = true;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.phoneNumber]);
 
   const invalidateUser = () =>
     queryClient.invalidateQueries({ queryKey: getGetCurrentUserQueryKey() });
@@ -253,7 +264,8 @@ function PhoneCard() {
         Phone &amp; SMS
       </div>
       <p className="mb-4 text-sm text-muted-foreground">
-        Verify a phone number to receive Travels reminders by text. See our{" "}
+        Verify a phone number to receive Travels reminders, Elaine messages, and
+        Elaine voice calls. See our{" "}
         <a
           href={`${base}modules/travels/privacy`}
           target="_blank"
@@ -314,11 +326,11 @@ function PhoneCard() {
               htmlFor="sms-consent"
               className="text-xs font-normal leading-relaxed text-muted-foreground"
             >
-              I agree to receive SMS text messages from Batchelor App at the
-              phone number above, including verification codes and Travels trip
-              reminders. Message and data rates may apply. Message frequency
-              varies. Reply STOP to opt out at any time, or HELP for help. See
-              our{" "}
+              I agree to receive SMS text messages and Elaine voice calls from
+              Batchelor App at the phone number above, including verification
+              codes, Travels trip reminders, and Elaine messages. Message and
+              data rates may apply. Message frequency varies. Reply STOP to opt
+              out at any time, or HELP for help. See our{" "}
               <a
                 href={`${base}modules/travels/privacy`}
                 target="_blank"

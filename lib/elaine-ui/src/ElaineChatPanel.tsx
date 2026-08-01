@@ -5,6 +5,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { BarcodeScanButton } from "./BarcodeScanButton";
 import {
   Send,
@@ -123,6 +124,54 @@ function MessageText({
   );
 }
 
+/**
+ * Collapsible "Thinking…" disclosure shown above an assistant reply when the
+ * model produced a reasoning summary. `streaming` keeps it open while the
+ * summary is still arriving; once streaming stops the user controls expansion.
+ */
+function ThinkingDisclosure({
+  summary,
+  streaming = false,
+}: {
+  summary: string;
+  streaming?: boolean;
+}) {
+  const [open, setOpen] = useState(streaming);
+
+  // Auto-open while streaming; leave in user-controlled state after done.
+  useEffect(() => {
+    if (streaming) setOpen(true);
+  }, [streaming]);
+
+  return (
+    <div className="rounded-xl border border-border/50 bg-muted/40 text-xs">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-1.5 px-3 py-2 text-left text-muted-foreground hover:text-foreground transition-colors"
+        aria-expanded={open}
+      >
+        {open ? (
+          <ChevronDown className="h-3 w-3 shrink-0" />
+        ) : (
+          <ChevronRight className="h-3 w-3 shrink-0" />
+        )}
+        <span className="font-medium">
+          {streaming ? "Thinking…" : "Thinking"}
+        </span>
+      </button>
+      {open && (
+        <div className="px-3 pb-3 pt-0 text-muted-foreground leading-relaxed whitespace-pre-wrap">
+          {summary}
+          {streaming && (
+            <span className="ml-1 inline-block h-3 w-0.5 animate-pulse bg-muted-foreground" />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const TTS_RATE_OPTIONS = [0.75, 1, 1.25, 1.5, 2] as const;
 
 interface ElaineChatPanelProps {
@@ -173,6 +222,7 @@ export function ElaineChatPanel({
     actionDone,
     isStreaming,
     streamingContent,
+    streamingReasoningSummary,
     statusMessage,
     runtimeTrace,
     endRef,
@@ -380,6 +430,9 @@ export function ElaineChatPanel({
                 {msg.runtimeTrace && (
                   <ElainePlanProgress trace={msg.runtimeTrace} />
                 )}
+                {msg.reasoningSummary && (
+                  <ThinkingDisclosure summary={msg.reasoningSummary} />
+                )}
                 <div className="rounded-2xl rounded-tl-sm bg-muted px-3.5 py-2.5 text-sm leading-relaxed text-foreground">
                   <MessageText text={text} citations={citations} />
                 </div>
@@ -433,6 +486,12 @@ export function ElaineChatPanel({
             />
             <div className={`${bubbleWidthClass} flex flex-col gap-1.5`}>
               {runtimeTrace && <ElainePlanProgress trace={runtimeTrace} live />}
+              {streamingReasoningSummary && (
+                <ThinkingDisclosure
+                  summary={streamingReasoningSummary}
+                  streaming
+                />
+              )}
               {streamingContent ? (
                 <div className="rounded-2xl rounded-tl-sm bg-muted px-3.5 py-2.5 text-sm leading-relaxed text-foreground">
                   <MarkdownMessage text={streamingContent} />

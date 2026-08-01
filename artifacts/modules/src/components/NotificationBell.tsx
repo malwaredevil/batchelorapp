@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Bell, X, Check, CheckCheck, ChevronRight } from "lucide-react";
 import {
@@ -200,7 +200,8 @@ export function NotificationBell({
   });
 
   const unreadCount = counts?.total ?? 0;
-  const items = list?.items ?? [];
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- list reference is stable per query result
+  const items = useMemo(() => list?.items ?? [], [list?.items]);
 
   // Position panel below trigger button
   useEffect(() => {

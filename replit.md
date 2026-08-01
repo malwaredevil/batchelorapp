@@ -84,6 +84,8 @@ Combined pnpm monorepo serving both the Pottery and Quilting collection apps und
 
 ## User preferences
 
+- When requesting missing secrets, prompt for them ONE at a time (name + short description of what it's for), never as a single bulk multi-field form.
+
 - Replit is primary source of truth; GitHub (`malwaredevil/batchelorapp`) is backup + issue tracker
 - Never run `drizzle-kit push --force` — ever
 - Always run backup before any schema change or publish

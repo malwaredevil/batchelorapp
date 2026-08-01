@@ -457,6 +457,8 @@ export const ELAINE_EVALUATION_CORPUS = {
       availableTools: [
         "search_household_data",
         "create_trip",
+        "search_household_data",
+        "create_trip",
         "show_pottery_item",
         "update_pottery_item",
         "show_fabric_swatch",
@@ -480,6 +482,7 @@ export const ELAINE_EVALUATION_CORPUS = {
         "cancel_elaine_task",
         "show_data_card",
         "suggest_navigation",
+        "check_integrations_health",
       ],
       mockedObservations: [],
       expectedToolSequence: ["search_household_data"],

@@ -18,6 +18,7 @@ describe("Elaine tool-family compatibility guard", () => {
       "memory",
       "widgets",
       "navigation",
+      "admin",
     ]);
   });
 

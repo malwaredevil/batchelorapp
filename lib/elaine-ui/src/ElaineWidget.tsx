@@ -223,13 +223,19 @@ export function ElaineWidget({
     },
   });
 
+  // Track whether the widget was already open on the previous render so we
+  // can jump instantly on first open instead of smooth-scrolling from the top.
+  const prevOpenRef = useRef(false);
   useEffect(() => {
-    if (open)
+    if (open) {
+      const justOpened = !prevOpenRef.current;
       chat.endRef.current?.scrollIntoView({
-        behavior: "smooth",
+        behavior: justOpened ? "instant" : "smooth",
         block: "nearest",
         inline: "nearest",
       });
+    }
+    prevOpenRef.current = open;
   }, [messages, open, isStreaming, streamingContent, chat.endRef]);
 
   // Close the history panel whenever the widget itself closes, so reopening

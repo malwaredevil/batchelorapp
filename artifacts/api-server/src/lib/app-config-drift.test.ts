@@ -991,6 +991,7 @@ describe("app-config drift guard", () => {
     //   1. The KNOWN_MODULE_LABELS set below.
     //   2. MODULE_LABELS in artifacts/web/src/pages/control-panel.tsx.
     const KNOWN_MODULE_LABELS = new Set([
+      "email",
       "web_search",
       "openrouter",
       "ornaments",

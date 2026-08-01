@@ -200,6 +200,13 @@ export const travelsReminders = pgTable(
       .array()
       .notNull()
       .default(sql`'{}'::integer[]`),
+    // app_users.id values who should receive an outbound voice call alert for
+    // this reminder. Requires a verified phone number on the account.
+    // Falls back to SMS if the call fails.
+    callRecipientUserIds: integer("call_recipient_user_ids")
+      .array()
+      .notNull()
+      .default(sql`'{}'::integer[]`),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()

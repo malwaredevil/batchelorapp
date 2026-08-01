@@ -103,6 +103,10 @@ run_bg pgsingleton pnpm --filter @workspace/scripts run check-pg-singleton
 # local pre-publish gate must catch Replit-only drift before it is synced.
 run_bg composition pnpm --filter @workspace/scripts run check-domain-composition
 
+# Secrets-registry drift guard: checks that every env var in env.ts has a
+# matching entry in the sync-github-secrets.ts SECRETS registry.
+run_bg secretsregistry pnpm --filter @workspace/scripts run check-secrets-registry
+
 # GitHub CI status (network-bound — runs in parallel with the local guards)
 run_bg cistatus pnpm --filter @workspace/scripts run check-ci-status
 
@@ -119,11 +123,12 @@ declare -A LABELS=(
   [uploadlimit]="Upload-limit guard"
   [pgsingleton]="pg singleton guard"
   [composition]="Composition and configuration"
+  [secretsregistry]="Secrets registry drift"
   [cistatus]="GitHub CI status"
 )
 
 FAILED=()
-for key in appconfig forbidden secretsscan uploadlimit pgsingleton composition cistatus; do
+for key in appconfig forbidden secretsscan uploadlimit pgsingleton composition secretsregistry cistatus; do
   code=$(cat "$LOGDIR/$key.exit" 2>/dev/null || echo 1)
   if [[ "$code" -eq 0 ]]; then
     echo -e "${GREEN}✓${RESET} ${LABELS[$key]}"
@@ -145,22 +150,29 @@ fi
 echo -e "\n${GREEN}✓ All pre-publish checks passed.${RESET}"
 echo "  CI covers: typecheck, lint, codegen drift, PII scan."
 echo ""
-echo "  Proceed to:"
-echo "    Stage 2   — DB safety (additive-only migrations; no destructive schema changes)."
-echo "    Stage 3a  — backup: pnpm --filter @workspace/scripts run backup-to-replit"
-echo "    Stage 3b  — open PRs: close resolved issues, merge green Dependabot PRs."
-echo "    Stage 3b3 — branch cleanup: delete every closed/merged PR's head branch."
-echo "                 delete_branch_on_merge is ON (merged PRs auto-delete)."
-echo "                 Manually delete closed-without-merge branches:"
-echo "                   DELETE /repos/malwaredevil/batchelorapp/git/refs/heads/{branch}"
-echo "                 Confirm only 'main' remains: GET /repos/.../branches?per_page=100"
-echo "    Stage 3c  — GitHub sync (all files go through a PR — no exceptions):"
-echo "                 github-sync \"msg\"                  creates a sync branch + PR"
-echo "                 github-sync \"msg\" --confirm-deletions  include local deletions"
-echo "    Stage 3d  — wait for CI: pnpm --filter @workspace/scripts run check-ci-status"
-echo "    Stage 3e  — security scan:"
-echo "                 Dependabot:    GET /repos/.../dependabot/alerts?state=open"
-echo "                 Code scanning: GET /repos/.../code-scanning/alerts?state=open"
-echo "                 Secret scan:   GET /repos/.../secret-scanning/alerts?state=open"
-echo "                 Fix or dismiss every open finding before publishing."
-echo "    Publish   — suggest_deploy, then sentry-baseline mark-published."
+echo "  ┌─ MANUAL STEPS (in order) ──────────────────────────────────────────────────┐"
+echo "  │ Stage 1   — Sentry issue triage (REQUIRED — must happen before sync):      │"
+echo "  │              Use mcpSentry_searchIssues to list all unresolved issues.      │"
+echo "  │              Every issue must receive an explicit disposition:              │"
+echo "  │                resolved / resolvedInNextRelease / ignored (with reason)     │"
+echo "  │              Record remaining open IDs:                                     │"
+echo "  │                sentry-baseline write <count> <comma-ids>                   │"
+echo "  │ Stage 2   — DB safety: additive-only migrations, no DROP/RENAME.           │"
+echo "  │ Stage 3a  — backup: pnpm --filter @workspace/scripts run backup-to-replit  │"
+echo "  │ Stage 3b  — open PRs: close resolved issues, merge green Dependabot PRs.   │"
+echo "  │ Stage 3b3 — branch cleanup: only 'main' should remain.                     │"
+echo "  │              DELETE /repos/malwaredevil/batchelorapp/git/refs/heads/{br}   │"
+echo "  │ Stage 3c  — GitHub sync (all files go through a PR — no exceptions):       │"
+echo "  │              github-sync \"msg\"                  creates a sync branch + PR  │"
+echo "  │              github-sync \"msg\" --confirm-deletions  include local deletions │"
+echo "  │ Stage 3d  — wait for CI: check-ci-status                                   │"
+echo "  │ Stage 3e  — security scan (GitHub):                                        │"
+echo "  │              Dependabot:    GET /repos/.../dependabot/alerts?state=open     │"
+echo "  │              Code scanning: GET /repos/.../code-scanning/alerts?state=open  │"
+echo "  │              Secret scan:   GET /repos/.../secret-scanning/alerts?state=open│"
+echo "  │              Fix or dismiss every open finding before publishing.           │"
+echo "  │ Publish   — suggest_deploy, then sentry-baseline mark-published.           │"
+echo "  │ Stage 4   — post-publish Sentry delta (~5 min after deploy):               │"
+echo "  │              compare new issues against baseline IDs, fix regressions,     │"
+echo "  │              then sentry-baseline clear.                                   │"
+echo "  └────────────────────────────────────────────────────────────────────────────┘"

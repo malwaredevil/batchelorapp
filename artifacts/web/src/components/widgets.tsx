@@ -1,3 +1,4 @@
+import { crossAppBase } from "@/lib/cross-app";
 import { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -42,7 +43,7 @@ import {
   type OfficeNote,
 } from "@workspace/api-client-react";
 
-const base = import.meta.env.BASE_URL;
+const base = crossAppBase();
 
 // ── Live: Pottery stats ──────────────────────────────────────────────────────
 export function PotteryStatsWidget() {
@@ -57,7 +58,7 @@ export function PotteryStatsWidget() {
       v: stats?.uniqueItems != null ? String(stats.uniqueItems) : "—",
       l: "Unique",
     },
-    { v: cats != null ? String(cats.length) : "—", l: "Categories" },
+    { v: Array.isArray(cats) ? String(cats.length) : "—", l: "Categories" },
   ];
   return (
     <div className="space-y-2">
@@ -77,7 +78,7 @@ export function PotteryStatsWidget() {
         ))}
       </div>
       <a
-        href={`${base}pottery/`}
+        href={`${base}modules/pottery/`}
         className="flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400 hover:underline"
       >
         Open collection <ArrowRight className="w-3 h-3" />
@@ -121,7 +122,7 @@ export function QuiltingStatsWidget() {
         ))}
       </div>
       <a
-        href={`${base}quilting/fabrics`}
+        href={`${base}modules/quilting/fabrics`}
         className="flex items-center gap-1 text-xs font-medium text-violet-600 dark:text-violet-400 hover:underline"
       >
         Open quilting <ArrowRight className="w-3 h-3" />
@@ -133,7 +134,10 @@ export function QuiltingStatsWidget() {
 // ── Live: Shopping list ──────────────────────────────────────────────────────
 export function ShoppingListWidget() {
   const { data } = useListShoppingItems();
-  const items = data?.slice(0, 4) ?? [];
+  // Defensive: guard against the API returning a non-array (e.g. an HTML SPA
+  // fallback page when the dev proxy is mis-routed). Without this, .slice()
+  // would succeed on a string and produce a 4-char string whose .map throws.
+  const items = Array.isArray(data) ? data.slice(0, 4) : [];
   return (
     <div className="space-y-2">
       {items.length === 0 && (
@@ -154,7 +158,7 @@ export function ShoppingListWidget() {
         </div>
       ))}
       <a
-        href={`${base}quilting/shopping`}
+        href={`${base}modules/quilting/shopping`}
         className="flex items-center gap-1 text-xs font-medium text-rose-600 dark:text-rose-400 hover:underline"
       >
         <ShoppingBag className="w-3 h-3" /> View full list
@@ -199,7 +203,7 @@ export function RandomPieceWidget() {
       </div>
       <div className="flex items-center justify-between">
         <a
-          href={`${base}pottery/piece/${piece.id}`}
+          href={`${base}modules/pottery/piece/${piece.id}`}
           className="text-xs font-medium text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-1"
         >
           View piece <ArrowRight className="w-3 h-3" />
@@ -242,7 +246,7 @@ export function MaintenanceWidget() {
         </div>
       ))}
       <a
-        href={`${base}pottery/maintenance`}
+        href={`${base}modules/pottery/maintenance`}
         className="flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400 hover:underline"
       >
         <FlaskConical className="w-3 h-3" /> Maintenance log
@@ -271,13 +275,13 @@ export function FabricStashWidget() {
       </div>
       <div className="flex gap-2">
         <a
-          href={`${base}quilting/fabrics`}
+          href={`${base}modules/quilting/fabrics`}
           className="flex-1 text-center text-xs font-medium py-1.5 rounded-lg bg-violet-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-900/40 transition-colors"
         >
           Browse fabrics
         </a>
         <a
-          href={`${base}quilting/fabrics/add`}
+          href={`${base}modules/quilting/fabrics/add`}
           className="flex items-center justify-center gap-1 px-3 text-xs font-medium py-1.5 rounded-lg bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
         >
           <Plus className="w-3 h-3" /> Add
@@ -305,13 +309,13 @@ export function BlockDesignerWidget() {
       </div>
       <div className="flex gap-2">
         <a
-          href={`${base}quilting/blocks`}
+          href={`${base}modules/quilting/blocks`}
           className="flex-1 text-center text-xs font-medium py-1.5 rounded-lg bg-violet-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-900/40 transition-colors"
         >
           View blocks
         </a>
         <a
-          href={`${base}quilting/blocks/new`}
+          href={`${base}modules/quilting/blocks/new`}
           className="flex items-center justify-center gap-1 px-3 text-xs font-medium py-1.5 rounded-lg bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
         >
           <Plus className="w-3 h-3" /> New
@@ -340,7 +344,7 @@ export function LayoutsWidget() {
         </div>
       </div>
       <a
-        href={`${base}quilting/layouts`}
+        href={`${base}modules/quilting/layouts`}
         className="flex items-center gap-1 text-xs font-medium text-violet-600 dark:text-violet-400 hover:underline"
       >
         <Layers className="w-3 h-3" /> View layouts
@@ -354,28 +358,28 @@ export function QuickAddWidget() {
   const actions = [
     {
       label: "Add pottery piece",
-      href: `${base}pottery/add`,
+      href: `${base}modules/pottery/add`,
       icon: Package,
       color:
         "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20",
     },
     {
       label: "Add fabric",
-      href: `${base}quilting/fabrics/add`,
+      href: `${base}modules/quilting/fabrics/add`,
       icon: Shirt,
       color:
         "text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/20",
     },
     {
       label: "Add quilt block",
-      href: `${base}quilting/blocks/new`,
+      href: `${base}modules/quilting/blocks/new`,
       icon: Scissors,
       color:
         "text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/20",
     },
     {
       label: "Do I own this?",
-      href: `${base}pottery/compare`,
+      href: `${base}modules/pottery/compare`,
       icon: Camera,
       color: "text-primary bg-primary/10",
     },
@@ -406,13 +410,13 @@ export function AiSearchWidget() {
       </p>
       <div className="flex gap-2">
         <a
-          href={`${base}pottery/compare`}
+          href={`${base}modules/pottery/compare`}
           className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors"
         >
           <Camera className="w-3.5 h-3.5" /> Pottery
         </a>
         <a
-          href={`${base}quilting/compare`}
+          href={`${base}modules/quilting/compare`}
           className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-violet-100 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400 text-xs font-medium hover:opacity-80 transition-colors"
         >
           <Camera className="w-3.5 h-3.5" /> Fabric
@@ -452,7 +456,7 @@ export function NotesWidget() {
     },
   });
 
-  const recent = (notes ?? []).slice(0, 4);
+  const recent = Array.isArray(notes) ? notes.slice(0, 4) : [];
 
   if (mode === "create") {
     return (
@@ -545,7 +549,7 @@ export function NotesWidget() {
             ← All notes
           </button>
           <a
-            href={`${base}office/notes`}
+            href={`${base}modules/office/notes`}
             className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
           >
             Open Office <ArrowRight className="w-3 h-3" />
@@ -600,7 +604,7 @@ export function NotesWidget() {
       )}
 
       <a
-        href={`${base}office/notes`}
+        href={`${base}modules/office/notes`}
         className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-primary hover:underline pt-0.5"
       >
         Open Notes <ArrowRight className="w-3 h-3" />
@@ -744,7 +748,7 @@ export function PatternIdeaWidget() {
       </div>
       <p className="text-xs text-muted-foreground leading-relaxed">{p.desc}</p>
       <a
-        href={`${base}quilting/blocks/new`}
+        href={`${base}modules/quilting/blocks/new`}
         className="flex items-center gap-1 text-xs font-medium text-violet-600 dark:text-violet-400 hover:underline"
       >
         Try this block <ArrowRight className="w-3 h-3" />
@@ -762,7 +766,7 @@ export function ActivityWidget() {
       sub: "Pottery",
       time: "2h ago",
       color: "text-amber-500",
-      href: `${base}pottery/`,
+      href: `${base}modules/pottery/`,
     },
     {
       icon: Shirt,
@@ -770,7 +774,7 @@ export function ActivityWidget() {
       sub: "Quilting",
       time: "Yesterday",
       color: "text-violet-500",
-      href: `${base}quilting/fabrics`,
+      href: `${base}modules/quilting/fabrics`,
     },
     {
       icon: Scissors,
@@ -778,7 +782,7 @@ export function ActivityWidget() {
       sub: "Quilting",
       time: "2 days ago",
       color: "text-violet-500",
-      href: `${base}quilting/blocks`,
+      href: `${base}modules/quilting/blocks`,
     },
     {
       icon: Package,
@@ -786,7 +790,7 @@ export function ActivityWidget() {
       sub: "Pottery",
       time: "3 days ago",
       color: "text-amber-500",
-      href: `${base}pottery/`,
+      href: `${base}modules/pottery/`,
     },
   ];
   return (
@@ -919,7 +923,7 @@ export function PhotoOfDayWidget() {
       </div>
       {piece && (
         <a
-          href={`${base}pottery/piece/${piece.id}`}
+          href={`${base}modules/pottery/piece/${piece.id}`}
           className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
         >
           View piece <ArrowRight className="w-3 h-3" />
@@ -1260,7 +1264,7 @@ export function TravelStatsWidget() {
         ))}
       </div>
       <a
-        href={`${base}travels/`}
+        href={`${base}modules/travels/`}
         className="flex items-center gap-1 text-xs font-medium text-sky-600 dark:text-sky-400 hover:underline"
       >
         Open travels <ArrowRight className="w-3 h-3" />
@@ -1298,7 +1302,7 @@ export function NextTripWidget() {
           No upcoming trips planned.
         </p>
         <a
-          href={`${base}travels/trips`}
+          href={`${base}modules/travels/trips`}
           className="flex items-center gap-1 text-xs font-medium text-sky-600 dark:text-sky-400 hover:underline"
         >
           <Plane className="w-3 h-3" /> Plan a trip
@@ -1333,7 +1337,7 @@ export function NextTripWidget() {
         )}
       </div>
       <a
-        href={`${base}travels/trips`}
+        href={`${base}modules/travels/trips`}
         className="flex items-center gap-1 text-xs font-medium text-sky-600 dark:text-sky-400 hover:underline"
       >
         View all trips <ArrowRight className="w-3 h-3" />
@@ -1344,7 +1348,9 @@ export function NextTripWidget() {
 
 // ── Live: Trip Reminders ──────────────────────────────────────────────────────
 export function TripRemindersWidget() {
-  const { data: reminders = [] } = useListAllReminders();
+  const { data: remindersRaw } = useListAllReminders();
+  // Defensive: guard against non-array (e.g. HTML SPA fallback mis-routed by dev proxy).
+  const reminders = Array.isArray(remindersRaw) ? remindersRaw : [];
 
   const upcoming = reminders
     .filter((r) => !r.done)
@@ -1383,7 +1389,7 @@ export function TripRemindersWidget() {
         );
       })}
       <a
-        href={`${base}travels/`}
+        href={`${base}modules/travels/`}
         className="flex items-center gap-1 text-xs font-medium text-sky-600 dark:text-sky-400 hover:underline"
       >
         <Bell className="w-3 h-3" /> All reminders
@@ -1394,7 +1400,9 @@ export function TripRemindersWidget() {
 
 // ── Live: Travel Wishlist ─────────────────────────────────────────────────────
 export function TravelWishlistWidget() {
-  const { data: wishlist = [] } = useListWishlist();
+  const { data: wishlistRaw } = useListWishlist();
+  // Defensive: guard against non-array (e.g. HTML SPA fallback mis-routed by dev proxy).
+  const wishlist = Array.isArray(wishlistRaw) ? wishlistRaw : [];
   const pending = wishlist.filter((w) => !w.done).slice(0, 5);
 
   return (
@@ -1422,7 +1430,7 @@ export function TravelWishlistWidget() {
       })}
       <div className="flex items-center justify-between pt-0.5">
         <a
-          href={`${base}travels/wishlist`}
+          href={`${base}modules/travels/wishlist`}
           className="flex items-center gap-1 text-xs font-medium text-sky-600 dark:text-sky-400 hover:underline"
         >
           <List className="w-3 h-3" /> View wishlist

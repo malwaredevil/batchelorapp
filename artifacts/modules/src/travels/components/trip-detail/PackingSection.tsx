@@ -238,7 +238,9 @@ export function PackingSection({
   const deleteItem = useDeletePackingItem();
   const reorderItems = useReorderPackingItems();
   const loadTemplate = useLoadPackingTemplate();
-  const { data: templates = [] } = useListPackingTemplates();
+  const { data: templatesRaw } = useListPackingTemplates();
+  // Defensive: guard against non-array (e.g. HTML SPA fallback mis-routed by dev proxy).
+  const templates = Array.isArray(templatesRaw) ? templatesRaw : [];
   const createTemplate = useCreatePackingTemplate();
   const deleteTemplate = useDeletePackingTemplate();
 

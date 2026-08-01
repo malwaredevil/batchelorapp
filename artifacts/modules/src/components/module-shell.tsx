@@ -5,6 +5,7 @@ import type { AppId } from "@workspace/elaine-ui";
 import { NotificationBell } from "./NotificationBell";
 import { useBackgroundTasks } from "@/lib/background-tasks";
 import { InstallBanner } from "@workspace/web-core";
+import { crossAppUrl } from "@workspace/web-core/cross-app";
 import {
   ChevronDown,
   Library,
@@ -166,7 +167,9 @@ export function ModuleShell({ children }: { children: ReactNode }) {
 
   function go(item: ResolvedNavEntry) {
     if (item.external) {
-      window.location.href = item.href;
+      // External links may cross SPA boundaries (e.g. /account on the hub);
+      // strip any raw dev port so path-routing works.
+      window.location.href = crossAppUrl(item.href);
     } else {
       navigate(item.href);
     }

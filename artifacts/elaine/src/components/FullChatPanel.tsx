@@ -10,6 +10,7 @@ import {
   ElaineName,
 } from "@workspace/elaine-ui";
 import type { FullChat } from "@/lib/useFullChat";
+import { crossAppUrl } from "@workspace/web-core/cross-app";
 
 const MAGNET_VERDICT_COPY: Record<
   MagnetCheckResult["verdict"],
@@ -150,7 +151,7 @@ export function FullChatPanel({
                 {magnetResult.matches.map((match) => (
                   <a
                     key={match.photoId}
-                    href={`/modules/travels/trips/${match.tripId}`}
+                    href={crossAppUrl(`/modules/travels/trips/${match.tripId}`)}
                     onClick={onNavigated}
                   >
                     <div className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-border/50 p-1.5 transition-colors hover:border-primary/30">

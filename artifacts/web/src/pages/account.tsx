@@ -748,19 +748,22 @@ export default function Account() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-background/80 px-6 py-4 backdrop-blur-md">
-        <Link
-          href="/"
-          className="flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to apps
-        </Link>
-        <div className="flex items-center gap-2">
-          <AppLogo className="h-7 w-7" />
-          <span className="font-semibold tracking-tight text-primary">
-            Batchelor
-          </span>
+      <header className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur-md">
+        {/* mx-auto max-w-6xl matches the shared ApplicationHeader container */}
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
+          <Link
+            href="/"
+            className="flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to apps
+          </Link>
+          <div className="flex items-center gap-2">
+            <AppLogo className="h-7 w-7" />
+            <span className="font-semibold tracking-tight text-primary">
+              Batchelor
+            </span>
+          </div>
         </div>
       </header>
 

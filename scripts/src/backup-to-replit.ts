@@ -13,7 +13,7 @@
  *            pottery_images, pottery_item_categories
  *   Ornaments: ornaments_categories, ornaments_items (WITHOUT embedding/visual_embedding),
  *              ornaments_images, ornaments_item_categories, ornaments_barcode_cache,
- *              ornaments_hallmark_events, hallmark_ornaments
+ *              ornaments_hallmark_events, hallmark_ornaments, ornament_upc_corrections
  *   Quilting: quilting_categories, quilting_fabrics (WITHOUT embedding/visual_embedding),
  *             quilting_patterns (WITHOUT embedding/visual_embedding),
  *             quilting_finished_quilts, quilting_fabric_links, quilting_pattern_links,
@@ -351,6 +351,20 @@ CREATE TABLE IF NOT EXISTS ornaments_hallmark_events (
   created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS ornament_upc_corrections (
+  id                            SERIAL PRIMARY KEY,
+  barcode                       TEXT NOT NULL,
+  corrected_name                TEXT,
+  corrected_brand               TEXT,
+  corrected_series_or_collection TEXT,
+  corrected_year                INTEGER,
+  wrong_name                    TEXT,
+  wrong_brand                   TEXT,
+  submitted_by                  INTEGER,
+  created_at                    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_ornament_upc_corrections_barcode ON ornament_upc_corrections(barcode);
 
 -- Quilting
 CREATE TABLE IF NOT EXISTS quilting_categories (
@@ -1946,6 +1960,24 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "ornaments_hallmark_events", "id");
+
+  summary["ornament_upc_corrections"] = await copyTable(source, dest, {
+    table: "ornament_upc_corrections",
+    columns: [
+      "id",
+      "barcode",
+      "corrected_name",
+      "corrected_brand",
+      "corrected_series_or_collection",
+      "corrected_year",
+      "wrong_name",
+      "wrong_brand",
+      "submitted_by",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "ornament_upc_corrections", "id");
 
   // ── Office ────────────────────────────────────────────────────────────────
   summary["office_notes"] = await copyTable(source, dest, {

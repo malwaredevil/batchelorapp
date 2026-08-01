@@ -20,6 +20,25 @@ LOGDIR="$(mktemp -d)"
 trap 'rm -rf "$LOGDIR"' EXIT
 
 # ---------------------------------------------------------------------------
+# Step 0: architecture-doc freshness reminder (agent-internal, non-fatal)
+# .agents/architecture/ARCHITECTURE.md is the agent's roadmap of routing,
+# artifacts, shared libs, and env interactions. It must be updated in the same
+# commit as any structural change. Warn if code changed more recently.
+# ---------------------------------------------------------------------------
+ARCH_DOC=".agents/architecture/ARCHITECTURE.md"
+if [ -f "$ARCH_DOC" ]; then
+  # Doc is gitignored (.agents/) — use file mtime vs last structural commit.
+  DOC_TS=$(stat -c %Y "$ARCH_DOC" 2>/dev/null || echo 0)
+  CODE_TS=$(git log -1 --format=%ct -- artifacts lib scripts .replit 2>/dev/null || echo 0)
+  if [ "$CODE_TS" -gt "$DOC_TS" ]; then
+    echo -e "${BOLD}⚠ NOTE${RESET}: $ARCH_DOC is older than the latest structural code change."
+    echo "  If routing/artifacts/shared-lib/scripts structure changed, update it before publishing."
+  fi
+else
+  echo -e "${RED}⚠${RESET} $ARCH_DOC missing — recreate it (agent architecture roadmap)."
+fi
+
+# ---------------------------------------------------------------------------
 # Step 1: prettier --write (auto-fix formatting before GitHub sync)
 # ---------------------------------------------------------------------------
 echo -e "\n${BOLD}[1/3]${RESET} Formatting (prettier --write) …"

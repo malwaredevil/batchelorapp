@@ -198,8 +198,7 @@ export const APP_CONFIG_DEFAULTS: AppConfigDefault[] = [
   {
     module: "email",
     key: "elaine_from_email",
-    value:
-      process.env.ELAINE_FROM_EMAIL ?? "Elaine <elaine@app.batchelor.app>",
+    value: process.env.ELAINE_FROM_EMAIL ?? "Elaine <elaine@app.batchelor.app>",
     type: "string",
     label: "Elaine sender address",
     description:

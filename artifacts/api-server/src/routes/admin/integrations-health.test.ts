@@ -74,9 +74,7 @@ vi.mock("../../middleware/owner", () => ({
 
 // ── Router import (must come after all vi.mock calls) ────────────────────────
 
-import integrationsHealthRouter, {
-  _setTestCache,
-} from "./integrations-health";
+import integrationsHealthRouter, { _setTestCache } from "./integrations-health";
 
 // ── App builder ───────────────────────────────────────────────────────────────
 

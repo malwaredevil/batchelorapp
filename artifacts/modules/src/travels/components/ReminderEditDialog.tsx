@@ -677,8 +677,8 @@ export function ReminderEditDialog({
                 </div>
               )}
               <p className="text-xs text-muted-foreground pt-0.5">
-                An automated voice call is placed when the reminder fires.
-                Falls back to SMS if the call doesn&apos;t connect.
+                An automated voice call is placed when the reminder fires. Falls
+                back to SMS if the call doesn&apos;t connect.
               </p>
             </div>
 

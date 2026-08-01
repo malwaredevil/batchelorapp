@@ -53,25 +53,29 @@ import { communicationActionExecutors } from "./communication-actions";
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeContact(overrides: Partial<{
-  id: number;
-  displayName: string;
-  phoneNumber: string | null;
-  slackUserId: string | null;
-  phoneVerified: boolean;
-  smsConsentAt: Date | null;
-  smsOptedOutAt: Date | null;
-}> = {}) {
-  return [{
-    id: 2,
-    displayName: "Jane",
-    phoneNumber: "+12105551234",
-    slackUserId: null,
-    phoneVerified: true,
-    smsConsentAt: new Date("2024-01-01"),
-    smsOptedOutAt: null,
-    ...overrides,
-  }];
+function makeContact(
+  overrides: Partial<{
+    id: number;
+    displayName: string;
+    phoneNumber: string | null;
+    slackUserId: string | null;
+    phoneVerified: boolean;
+    smsConsentAt: Date | null;
+    smsOptedOutAt: Date | null;
+  }> = {},
+) {
+  return [
+    {
+      id: 2,
+      displayName: "Jane",
+      phoneNumber: "+12105551234",
+      slackUserId: null,
+      phoneVerified: true,
+      smsConsentAt: new Date("2024-01-01"),
+      smsOptedOutAt: null,
+      ...overrides,
+    },
+  ];
 }
 
 // ---------------------------------------------------------------------------
@@ -152,7 +156,10 @@ describe("message_contact executor — SMS path", () => {
 
   it("returns 422 when phone is not verified", async () => {
     mockSelect.mockResolvedValue(
-      makeContact({ phoneVerified: false, smsConsentAt: new Date("2024-01-01") }),
+      makeContact({
+        phoneVerified: false,
+        smsConsentAt: new Date("2024-01-01"),
+      }),
     );
     const result = await communicationActionExecutors.message_contact(
       { contactName: "Jane", message: "Hey", channel: "sms" } as never,
@@ -219,7 +226,7 @@ describe("message_contact executor — Slack path", () => {
     mockSelect.mockResolvedValue(
       makeContact({
         slackUserId: "U123",
-        phoneVerified: false,  // phone not verified — but Slack doesn't care
+        phoneVerified: false, // phone not verified — but Slack doesn't care
         smsConsentAt: null,
       }),
     );
@@ -228,7 +235,9 @@ describe("message_contact executor — Slack path", () => {
       1,
     );
     expect(result.status).toBe(200);
-    expect((result.body as Record<string, unknown>).result).toMatchObject({ channel: "slack" });
+    expect((result.body as Record<string, unknown>).result).toMatchObject({
+      channel: "slack",
+    });
     expect(mockSendSms).not.toHaveBeenCalled();
   });
 });

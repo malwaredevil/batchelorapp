@@ -300,7 +300,8 @@ describe("PATCH /admin/users/:id", () => {
     // eslint-disable-next-line @typescript-eslint/unbound-method
     const updateMock = db.update as ReturnType<typeof vi.fn>;
     expect(updateMock).toHaveBeenCalled();
-    const setArg = updateMock.mock.results[0]?.value?.set?.mock?.calls?.[0]?.[0] as Record<string, unknown> | undefined;
+    const setArg = updateMock.mock.results[0]?.value?.set?.mock
+      ?.calls?.[0]?.[0] as Record<string, unknown> | undefined;
     if (setArg) {
       expect(setArg["phoneVerified"]).toBe(false);
       expect(setArg["phoneVerifiedAt"]).toBeNull();
@@ -320,7 +321,8 @@ describe("PATCH /admin/users/:id", () => {
       .patch("/admin/users/2")
       .send({ phoneNumber: "+12105551234", displayName: "Jane Updated" });
     const updateMock = db.update as ReturnType<typeof vi.fn>;
-    const setArg = updateMock.mock.results[0]?.value?.set?.mock?.calls?.[0]?.[0] as Record<string, unknown> | undefined;
+    const setArg = updateMock.mock.results[0]?.value?.set?.mock
+      ?.calls?.[0]?.[0] as Record<string, unknown> | undefined;
     // phoneVerified should NOT be auto-cleared (same number)
     if (setArg) {
       expect(setArg).not.toHaveProperty("phoneVerifiedAt");

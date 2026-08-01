@@ -66,7 +66,10 @@ export function startBirthdayScheduler(): () => void {
     } catch (err) {
       logger.error({ err }, "birthday-scheduler: tick error");
     }
-    if (!stopped) setTimeout(tick, ONE_DAY_MS).unref();
+    if (!stopped)
+      setTimeout(() => {
+        void tick();
+      }, ONE_DAY_MS).unref();
   }
 
   void tick();

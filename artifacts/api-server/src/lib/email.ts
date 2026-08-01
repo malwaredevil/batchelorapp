@@ -22,7 +22,6 @@ export function resendConfigured(): boolean {
   return !!process.env.RESEND_API_KEY;
 }
 
-
 // Alert type is now derived from the reminder's own configurable
 // alert_days_before array rather than a fixed 14/7/3-day set — any
 // non-negative day count is a valid alert type, e.g. "10_day".
@@ -112,7 +111,6 @@ export async function sendReminderAlertEmail(
   }
 }
 
-
 function escapeHtml(input: string): string {
   return input
     .replace(/&/g, "&amp;")
@@ -132,7 +130,11 @@ export async function sendAssistantEmail(
   subject: string,
   body: string,
 ): Promise<void> {
-  const from = await getConfig("email", "elaine_from_email", "Elaine <elaine@app.batchelor.app>");
+  const from = await getConfig(
+    "email",
+    "elaine_from_email",
+    "Elaine <elaine@app.batchelor.app>",
+  );
 
   const paragraphsHtml = body
     .split(/\n{2,}/)
@@ -198,7 +200,11 @@ export async function sendElaineEmailReply(
   body: string,
   inReplyToMessageId?: string | null,
 ): Promise<string | undefined> {
-  const from = await getConfig("email", "elaine_from_email", "Elaine <elaine@app.batchelor.app>");
+  const from = await getConfig(
+    "email",
+    "elaine_from_email",
+    "Elaine <elaine@app.batchelor.app>",
+  );
 
   const paragraphsHtml = body
     .split(/\n{2,}/)
@@ -261,7 +267,11 @@ export async function sendBirthdayEmail(
   toEmail: string,
   displayName: string | null,
 ): Promise<void> {
-  const from = await getConfig("email", "elaine_from_email", "Elaine <elaine@app.batchelor.app>");
+  const from = await getConfig(
+    "email",
+    "elaine_from_email",
+    "Elaine <elaine@app.batchelor.app>",
+  );
   const name = displayName ?? toEmail.split("@")[0];
 
   const { error } = await getResend().emails.send({

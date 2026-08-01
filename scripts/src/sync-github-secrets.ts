@@ -62,7 +62,8 @@ const SECRETS: Array<{ name: string; purpose: string; required: boolean }> = [
     // Optional: lib/db/src/resolve-url.ts falls back to computing the pooler
     // host as `aws-0-${SUPABASE_POOLER_REGION ?? "eu-west-1"}.pooler.supabase.com`
     // when this is unset, so the app runs fine without it.
-    purpose: "Supabase connection pooler host override (computed from region when absent)",
+    purpose:
+      "Supabase connection pooler host override (computed from region when absent)",
     required: false,
   },
   // ── Auth ────────────────────────────────────────────────────────────────────
@@ -123,7 +124,8 @@ const SECRETS: Array<{ name: string; purpose: string; required: boolean }> = [
   },
   {
     name: "OPENAI_WORKSPACE_API_KEY",
-    purpose: "OpenAI workspace-scoped API key (separate billing envelope from OPENAI_API_KEY)",
+    purpose:
+      "OpenAI workspace-scoped API key (separate billing envelope from OPENAI_API_KEY)",
     required: true,
   },
   {
@@ -133,7 +135,8 @@ const SECRETS: Array<{ name: string; purpose: string; required: boolean }> = [
   },
   {
     name: "REPLICATE_WEBHOOK_SIGNING_SECRET",
-    purpose: "Replicate webhook HMAC signing secret for verifying async prediction callbacks",
+    purpose:
+      "Replicate webhook HMAC signing secret for verifying async prediction callbacks",
     required: true,
   },
   {
@@ -158,7 +161,8 @@ const SECRETS: Array<{ name: string; purpose: string; required: boolean }> = [
     // password-reset and test emails (throws at call-time if absent) but those
     // flows are non-critical and email.ts's resendConfigured() gates them.
     // Set this to a verified Resend sender address to re-enable those flows.
-    purpose: "Resend sender address for transactional email (password-reset / test email)",
+    purpose:
+      "Resend sender address for transactional email (password-reset / test email)",
     required: false,
   },
   {
@@ -166,7 +170,8 @@ const SECRETS: Array<{ name: string; purpose: string; required: boolean }> = [
     // Optional: email.ts falls back to the hardcoded verified sender
     // "Batchelor Travels <travel.alert@app.batchelor.app>" when this is absent.
     // Not currently set in Replit or GitHub.
-    purpose: "Resend sender address for reminder email (falls back to travel.alert@app.batchelor.app)",
+    purpose:
+      "Resend sender address for reminder email (falls back to travel.alert@app.batchelor.app)",
     required: false,
   },
   // ── Error tracking ──────────────────────────────────────────────────────────
@@ -242,7 +247,8 @@ const SECRETS: Array<{ name: string; purpose: string; required: boolean }> = [
     // The dev counterpart (RESEND_WEBHOOK_SECRET_DEV) is intentionally not
     // synced — it only needs to be set in the Replit workspace; GitHub CI
     // uses the prod secret exclusively.
-    purpose: "Resend inbound-email webhook signing secret for the production domain",
+    purpose:
+      "Resend inbound-email webhook signing secret for the production domain",
     required: true,
   },
   // ── Optional (sync when present; skip with notice when not set) ─────────────

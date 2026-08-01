@@ -40,9 +40,7 @@ vi.mock("./slack", () => ({
 
 const callsConfigured = vi.fn().mockReturnValue(false);
 const initiateOutboundCall = vi.fn().mockResolvedValue(undefined);
-const buildReminderCallScript = vi
-  .fn()
-  .mockReturnValue("Reminder call script");
+const buildReminderCallScript = vi.fn().mockReturnValue("Reminder call script");
 vi.mock("./calls", () => ({
   callsConfigured: () => callsConfigured(),
   initiateOutboundCall: (...args: unknown[]) => initiateOutboundCall(...args),

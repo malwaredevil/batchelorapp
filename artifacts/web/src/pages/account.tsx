@@ -264,8 +264,8 @@ function PhoneCard() {
         Phone &amp; SMS
       </div>
       <p className="mb-4 text-sm text-muted-foreground">
-        Verify a phone number to receive Travels reminders, Elaine messages,
-        and Elaine voice calls. See our{" "}
+        Verify a phone number to receive Travels reminders, Elaine messages, and
+        Elaine voice calls. See our{" "}
         <a
           href={`${base}modules/travels/privacy`}
           target="_blank"

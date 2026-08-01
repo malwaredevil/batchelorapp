@@ -8,11 +8,7 @@ import {
   SmsRegistrationPendingError,
 } from "../lib/sms";
 import { initiateOutboundCall } from "../lib/calls";
-import {
-  openDmChannel,
-  postSlackMessage,
-  slackConfigured,
-} from "../lib/slack";
+import { openDmChannel, postSlackMessage, slackConfigured } from "../lib/slack";
 import { logger } from "../lib/logger";
 
 // ---------------------------------------------------------------------------
@@ -594,8 +590,7 @@ export async function buildCommunicationActionLabel(action: {
       const payload = MessageContactPayload.parse(action.payload);
       if (payload.scheduleAt) {
         const when = formatScheduledTime(payload.scheduleAt);
-        const via =
-          payload.channel !== "auto" ? ` via ${payload.channel}` : "";
+        const via = payload.channel !== "auto" ? ` via ${payload.channel}` : "";
         return `Schedule a message to ${payload.contactName}${via} at ${when}`;
       }
       const via = payload.channel !== "auto" ? ` via ${payload.channel}` : "";

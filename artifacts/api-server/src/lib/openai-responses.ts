@@ -361,7 +361,12 @@ export function buildReasoningParam(options: {
  */
 export function accumulateReasoningSummaryEvent(
   parts: Map<number, string>,
-  event: { type: string; summary_index?: number; delta?: string; text?: string },
+  event: {
+    type: string;
+    summary_index?: number;
+    delta?: string;
+    text?: string;
+  },
 ): string | null {
   const idx = event.summary_index ?? 0;
   if (event.type === "response.reasoning_summary_text.delta") {
@@ -460,7 +465,9 @@ export async function streamOpenAIResponseRound(
           // Request source URLs for built-in web search calls so we can
           // surface them as citations in the chat UI.
           include: options.useBuiltinWebSearch
-            ? (["web_search_call.action.sources"] as ResponseCreateParams["include"])
+            ? ([
+                "web_search_call.action.sources",
+              ] as ResponseCreateParams["include"])
             : undefined,
         });
 
@@ -481,7 +488,12 @@ export async function streamOpenAIResponseRound(
         for await (const event of stream) {
           const summaryDelta = accumulateReasoningSummaryEvent(
             reasoningSummaryParts,
-            event as { type: string; summary_index?: number; delta?: string; text?: string },
+            event as {
+              type: string;
+              summary_index?: number;
+              delta?: string;
+              text?: string;
+            },
           );
           if (summaryDelta !== null) {
             options.onReasoningSummaryDelta?.(summaryDelta);

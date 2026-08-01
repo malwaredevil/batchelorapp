@@ -34,7 +34,10 @@ const USER_SELECT = {
 // GET / — all household members (no passwordHash)
 // ---------------------------------------------------------------------------
 router.get("/", async (_req, res) => {
-  const users = await db.select(USER_SELECT).from(appUsers).orderBy(appUsers.createdAt);
+  const users = await db
+    .select(USER_SELECT)
+    .from(appUsers)
+    .orderBy(appUsers.createdAt);
   res.json({ users });
 });
 
@@ -98,7 +101,9 @@ router.patch("/:id", async (req, res) => {
       return;
     }
     if (requesterId === targetId) {
-      res.status(400).json({ error: "You cannot remove your own owner status." });
+      res
+        .status(400)
+        .json({ error: "You cannot remove your own owner status." });
       return;
     }
   }
@@ -112,8 +117,10 @@ router.patch("/:id", async (req, res) => {
   // Keep phoneVerifiedAt in sync with the phoneVerified god-mode toggle.
   // (The phone-number-change block below overrides this when a new number is
   // supplied — clearing both fields regardless — which is the correct policy.)
-  if (parsed.data.phoneVerified === true) updatePayload["phoneVerifiedAt"] = new Date();
-  else if (parsed.data.phoneVerified === false) updatePayload["phoneVerifiedAt"] = null;
+  if (parsed.data.phoneVerified === true)
+    updatePayload["phoneVerifiedAt"] = new Date();
+  else if (parsed.data.phoneVerified === false)
+    updatePayload["phoneVerifiedAt"] = null;
 
   // Security: changing phoneNumber invalidates all number-bound verification and
   // consent state. If the request supplies a new number but does NOT explicitly
@@ -132,7 +139,8 @@ router.patch("/:id", async (req, res) => {
       updatePayload["phoneVerifiedAt"] = null;
       updatePayload["smsFirstOutboundSentAt"] = null;
       // Clear these only when the caller has not provided an explicit override
-      if (!("phoneVerified" in parsed.data)) updatePayload["phoneVerified"] = false;
+      if (!("phoneVerified" in parsed.data))
+        updatePayload["phoneVerified"] = false;
       if (smsConsentNow === undefined) updatePayload["smsConsentAt"] = null;
       if (smsOptedOut === undefined) updatePayload["smsOptedOutAt"] = null;
     }
@@ -367,10 +375,7 @@ router.delete("/:id", async (req, res) => {
     );
     await client.query("DELETE FROM travels_reminders WHERE user_id = $1", p);
     // Trip content leaf tables
-    await client.query(
-      "DELETE FROM travels_trip_photos WHERE user_id = $1",
-      p,
-    );
+    await client.query("DELETE FROM travels_trip_photos WHERE user_id = $1", p);
     await client.query(
       "DELETE FROM travels_trip_documents WHERE user_id = $1",
       p,
@@ -406,10 +411,7 @@ router.delete("/:id", async (req, res) => {
     // ── 5. Delete Quilting data ──────────────────────────────────────────────
     // fabrics/blocks/patterns/layouts cascade to their child tables.
     await client.query("DELETE FROM quilting_fabrics WHERE user_id = $1", p);
-    await client.query(
-      "DELETE FROM quilting_categories WHERE user_id = $1",
-      p,
-    );
+    await client.query("DELETE FROM quilting_categories WHERE user_id = $1", p);
     await client.query("DELETE FROM quilting_patterns WHERE user_id = $1", p);
     await client.query(
       "DELETE FROM quilting_finished_quilts WHERE user_id = $1",

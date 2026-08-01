@@ -16,7 +16,10 @@ import {
   elaineHistoryConversations,
   elaineHistoryMessages,
 } from "@workspace/db";
-import { fireCallContact, fireMessageContact } from "../elaine/communication-actions";
+import {
+  fireCallContact,
+  fireMessageContact,
+} from "../elaine/communication-actions";
 import { logger } from "./logger";
 
 const POLL_INTERVAL_MS = 60_000; // one minute

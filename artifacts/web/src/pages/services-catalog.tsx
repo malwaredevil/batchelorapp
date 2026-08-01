@@ -454,8 +454,12 @@ export function ServicesCatalogContent({
                     />
                   )}
                   <div className="min-w-0">
-                    <h3 className="font-semibold text-foreground">{svc.name}</h3>
-                    <p className="text-xs text-muted-foreground">{svc.purpose}</p>
+                    <h3 className="font-semibold text-foreground">
+                      {svc.name}
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      {svc.purpose}
+                    </p>
                   </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5">

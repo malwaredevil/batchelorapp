@@ -83,7 +83,7 @@ describe("Elaine deterministic evaluation corpus", () => {
     expect(() =>
       assertElaineToolFamilyCoverage(scenario.availableTools),
     ).not.toThrow();
-    expect(Object.keys(ELAINE_TOOL_FAMILY_SENTINELS)).toHaveLength(9);
+    expect(Object.keys(ELAINE_TOOL_FAMILY_SENTINELS)).toHaveLength(10);
   });
 
   it("prints a concise candidate quality summary for CI and Replit", () => {

@@ -369,7 +369,8 @@ export default function OfficeGmailPage() {
       .map((m) => m.id);
     if (unreadIds.length === 0) return;
     markThreadRead(selectedThreadId, unreadIds);
-  }, [threadData?.id, selectedThreadId, markThreadRead]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [threadData?.id, selectedThreadId, markThreadRead]); // threadData object intentionally not in deps — only re-run when thread ID changes
 
   function handleSelectLabel(id: LabelId) {
     setSelectedLabel(id);

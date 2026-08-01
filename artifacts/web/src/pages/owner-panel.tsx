@@ -451,7 +451,11 @@ function UserManagementContent() {
     setError(null);
     // raw-fetch-ok — owner-only admin endpoint
     fetch("/api/admin/users")
-      .then((r) => (r.ok ? (r.json() as Promise<{ users: AdminUser[] }>) : Promise.reject(r.status)))
+      .then((r) =>
+        r.ok
+          ? (r.json() as Promise<{ users: AdminUser[] }>)
+          : Promise.reject(r.status),
+      )
       .then((d) => {
         setUsers(d.users);
         setLoading(false);
@@ -503,20 +507,32 @@ function UserManagementContent() {
         slackUserId: form.slackUserId.trim() || null,
       };
       const resp = await fetch(`/api/admin/users/${editingUser.id}`, {
+        // raw-fetch-ok
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       const data = (await resp.json()) as { user?: AdminUser; error?: unknown };
       if (!resp.ok) {
-        toast({ title: "Save failed", description: String(data.error ?? "Unknown error"), variant: "destructive" });
+        toast({
+          title: "Save failed",
+          description: String(data.error ?? "Unknown error"),
+          variant: "destructive",
+        });
       } else {
-        toast({ title: "Saved", description: `${data.user?.displayName ?? data.user?.email} updated.` });
+        toast({
+          title: "Saved",
+          description: `${data.user?.displayName ?? data.user?.email} updated.`,
+        });
         setEditingUser(null);
         loadUsers();
       }
     } catch (e) {
-      toast({ title: "Save failed", description: String(e), variant: "destructive" });
+      toast({
+        title: "Save failed",
+        description: String(e),
+        variant: "destructive",
+      });
     } finally {
       setSaving(false);
     }
@@ -524,17 +540,33 @@ function UserManagementContent() {
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
-    const expectedName = (deleteTarget.displayName ?? deleteTarget.email).trim();
+    const expectedName = (
+      deleteTarget.displayName ?? deleteTarget.email
+    ).trim();
     if (deleteConfirmName.trim() !== expectedName) {
-      toast({ title: "Name doesn't match", description: "Type the exact name/email shown to confirm.", variant: "destructive" });
+      toast({
+        title: "Name doesn't match",
+        description: "Type the exact name/email shown to confirm.",
+        variant: "destructive",
+      });
       return;
     }
     setDeleting(true);
     try {
-      const resp = await fetch(`/api/admin/users/${deleteTarget.id}`, { method: "DELETE" });
-      const data = (await resp.json()) as { deleted?: boolean; error?: unknown };
+      const resp = await fetch(`/api/admin/users/${deleteTarget.id}`, {
+        // raw-fetch-ok
+        method: "DELETE",
+      });
+      const data = (await resp.json()) as {
+        deleted?: boolean;
+        error?: unknown;
+      };
       if (!resp.ok) {
-        toast({ title: "Delete failed", description: String(data.error ?? "Unknown error"), variant: "destructive" });
+        toast({
+          title: "Delete failed",
+          description: String(data.error ?? "Unknown error"),
+          variant: "destructive",
+        });
       } else {
         toast({ title: "User deleted" });
         setDeleteTarget(null);
@@ -542,7 +574,11 @@ function UserManagementContent() {
         loadUsers();
       }
     } catch (e) {
-      toast({ title: "Delete failed", description: String(e), variant: "destructive" });
+      toast({
+        title: "Delete failed",
+        description: String(e),
+        variant: "destructive",
+      });
     } finally {
       setDeleting(false);
     }
@@ -575,8 +611,9 @@ function UserManagementContent() {
       <div>
         <h2 className="text-lg font-semibold tracking-tight">Users</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Household members — edit identity, preferences, permissions, phone/SMS,
-          and Slack. Hub widget preferences are excluded (managed by each user).
+          Household members — edit identity, preferences, permissions,
+          phone/SMS, and Slack. Hub widget preferences are excluded (managed by
+          each user).
         </p>
       </div>
 
@@ -586,10 +623,18 @@ function UserManagementContent() {
           <thead>
             <tr className="bg-muted/40 text-muted-foreground text-xs uppercase tracking-wide">
               <th className="px-4 py-2.5 text-left font-medium">Member</th>
-              <th className="px-4 py-2.5 text-left font-medium hidden sm:table-cell">Phone</th>
-              <th className="px-4 py-2.5 text-left font-medium hidden md:table-cell">SMS</th>
-              <th className="px-4 py-2.5 text-left font-medium hidden lg:table-cell">Slack</th>
-              <th className="px-4 py-2.5 text-left font-medium hidden lg:table-cell">Joined</th>
+              <th className="px-4 py-2.5 text-left font-medium hidden sm:table-cell">
+                Phone
+              </th>
+              <th className="px-4 py-2.5 text-left font-medium hidden md:table-cell">
+                SMS
+              </th>
+              <th className="px-4 py-2.5 text-left font-medium hidden lg:table-cell">
+                Slack
+              </th>
+              <th className="px-4 py-2.5 text-left font-medium hidden lg:table-cell">
+                Joined
+              </th>
               <th className="px-4 py-2.5 text-right font-medium">Edit</th>
             </tr>
           </thead>
@@ -613,7 +658,10 @@ function UserManagementContent() {
                     <div className="flex items-center gap-2.5">
                       <div
                         className="h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
-                        style={{ background: "hsl(var(--primary))", color: "hsl(var(--primary-foreground))" }}
+                        style={{
+                          background: "hsl(var(--primary))",
+                          color: "hsl(var(--primary-foreground))",
+                        }}
                       >
                         {initials || "?"}
                       </div>
@@ -631,7 +679,9 @@ function UserManagementContent() {
                             </span>
                           )}
                         </div>
-                        <div className="text-xs text-muted-foreground truncate max-w-[160px]">{u.email}</div>
+                        <div className="text-xs text-muted-foreground truncate max-w-[160px]">
+                          {u.email}
+                        </div>
                       </div>
                     </div>
                   </td>
@@ -648,13 +698,17 @@ function UserManagementContent() {
                     )}
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell">
-                    <span className={`text-xs font-medium ${sms.color}`}>{sms.label}</span>
+                    <span className={`text-xs font-medium ${sms.color}`}>
+                      {sms.label}
+                    </span>
                   </td>
                   <td className="px-4 py-3 hidden lg:table-cell">
                     {u.slackUserId ? (
                       <div className="flex items-center gap-1 text-xs">
                         <Slack className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                        <span className="font-mono text-muted-foreground">{u.slackUserId}</span>
+                        <span className="font-mono text-muted-foreground">
+                          {u.slackUserId}
+                        </span>
                       </div>
                     ) : (
                       <span className="text-xs text-muted-foreground">—</span>
@@ -684,15 +738,20 @@ function UserManagementContent() {
       {editingUser && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          onClick={(e) => { if (e.target === e.currentTarget) setEditingUser(null); }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setEditingUser(null);
+          }}
         >
           <div className="bg-background border border-border rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-background z-10">
               <div>
                 <h3 className="font-semibold text-base">
-                  Edit {(editingUser.displayName ?? "").trim() || editingUser.email}
+                  Edit{" "}
+                  {(editingUser.displayName ?? "").trim() || editingUser.email}
                 </h3>
-                <p className="text-xs text-muted-foreground mt-0.5">ID: {editingUser.id}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  ID: {editingUser.id}
+                </p>
               </div>
               <button
                 type="button"
@@ -706,14 +765,20 @@ function UserManagementContent() {
             <div className="px-6 py-5 space-y-6">
               {/* Identity */}
               <section className="space-y-3">
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Identity</h4>
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Identity
+                </h4>
                 <div className="space-y-2">
                   <label className="block">
-                    <span className="text-xs text-muted-foreground">Display name</span>
+                    <span className="text-xs text-muted-foreground">
+                      Display name
+                    </span>
                     <input
                       className="mt-1 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                       value={form.displayName}
-                      onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, displayName: e.target.value }))
+                      }
                       placeholder="Jane Smith"
                     />
                   </label>
@@ -723,15 +788,21 @@ function UserManagementContent() {
                       type="email"
                       className="mt-1 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                       value={form.email}
-                      onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, email: e.target.value }))
+                      }
                     />
                   </label>
                   <label className="block">
-                    <span className="text-xs text-muted-foreground">Birthday (MM-DD)</span>
+                    <span className="text-xs text-muted-foreground">
+                      Birthday (MM-DD)
+                    </span>
                     <input
                       className="mt-1 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring"
                       value={form.birthday}
-                      onChange={(e) => setForm((f) => ({ ...f, birthday: e.target.value }))}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, birthday: e.target.value }))
+                      }
                       placeholder="07-04"
                       maxLength={5}
                     />
@@ -741,33 +812,53 @@ function UserManagementContent() {
 
               {/* Preferences */}
               <section className="space-y-3">
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Preferences</h4>
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Preferences
+                </h4>
                 <div className="space-y-2">
                   <label className="block">
-                    <span className="text-xs text-muted-foreground">Theme preference</span>
+                    <span className="text-xs text-muted-foreground">
+                      Theme preference
+                    </span>
                     <input
                       className="mt-1 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                       value={form.themePreference}
-                      onChange={(e) => setForm((f) => ({ ...f, themePreference: e.target.value }))}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          themePreference: e.target.value,
+                        }))
+                      }
                       placeholder="light / dark / system"
                     />
                   </label>
                   <label className="block">
-                    <span className="text-xs text-muted-foreground">Timezone (IANA)</span>
+                    <span className="text-xs text-muted-foreground">
+                      Timezone (IANA)
+                    </span>
                     <input
                       className="mt-1 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring"
                       value={form.timezone}
-                      onChange={(e) => setForm((f) => ({ ...f, timezone: e.target.value }))}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, timezone: e.target.value }))
+                      }
                       placeholder="America/Denver"
                     />
                   </label>
                   <label className="block">
-                    <span className="text-xs text-muted-foreground">Travels reminder email</span>
+                    <span className="text-xs text-muted-foreground">
+                      Travels reminder email
+                    </span>
                     <input
                       type="email"
                       className="mt-1 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                       value={form.travelsReminderEmail}
-                      onChange={(e) => setForm((f) => ({ ...f, travelsReminderEmail: e.target.value }))}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          travelsReminderEmail: e.target.value,
+                        }))
+                      }
                       placeholder="jane@example.com"
                     />
                   </label>
@@ -776,7 +867,9 @@ function UserManagementContent() {
 
               {/* Permissions */}
               <section className="space-y-3">
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Permissions</h4>
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Permissions
+                </h4>
                 <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
                   <div>
                     <div className="text-sm font-medium">Owner</div>
@@ -789,7 +882,9 @@ function UserManagementContent() {
                   <button
                     type="button"
                     disabled={editingUser.id === me?.id}
-                    onClick={() => setForm((f) => ({ ...f, isOwner: !f.isOwner }))}
+                    onClick={() =>
+                      setForm((f) => ({ ...f, isOwner: !f.isOwner }))
+                    }
                     className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 ${form.isOwner ? "bg-primary" : "bg-input"}`}
                     role="switch"
                     aria-checked={form.isOwner}
@@ -809,29 +904,53 @@ function UserManagementContent() {
                 </h4>
                 <div className="space-y-2">
                   <label className="block">
-                    <span className="text-xs text-muted-foreground">Phone number (E.164)</span>
+                    <span className="text-xs text-muted-foreground">
+                      Phone number (E.164)
+                    </span>
                     <input
                       className="mt-1 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring"
                       value={form.phoneNumber}
-                      onChange={(e) => setForm((f) => ({ ...f, phoneNumber: e.target.value }))}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, phoneNumber: e.target.value }))
+                      }
                       placeholder="+12105551234"
                     />
                   </label>
                   {(
                     [
-                      { key: "phoneVerified", label: "Phone verified", description: "Mark this number as verified without the OTP flow." },
-                      { key: "smsConsentNow", label: "Has SMS consent", description: "Sets / clears smsConsentAt timestamp." },
-                      { key: "smsOptedOut", label: "SMS opted out", description: "Sets / clears smsOptedOutAt timestamp." },
+                      {
+                        key: "phoneVerified",
+                        label: "Phone verified",
+                        description:
+                          "Mark this number as verified without the OTP flow.",
+                      },
+                      {
+                        key: "smsConsentNow",
+                        label: "Has SMS consent",
+                        description: "Sets / clears smsConsentAt timestamp.",
+                      },
+                      {
+                        key: "smsOptedOut",
+                        label: "SMS opted out",
+                        description: "Sets / clears smsOptedOutAt timestamp.",
+                      },
                     ] as const
                   ).map(({ key, label, description }) => (
-                    <div key={key} className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
+                    <div
+                      key={key}
+                      className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5"
+                    >
                       <div>
                         <div className="text-sm font-medium">{label}</div>
-                        <div className="text-xs text-muted-foreground">{description}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {description}
+                        </div>
                       </div>
                       <button
                         type="button"
-                        onClick={() => setForm((f) => ({ ...f, [key]: !f[key] }))}
+                        onClick={() =>
+                          setForm((f) => ({ ...f, [key]: !f[key] }))
+                        }
                         className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${form[key] ? "bg-primary" : "bg-input"}`}
                         role="switch"
                         aria-checked={form[key]}
@@ -852,11 +971,15 @@ function UserManagementContent() {
                   Slack
                 </h4>
                 <label className="block">
-                  <span className="text-xs text-muted-foreground">Slack user ID</span>
+                  <span className="text-xs text-muted-foreground">
+                    Slack user ID
+                  </span>
                   <input
                     className="mt-1 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring"
                     value={form.slackUserId}
-                    onChange={(e) => setForm((f) => ({ ...f, slackUserId: e.target.value }))}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, slackUserId: e.target.value }))
+                    }
                     placeholder="U1234567890"
                   />
                 </label>
@@ -864,12 +987,16 @@ function UserManagementContent() {
 
               {/* Account (read-only) */}
               <section className="space-y-2 rounded-lg border border-border/60 bg-muted/20 px-4 py-3">
-                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Account (read-only)</h4>
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Account (read-only)
+                </h4>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
                   <span className="text-muted-foreground">ID</span>
                   <span className="font-mono">{editingUser.id}</span>
                   <span className="text-muted-foreground">Created</span>
-                  <span>{new Date(editingUser.createdAt).toLocaleString()}</span>
+                  <span>
+                    {new Date(editingUser.createdAt).toLocaleString()}
+                  </span>
                 </div>
               </section>
             </div>
@@ -918,7 +1045,12 @@ function UserManagementContent() {
       {deleteTarget && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          onClick={(e) => { if (e.target === e.currentTarget) { setDeleteTarget(null); setDeleteConfirmName(""); } }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setDeleteTarget(null);
+              setDeleteConfirmName("");
+            }
+          }}
         >
           <div className="bg-background border border-border rounded-xl shadow-2xl w-full max-w-sm">
             <div className="px-6 py-5 space-y-4">
@@ -930,7 +1062,10 @@ function UserManagementContent() {
                   <h3 className="font-semibold text-base">Delete user?</h3>
                   <p className="text-sm text-muted-foreground mt-1">
                     This permanently deletes{" "}
-                    <strong>{(deleteTarget.displayName ?? "").trim() || deleteTarget.email}</strong>{" "}
+                    <strong>
+                      {(deleteTarget.displayName ?? "").trim() ||
+                        deleteTarget.email}
+                    </strong>{" "}
                     and all their data. This cannot be undone.
                   </p>
                 </div>
@@ -939,7 +1074,8 @@ function UserManagementContent() {
                 <label className="block text-xs text-muted-foreground mb-1">
                   Type{" "}
                   <strong className="text-foreground font-mono">
-                    {(deleteTarget.displayName ?? "").trim() || deleteTarget.email}
+                    {(deleteTarget.displayName ?? "").trim() ||
+                      deleteTarget.email}
                   </strong>{" "}
                   to confirm
                 </label>
@@ -948,14 +1084,19 @@ function UserManagementContent() {
                   className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-destructive/50"
                   value={deleteConfirmName}
                   onChange={(e) => setDeleteConfirmName(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") void handleDelete(); }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void handleDelete();
+                  }}
                 />
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border">
               <button
                 type="button"
-                onClick={() => { setDeleteTarget(null); setDeleteConfirmName(""); }}
+                onClick={() => {
+                  setDeleteTarget(null);
+                  setDeleteConfirmName("");
+                }}
                 className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground border border-border hover:bg-muted transition-colors"
               >
                 Cancel
@@ -3024,7 +3165,12 @@ interface IntegrationsHealthResponse {
 
 const STATUS_META: Record<
   ServiceCheckStatus,
-  { label: string; dotClass: string; badgeClass: string; icon: typeof CheckCircle2 }
+  {
+    label: string;
+    dotClass: string;
+    badgeClass: string;
+    icon: typeof CheckCircle2;
+  }
 > = {
   ok: {
     label: "Operational",
@@ -3115,29 +3261,41 @@ function IntegrationsContent() {
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const runChecks = useCallback(async (bust = false) => {
-    setLoading(true);
-    setError(null);
-    try {
-      if (bust) {
-        // Clear cache first
-        await fetch("/api/admin/integrations/health/bust", { method: "POST" });
+  const runChecks = useCallback(
+    async (bust = false) => {
+      setLoading(true);
+      setError(null);
+      try {
+        if (bust) {
+          // Clear cache first
+          await fetch("/api/admin/integrations/health/bust", {
+            // raw-fetch-ok
+            method: "POST",
+          });
+        }
+        const resp = await fetch("/api/admin/integrations/health"); // raw-fetch-ok
+        if (!resp.ok) {
+          const body = (await resp.json().catch(() => ({}))) as {
+            error?: string;
+          };
+          throw new Error(body.error ?? `HTTP ${resp.status}`);
+        }
+        const d = (await resp.json()) as IntegrationsHealthResponse;
+        setData(d);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setError(msg);
+        toast({
+          title: "Health check failed",
+          description: msg,
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
       }
-      const resp = await fetch("/api/admin/integrations/health");
-      if (!resp.ok) {
-        const body = (await resp.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error ?? `HTTP ${resp.status}`);
-      }
-      const d = (await resp.json()) as IntegrationsHealthResponse;
-      setData(d);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setError(msg);
-      toast({ title: "Health check failed", description: msg, variant: "destructive" });
-    } finally {
-      setLoading(false);
-    }
-  }, [toast]);
+    },
+    [toast],
+  );
 
   const checks = data?.checks ?? [];
   const okCount = checks.filter((c) => c.status === "ok").length;
@@ -3160,8 +3318,8 @@ function IntegrationsContent() {
         <p className="mt-1 text-sm text-muted-foreground">
           Live connectivity check for every connected external API. Results are
           cached for 5 minutes — click{" "}
-          <span className="font-medium text-foreground">Re-check</span> to
-          force a fresh run.
+          <span className="font-medium text-foreground">Re-check</span> to force
+          a fresh run.
         </p>
       </div>
 

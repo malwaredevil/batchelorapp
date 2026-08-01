@@ -30,9 +30,10 @@ export function ComposeModal({ initial = {}, onClose }: ComposeModalProps) {
   const send = useGmailSend();
 
   // Focus body on mount if replying (has initial.to)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (initial.to) bodyRef.current?.focus();
-  }, []);
+  }, []); // mount-only: focus on open, initial.to is stable
 
   async function handleSend() {
     if (!to.trim()) {
@@ -210,7 +211,9 @@ export function ComposeModal({ initial = {}, onClose }: ComposeModalProps) {
           {/* Footer */}
           <div className="flex items-center justify-between px-4 py-3 border-t border-border/50 bg-background/50 rounded-b-none">
             <Button
-              onClick={handleSend}
+              onClick={() => {
+                void handleSend();
+              }}
               disabled={send.isPending}
               className="gap-2 bg-blue-600 hover:bg-blue-700 text-white rounded-full px-5"
             >

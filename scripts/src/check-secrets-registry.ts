@@ -86,11 +86,17 @@ export function findMatchingParen(src: string, openPos: number): number {
   for (let i = openPos; i < src.length; i++) {
     const ch = src[i];
     if (inStr !== null) {
-      if (ch === "\\" ) { i++; continue; } // skip escaped char
+      if (ch === "\\") {
+        i++;
+        continue;
+      } // skip escaped char
       if (ch === inStr) inStr = null;
       continue;
     }
-    if (ch === '"' || ch === "'" || ch === "`") { inStr = ch; continue; }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      inStr = ch;
+      continue;
+    }
     if (ch === "(") depth++;
     else if (ch === ")") {
       depth--;
@@ -188,7 +194,7 @@ export function parseEnvTs(src: string): EnvKey[] {
   for (const body of extractCallBodies("devOrRequired")) {
     const literals = extractEnvLiterals(body);
     if (literals.length >= 1) add(literals[0]!, false); // dev name — optional
-    if (literals.length >= 2) add(literals[1]!, true);  // prod name — required
+    if (literals.length >= 2) add(literals[1]!, true); // prod name — required
   }
 
   // ── optional("KEY") or optional(ternary ? "KEY_A" : "KEY_B") ─────────────
@@ -247,15 +253,24 @@ export function parseSyncTs(src: string): Set<string> {
   for (let i = openBracketAbsPos; i < src.length; i++) {
     const ch = src[i];
     if (inStr !== null) {
-      if (ch === "\\") { i++; continue; }
+      if (ch === "\\") {
+        i++;
+        continue;
+      }
       if (ch === inStr) inStr = null;
       continue;
     }
-    if (ch === '"' || ch === "'" || ch === "`") { inStr = ch; continue; }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      inStr = ch;
+      continue;
+    }
     if (ch === "[" || ch === "{") depth++;
     else if (ch === "]" || ch === "}") {
       depth--;
-      if (depth === 0) { closeBracketPos = i; break; }
+      if (depth === 0) {
+        closeBracketPos = i;
+        break;
+      }
     }
   }
 

@@ -207,7 +207,10 @@ const SECRETS = [
 
 test("no drift when all required keys are in SECRETS", () => {
   const envSrc = `export const env = { s: required("SESSION_SECRET") };`;
-  const { missingRequired, missingOptional } = checkDrift(envSrc, SYNC_WITH_BOTH);
+  const { missingRequired, missingOptional } = checkDrift(
+    envSrc,
+    SYNC_WITH_BOTH,
+  );
   assert.deepEqual(missingRequired, []);
   assert.deepEqual(missingOptional, []);
 });
@@ -231,7 +234,10 @@ test("does NOT flag keys in INTENTIONALLY_EXCLUDED", () => {
     "test precondition: DEV_SCREENSHOT_TOKEN must be excluded",
   );
   const envSrc = `export const env = { s: optional("DEV_SCREENSHOT_TOKEN") };`;
-  const { missingRequired, missingOptional } = checkDrift(envSrc, SYNC_WITH_BOTH);
+  const { missingRequired, missingOptional } = checkDrift(
+    envSrc,
+    SYNC_WITH_BOTH,
+  );
   assert.deepEqual(missingRequired, []);
   assert.deepEqual(missingOptional, []);
 });

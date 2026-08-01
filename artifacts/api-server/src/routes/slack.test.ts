@@ -93,6 +93,7 @@ vi.mock("../lib/env", () => ({
 }));
 
 vi.mock("../middleware/rateLimit", () => ({
+  adminLimiter: (_req: unknown, _res: unknown, next: () => void) => next(),
   webhookLimiter: (_req: unknown, _res: unknown, next: () => void) => next(),
   apiLimiter: (_req: unknown, _res: unknown, next: () => void) => next(),
 }));

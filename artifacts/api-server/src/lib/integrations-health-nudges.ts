@@ -69,7 +69,9 @@ export async function computeAndStoreIntegrationsHealthNudges(): Promise<void> {
       .where(eq(appUsers.isOwner, true))
       .limit(1);
     if (ownerRows.length === 0) {
-      logger.info("integrations-health-nudges: no owner account found, skipping");
+      logger.info(
+        "integrations-health-nudges: no owner account found, skipping",
+      );
       return;
     }
     const ownerId = ownerRows[0]!.id;

@@ -16,7 +16,11 @@ import { computeAndStoreNudges } from "../lib/travels-nudges";
 import { computeAndStoreIntegrationsHealthNudges } from "../lib/integrations-health-nudges";
 import { logger } from "../lib/logger";
 
-Promise.all([runReminderAlerts(), computeAndStoreNudges(), computeAndStoreIntegrationsHealthNudges()])
+Promise.all([
+  runReminderAlerts(),
+  computeAndStoreNudges(),
+  computeAndStoreIntegrationsHealthNudges(),
+])
   .then(async () => {
     logger.info("send-reminder-alerts: run complete");
     await pool.end();

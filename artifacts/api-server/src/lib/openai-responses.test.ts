@@ -348,7 +348,10 @@ describe("finalizeReasoningSummary", () => {
   });
 
   it("returns undefined when all parts are whitespace-only", () => {
-    const parts = new Map([[0, "   "], [1, "\n\n"]]);
+    const parts = new Map([
+      [0, "   "],
+      [1, "\n\n"],
+    ]);
     expect(finalizeReasoningSummary(parts)).toBeUndefined();
   });
 
@@ -406,20 +409,19 @@ describe("buildResponsesToolsParam", () => {
   });
 
   it("appends web_search built-in after function tools when flag is on", () => {
-    const result = buildResponsesToolsParam(
-      [SAMPLE_FUNCTION_TOOL],
-      true,
-    ) as { type: string; name?: string }[];
+    const result = buildResponsesToolsParam([SAMPLE_FUNCTION_TOOL], true) as {
+      type: string;
+      name?: string;
+    }[];
     expect(result).toHaveLength(2);
     expect(result[0].type).toBe("function");
     expect(result[1].type).toBe("web_search");
   });
 
   it("does NOT include built-in when flag is off even with function tools present", () => {
-    const result = buildResponsesToolsParam(
-      [SAMPLE_FUNCTION_TOOL],
-      false,
-    ) as { type: string }[];
+    const result = buildResponsesToolsParam([SAMPLE_FUNCTION_TOOL], false) as {
+      type: string;
+    }[];
     expect(result.every((t) => t.type !== "web_search")).toBe(true);
   });
 });

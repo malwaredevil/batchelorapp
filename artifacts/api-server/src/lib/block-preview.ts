@@ -200,6 +200,9 @@ function renderCell(
   const f = (c: string) => resolveFill(c, fabUriMap);
 
   switch (p.kind) {
+    case "other":
+      return "";
+
     case "solid":
       return `<rect x="${r(x)}" y="${r(y)}" width="${r(w)}" height="${r(h)}" fill="${f(p.color)}"/>`;
 

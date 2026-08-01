@@ -393,9 +393,7 @@ export const elaineScheduledActions = pgTable(
       table.status,
       table.scheduledFor,
     ),
-    index("elaine_scheduled_actions_user_id_idx").on(
-      table.initiatedByUserId,
-    ),
+    index("elaine_scheduled_actions_user_id_idx").on(table.initiatedByUserId),
   ],
 ).enableRLS();
 

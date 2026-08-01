@@ -67,7 +67,10 @@ async function runCheck(
     const result = await Promise.race([
       fn(key),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`timeout after ${CHECK_TIMEOUT_MS}ms`)), CHECK_TIMEOUT_MS),
+        setTimeout(
+          () => reject(new Error(`timeout after ${CHECK_TIMEOUT_MS}ms`)),
+          CHECK_TIMEOUT_MS,
+        ),
       ),
     ]);
     const latencyMs = Date.now() - start;
@@ -99,7 +102,11 @@ function configCheck(
         ? { service, status: "ok" }
         : { service, status: "error", detail: result.detail };
     } catch (err) {
-      return { service, status: "error", detail: err instanceof Error ? err.message : String(err) };
+      return {
+        service,
+        status: "error",
+        detail: err instanceof Error ? err.message : String(err),
+      };
     }
   }
   return { service, status: "ok" };
@@ -115,7 +122,10 @@ async function checkSupabase(): Promise<ServiceCheckResult> {
     await Promise.race([
       db.execute(sql`SELECT 1`),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error(`timeout after ${CHECK_TIMEOUT_MS}ms`)), CHECK_TIMEOUT_MS),
+        setTimeout(
+          () => reject(new Error(`timeout after ${CHECK_TIMEOUT_MS}ms`)),
+          CHECK_TIMEOUT_MS,
+        ),
       ),
     ]);
     return { service: "Supabase", status: "ok", latencyMs: Date.now() - start };
@@ -136,8 +146,13 @@ async function checkOpenRouter(): Promise<ServiceCheckResult> {
       signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
     });
     if (!resp.ok) {
-      const body = (await resp.json().catch(() => ({}))) as { error?: { message?: string } };
-      return { ok: false, detail: `HTTP ${resp.status}: ${body?.error?.message ?? resp.statusText}` };
+      const body = (await resp.json().catch(() => ({}))) as {
+        error?: { message?: string };
+      };
+      return {
+        ok: false,
+        detail: `HTTP ${resp.status}: ${body?.error?.message ?? resp.statusText}`,
+      };
     }
     return { ok: true };
   });
@@ -150,8 +165,13 @@ async function checkOpenAI(): Promise<ServiceCheckResult> {
       signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
     });
     if (!resp.ok) {
-      const body = (await resp.json().catch(() => ({}))) as { error?: { message?: string } };
-      return { ok: false, detail: `HTTP ${resp.status}: ${body?.error?.message ?? resp.statusText}` };
+      const body = (await resp.json().catch(() => ({}))) as {
+        error?: { message?: string };
+      };
+      return {
+        ok: false,
+        detail: `HTTP ${resp.status}: ${body?.error?.message ?? resp.statusText}`,
+      };
     }
     return { ok: true };
   });
@@ -167,12 +187,18 @@ async function checkJinaAI(): Promise<ServiceCheckResult> {
         "Content-Type": "application/json",
         Authorization: `Bearer ${key}`,
       },
-      body: JSON.stringify({ model: "jina-clip-v2", input: [{ text: "health" }] }),
+      body: JSON.stringify({
+        model: "jina-clip-v2",
+        input: [{ text: "health" }],
+      }),
       signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
     });
     if (!resp.ok) {
       const body = (await resp.json().catch(() => ({}))) as { detail?: string };
-      return { ok: false, detail: `HTTP ${resp.status}: ${body?.detail ?? resp.statusText}` };
+      return {
+        ok: false,
+        detail: `HTTP ${resp.status}: ${body?.detail ?? resp.statusText}`,
+      };
     }
     return { ok: true };
   });
@@ -197,7 +223,10 @@ async function checkVoyageAI(): Promise<ServiceCheckResult> {
     });
     if (!resp.ok) {
       const body = (await resp.json().catch(() => ({}))) as { detail?: string };
-      return { ok: false, detail: `HTTP ${resp.status}: ${body?.detail ?? resp.statusText}` };
+      return {
+        ok: false,
+        detail: `HTTP ${resp.status}: ${body?.detail ?? resp.statusText}`,
+      };
     }
     return { ok: true };
   });
@@ -210,8 +239,13 @@ async function checkResend(): Promise<ServiceCheckResult> {
       signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
     });
     if (!resp.ok) {
-      const body = (await resp.json().catch(() => ({}))) as { message?: string };
-      return { ok: false, detail: `HTTP ${resp.status}: ${body?.message ?? resp.statusText}` };
+      const body = (await resp.json().catch(() => ({}))) as {
+        message?: string;
+      };
+      return {
+        ok: false,
+        detail: `HTTP ${resp.status}: ${body?.message ?? resp.statusText}`,
+      };
     }
     return { ok: true };
   });
@@ -225,7 +259,10 @@ async function checkAgentPhone(): Promise<ServiceCheckResult> {
       signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
     });
     if (!resp.ok) {
-      const body = (await resp.json().catch(() => ({}))) as { message?: string; error?: string };
+      const body = (await resp.json().catch(() => ({}))) as {
+        message?: string;
+        error?: string;
+      };
       return {
         ok: false,
         detail: `HTTP ${resp.status}: ${body?.message ?? body?.error ?? resp.statusText}`,
@@ -237,12 +274,20 @@ async function checkAgentPhone(): Promise<ServiceCheckResult> {
 
 async function checkApify(): Promise<ServiceCheckResult> {
   return runCheck("Apify", env.apifyApiToken, async (token) => {
-    const resp = await fetch(`https://api.apify.com/v2/users/me?token=${encodeURIComponent(token)}`, {
-      signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
-    });
+    const resp = await fetch(
+      `https://api.apify.com/v2/users/me?token=${encodeURIComponent(token)}`,
+      {
+        signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
+      },
+    );
     if (!resp.ok) {
-      const body = (await resp.json().catch(() => ({}))) as { error?: { message?: string } };
-      return { ok: false, detail: `HTTP ${resp.status}: ${body?.error?.message ?? resp.statusText}` };
+      const body = (await resp.json().catch(() => ({}))) as {
+        error?: { message?: string };
+      };
+      return {
+        ok: false,
+        detail: `HTTP ${resp.status}: ${body?.error?.message ?? resp.statusText}`,
+      };
     }
     return { ok: true };
   });
@@ -271,7 +316,10 @@ async function checkSlack(): Promise<ServiceCheckResult> {
 
 /** Google OAuth: config-only check (no live call — per-user tokens needed for full auth). */
 function checkGoogleOAuth(): ServiceCheckResult {
-  return configCheck("Google OAuth", [env.googleClientId, env.googleClientSecret]);
+  return configCheck("Google OAuth", [
+    env.googleClientId,
+    env.googleClientSecret,
+  ]);
 }
 
 async function checkGoogleMaps(): Promise<ServiceCheckResult> {
@@ -283,10 +331,17 @@ async function checkGoogleMaps(): Promise<ServiceCheckResult> {
     if (!resp.ok) {
       return { ok: false, detail: `HTTP ${resp.status}: ${resp.statusText}` };
     }
-    const body = (await resp.json()) as { status: string; error_message?: string };
+    const body = (await resp.json()) as {
+      status: string;
+      error_message?: string;
+    };
     // "ZERO_RESULTS" means the API is working — we just searched for "health" with no result.
-    if (body.status === "OK" || body.status === "ZERO_RESULTS") return { ok: true };
-    return { ok: false, detail: `${body.status}: ${body.error_message ?? "unknown error"}` };
+    if (body.status === "OK" || body.status === "ZERO_RESULTS")
+      return { ok: true };
+    return {
+      ok: false,
+      detail: `${body.status}: ${body.error_message ?? "unknown error"}`,
+    };
   });
 }
 
@@ -300,7 +355,10 @@ function checkGoogleWallet(): ServiceCheckResult {
         JSON.parse(env.googleWalletServiceAccountJson!);
         return { ok: true };
       } catch {
-        return { ok: false, detail: "GOOGLE_WALLET_SERVICE_ACCOUNT_JSON is not valid JSON" };
+        return {
+          ok: false,
+          detail: "GOOGLE_WALLET_SERVICE_ACCOUNT_JSON is not valid JSON",
+        };
       }
     },
   );
@@ -315,7 +373,10 @@ async function checkReplicate(): Promise<ServiceCheckResult> {
     });
     if (!resp.ok) {
       const body = (await resp.json().catch(() => ({}))) as { detail?: string };
-      return { ok: false, detail: `HTTP ${resp.status}: ${body?.detail ?? resp.statusText}` };
+      return {
+        ok: false,
+        detail: `HTTP ${resp.status}: ${body?.detail ?? resp.statusText}`,
+      };
     }
     return { ok: true };
   });
@@ -328,7 +389,9 @@ async function checkEbay(): Promise<ServiceCheckResult> {
   }
   const start = Date.now();
   try {
-    const credentials = Buffer.from(`${ebayAppId}:${ebayCertId}`).toString("base64");
+    const credentials = Buffer.from(`${ebayAppId}:${ebayCertId}`).toString(
+      "base64",
+    );
     const resp = await fetch("https://api.ebay.com/identity/v1/oauth2/token", {
       method: "POST",
       headers: {
@@ -340,7 +403,9 @@ async function checkEbay(): Promise<ServiceCheckResult> {
     });
     const latencyMs = Date.now() - start;
     if (!resp.ok) {
-      const body = (await resp.json().catch(() => ({}))) as { error_description?: string };
+      const body = (await resp.json().catch(() => ({}))) as {
+        error_description?: string;
+      };
       return {
         service: "eBay",
         status: "error",
@@ -365,7 +430,9 @@ function checkSentry(): ServiceCheckResult {
     // DSN should look like https://<key>@<host>/<project-id>
     const dsn = env.sentryDsn!;
     const ok = /^https:\/\/.+@.+\/.+$/.test(dsn);
-    return ok ? { ok: true } : { ok: false, detail: "SENTRY_DSN does not match expected format" };
+    return ok
+      ? { ok: true }
+      : { ok: false, detail: "SENTRY_DSN does not match expected format" };
   });
 }
 
@@ -462,7 +529,9 @@ router.post("/bust", (_req, res) => {
 // ---------------------------------------------------------------------------
 
 /** @internal Inject a cache entry for unit tests without running real checks. */
-export function _setTestCache(entry: { data: CachedResult; expiresAt: number } | null): void {
+export function _setTestCache(
+  entry: { data: CachedResult; expiresAt: number } | null,
+): void {
   _cache = entry;
 }
 

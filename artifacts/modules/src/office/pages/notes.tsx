@@ -208,11 +208,13 @@ export default function OfficeNotes() {
         <p className="text-sm text-muted-foreground">Loading notes...</p>
       )}
 
-      {!isLoading && (Array.isArray(notes) ? notes : []).length === 0 && !composing && (
-        <p className="text-sm text-muted-foreground">
-          No notes yet. Create one to get started.
-        </p>
-      )}
+      {!isLoading &&
+        (Array.isArray(notes) ? notes : []).length === 0 &&
+        !composing && (
+          <p className="text-sm text-muted-foreground">
+            No notes yet. Create one to get started.
+          </p>
+        )}
 
       <div className="space-y-3">
         {(Array.isArray(notes) ? notes : []).map((note) => (

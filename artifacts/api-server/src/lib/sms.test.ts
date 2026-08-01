@@ -98,7 +98,9 @@ describe("sendSms() — opt-out enforcement", () => {
 
   it("throws SmsOptedOutError when the recipient has opted out", async () => {
     // Simulate an opted-out user row.
-    selectQueue.push([{ smsOptedOutAt: new Date(), smsFirstOutboundSentAt: new Date() }]);
+    selectQueue.push([
+      { smsOptedOutAt: new Date(), smsFirstOutboundSentAt: new Date() },
+    ]);
 
     const { sendSms, SmsOptedOutError } = await import("./sms");
 
@@ -108,7 +110,9 @@ describe("sendSms() — opt-out enforcement", () => {
   });
 
   it("does not call the connector when the recipient has opted out", async () => {
-    selectQueue.push([{ smsOptedOutAt: new Date(), smsFirstOutboundSentAt: new Date() }]);
+    selectQueue.push([
+      { smsOptedOutAt: new Date(), smsFirstOutboundSentAt: new Date() },
+    ]);
 
     const { sendSms } = await import("./sms");
 
@@ -124,7 +128,9 @@ describe("sendSms() — opt-out enforcement", () => {
 
   it("does not throw when the recipient has NOT opted out", async () => {
     // Opted-in user (smsOptedOutAt is null, first message already sent).
-    selectQueue.push([{ smsOptedOutAt: null, smsFirstOutboundSentAt: new Date() }]);
+    selectQueue.push([
+      { smsOptedOutAt: null, smsFirstOutboundSentAt: new Date() },
+    ]);
     // getFromNumber() call — return a number list.
     mockProxy
       .mockResolvedValueOnce(

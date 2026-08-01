@@ -440,11 +440,7 @@ export function ImagePicker({ file, onSelect, disabled }: ImagePickerProps) {
         data-testid="input-image"
       />
 
-      <div
-        className="w-full"
-        onDrop={handleDrop}
-        onDragOver={handleDragOver}
-      >
+      <div className="w-full" onDrop={handleDrop} onDragOver={handleDragOver}>
         {preview ? (
           <div>
             <div className="relative overflow-hidden rounded-xl border border-card-border bg-muted">

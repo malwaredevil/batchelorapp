@@ -364,3 +364,36 @@ export const hallmarkOrnaments = pgTable(
 
 export type HallmarkOrnamentsRow = typeof hallmarkOrnaments.$inferSelect;
 export type InsertHallmarkOrnament = typeof hallmarkOrnaments.$inferInsert;
+
+// ---------------------------------------------------------------------------
+// User-submitted barcode corrections
+// ---------------------------------------------------------------------------
+
+/**
+ * User-flagged barcode corrections. When a lookup returns wrong data the user
+ * can submit the correct name/brand/series/year. The most recent row for a
+ * given barcode takes precedence over any cache or catalog result.
+ */
+export const ornamentUpcCorrections = pgTable(
+  "ornament_upc_corrections",
+  {
+    id: serial("id").primaryKey(),
+    barcode: text("barcode").notNull(),
+    correctedName: text("corrected_name"),
+    correctedBrand: text("corrected_brand"),
+    correctedSeriesOrCollection: text("corrected_series_or_collection"),
+    correctedYear: integer("corrected_year"),
+    wrongName: text("wrong_name"),
+    wrongBrand: text("wrong_brand"),
+    submittedBy: integer("submitted_by"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("idx_ornament_upc_corrections_barcode").on(table.barcode),
+  ],
+);
+
+export type OrnamentUpcCorrectionRow =
+  typeof ornamentUpcCorrections.$inferSelect;

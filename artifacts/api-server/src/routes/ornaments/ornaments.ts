@@ -454,6 +454,8 @@ router.post(
   "/items/report-barcode-correction",
   requireAuth,
   async (req, res) => {
+    const { ReportBarcodeCorrectionBody, ReportBarcodeCorrectionResponse } =
+      await import("@workspace/api-zod");
     const body = ReportBarcodeCorrectionBody.parse(req.body);
     await db.execute(sql`
     INSERT INTO ornament_upc_corrections

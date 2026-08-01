@@ -1,7 +1,8 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import {
   db,
   ornamentsBarcodeCache,
+  ornamentUpcCorrections,
   hallmarkOrnaments,
   hallmarkHoohCatalog,
   ornamentsItems,
@@ -663,17 +664,73 @@ export async function lookupBarcode(
 ): Promise<BarcodeLookupResult> {
   const barcode = rawBarcode.trim();
 
+  // ── 0. Load cache + correction in parallel ────────────────────────────────
+  const [[cached], [correction]] = await Promise.all([
+    db
+      .select()
+      .from(ornamentsBarcodeCache)
+      .where(eq(ornamentsBarcodeCache.barcode, barcode))
+      .limit(1),
+    db
+      .select()
+      .from(ornamentUpcCorrections)
+      .where(eq(ornamentUpcCorrections.barcode, barcode))
+      .orderBy(desc(ornamentUpcCorrections.createdAt))
+      .limit(1),
+  ]);
+
   // ── 1. Return from cache if available ────────────────────────────────────
   // NOTE: a cached found=0 entry does NOT short-circuit here — we continue
   // through the fallback chain so eBay/AI can discover a match that the
   // original lookup missed.  Only a found=1 cache hit is authoritative.
-  const [cached] = await db
-    .select()
-    .from(ornamentsBarcodeCache)
-    .where(eq(ornamentsBarcodeCache.barcode, barcode))
-    .limit(1);
-
   if (cached?.found === 1) {
+    // Apply any user-submitted correction as an override.
+    if (correction) {
+      const correctedName = correction.correctedName ?? cached.name;
+      const correctedBrand = correction.correctedBrand ?? cached.brand;
+      const correctedSeries =
+        correction.correctedSeriesOrCollection ?? cached.seriesOrCollection;
+      const correctedYear = correction.correctedYear ?? cached.year;
+
+      // Persist correction into cache so subsequent cache-only reads also
+      // reflect it (idempotent — safe to overwrite with same values).
+      await db
+        .update(ornamentsBarcodeCache)
+        .set({
+          name: correctedName,
+          brand: correctedBrand,
+          seriesOrCollection: correctedSeries,
+          year: correctedYear,
+        })
+        .where(eq(ornamentsBarcodeCache.barcode, barcode));
+
+      logger.info(
+        { barcode, correctedName, correctedBrand },
+        "Barcode cache returned with user correction applied",
+      );
+
+      return {
+        barcode,
+        found: true,
+        name: correctedName,
+        brand: correctedBrand,
+        seriesOrCollection: correctedSeries,
+        year: correctedYear,
+        description: cached.description,
+        imageUrl: cached.imageUrl,
+        fromCache: true,
+        hallmarkSku: cached.hallmarkSku ?? null,
+        hallmarkArtist: cached.hallmarkArtist ?? null,
+        hallmarkSeriesName: cached.hallmarkSeriesName ?? null,
+        hallmarkSequenceNumber: cached.hallmarkSequenceNumber ?? null,
+        hallmarkRetailPriceUsd: cached.hallmarkOriginalRetailPrice ?? null,
+        hallmarkCollectorPriceUsd: cached.hallmarkCollectorPriceUsd ?? null,
+        hallmarkInStock: cached.hallmarkInStock ?? null,
+        hallmarkImages: cached.hallmarkImages ?? null,
+        hallmarkProductUrl: cached.hallmarkProductUrl ?? null,
+      };
+    }
+
     return {
       barcode,
       found: true,
@@ -843,12 +900,26 @@ export async function lookupBarcode(
   }
 
   // Merge: authoritative Hallmark data wins over heuristic title parsing
-  const name = hallmark?.name ?? upcResult.name ?? null;
-  const seriesOrCollection =
+  const baseName = hallmark?.name ?? upcResult.name ?? null;
+  const baseSeries =
     hallmark?.seriesName ?? upcResult.seriesOrCollection ?? null;
-  const year = hallmark?.year ?? upcResult.year ?? null;
+  const baseYear = hallmark?.year ?? upcResult.year ?? null;
   const imageUrl = upcResult.imageUrl ?? hallmark?.images?.[0] ?? null;
-  const brand = upcResult.brand ?? "Hallmark";
+  const baseBrand = upcResult.brand ?? "Hallmark";
+
+  // Apply user correction override (most-recent correction wins over catalog)
+  const name = correction?.correctedName ?? baseName;
+  const brand = correction?.correctedBrand ?? baseBrand;
+  const seriesOrCollection =
+    correction?.correctedSeriesOrCollection ?? baseSeries;
+  const year = correction?.correctedYear ?? baseYear;
+
+  if (correction) {
+    logger.info(
+      { barcode, name, brand, seriesOrCollection, year },
+      "User correction applied to fresh barcode lookup result",
+    );
+  }
 
   // ── 6. Write / update cache ───────────────────────────────────────────────
   // Use onConflictDoUpdate so a successful fallback overwrites a prior

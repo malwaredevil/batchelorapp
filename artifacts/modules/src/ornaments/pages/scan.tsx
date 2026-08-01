@@ -8,9 +8,10 @@ import {
   ScanLine,
   ImageUp,
   RefreshCw,
-  Plus,
   Tag,
   Calendar,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
 import {
   useLookupBarcode,
@@ -21,6 +22,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { usePageAssistantContext } from "@/ornaments/lib/assistant-context";
 import { useBarcodeCamera } from "@/ornaments/components/use-barcode-camera";
+
+type ScanResult = {
+  found: boolean;
+  name?: string | null;
+  brand?: string | null;
+  seriesOrCollection?: string | null;
+  year?: number | null;
+};
+
+type ConfirmState =
+  | { step: "confirming" }
+  | { step: "confirmed" }
+  | { step: "correcting" }
+  | { step: "correction-submitted" };
 
 export default function ScanPage() {
   const [_, setLocation] = useLocation();
@@ -34,17 +49,20 @@ export default function ScanPage() {
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [isPhotoExtracting, setIsPhotoExtracting] = useState(false);
   const [scannedCode, setScannedCode] = useState("");
-  const [scanResult, setScanResult] = useState<{
-    found: boolean;
-    name?: string | null;
-    brand?: string | null;
-    seriesOrCollection?: string | null;
-    year?: number | null;
-  } | null>(null);
+  const [scanResult, setScanResult] = useState<ScanResult | null>(null);
+  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
+
+  // Correction form state
+  const [correctedName, setCorrectedName] = useState("");
+  const [correctedBrand, setCorrectedBrand] = useState("");
+  const [correctedSeriesOrCollection, setCorrectedSeriesOrCollection] =
+    useState("");
+  const [correctedYear, setCorrectedYear] = useState("");
+  const [isSubmittingCorrection, setIsSubmittingCorrection] = useState(false);
 
   usePageAssistantContext(
     "ornaments-scan",
-    `Barcode scanning page to quickly add an ornament. Uses device camera or manual UPC entry.`,
+    `Lookup Ornament page — looks up ornament details by UPC barcode. This is a lookup-only tool; no data is saved to the collection.`,
   );
 
   const { videoRef, isScanning, hasCamera, startScanning, stopScanning } =
@@ -63,6 +81,7 @@ export default function ScanPage() {
     setManualCode(code);
     setScannedCode(code);
     setScanResult(null);
+    setConfirmState(null);
 
     try {
       toast.loading(`Looking up ${code}...`, { id: "lookup" });
@@ -71,20 +90,16 @@ export default function ScanPage() {
       });
       toast.dismiss("lookup");
       setScanResult(result);
+      setConfirmState({ step: "confirming" });
 
       if (result.found) {
         toast.success("Found it!");
       } else {
-        toast.info("Not in database — you can still add it manually.");
+        toast.info("Nothing found for this barcode.");
       }
     } catch {
       toast.dismiss("lookup");
-      toast.error("Lookup failed. Proceeding to manual entry.");
-      sessionStorage.setItem(
-        "ornaments-add-prefill",
-        JSON.stringify({ barcodeValue: code, brand: "Hallmark" }),
-      );
-      setLocation("/ornaments/add");
+      toast.error("Lookup failed. Please try again.");
     } finally {
       setIsLookingUp(false);
     }
@@ -92,8 +107,13 @@ export default function ScanPage() {
 
   const handleScanAnother = () => {
     setScanResult(null);
+    setConfirmState(null);
     setScannedCode("");
     setManualCode("");
+    setCorrectedName("");
+    setCorrectedBrand("");
+    setCorrectedSeriesOrCollection("");
+    setCorrectedYear("");
     void startScanning();
   };
 
@@ -139,16 +159,45 @@ export default function ScanPage() {
     }
   };
 
+  // -------------------------------------------------------------------------
+  // Correction submission
+  // -------------------------------------------------------------------------
+  const handleSubmitCorrection = async () => {
+    if (!scanResult || !scannedCode) return;
+    setIsSubmittingCorrection(true);
+    try {
+      await fetch("/api/ornaments/items/report-barcode-correction", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          barcode: scannedCode,
+          wrongName: scanResult.name,
+          wrongBrand: scanResult.brand,
+          correctedName: correctedName.trim() || undefined,
+          correctedBrand: correctedBrand.trim() || undefined,
+          correctedSeriesOrCollection:
+            correctedSeriesOrCollection.trim() || undefined,
+          correctedYear: correctedYear ? Number(correctedYear) : undefined,
+        }),
+      });
+      setConfirmState({ step: "correction-submitted" });
+    } catch {
+      toast.error("Failed to submit correction. Please try again.");
+    } finally {
+      setIsSubmittingCorrection(false);
+    }
+  };
+
   const isAnyLoading = isLookingUp || isPhotoExtracting;
 
   return (
     <div className="mx-auto max-w-md space-y-6 pt-4">
       <div className="text-center mb-8">
         <h1 className="text-3xl font-serif font-bold text-foreground">
-          Scan Box
+          Lookup Ornament
         </h1>
         <p className="text-muted-foreground mt-2">
-          Scan the UPC barcode on the ornament box to autofill details
+          Scan the UPC barcode on the ornament box to look up details
         </p>
       </div>
 
@@ -281,70 +330,239 @@ export default function ScanPage() {
         )}
       </div>
 
-      {/* Inline results — shown instead of redirecting to /add */}
-      {scanResult && (
+      {/* Results + confirmation flow */}
+      {scanResult && confirmState && (
         <div className="pt-4 border-t border-border space-y-4">
-          {scanResult.found ? (
-            <div className="bg-card rounded-2xl border border-border p-5 space-y-3">
-              <div>
-                <h2 className="text-lg font-serif font-bold">
+          {/* ----------------------------------------------------------------
+              NOT FOUND
+          ---------------------------------------------------------------- */}
+          {!scanResult.found && (
+            <>
+              {confirmState.step === "confirming" && (
+                <div className="bg-muted/50 rounded-xl p-5 text-center space-y-4">
+                  <div className="flex flex-col items-center gap-2">
+                    <AlertCircle className="h-8 w-8 text-muted-foreground" />
+                    <p className="text-sm font-medium">
+                      Nothing found for this barcode.
+                    </p>
+                    <p className="text-xs text-muted-foreground font-mono">
+                      {scannedCode}
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => setConfirmState({ step: "confirmed" })}
+                  >
+                    Got it
+                  </Button>
+                </div>
+              )}
+
+              {confirmState.step === "confirmed" && (
+                <div className="bg-muted/50 rounded-xl p-4 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    No product info found for{" "}
+                    <span className="font-mono">{scannedCode}</span>.
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ----------------------------------------------------------------
+              FOUND — confirmation step
+          ---------------------------------------------------------------- */}
+          {scanResult.found && confirmState.step === "confirming" && (
+            <div className="bg-card rounded-2xl border border-border p-5 space-y-4">
+              <h2 className="text-base font-semibold">
+                Is this information correct?
+              </h2>
+
+              {/* Info card */}
+              <div className="space-y-1">
+                <p className="font-serif text-lg font-bold">
                   {scanResult.name ?? "Unknown ornament"}
-                </h2>
+                </p>
                 {scanResult.brand && (
                   <p className="text-sm text-muted-foreground">
                     {scanResult.brand}
                   </p>
                 )}
+                <div className="flex flex-wrap gap-3 text-sm text-muted-foreground pt-1">
+                  {scanResult.year && (
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="h-3.5 w-3.5" />
+                      <span>{scanResult.year}</span>
+                    </div>
+                  )}
+                  {scanResult.seriesOrCollection && (
+                    <div className="flex items-center gap-1.5">
+                      <Tag className="h-3.5 w-3.5" />
+                      <span>{scanResult.seriesOrCollection}</span>
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="flex flex-wrap gap-3 text-sm text-muted-foreground">
-                {scanResult.year && (
-                  <div className="flex items-center gap-1.5">
-                    <Calendar className="h-3.5 w-3.5" />
-                    <span>{scanResult.year}</span>
-                  </div>
-                )}
-                {scanResult.seriesOrCollection && (
-                  <div className="flex items-center gap-1.5">
-                    <Tag className="h-3.5 w-3.5" />
-                    <span>{scanResult.seriesOrCollection}</span>
-                  </div>
-                )}
+
+              <div className="flex gap-3">
+                <Button
+                  className="flex-1"
+                  onClick={() => setConfirmState({ step: "confirmed" })}
+                >
+                  Yes
+                </Button>
+                <Button
+                  variant="outline"
+                  className="flex-1 text-destructive border-destructive/40 hover:bg-destructive/5"
+                  onClick={() => {
+                    setCorrectedName(scanResult.name ?? "");
+                    setCorrectedBrand(scanResult.brand ?? "");
+                    setCorrectedSeriesOrCollection(
+                      scanResult.seriesOrCollection ?? "",
+                    );
+                    setCorrectedYear(
+                      scanResult.year ? String(scanResult.year) : "",
+                    );
+                    setConfirmState({ step: "correcting" });
+                  }}
+                >
+                  No, this is wrong
+                </Button>
               </div>
             </div>
-          ) : (
-            <div className="bg-muted/50 rounded-xl p-4 text-center">
-              <p className="text-sm text-muted-foreground">
-                No product info found for{" "}
-                <span className="font-mono">{scannedCode}</span>. You can still
-                add it manually.
+          )}
+
+          {/* ----------------------------------------------------------------
+              FOUND — confirmed, show result with muted note
+          ---------------------------------------------------------------- */}
+          {scanResult.found && confirmState.step === "confirmed" && (
+            <div className="bg-card rounded-2xl border border-border p-5 space-y-3">
+              <div className="flex items-start gap-2">
+                <CheckCircle2 className="h-5 w-5 text-green-500 mt-0.5 shrink-0" />
+                <div className="space-y-1 min-w-0">
+                  <p className="font-serif text-lg font-bold leading-tight">
+                    {scanResult.name ?? "Unknown ornament"}
+                  </p>
+                  {scanResult.brand && (
+                    <p className="text-sm text-muted-foreground">
+                      {scanResult.brand}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap gap-3 text-sm text-muted-foreground pt-1">
+                    {scanResult.year && (
+                      <div className="flex items-center gap-1.5">
+                        <Calendar className="h-3.5 w-3.5" />
+                        <span>{scanResult.year}</span>
+                      </div>
+                    )}
+                    {scanResult.seriesOrCollection && (
+                      <div className="flex items-center gap-1.5">
+                        <Tag className="h-3.5 w-3.5" />
+                        <span>{scanResult.seriesOrCollection}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground pt-1">
+                Lookup only — no data is saved.
               </p>
             </div>
           )}
+
+          {/* ----------------------------------------------------------------
+              FOUND — correction form
+          ---------------------------------------------------------------- */}
+          {scanResult.found && confirmState.step === "correcting" && (
+            <div className="bg-card rounded-2xl border border-border p-5 space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Sorry about that! Please fill in the correct details below.
+              </p>
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Name
+                  </label>
+                  <Input
+                    value={correctedName}
+                    onChange={(e) => setCorrectedName(e.target.value)}
+                    placeholder="Ornament name"
+                    disabled={isSubmittingCorrection}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Brand
+                  </label>
+                  <Input
+                    value={correctedBrand}
+                    onChange={(e) => setCorrectedBrand(e.target.value)}
+                    placeholder="e.g. Hallmark"
+                    disabled={isSubmittingCorrection}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Series / Collection
+                  </label>
+                  <Input
+                    value={correctedSeriesOrCollection}
+                    onChange={(e) =>
+                      setCorrectedSeriesOrCollection(e.target.value)
+                    }
+                    placeholder="e.g. Keepsake Ornaments"
+                    disabled={isSubmittingCorrection}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Year
+                  </label>
+                  <Input
+                    type="number"
+                    value={correctedYear}
+                    onChange={(e) => setCorrectedYear(e.target.value)}
+                    placeholder="e.g. 2023"
+                    disabled={isSubmittingCorrection}
+                  />
+                </div>
+              </div>
+              <Button
+                className="w-full"
+                onClick={handleSubmitCorrection}
+                disabled={isSubmittingCorrection}
+              >
+                {isSubmittingCorrection ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Submitting…
+                  </>
+                ) : (
+                  "Submit Correction"
+                )}
+              </Button>
+            </div>
+          )}
+
+          {/* ----------------------------------------------------------------
+              FOUND — correction submitted
+          ---------------------------------------------------------------- */}
+          {scanResult.found && confirmState.step === "correction-submitted" && (
+            <div className="bg-card rounded-2xl border border-border p-5 text-center space-y-2">
+              <CheckCircle2 className="h-8 w-8 text-green-500 mx-auto" />
+              <p className="text-sm font-medium">
+                Thank you — your correction has been recorded.
+              </p>
+            </div>
+          )}
+
+          {/* Scan Another button always visible in results panel */}
           <div className="flex gap-3">
             <Button
+              variant="outline"
               className="flex-1"
-              onClick={() => {
-                sessionStorage.setItem(
-                  "ornaments-add-prefill",
-                  JSON.stringify({
-                    name: scanResult.found ? scanResult.name : undefined,
-                    brand:
-                      (scanResult.found ? scanResult.brand : null) ??
-                      "Hallmark",
-                    seriesOrCollection: scanResult.found
-                      ? scanResult.seriesOrCollection
-                      : undefined,
-                    year: scanResult.found ? scanResult.year : undefined,
-                    barcodeValue: scannedCode,
-                  }),
-                );
-                setLocation("/ornaments/add");
-              }}
+              onClick={handleScanAnother}
             >
-              <Plus className="mr-2 h-4 w-4" />
-              {scanResult.found ? "Add to Collection" : "Add Manually"}
-            </Button>
-            <Button variant="outline" onClick={handleScanAnother}>
               <RefreshCw className="mr-2 h-4 w-4" />
               Scan Another
             </Button>

@@ -1351,6 +1351,24 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_in_stock BOOLEAN`,
   `ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_images TEXT[]`,
 
+  // ── Barcode correction submissions ───────────────────────────────────────────
+  // Users can flag incorrect barcode lookup results and submit corrections.
+  // These are stored here and consulted first on future lookups for the same
+  // barcode (most-recent correction wins).
+  `CREATE TABLE IF NOT EXISTS ornament_upc_corrections (
+    id SERIAL PRIMARY KEY,
+    barcode TEXT NOT NULL,
+    corrected_name TEXT,
+    corrected_brand TEXT,
+    corrected_series_or_collection TEXT,
+    corrected_year INTEGER,
+    wrong_name TEXT,
+    wrong_brand TEXT,
+    submitted_by INTEGER,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_ornament_upc_corrections_barcode ON ornament_upc_corrections(barcode)`,
+
   // ── Realtime replication (issue #128) ───────────────────────────────────────
   // Adds the household-shared collection tables to Supabase's built-in
   // `supabase_realtime` publication so the api-server's Realtime relay

@@ -569,51 +569,24 @@ export default function OrnamentDetail() {
         heroContent={
           !isEditing ? (
             <div className="space-y-4">
-              {(ornament.brand ||
-                ornament.year ||
-                ornament.dimensions ||
-                consensus != null) && (
-                <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                  {ornament.brand && (
+              {(ornament.aiDescription || ornament.notes) && (
+                <div className="space-y-2">
+                  {ornament.aiDescription && (
                     <div>
-                      <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
-                        Brand
+                      <p className="mb-1.5 text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                        Description
                       </p>
-                      <p className="text-sm">{ornament.brand}</p>
+                      <p className="text-sm leading-relaxed text-muted-foreground">
+                        {ornament.aiDescription}
+                      </p>
                     </div>
                   )}
-                  {ornament.year && (
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
-                        Year
-                      </p>
-                      <p className="text-sm">{ornament.year}</p>
-                    </div>
-                  )}
-                  {ornament.dimensions && (
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
-                        Dimensions
-                      </p>
-                      <p className="text-sm">{ornament.dimensions}</p>
-                    </div>
-                  )}
-                  {consensus != null && (
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
-                        Consensus Est. Value
-                      </p>
-                      <p className="text-sm font-medium">
-                        {formatCurrency(consensus)}
-                      </p>
-                    </div>
+                  {ornament.notes && (
+                    <p className="text-sm leading-relaxed text-muted-foreground">
+                      {ornament.notes}
+                    </p>
                   )}
                 </div>
-              )}
-              {ornament.notes && (
-                <p className="text-sm leading-relaxed text-muted-foreground">
-                  {ornament.notes}
-                </p>
               )}
 
               {ornament.categories?.length ? (
@@ -654,6 +627,24 @@ export default function OrnamentDetail() {
         }
         fields={
           <>
+            {!isEditing && (
+              <>
+                <CollectionDetailField
+                  label="Brand"
+                  value={ornament.brand || "—"}
+                  locked={lockedFields.includes("brand")}
+                  onToggleLock={() => toggleFieldLock("brand")}
+                  empty={!ornament.brand}
+                />
+                <CollectionDetailField
+                  label="Year"
+                  value={ornament.year?.toString() ?? "—"}
+                  locked={lockedFields.includes("year")}
+                  onToggleLock={() => toggleFieldLock("year")}
+                  empty={!ornament.year}
+                />
+              </>
+            )}
             {isEditing && (
               <>
                 <CollectionDetailField
@@ -730,7 +721,15 @@ export default function OrnamentDetail() {
                 />
               </>
             )}
-            {isEditing && (
+            {!isEditing ? (
+              <CollectionDetailField
+                label="Dimensions"
+                value={ornament.dimensions || "—"}
+                locked={lockedFields.includes("dimensions")}
+                onToggleLock={() => toggleFieldLock("dimensions")}
+                empty={!ornament.dimensions}
+              />
+            ) : (
               <CollectionDetailField
                 label="Dimensions"
                 value={ornament.dimensions || "—"}
@@ -1020,47 +1019,17 @@ export default function OrnamentDetail() {
         panels={
           <>
             {/* AI Description */}
-            {(isEditing || ornament.aiDescription) && (
+            {isEditing && (
               <CollectionDetailSection
                 title="AI Description"
-                action={
-                  !isEditing && ornament.aiDescription ? (
-                    <button
-                      type="button"
-                      onClick={() => toggleFieldLock("aiDescription")}
-                      title={
-                        lockedFields.includes("aiDescription")
-                          ? "Locked — AI won't overwrite. Click to unlock."
-                          : "Click to lock — AI won't overwrite."
-                      }
-                      className={
-                        lockedFields.includes("aiDescription")
-                          ? "text-primary"
-                          : "text-muted-foreground/40 hover:text-muted-foreground"
-                      }
-                    >
-                      {lockedFields.includes("aiDescription") ? (
-                        <span className="text-xs">🔒</span>
-                      ) : (
-                        <span className="text-xs">🔓</span>
-                      )}
-                    </button>
-                  ) : undefined
-                }
               >
-                {isEditing ? (
-                  <Textarea
-                    value={draft.aiDesc}
-                    onChange={(e) =>
-                      setDraft((d) => ({ ...d, aiDesc: e.target.value }))
-                    }
-                    className="text-sm min-h-[100px] leading-relaxed"
-                  />
-                ) : (
-                  <p className="text-sm leading-relaxed text-muted-foreground">
-                    {ornament.aiDescription}
-                  </p>
-                )}
+                <Textarea
+                  value={draft.aiDesc}
+                  onChange={(e) =>
+                    setDraft((d) => ({ ...d, aiDesc: e.target.value }))
+                  }
+                  className="text-sm min-h-[100px] leading-relaxed"
+                />
               </CollectionDetailSection>
             )}
 

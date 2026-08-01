@@ -133,7 +133,10 @@ export function QuiltingStatsWidget() {
 // ── Live: Shopping list ──────────────────────────────────────────────────────
 export function ShoppingListWidget() {
   const { data } = useListShoppingItems();
-  const items = data?.slice(0, 4) ?? [];
+  // Defensive: guard against the API returning a non-array (e.g. an HTML SPA
+  // fallback page when the dev proxy is mis-routed). Without this, .slice()
+  // would succeed on a string and produce a 4-char string whose .map throws.
+  const items = Array.isArray(data) ? data.slice(0, 4) : [];
   return (
     <div className="space-y-2">
       {items.length === 0 && (

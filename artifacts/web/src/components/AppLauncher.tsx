@@ -519,6 +519,11 @@ class SilentErrorBoundary extends Component<
   static getDerivedStateFromError() {
     return { hasError: true };
   }
+  componentDidCatch(error: Error, info: { componentStack: string }) {
+    // Log errors that are silenced so they remain visible in the console even
+    // though the boundary renders null instead of crashing the page.
+    console.error("[SilentErrorBoundary] Caught error:", error.message, "\nComponent stack:", info.componentStack);
+  }
   render() {
     if (this.state.hasError) return null;
     return this.props.children;
@@ -541,7 +546,11 @@ function HallmarkEventStatTile() {
   const now = Date.now();
   const [index, setIndex] = useState(0);
 
-  const { data: connectedCals = [] } = useListConnectedCalendars();
+  const { data: connectedCalsRaw } = useListConnectedCalendars();
+  // Defensive: guard against non-array data (e.g. from a mis-routed dev proxy
+  // returning an HTML page). The default = [] on destructuring only fires for
+  // undefined, not for other non-array values.
+  const connectedCals = Array.isArray(connectedCalsRaw) ? connectedCalsRaw : [];
   const hallmarkCal = connectedCals.find((c) => c.isHallmarkCalendar) ?? null;
 
   const { data: gcalEvents = [] } = useListConnectedCalendarEvents(

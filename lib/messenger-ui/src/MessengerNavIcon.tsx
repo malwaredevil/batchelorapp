@@ -92,12 +92,19 @@ export function MessengerNavIcon({
   // True while any drag/resize is in progress — suppresses outside-click close.
   const isInteracting = useRef(false);
 
-  const { data: conversations } = useListConversations({
+  const { data: conversationsRaw } = useListConversations({
     query: {
       queryKey: getListConversationsQueryKey(),
       refetchInterval: isOpen ? 5_000 : 60_000,
     } as UseQueryOptions<MessengerConversationSummary[]>,
   });
+  // Defensive: guard against a non-array value in the cache (e.g. an HTML SPA
+  // fallback page stored when the dev proxy mis-routes /api/... to Vite).
+  // Without this, optional chaining ?. still tries to call .find() on a string
+  // and throws "conversations.find is not a function".
+  const conversations = Array.isArray(conversationsRaw)
+    ? conversationsRaw
+    : undefined;
   const firstActiveId = conversations?.find((c) => !c.archivedAt)?.id ?? null;
   const effectiveConvId = selectedConvId ?? firstActiveId;
 

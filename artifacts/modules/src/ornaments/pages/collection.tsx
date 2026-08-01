@@ -28,7 +28,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Plus, Image as ImageIcon, CalendarHeart, Check } from "lucide-react";
+import {
+  Plus,
+  Image as ImageIcon,
+  CalendarHeart,
+  Check,
+  Pencil,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -515,6 +521,14 @@ export default function Collection() {
                 )
               }
               onDelete={() => setDeleteConfirmId(item.id)}
+              extraMenuItems={
+                <DropdownMenuItem asChild>
+                  <Link href={`/ornaments/ornament/${item.id}?edit=1`}>
+                    <Pencil className="mr-2 h-3.5 w-3.5" />
+                    Edit
+                  </Link>
+                </DropdownMenuItem>
+              }
               LinkComponent={Link}
             />
           ))}
@@ -607,6 +621,14 @@ export default function Collection() {
                 )
               }
               onDelete={() => setDeleteConfirmId(item.id)}
+              extraMenuItems={
+                <DropdownMenuItem asChild>
+                  <Link href={`/ornaments/ornament/${item.id}?edit=1`}>
+                    <Pencil className="mr-2 h-3.5 w-3.5" />
+                    Edit
+                  </Link>
+                </DropdownMenuItem>
+              }
               LinkComponent={Link}
             />
           ))}

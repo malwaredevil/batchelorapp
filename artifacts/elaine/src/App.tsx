@@ -57,11 +57,14 @@ function Routes() {
 
   return (
     <>
-      <div className="min-h-screen bg-background">
+      {/* h-dvh + flex-col so the main area always fills exactly the space
+          below the header without any page-level scrollbar. Chat uses
+          h-full inside main; Memory/Tasks scroll within the main overflow. */}
+      <div className="flex h-dvh flex-col bg-background">
         <ThemePreferenceSync />
         <Header />
         <InstallBanner />
-        <main>
+        <main className="flex-1 min-h-0 overflow-auto">
           <Switch>
             <Route path="/" component={Chat} />
             <Route path="/memory" component={Memory} />

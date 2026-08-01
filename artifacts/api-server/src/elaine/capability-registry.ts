@@ -172,6 +172,11 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
     domain: "office",
     executorPrefix: "officeAction",
   }),
+  ...policies(["call_contact", "message_contact"], {
+    ...ACTION_DEFAULTS,
+    domain: "office",
+    executorPrefix: "communicationAction",
+  }),
   ...policies(
     [
       "update_notification_state",

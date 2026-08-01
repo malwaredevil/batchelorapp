@@ -172,6 +172,13 @@ import {
   type AdaptiveActionType,
 } from "./adaptive-actions";
 import {
+  buildCommunicationActionLabel,
+  communicationActionExecutors,
+  communicationActionSchemas,
+  communicationActionTools,
+  type CommunicationActionType,
+} from "./communication-actions";
+import {
   GET_ELAINE_TASK_TOOL_NAME,
   GET_NOTE_TOOL_NAME,
   GET_NOTIFICATION_COUNTS_TOOL_NAME,
@@ -860,6 +867,7 @@ const ActionBody = z.discriminatedUnion("type", [
   ...universalActionSchemas,
   ...adaptiveActionSchemas,
   ...appOperationActionSchemas,
+  ...communicationActionSchemas,
 ]);
 
 type PendingAction = z.infer<typeof ActionBody>;
@@ -1152,6 +1160,19 @@ async function buildActionLabel(action: PendingAction): Promise<string> {
       if (action.type === EXECUTE_APP_OPERATION_TOOL_NAME) {
         return buildAppOperationActionLabel(action);
       }
+      if (
+        communicationActionSchemas.some(
+          (schema) =>
+            schema.safeParse({
+              type: action.type,
+              payload: action.payload,
+            }).success,
+        )
+      ) {
+        return buildCommunicationActionLabel(
+          action as { type: CommunicationActionType; payload: unknown },
+        );
+      }
       return "Perform this action";
   }
 }
@@ -1183,6 +1204,7 @@ type TravelActionType = Exclude<
   | UniversalActionType
   | AdaptiveActionType
   | AppOperationActionType
+  | CommunicationActionType
 >;
 
 const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
@@ -2363,6 +2385,7 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
   ...ornamentActionExecutors,
   ...universalActionExecutors,
   ...adaptiveActionExecutors,
+  ...communicationActionExecutors,
   [EXECUTE_APP_OPERATION_TOOL_NAME]:
     executeAppOperationAction as ActionExecutor,
 };
@@ -3008,6 +3031,7 @@ const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       },
     },
   },
+  ...communicationActionTools,
 ];
 
 const NAVIGATE_TOOL_NAME = "suggest_navigation";
@@ -7399,6 +7423,7 @@ router.post("/chat", async (req, res) => {
 const SMS_RATE_LIMITED_ACTION_TYPES = new Set<ActionType>([
   "send_test_sms",
   "send_phone_verification_code",
+  "message_contact",
 ]);
 
 function runMiddleware(

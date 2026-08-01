@@ -406,21 +406,30 @@ export async function runAllChecks(): Promise<CachedResult> {
   };
 }
 
+/**
+ * Public cache-aware accessor used by both the HTTP route and the Elaine
+ * tool executor. Both paths share the same in-process cache so an Elaine
+ * health query never burns extra rate-limited external API calls when a
+ * fresh result is already sitting in memory.
+ */
+export async function getCachedHealthChecks(): Promise<
+  CachedResult & { fromCache: boolean }
+> {
+  const now = Date.now();
+  if (_cache && _cache.expiresAt > now) {
+    return { ..._cache.data, fromCache: true };
+  }
+  const data = await runAllChecks();
+  _cache = { data, expiresAt: now + CACHE_TTL_MS };
+  return { ...data, fromCache: false };
+}
+
 // ---------------------------------------------------------------------------
-// Route
+// Routes
 // ---------------------------------------------------------------------------
 
 router.get("/", async (_req, res) => {
-  const now = Date.now();
-
-  if (_cache && _cache.expiresAt > now) {
-    res.json({ ..._cache.data, fromCache: true });
-    return;
-  }
-
-  const data = await runAllChecks();
-  _cache = { data, expiresAt: now + CACHE_TTL_MS };
-  res.json({ ...data, fromCache: false });
+  res.json(await getCachedHealthChecks());
 });
 
 /**

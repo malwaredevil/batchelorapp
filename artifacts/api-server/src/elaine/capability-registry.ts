@@ -12,7 +12,8 @@ export type ElaineCapabilityDomain =
   | "memory"
   | "research"
   | "widgets"
-  | "navigation";
+  | "navigation"
+  | "admin";
 
 export type ElaineCapabilityPolicy = {
   toolName: string;
@@ -473,6 +474,17 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
     executorPrefix: "settings",
     audit: "runtime_observation",
     retry: "safe",
+    channels: ["web"],
+  }),
+  ...policies(["check_integrations_health"], {
+    domain: "admin",
+    kind: "read",
+    risk: "none",
+    auth: "session_and_owner",
+    confirmation: "never",
+    executorPrefix: "adminRead",
+    audit: "runtime_observation",
+    retry: "read_only",
     channels: ["web"],
   }),
 ];

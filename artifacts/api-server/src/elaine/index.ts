@@ -81,6 +81,7 @@ import { logActivity } from "../lib/soft-delete";
 import { deleteDocument } from "../lib/travels-storage";
 import { getValidAccessToken } from "../lib/google-calendar-tokens";
 import { rescanTripDocument } from "../routes/travels/documents";
+import { getCachedHealthChecks } from "../routes/admin/integrations-health";
 import {
   getReminderSyncTarget,
   syncReminderCalendarEvents,
@@ -3803,6 +3804,7 @@ const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
 ];
 
 const QUERY_HOUSEHOLD_TOOL_NAME = "query_household_data";
+const CHECK_INTEGRATIONS_HEALTH_TOOL_NAME = "check_integrations_health";
 
 const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   ...officeActionTools,
@@ -4120,6 +4122,19 @@ const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           },
         },
         required: ["name"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: CHECK_INTEGRATIONS_HEALTH_TOOL_NAME,
+      description:
+        "Check the health of every connected external service (Supabase, OpenRouter, Resend, Slack, AgentPhone, Google Maps, eBay, Sentry, etc.) and return their current status. Only available to the app owner (isOwner). Use this when the owner asks 'is Slack connected?', 'which services are broken?', 'is everything working?', 'what's the status of our integrations?', or any similar question about whether external APIs are reachable. Results are cached up to 5 minutes — tell the owner the cachedAt timestamp if they ask when it was last checked. Do not call this unless the user is the app owner.",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: [],
       },
     },
   },
@@ -4968,6 +4983,8 @@ EMAIL: Whenever you've just given the user something substantial worth keeping �
 ACCOUNT & NOTIFICATIONS: These only make sense on the shared Account settings page (hub-account context). Use send_test_email if the user wants to confirm email delivery is working — always their own account address. Use send_test_sms the same way for texts, but only if the page context shows they already have a verified phone number; if not, tell them to verify one first instead of calling it. Use send_phone_verification_code when the user wants to add or change their phone number — you must have their explicit, clearly-stated agreement to receive SMS messages before calling it (set consent to true only then), and the number must be in E.164 format (e.g. +12105551234); ask them to reformat a local number if needed. Use verify_phone_code once they tell you the 6-digit code they received by text — never invent or reuse a code from earlier in the conversation. None of these four actions are available outside the Account page, and none of them ever touch another household member's phone/email. Use update_elaine_settings when the user explicitly asks to toggle Elaine on/off or change the chat window size (compact / comfortable / large) — this is also only appropriate on the Account page, never in other apps. For confirmation-mode changes, use set_action_confirmation_mode instead.
 
 CONTROL PANEL: The Control Panel ("/control-panel", hub app, owner-only) holds every app-wide tuning constant — AI token limits (e.g. itinerary_gen_max_tokens, packing_ai_max_tokens), request timeouts (openrouter.request_timeout_ms), and similar parameters. When a user describes a quality or performance problem that a tuning constant might fix — e.g. "the itinerary keeps getting cut off", "packing suggestions seem short", "search is timing out" — proactively call query_household_data with include: ["app_config"] to read the current values, then explain which setting is likely responsible and what a sensible new value might be. Only propose update_app_config when you are on the Control Panel page and the specific key is visible in the on-screen state; never guess a module or key name. update_app_config is restricted to the app owner (isOwner) — if the user isn't the owner, tell them only the app owner can change these settings. This action is also excluded from the SMS/voice/email channels. Changes take effect within 30 seconds (next cache refresh) without a server restart. When you execute update_app_config, the action result includes the full updated row with the new value — always state the new value explicitly in your reply so the user knows what was changed to. If the user asks a follow-up about the setting you just changed (e.g. "what did you just set it to?"), answer from the action result you already received rather than re-reading the page context, which may not yet reflect the update.
+
+INTEGRATIONS HEALTH: When the owner asks whether a connected service is working — "is Slack connected?", "which integrations are broken?", "is everything working?", "why is email not sending?" — call check_integrations_health (owner-only) to get a live status summary. Respond in plain English: lead with a one-line overall verdict ("All 16 services are operational" or "1 service is showing an error"), then list any errors or missing keys by name with the detail message. For missing-key services, explain it means the secret/API key hasn't been configured yet. For errors, quote the exact detail string so the owner can diagnose it. If all services are ok, keep the reply short and reassuring — a full table is only needed when there are problems. Never call this tool for non-owners; if a non-owner asks, tell them only the app owner can check integration health.
 
 PROACTIVE CONFIG WARNINGS: When the on-screen page context already includes an "App config snapshot" section and a setting there looks likely to cause problems for what the current page does — for example, a very short request timeout on a page that runs AI analysis, or a very low token limit on a page that generates long text — volunteer a one-sentence observation early in your reply (e.g. "By the way, your AI timeout is set to 5 s, which may be why ornament analysis keeps timing out — the app owner can raise it in the Control Panel."). Only do this when the config value is genuinely out of range for the task at hand and is visible in the current page context; do not speculate about settings you haven't seen, and don't repeat the warning in the same conversation if you've already mentioned it.
 
@@ -7191,6 +7208,30 @@ router.post("/chat", async (req, res) => {
               "Unsupported app data tool.";
           } else if (call.name === LIST_SCHEDULED_CONTACTS_TOOL_NAME) {
             resultText = await executeListScheduledContacts(userId);
+          } else if (call.name === CHECK_INTEGRATIONS_HEALTH_TOOL_NAME) {
+            const [me] = await db
+              .select({ isOwner: appUsers.isOwner })
+              .from(appUsers)
+              .where(eq(appUsers.id, userId));
+            if (!me?.isOwner) {
+              resultText =
+                "Access denied — only the app owner can check integration health.";
+            } else {
+              const { checks, cachedAt } = await getCachedHealthChecks();
+              const ok = checks.filter((c) => c.status === "ok");
+              const missing = checks.filter((c) => c.status === "missing_key");
+              const errors = checks.filter((c) => c.status === "error");
+              resultText = JSON.stringify({
+                summary: {
+                  total: checks.length,
+                  ok: ok.length,
+                  missing_key: missing.length,
+                  error: errors.length,
+                },
+                checks,
+                cachedAt,
+              });
+            }
           } else {
             resultText = "Unsupported tool.";
           }

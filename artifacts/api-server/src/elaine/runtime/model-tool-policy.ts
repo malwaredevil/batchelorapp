@@ -41,6 +41,7 @@ export const MODEL_VISIBLE_HARD_TOOL_NAMES = new Set<string>([
   "suggest_clothing_layers",
   "discover_app_operations",
   "read_app_operation",
+  "check_integrations_health",
 ]);
 
 export const MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS: Readonly<
@@ -83,6 +84,7 @@ export const MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS: Readonly<
   suggest_clothing_layers: "preparing clothing recommendations",
   discover_app_operations: "checking available app capabilities",
   read_app_operation: "checking the Batchelor App",
+  check_integrations_health: "checking connected services",
 };
 
 export const SPECIALIZED_CURRENT_TOOL_NAMES = new Set<string>([

@@ -999,7 +999,8 @@ export function AppLauncher() {
                 value={app.name}
                 onSelect={() => {
                   setSearchOpen(false);
-                  navigate(app.href);
+                  // Cross-SPA navigation must be a full page load
+                  window.location.href = app.href;
                 }}
               >
                 <LayoutGrid className="w-4 h-4 mr-2" />
@@ -1012,7 +1013,7 @@ export function AppLauncher() {
               value="Add Pottery piece"
               onSelect={() => {
                 setSearchOpen(false);
-                navigate(`${base}pottery/add`);
+                window.location.href = `${base}modules/pottery/add`;
               }}
             >
               <Plus className="w-4 h-4 mr-2" />
@@ -1022,7 +1023,7 @@ export function AppLauncher() {
               value="Add Fabric"
               onSelect={() => {
                 setSearchOpen(false);
-                navigate(`${base}quilting/fabrics/add`);
+                window.location.href = `${base}modules/quilting/fabrics/add`;
               }}
             >
               <Plus className="w-4 h-4 mr-2" />
@@ -1032,7 +1033,7 @@ export function AppLauncher() {
               value="Do I own this?"
               onSelect={() => {
                 setSearchOpen(false);
-                navigate(`${base}pottery/compare`);
+                window.location.href = `${base}modules/pottery/compare`;
               }}
             >
               <Camera className="w-4 h-4 mr-2" />
@@ -1042,7 +1043,7 @@ export function AppLauncher() {
               value="Shopping List"
               onSelect={() => {
                 setSearchOpen(false);
-                navigate(`${base}quilting/shopping`);
+                window.location.href = `${base}modules/quilting/shopping`;
               }}
             >
               <ShoppingBag className="w-4 h-4 mr-2" />
@@ -1078,7 +1079,9 @@ export function AppLauncher() {
                 {ADD_ACTIONS.map((a) => (
                   <DropdownMenuItem
                     key={a.href}
-                    onSelect={() => navigate(a.href)}
+                    onSelect={() => {
+                      window.location.href = a.href;
+                    }}
                   >
                     <Plus className="w-4 h-4 mr-2 text-muted-foreground" />
                     {a.label}
@@ -1097,13 +1100,17 @@ export function AppLauncher() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem
-                  onSelect={() => navigate(`${base}pottery/compare`)}
+                  onSelect={() => {
+                    window.location.href = `${base}modules/pottery/compare`;
+                  }}
                 >
                   <Camera className="w-4 h-4 mr-2 text-muted-foreground" />
                   Pottery piece
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onSelect={() => navigate(`${base}quilting/compare`)}
+                  onSelect={() => {
+                    window.location.href = `${base}modules/quilting/compare`;
+                  }}
                 >
                   <Camera className="w-4 h-4 mr-2 text-muted-foreground" />
                   Fabric
@@ -1113,7 +1120,9 @@ export function AppLauncher() {
 
             <Button
               variant="outline"
-              onClick={() => navigate(`${base}quilting/shopping`)}
+              onClick={() => {
+                window.location.href = `${base}modules/quilting/shopping`;
+              }}
             >
               <ShoppingBag className="w-4 h-4 mr-2" />
               Shopping List

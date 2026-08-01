@@ -299,12 +299,14 @@ export default function OwnerPanel() {
 
       {/* Environment banner — shown just below the top bar */}
       {isOwner && (envStatus || envLoading) && (
-        <div className="px-6 py-3 border-b border-border">
-          <EnvironmentBanner status={envStatus} loading={envLoading} />
+        <div className="border-b border-border py-3">
+          <div className="mx-auto max-w-6xl px-4">
+            <EnvironmentBanner status={envStatus} loading={envLoading} />
+          </div>
         </div>
       )}
 
-      <main className="mx-auto max-w-3xl space-y-6 p-6 md:p-8">
+      <main className="mx-auto max-w-6xl space-y-6 p-6 md:p-8">
         {safeTab === "travels" && (
           <div className="mx-auto w-full max-w-xl space-y-4">
             <div>

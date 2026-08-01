@@ -767,7 +767,7 @@ export default function Account() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl space-y-6 p-6 md:p-8">
+      <main className="mx-auto max-w-6xl space-y-6 p-6 md:p-8">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Account</h1>
           <p className="mt-1 text-sm text-muted-foreground">

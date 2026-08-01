@@ -16,6 +16,7 @@ import {
 import {
   useLookupBarcode,
   useExtractOrnamentBarcodePhoto,
+  useReportBarcodeCorrection,
 } from "@workspace/api-client-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -58,7 +59,7 @@ export default function ScanPage() {
   const [correctedSeriesOrCollection, setCorrectedSeriesOrCollection] =
     useState("");
   const [correctedYear, setCorrectedYear] = useState("");
-  const [isSubmittingCorrection, setIsSubmittingCorrection] = useState(false);
+  const reportCorrection = useReportBarcodeCorrection();
 
   usePageAssistantContext(
     "ornaments-scan",
@@ -162,14 +163,11 @@ export default function ScanPage() {
   // -------------------------------------------------------------------------
   // Correction submission
   // -------------------------------------------------------------------------
-  const handleSubmitCorrection = async () => {
+  const handleSubmitCorrection = () => {
     if (!scanResult || !scannedCode) return;
-    setIsSubmittingCorrection(true);
-    try {
-      await fetch("/api/ornaments/items/report-barcode-correction", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+    reportCorrection.mutate(
+      {
+        data: {
           barcode: scannedCode,
           wrongName: scanResult.name,
           wrongBrand: scanResult.brand,
@@ -178,14 +176,14 @@ export default function ScanPage() {
           correctedSeriesOrCollection:
             correctedSeriesOrCollection.trim() || undefined,
           correctedYear: correctedYear ? Number(correctedYear) : undefined,
-        }),
-      });
-      setConfirmState({ step: "correction-submitted" });
-    } catch {
-      toast.error("Failed to submit correction. Please try again.");
-    } finally {
-      setIsSubmittingCorrection(false);
-    }
+        },
+      },
+      {
+        onSuccess: () => setConfirmState({ step: "correction-submitted" }),
+        onError: () =>
+          toast.error("Failed to submit correction. Please try again."),
+      },
+    );
   };
 
   const isAnyLoading = isLookingUp || isPhotoExtracting;
@@ -487,7 +485,7 @@ export default function ScanPage() {
                     value={correctedName}
                     onChange={(e) => setCorrectedName(e.target.value)}
                     placeholder="Ornament name"
-                    disabled={isSubmittingCorrection}
+                    disabled={reportCorrection.isPending}
                   />
                 </div>
                 <div className="space-y-1">
@@ -498,7 +496,7 @@ export default function ScanPage() {
                     value={correctedBrand}
                     onChange={(e) => setCorrectedBrand(e.target.value)}
                     placeholder="e.g. Hallmark"
-                    disabled={isSubmittingCorrection}
+                    disabled={reportCorrection.isPending}
                   />
                 </div>
                 <div className="space-y-1">
@@ -511,7 +509,7 @@ export default function ScanPage() {
                       setCorrectedSeriesOrCollection(e.target.value)
                     }
                     placeholder="e.g. Keepsake Ornaments"
-                    disabled={isSubmittingCorrection}
+                    disabled={reportCorrection.isPending}
                   />
                 </div>
                 <div className="space-y-1">
@@ -523,16 +521,16 @@ export default function ScanPage() {
                     value={correctedYear}
                     onChange={(e) => setCorrectedYear(e.target.value)}
                     placeholder="e.g. 2023"
-                    disabled={isSubmittingCorrection}
+                    disabled={reportCorrection.isPending}
                   />
                 </div>
               </div>
               <Button
                 className="w-full"
                 onClick={handleSubmitCorrection}
-                disabled={isSubmittingCorrection}
+                disabled={reportCorrection.isPending}
               >
-                {isSubmittingCorrection ? (
+                {reportCorrection.isPending ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Submitting…

@@ -731,7 +731,9 @@ export default function PieceDetail() {
 
   const [editing, setEditing] = useState(false);
   const search = useSearch();
-  useEffect(() => { if (new URLSearchParams(search).get("edit") === "1") setEditing(true); }, []);
+  useEffect(() => {
+    if (new URLSearchParams(search).get("edit") === "1") setEditing(true);
+  }, []);
   const [name, setName] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [notes, setNotes] = useState("");

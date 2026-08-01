@@ -134,7 +134,9 @@ export default function CameraAddOrnament() {
   /** User confirmed the barcode data looks correct. */
   function handleConfirmYes(confirmation: PendingConfirmation) {
     const { clientId, code, result } = confirmation;
-    const label = result.found ? (result.name ?? `Barcode: ${code}`) : `Barcode: ${code}`;
+    const label = result.found
+      ? (result.name ?? `Barcode: ${code}`)
+      : `Barcode: ${code}`;
 
     setItems((prev) =>
       prev.map((i) =>
@@ -158,9 +160,7 @@ export default function CameraAddOrnament() {
       );
     }
 
-    setConfirmationQueue((prev) =>
-      prev.filter((c) => c.clientId !== clientId),
-    );
+    setConfirmationQueue((prev) => prev.filter((c) => c.clientId !== clientId));
   }
 
   /** User said the data is wrong. */
@@ -179,9 +179,7 @@ export default function CameraAddOrnament() {
       ),
     );
     // Do NOT write sessionStorage.
-    setConfirmationQueue((prev) =>
-      prev.filter((c) => c.clientId !== clientId),
-    );
+    setConfirmationQueue((prev) => prev.filter((c) => c.clientId !== clientId));
   }
 
   /** User acknowledged a "not found" result. */
@@ -198,9 +196,7 @@ export default function CameraAddOrnament() {
           : i,
       ),
     );
-    setConfirmationQueue((prev) =>
-      prev.filter((c) => c.clientId !== clientId),
-    );
+    setConfirmationQueue((prev) => prev.filter((c) => c.clientId !== clientId));
   }
 
   // ── Photo processing queue ────────────────────────────────────────────────

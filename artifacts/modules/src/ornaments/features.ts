@@ -6,7 +6,7 @@ import {
   BarChart3,
   Wrench,
   CalendarHeart,
-  ScanBarcode,
+  Search,
 } from "lucide-react";
 
 registerFeature({
@@ -36,8 +36,8 @@ registerFeature({
   nav: {
     group: "scan",
     href: "/ornaments/scan",
-    label: "Scan Barcode",
-    icon: ScanBarcode,
+    label: "Lookup Ornament",
+    icon: Search,
     order: 32,
   },
 });

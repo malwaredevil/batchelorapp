@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation, useRoute } from "wouter";
+import { Link, useLocation, useRoute, useSearch } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetPottery,
@@ -730,6 +730,8 @@ export default function PieceDetail() {
   }, [allItems]);
 
   const [editing, setEditing] = useState(false);
+  const search = useSearch();
+  useEffect(() => { if (new URLSearchParams(search).get("edit") === "1") setEditing(true); }, []);
   const [name, setName] = useState("");
   const [quantity, setQuantity] = useState(1);
   const [notes, setNotes] = useState("");

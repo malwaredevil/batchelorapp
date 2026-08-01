@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { useRoute, useLocation } from "wouter";
+import { useState, useMemo, useEffect } from "react";
+import { useRoute, useLocation, useSearch } from "wouter";
 import {
   Loader2,
   Trash2,
@@ -90,6 +90,10 @@ export default function OrnamentDetail() {
   });
 
   const [isEditing, setIsEditing] = useState(false);
+  const search = useSearch();
+  useEffect(() => {
+    if (new URLSearchParams(search).get("edit") === "1") setIsEditing(true);
+  }, []);
   const [draft, setDraft] = useState({
     name: "",
     brand: "",

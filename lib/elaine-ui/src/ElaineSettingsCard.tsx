@@ -35,7 +35,9 @@ export function ElaineSettingsCard({
   const { data: assistantSettings, isLoading: settingsLoading } =
     useGetElaineSettings();
   const updateAssistantSettings = useUpdateElaineSettings();
-  const { data: memory = [], isLoading: memoryLoading } = useListElaineMemory();
+  const { data: memoryRaw, isLoading: memoryLoading } = useListElaineMemory();
+  // Defensive: guard against non-array (e.g. HTML SPA fallback mis-routed by dev proxy).
+  const memory = Array.isArray(memoryRaw) ? memoryRaw : [];
 
   function handleToggle(enabled: boolean) {
     updateAssistantSettings.mutate(

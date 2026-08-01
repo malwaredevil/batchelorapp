@@ -1347,7 +1347,9 @@ export function NextTripWidget() {
 
 // ── Live: Trip Reminders ──────────────────────────────────────────────────────
 export function TripRemindersWidget() {
-  const { data: reminders = [] } = useListAllReminders();
+  const { data: remindersRaw } = useListAllReminders();
+  // Defensive: guard against non-array (e.g. HTML SPA fallback mis-routed by dev proxy).
+  const reminders = Array.isArray(remindersRaw) ? remindersRaw : [];
 
   const upcoming = reminders
     .filter((r) => !r.done)
@@ -1397,7 +1399,9 @@ export function TripRemindersWidget() {
 
 // ── Live: Travel Wishlist ─────────────────────────────────────────────────────
 export function TravelWishlistWidget() {
-  const { data: wishlist = [] } = useListWishlist();
+  const { data: wishlistRaw } = useListWishlist();
+  // Defensive: guard against non-array (e.g. HTML SPA fallback mis-routed by dev proxy).
+  const wishlist = Array.isArray(wishlistRaw) ? wishlistRaw : [];
   const pending = wishlist.filter((w) => !w.done).slice(0, 5);
 
   return (

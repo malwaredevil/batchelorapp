@@ -483,7 +483,6 @@ async function getDocumentLabelInfo(documentId: number): Promise<{
   return item ?? null;
 }
 
-
 // ---------------------------------------------------------------------------
 // Action registry. Each entry is the single source of truth for one
 // confirmable write-action: its Zod payload schema (server-side validation,
@@ -2417,8 +2416,6 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
 // that aren't part of the confirm-then-execute flow.
 // ---------------------------------------------------------------------------
 
-
-
 // Per-app allowlists for navigation suggestions. Elaine is one continuous
 // conversation across apps, but "suggest_navigation" must only ever point at
 // a real path in the app the user is currently viewing (see ChatBody.appId).
@@ -2531,16 +2528,13 @@ const RememberToolPayload = z.object({
   expires_in_days: z.number().int().positive().optional(),
 });
 
-
 const SetModeToolPayload = z.object({
   mode: z.enum(ACTION_CONFIRMATION_MODES),
 });
 
-
 const WebSearchToolPayload = z.object({
   query: z.string().min(1).max(500),
 });
-
 
 const EbaySearchToolPayload = z.object({
   query: z.string().min(1).max(300),
@@ -2552,13 +2546,11 @@ const EbaySearchToolPayload = z.object({
     ),
 });
 
-
 const SearchHallmarkToolPayload = z.object({
   name: z.string().min(1).max(200).optional(),
   hallmarkSku: z.string().min(1).max(50).optional(),
   year: z.number().int().min(1970).max(2100).optional(),
 });
-
 
 const SearchFlightsToolPayload = z.object({
   originIata: z.string().min(2).max(10),
@@ -2573,17 +2565,14 @@ const SearchFlightsToolPayload = z.object({
     .optional(),
 });
 
-
 const FetchPageToolPayload = z.object({
   url: z.string().url().max(2000),
 });
-
 
 const ConsultExpertsToolPayload = z.object({
   question: z.string().min(1).max(500),
   context: z.string().max(1000).optional(),
 });
-
 
 const GetWeatherToolPayload = z.object({
   // lat/lng are optional — if omitted the server geocodes from locationName
@@ -2597,13 +2586,11 @@ const GetWeatherToolPayload = z.object({
   requestedEndDate: z.iso.date().optional(),
 });
 
-
 const FindNearbyPlacesToolPayload = z.object({
   query: z.string().min(1).max(200),
   lat: z.number().min(-90).max(90).optional(),
   lng: z.number().min(-180).max(180).optional(),
 });
-
 
 const GetRouteInfoToolPayload = z.object({
   origin: z.object({
@@ -2619,20 +2606,17 @@ const GetRouteInfoToolPayload = z.object({
   mode: z.enum(["DRIVE", "WALK", "BICYCLE", "TRANSIT"]).default("WALK"),
 });
 
-
 const GetAirQualityToolPayload = z.object({
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
   locationName: z.string().max(200),
 });
 
-
 const GetPollenForecastToolPayload = z.object({
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
   locationName: z.string().max(200),
 });
-
 
 const ShowDataCardToolPayload = z.object({
   title: z.string().max(120).optional(),
@@ -2646,7 +2630,6 @@ const ShowDataCardToolPayload = z.object({
     .min(1)
     .max(20),
 });
-
 
 const SearchHouseholdToolPayload = z.object({
   query: z.string().min(1).max(200),
@@ -2664,27 +2647,22 @@ const SearchHouseholdToolPayload = z.object({
     .optional(),
 });
 
-
 const SearchTripDocumentsToolPayload = z.object({
   query: z.string().min(1).max(200),
   tripId: z.number().int().positive().optional(),
 });
 
-
 const ShowPotteryItemToolPayload = z.object({
   itemId: z.number().int().positive(),
 });
-
 
 const ShowFabricSwatchToolPayload = z.object({
   fabricId: z.number().int().positive(),
 });
 
-
 const ShowOrnamentItemToolPayload = z.object({
   itemId: z.number().int().positive(),
 });
-
 
 const ShowDestinationCardToolPayload = z.object({
   name: z.string().min(1).max(200),
@@ -2692,12 +2670,10 @@ const ShowDestinationCardToolPayload = z.object({
   highlights: z.array(z.string().max(200)).max(5).optional(),
 });
 
-
 const GetExchangeRateToolPayload = z.object({
   from: z.string().length(3).toUpperCase(),
   to: z.array(z.string().length(3).toUpperCase()).min(1).max(6),
 });
-
 
 const ShowTripCardToolPayload = z.object({
   tripId: z.number().int().positive().optional(),
@@ -2709,7 +2685,6 @@ const ShowTripCardToolPayload = z.object({
   countdownDays: z.number().int().optional(),
 });
 
-
 const SuggestClothingLayersPayload = z.object({
   destination: z.string().min(1).max(200),
   startDate: z.string().optional(),
@@ -2720,17 +2695,12 @@ const SuggestClothingLayersPayload = z.object({
     .optional(),
 });
 
-
 const CalculateYardageToolPayload = z.object({
   quiltWidthInches: z.number().positive().max(200),
   quiltHeightInches: z.number().positive().max(200),
   fabricWidthInches: z.number().positive().max(120).default(40),
   bindingStripWidthInches: z.number().positive().max(12).default(2.5),
 });
-
-
-
-
 
 function isConsequentialToolName(name: string): boolean {
   return name === REMEMBER_TOOL_NAME || ACTION_TOOL_NAMES.has(name);
@@ -2742,7 +2712,6 @@ function runtimeToolDedupeKey(name: string, args: string): string {
   if (name === "queue_research_task") return name;
   return createHash("sha256").update(`${name}:${args}`).digest("hex");
 }
-
 
 function formatPlanForModel(trace: ElaineRuntimeTrace): string {
   const steps = trace.plan.steps

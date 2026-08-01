@@ -22,6 +22,7 @@
     "cleanup-app-config-defaults": "tsx ./src/cleanup-app-config-defaults.ts",
     "sentry-baseline": "tsx ./src/sentry-baseline.ts",
     "github-sync": "tsx ./src/github-sync.ts",
+    "sync-github-secrets": "tsx ./src/sync-github-secrets.ts",
     "pii-scan": "tsx ./src/pii-scan.ts",
     "check-public-file-secrets": "tsx ./src/check-public-file-secrets.ts",
     "check-secrets-registry": "tsx ./src/check-secrets-registry.ts",

@@ -116,6 +116,7 @@ Combined pnpm monorepo serving both the Pottery and Quilting collection apps und
      - **Real unfixed bug (cannot fix this session)**: leave `status: "unresolved"` but call `mcpSentry_updateIssue` with a `reason` that documents: (a) what the root cause is, (b) what the fix would be, (c) why it isn't fixed now. This ensures the issue isn't just ignored — it's acknowledged with a plan. Do NOT leave issues in an uninvestigated state just because they predate the current session.
        After triaging, record the remaining open IDs: `pnpm --filter @workspace/scripts run sentry-baseline write <count> <comma-separated-ids>`. The baseline must contain only genuine unresolved production issues when the release lands.
   2. UI browsing / screenshots — **canonical Method 1** (works regardless of artifact registration state):
+
      ```
      # a) Get token and domain (parallel)
      TOKEN=$(viewEnvVars DEV_SCREENSHOT_TOKEN, environment: "development")
@@ -125,9 +126,11 @@ Combined pnpm monorepo serving both the Pottery and Quilting collection apps und
      Screenshot({ source: { type: "externalUrl",
        url: `https://${DOMAIN}/<path>?screenshotToken=${TOKEN}` } })
      ```
+
      Pages: `/` (hub), `/modules/pottery`, `/modules/quilting`, `/modules/travels`, `/modules/ornaments`, `/modules/office`, `/elaine`, `/owner`.
      `DEV_SCREENSHOT_TOKEN` **must stay a plain env var** (development environment) — never a Replit secret. See `.agents/memory/screenshot-tool-cookie-bypass.md` for full reference and the secondary `app_preview` method.
      Fallback for interactive flows only: `runTest()` or curl with `AGENT_LOGIN_EMAIL`/`AGENT_LOGIN_PASSWORD` against `https://$REPLIT_DEV_DOMAIN`.
+
   3. Deep end-to-end code review of everything added/changed (verify it works as intended, not just that it typechecks). Diff Replit vs GitHub if unsure what changed.
      - **Composition review (mandatory):** for every changed component, provider integration, page-context formatter, query policy, API wrapper, upload flow, and domain page structure, search for sibling implementations. Replace duplication with a shared mechanism plus typed domain configuration. A passing UI test does not excuse architectural duplication.
   4. **Full E2E UI/UX visual verification — non-skippable gate before declaring any feature or fix done:**
@@ -144,11 +147,14 @@ Combined pnpm monorepo serving both the Pottery and Quilting collection apps und
   **Stage 3 — backup + GitHub sync (only after Stage 2 passes), in this exact order:**
   - 3a. Run the Supabase → Replit built-in DB backup: `pnpm --filter @workspace/scripts run backup-to-replit`.
   - 3b. If a GitHub issue was opened for this session's work, close it. On routine sessions with no pre-opened issues this is a quick no-op scan.
-  - 3b2. **Open PR review + Dependabot merges (required):** List all open PRs: `curl -s -H "Authorization: Bearer $GH_PAT" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/malwaredevil/batchelorapp/pulls?state=open&per_page=50" | jq '[.[] | {number: .number, title: .title, user: .user.login}]'`. For each open PR:
-    - **Dependabot PRs with all CI checks green:** merge immediately using squash (`PUT /repos/.../pulls/:n/merge` with `merge_method: "squash"`). Verify CI first by checking the PR head SHA's check-runs. Do not skip this — letting Dependabot PRs pile up defeats the security hardening that created them.
-    - **Dependabot PRs with failing CI:** investigate the failure; fix it if it's a simple conflict, or surface it to the user.
-    - **Superseded agent sync PRs (check every time):** when a `sync/…` PR fails CI and the fix lands via a later squash-merged PR, the original stays open indefinitely. For every open `sync/…` PR whose head branch is no longer ahead of `main` (branch deleted, or `git merge-base --is-ancestor <head-sha> main` returns 0), close it with a comment ("Superseded by later squash merge") and delete its branch in the same step.
-    - **Human/bot PRs that this session's changes already fixed:** close with a comment explaining why.
+  - 3b2. **Open PR review + Dependabot merges + branch hygiene (required every session — no exceptions):**
+    List all open PRs: `curl -s -H "Authorization: Bearer $GH_PAT" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/malwaredevil/batchelorapp/pulls?state=open&per_page=100" | jq '[.[] | {number: .number, title: .title, user: .user.login, head: .head.ref}]'`
+    For each open PR:
+    - **Dependabot PRs with all CI checks green:** merge immediately using squash (`PUT /repos/.../pulls/:n/merge` with `merge_method: "squash"`). Verify CI first by checking the PR head SHA's check-runs. Do not skip — letting Dependabot PRs pile up defeats security hardening.
+    - **Dependabot PRs with failing CI:** investigate; fix simple conflicts, surface blockers to user.
+    - **Superseded `sync/…` PRs (check EVERY time — this is the most commonly forgotten step):** when a sync PR fails CI and the fix lands via a later PR, the original stays open indefinitely with its branch dangling. For every open `sync/…` PR: check whether its head SHA is already an ancestor of main (`GET /repos/.../compare/main...{head-sha}` → `status: "behind"` means it's already merged). If so, close it with comment "Superseded by later squash merge" AND delete its head branch immediately.
+    - **Human/bot PRs that this session's changes already fixed:** close with a comment.
+      After handling all PRs: confirm only `main` branch exists. `curl -s -H "Authorization: Bearer $GH_PAT" "https://api.github.com/repos/malwaredevil/batchelorapp/branches?per_page=100" | jq '[.[].name]'` must return `["main"]`. Delete any stale branch: `DELETE /repos/malwaredevil/batchelorapp/git/refs/heads/{branch}`.
     - **Human/bot PRs that surface an unfixed issue:** fix it now before publishing.
       (Note: Sentry is on the Free plan — Seer auto-draft PRs are a Business-tier feature and no longer active.)
   - 3b3. **Branch cleanup (required after every PR merge or close):** `delete_branch_on_merge` is enabled on the repo, so merging via API auto-deletes the head branch. For PRs that were **closed without merging** (including any you abandoned this session), explicitly delete the head branch: `DELETE /repos/malwaredevil/batchelorapp/git/refs/heads/{branch}`. Then confirm no stale branches remain beyond `main`: `GET /repos/malwaredevil/batchelorapp/branches?per_page=100`. Any `sync/…` or `agent/…` branch without an open PR is stale and must be deleted. Do not let closed PRs linger open — close them with a comment and delete the branch in the same step.
@@ -162,6 +168,8 @@ Combined pnpm monorepo serving both the Pottery and Quilting collection apps und
       - **"Commit Suggestion" shortcut:** when GitHub shows a "Commit Suggestion" button next to a CodeQL finding in the PR UI, the user can apply it with one click — point it out to them rather than implementing the fix from scratch, since GitHub's suggested fix is pre-vetted by CodeQL. I cannot apply these via the REST API (UI-only feature).
       - **"52 relatedLocations were ignored" warning in the CodeQL status page:** this is a known CodeQL limitation on large TypeScript monorepos — diagnostic path metadata is silently truncated when it exceeds internal limits. It does not affect finding correctness and requires no action.
     - Secret scanning: `curl -s -H "Authorization: Bearer $GH_PAT" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/malwaredevil/batchelorapp/secret-scanning/alerts?state=open&per_page=50"` — any open alert here is a critical stop: rotate the secret immediately before doing anything else.
+
+  - 3f. **Sync GitHub secrets (mandatory every publish):** `pnpm --filter @workspace/scripts run sync-github-secrets`. All required secrets must show ✓. If any show ✗ (missing from Replit env), set them in the Replit Secrets tab first, then re-run. This keeps GitHub Actions' encrypted secret store in sync with Replit's runtime secrets so CI always has what it needs and GitHub serves as an encrypted backup.
 
   **Publish:** only after all stages pass, verify `VITE_SENTRY_DSN` is set in Replit Secrets (it is baked in at Vite build time — a missing secret silently disables all browser error tracking in production). Then call `suggest_deploy`. Immediately after calling suggest_deploy, run `pnpm --filter @workspace/scripts run sentry-baseline mark-published` — this writes the pending-stage4 file AND automatically POSTs the current git SHA to Sentry's release webhook (`SENTRY_RELEASE_WEBHOOK_URL`), creating a Release entity in Sentry so issues are annotated with the deploy version. Both actions happen in one command.
 

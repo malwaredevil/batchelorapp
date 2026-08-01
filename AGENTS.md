@@ -147,8 +147,12 @@ DOMAIN=$REPLIT_DEV_DOMAIN
 
 ```typescript
 // Step 2: screenshot (batch independent pages into one response)
-Screenshot({ source: { type: "externalUrl",
-  url: `https://${DOMAIN}/<path>?screenshotToken=${TOKEN}` } })
+Screenshot({
+  source: {
+    type: "externalUrl",
+    url: `https://${DOMAIN}/<path>?screenshotToken=${TOKEN}`,
+  },
+});
 ```
 
 Page paths: `/` (hub), `/modules/pottery`, `/modules/quilting`, `/modules/travels`,

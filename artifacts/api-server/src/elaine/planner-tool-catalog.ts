@@ -84,7 +84,6 @@ export const CALCULATE_YARDAGE_TOOL_NAME = "calculate_yardage";
 export const QUERY_HOUSEHOLD_TOOL_NAME = "query_household_data";
 export const CHECK_INTEGRATIONS_HEALTH_TOOL_NAME = "check_integrations_health";
 
-
 // ---------------------------------------------------------------------------
 // Tool arrays
 // ---------------------------------------------------------------------------
@@ -1488,7 +1487,6 @@ export const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     },
   },
 ];
-
 
 export const ACTION_TOOL_NAMES = new Set<string>(
   ACTION_TOOLS.map(

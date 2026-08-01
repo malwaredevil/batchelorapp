@@ -5126,7 +5126,7 @@ export const ReportBarcodeCorrectionBody = zod.object({
   "correctedName": zod.string().nullish(),
   "correctedBrand": zod.string().nullish(),
   "correctedSeriesOrCollection": zod.string().nullish(),
-  "correctedYear": zod.number().nullish()
+  "correctedYear": zod.number().int().nullish()
 })
 
 export const ReportBarcodeCorrectionResponse = zod.object({

@@ -1020,9 +1020,7 @@ export default function OrnamentDetail() {
           <>
             {/* AI Description */}
             {isEditing && (
-              <CollectionDetailSection
-                title="AI Description"
-              >
+              <CollectionDetailSection title="AI Description">
                 <Textarea
                   value={draft.aiDesc}
                   onChange={(e) =>

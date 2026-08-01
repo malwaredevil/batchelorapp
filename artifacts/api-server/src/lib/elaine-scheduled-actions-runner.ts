@@ -39,21 +39,24 @@ async function runDueScheduledActions(): Promise<void> {
 
   await Promise.allSettled(
     due.map(async (row) => {
-      // Optimistically mark as fired before executing so that a crash or
-      // restart never re-fires the same row (prefer under-delivery to double
-      // delivery for phone calls). If the actual send fails we update to
-      // 'failed' with the error text immediately after.
-      await db
+      // Atomically claim the row by updating it to "fired" only if it is still
+      // "pending".  We use UPDATE...RETURNING rather than a separate SELECT so
+      // that two concurrent scheduler instances (e.g. after an autoscale
+      // restart) cannot both pass the status check and both fire the same
+      // action — only the process whose UPDATE touches 1 row proceeds.
+      const [claimed] = await db
         .update(elaineScheduledActions)
         .set({ status: "fired", firedAt: new Date() })
         .where(
           and(
             eq(elaineScheduledActions.id, row.id),
-            // Only update if still pending — guards against a race with a
-            // concurrent scheduler instance on a second process/restart.
             eq(elaineScheduledActions.status, "pending"),
           ),
-        );
+        )
+        .returning({ id: elaineScheduledActions.id });
+
+      // Another poller already claimed this row — skip without firing.
+      if (!claimed) return;
 
       try {
         const payload = row.actionPayload as {

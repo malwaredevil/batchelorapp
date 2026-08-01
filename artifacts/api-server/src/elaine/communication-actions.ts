@@ -455,10 +455,30 @@ export const communicationActionExecutors: Record<
       };
     }
 
-    await db
+    // Atomic cancel: include user + status guard in WHERE so that if the
+    // scheduler fires the row between our read and our write, we detect the
+    // race instead of silently overwriting "fired" with "cancelled".
+    const [cancelled] = await db
       .update(elaineScheduledActions)
       .set({ status: "cancelled" })
-      .where(eq(elaineScheduledActions.id, payload.scheduledActionId));
+      .where(
+        and(
+          eq(elaineScheduledActions.id, payload.scheduledActionId),
+          eq(elaineScheduledActions.initiatedByUserId, userId),
+          eq(elaineScheduledActions.status, "pending"),
+        ),
+      )
+      .returning({ id: elaineScheduledActions.id });
+
+    if (!cancelled) {
+      return {
+        status: 409,
+        body: {
+          error:
+            "This scheduled contact could not be cancelled — it may have just fired. Check your call or message history.",
+        },
+      };
+    }
 
     const p = existing.actionPayload as { contactName?: string } | null;
     logger.info(

@@ -181,6 +181,26 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
     executorPrefix: "communicationAction",
     channels: ["web"] as const,
   }),
+  // cancel_scheduled_contact: safe cancel action; web-only to stay consistent
+  // with the schedule tools it pairs with.
+  ...policies(["cancel_scheduled_contact"], {
+    ...ACTION_DEFAULTS,
+    domain: "office",
+    executorPrefix: "communicationAction",
+    channels: ["web"] as const,
+  }),
+  // list_scheduled_contacts: read-only soft tool; web-only (same scope as schedule/cancel).
+  ...policies(["list_scheduled_contacts"], {
+    domain: "office",
+    kind: "read",
+    risk: "none",
+    auth: "session",
+    confirmation: "never",
+    executorPrefix: "communicationRead",
+    audit: "runtime_observation",
+    retry: "read_only",
+    channels: ["web"] as const,
+  }),
   ...policies(
     [
       "update_notification_state",

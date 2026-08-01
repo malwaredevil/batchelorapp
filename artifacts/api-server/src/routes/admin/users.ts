@@ -109,6 +109,11 @@ router.patch("/:id", async (req, res) => {
   else if (smsConsentNow === false) updatePayload["smsConsentAt"] = null;
   if (smsOptedOut === true) updatePayload["smsOptedOutAt"] = new Date();
   else if (smsOptedOut === false) updatePayload["smsOptedOutAt"] = null;
+  // Keep phoneVerifiedAt in sync with the phoneVerified god-mode toggle.
+  // (The phone-number-change block below overrides this when a new number is
+  // supplied — clearing both fields regardless — which is the correct policy.)
+  if (parsed.data.phoneVerified === true) updatePayload["phoneVerifiedAt"] = new Date();
+  else if (parsed.data.phoneVerified === false) updatePayload["phoneVerifiedAt"] = null;
 
   // Security: changing phoneNumber invalidates all number-bound verification and
   // consent state. If the request supplies a new number but does NOT explicitly
@@ -271,6 +276,11 @@ router.delete("/:id", async (req, res) => {
     );
 
     // ── 2. Delete Elaine data (leaf tables first) ────────────────────────────
+    // Scheduled actions initiated by this user (initiated_by_user_id FK, no CASCADE)
+    await client.query(
+      "DELETE FROM elaine_scheduled_actions WHERE initiated_by_user_id = $1",
+      p,
+    );
     await client.query("DELETE FROM elaine_daily_briefs WHERE user_id = $1", p);
     await client.query("DELETE FROM elaine_turn_traces WHERE user_id = $1", p);
     await client.query(

@@ -380,7 +380,7 @@ function checkVapid(): ServiceCheckResult {
 // Run all checks
 // ---------------------------------------------------------------------------
 
-async function runAllChecks(): Promise<CachedResult> {
+export async function runAllChecks(): Promise<CachedResult> {
   const results = await Promise.all([
     checkSupabase(),
     checkOpenRouter(),

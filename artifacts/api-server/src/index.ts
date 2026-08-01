@@ -4,6 +4,7 @@ import { runStartupMigration } from "./lib/startup-migrate";
 import { provisionAllBuckets } from "./lib/bucket-provisioning";
 import { startReminderScheduler } from "./lib/reminder-scheduler";
 import { startNudgeScheduler } from "./lib/travels-nudges";
+import { startIntegrationsHealthNudgeScheduler } from "./lib/integrations-health-nudges";
 import { startCalendarTripScanScheduler } from "./lib/travels-calendar-scan";
 import { startGmailScanScheduler } from "./lib/gmail-scan";
 import { startErrorRateSummary } from "./lib/error-tracker";
@@ -78,6 +79,7 @@ async function initializeRuntime(): Promise<void> {
     startMonitoringScheduler(),
     startCommCheckScheduler(),
     startScheduledActionsRunner(),
+    startIntegrationsHealthNudgeScheduler(),
   );
   startJobWorker("slack");
   startJobWorker("maintenance");

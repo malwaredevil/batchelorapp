@@ -1785,6 +1785,16 @@
     "reason": "Elaine has registered tools that reuse or mirror this website operation."
   },
   {
+    "operationId": "reportBarcodeCorrection",
+    "method": "POST",
+    "path": "/ornaments/items/report-barcode-correction",
+    "domain": "ornaments",
+    "summary": "Submit a correction when a barcode lookup returned wrong information",
+    "disposition": "covered_by_general_tool",
+    "mappedTools": ["lookup_product_barcode"],
+    "reason": "Submitting a barcode correction is a UI-driven action (Yes/No confirmation on the Lookup Ornament page). Elaine can explain the correction flow to users and re-run lookups via lookup_product_barcode, but has no dedicated tool to submit corrections directly. The primary user path is the on-screen confirmation form."
+  },
+  {
     "operationId": "lookupOrnamentBookValue",
     "method": "POST",
     "path": "/ornaments/items/{id}/book-value-lookup",

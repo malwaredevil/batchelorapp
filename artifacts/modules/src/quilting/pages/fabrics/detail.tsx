@@ -900,7 +900,11 @@ export default function FabricDetail() {
             )}
             {!isEditing && (
               <div className="space-y-4">
-                {f.aiDescription && <p className="text-sm leading-relaxed text-muted-foreground">{f.aiDescription}</p>}
+                {f.aiDescription && (
+                  <p className="text-sm leading-relaxed text-muted-foreground">
+                    {f.aiDescription}
+                  </p>
+                )}
                 {f.dominantColors.length > 0 && (
                   <div>
                     <p className="mb-1.5 flex items-center gap-0.5 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
@@ -913,8 +917,15 @@ export default function FabricDetail() {
                     </p>
                     <div className="flex flex-wrap gap-1.5">
                       {f.dominantColors.map((color) => (
-                        <span key={color} className="inline-flex items-center gap-1.5 rounded-full border border-card-border bg-card px-2.5 py-1 text-xs capitalize">
-                          <span className="h-3 w-3 rounded-full border border-black/10 shadow-sm" style={{ backgroundColor: color }} aria-hidden="true" />
+                        <span
+                          key={color}
+                          className="inline-flex items-center gap-1.5 rounded-full border border-card-border bg-card px-2.5 py-1 text-xs capitalize"
+                        >
+                          <span
+                            className="h-3 w-3 rounded-full border border-black/10 shadow-sm"
+                            style={{ backgroundColor: color }}
+                            aria-hidden="true"
+                          />
                           {color}
                         </span>
                       ))}
@@ -931,7 +942,17 @@ export default function FabricDetail() {
                         onToggle={toggleLock}
                       />
                     </p>
-                    <div className="flex flex-wrap gap-1.5">{f.motifs.map((motif) => <Badge key={motif} variant="outline" className="capitalize">{motif}</Badge>)}</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {f.motifs.map((motif) => (
+                        <Badge
+                          key={motif}
+                          variant="outline"
+                          className="capitalize"
+                        >
+                          {motif}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
                 )}
                 <div>
@@ -947,12 +968,33 @@ export default function FabricDetail() {
                     </button>
                   </p>
                   <div className="flex flex-wrap gap-1.5">
-                    {f.categories.length > 0 ? f.categories.map((cat) => (
-                      <Badge key={cat.id} variant="outline" className="border-transparent" style={(() => {
-                        const palette = cat.bgColor ? { bgColor: cat.bgColor, textColor: cat.textColor ?? "#fff" } : getCategoryPalette(cat.name);
-                        return { backgroundColor: palette.bgColor, color: palette.textColor };
-                      })()}>{cat.name}</Badge>
-                    )) : <span className="text-xs italic text-muted-foreground">No categories</span>}
+                    {f.categories.length > 0 ? (
+                      f.categories.map((cat) => (
+                        <Badge
+                          key={cat.id}
+                          variant="outline"
+                          className="border-transparent"
+                          style={(() => {
+                            const palette = cat.bgColor
+                              ? {
+                                  bgColor: cat.bgColor,
+                                  textColor: cat.textColor ?? "#fff",
+                                }
+                              : getCategoryPalette(cat.name);
+                            return {
+                              backgroundColor: palette.bgColor,
+                              color: palette.textColor,
+                            };
+                          })()}
+                        >
+                          {cat.name}
+                        </Badge>
+                      ))
+                    ) : (
+                      <span className="text-xs italic text-muted-foreground">
+                        No categories
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1134,78 +1176,64 @@ export default function FabricDetail() {
           </CollectionDetailSection>
 
           {/* Colors / Motifs */}
-          {isEditing && <CollectionDetailSection title="Characteristics">
-            {
-              <div className="space-y-2">
-                <div>
-                  <label className="mb-1 flex items-center text-xs text-muted-foreground">
-                    Dominant colours
-                    <LockButton
-                      field="dominantColors"
-                      lockedFields={lockedFields}
-                      onToggle={toggleLock}
+          {isEditing && (
+            <CollectionDetailSection title="Characteristics">
+              {
+                <div className="space-y-2">
+                  <div>
+                    <label className="mb-1 flex items-center text-xs text-muted-foreground">
+                      Dominant colours
+                      <LockButton
+                        field="dominantColors"
+                        lockedFields={lockedFields}
+                        onToggle={toggleLock}
+                      />
+                    </label>
+                    <Input
+                      value={field("dominantColors")}
+                      onChange={(e) => set("dominantColors", e.target.value)}
+                      placeholder="red, blue, gold"
+                      className="h-8 text-sm"
                     />
-                  </label>
-                  <Input
-                    value={field("dominantColors")}
-                    onChange={(e) => set("dominantColors", e.target.value)}
-                    placeholder="red, blue, gold"
-                    className="h-8 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 flex items-center text-xs text-muted-foreground">
-                    Motifs
-                    <LockButton
-                      field="motifs"
-                      lockedFields={lockedFields}
-                      onToggle={toggleLock}
+                  </div>
+                  <div>
+                    <label className="mb-1 flex items-center text-xs text-muted-foreground">
+                      Motifs
+                      <LockButton
+                        field="motifs"
+                        lockedFields={lockedFields}
+                        onToggle={toggleLock}
+                      />
+                    </label>
+                    <Input
+                      value={field("motifs")}
+                      onChange={(e) => set("motifs", e.target.value)}
+                      placeholder="floral, leaves"
+                      className="h-8 text-sm"
                     />
-                  </label>
-                  <Input
-                    value={field("motifs")}
-                    onChange={(e) => set("motifs", e.target.value)}
-                    placeholder="floral, leaves"
-                    className="h-8 text-sm"
-                  />
+                  </div>
                 </div>
-              </div>
-            }
-          </CollectionDetailSection>}
+              }
+            </CollectionDetailSection>
+          )}
 
           {/* Categories */}
-          { (isEditing || catEditing) && <CollectionDetailSection
-            title="Categories"
-            action={
-              !catEditing && !isEditing ? (
-                <button
-                  onClick={enterCatEdit}
-                  className="rounded p-0.5 text-muted-foreground/40 transition-colors hover:text-muted-foreground"
-                  title="Edit categories"
-                >
-                  <Pencil className="h-3 w-3" />
-                </button>
-              ) : undefined
-            }
-          >
-            {isEditing ? (
-              <TagSelector
-                allCategories={allCategories ?? []}
-                selectedIds={selectedCategoryIds}
-                onToggle={(id) =>
-                  setSelectedCategoryIds((prev) =>
-                    prev.includes(id)
-                      ? prev.filter((x) => x !== id)
-                      : [...prev, id],
-                  )
-                }
-                onCreated={(cat) =>
-                  setSelectedCategoryIds((prev) => [...prev, cat.id])
-                }
-                disabled={updateFabric.isPending}
-              />
-            ) : catEditing ? (
-              <>
+          {(isEditing || catEditing) && (
+            <CollectionDetailSection
+              title="Categories"
+              action={
+                !catEditing && !isEditing ? (
+                  <button
+                    onClick={enterCatEdit}
+                    className="rounded p-0.5 text-muted-foreground/40 transition-colors hover:text-muted-foreground"
+                    title="Edit categories"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                ) : undefined
+              }
+            >
+              {isEditing ? (
                 <TagSelector
                   allCategories={allCategories ?? []}
                   selectedIds={selectedCategoryIds}
@@ -1216,36 +1244,56 @@ export default function FabricDetail() {
                         : [...prev, id],
                     )
                   }
-                  onCreated={(cat) => {
-                    setSelectedCategoryIds((prev) => [...prev, cat.id]);
-                    setLocalNewCats((prev) =>
-                      prev.some((c) => c.id === cat.id) ? prev : [...prev, cat],
-                    );
-                  }}
+                  onCreated={(cat) =>
+                    setSelectedCategoryIds((prev) => [...prev, cat.id])
+                  }
                   disabled={updateFabric.isPending}
                 />
-                <div className="mt-3 flex gap-2">
-                  <Button
-                    size="sm"
-                    onClick={handleSaveCategories}
+              ) : catEditing ? (
+                <>
+                  <TagSelector
+                    allCategories={allCategories ?? []}
+                    selectedIds={selectedCategoryIds}
+                    onToggle={(id) =>
+                      setSelectedCategoryIds((prev) =>
+                        prev.includes(id)
+                          ? prev.filter((x) => x !== id)
+                          : [...prev, id],
+                      )
+                    }
+                    onCreated={(cat) => {
+                      setSelectedCategoryIds((prev) => [...prev, cat.id]);
+                      setLocalNewCats((prev) =>
+                        prev.some((c) => c.id === cat.id)
+                          ? prev
+                          : [...prev, cat],
+                      );
+                    }}
                     disabled={updateFabric.isPending}
-                  >
-                    <Check className="mr-1.5 h-3.5 w-3.5" />
-                    {updateFabric.isPending ? "Saving…" : "Save"}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setCatEditing(false)}
-                    disabled={updateFabric.isPending}
-                  >
-                    <XIcon className="mr-1.5 h-3.5 w-3.5" />
-                    Cancel
-                  </Button>
-                </div>
-              </>
-            ) : null}
-          </CollectionDetailSection>}
+                  />
+                  <div className="mt-3 flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={handleSaveCategories}
+                      disabled={updateFabric.isPending}
+                    >
+                      <Check className="mr-1.5 h-3.5 w-3.5" />
+                      {updateFabric.isPending ? "Saving…" : "Save"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setCatEditing(false)}
+                      disabled={updateFabric.isPending}
+                    >
+                      <XIcon className="mr-1.5 h-3.5 w-3.5" />
+                      Cancel
+                    </Button>
+                  </div>
+                </>
+              ) : null}
+            </CollectionDetailSection>
+          )}
 
           {/* AI description */}
 

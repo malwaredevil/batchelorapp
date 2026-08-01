@@ -597,10 +597,7 @@ export default function OrnamentDetail() {
               {(ornament.seriesOrCollection || ornament.condition) && (
                 <div className="flex flex-wrap gap-1.5">
                   {ornament.seriesOrCollection && (
-                    <Badge
-                      variant="outline"
-                      className="font-normal"
-                    >
+                    <Badge variant="outline" className="font-normal">
                       {ornament.seriesOrCollection}
                     </Badge>
                   )}

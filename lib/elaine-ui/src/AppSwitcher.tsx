@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import { cn } from "@workspace/web-core/utils";
+import { crossAppUrl } from "@workspace/web-core/cross-app";
 import {
   useGetCollectionStats,
   useGetStats,
@@ -380,7 +381,7 @@ export function AppSwitcher({
                 isCurrent
                   ? () => {}
                   : () => {
-                      window.location.href = app.href;
+                      window.location.href = crossAppUrl(app.href);
                     }
               }
             >

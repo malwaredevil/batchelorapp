@@ -10,7 +10,10 @@ import {
 } from "lucide-react";
 import { useAuth } from "@workspace/web-core/auth";
 import { useMessengerUnreadCount } from "./useMessengerUnreadCount";
-import { useMessengerNewMessageDetector } from "./useMessengerNewMessageDetector";
+import {
+  useMessengerNewMessageDetector,
+  type NewMessageEvent,
+} from "./useMessengerNewMessageDetector";
 import {
   MessengerToastContainer,
   type MessengerToastItem,
@@ -89,12 +92,19 @@ export function MessengerNavIcon({
   // True while any drag/resize is in progress — suppresses outside-click close.
   const isInteracting = useRef(false);
 
-  const { data: conversations } = useListConversations({
+  const { data: conversationsRaw } = useListConversations({
     query: {
       queryKey: getListConversationsQueryKey(),
       refetchInterval: isOpen ? 5_000 : 60_000,
     } as UseQueryOptions<MessengerConversationSummary[]>,
   });
+  // Defensive: guard against a non-array value in the cache (e.g. an HTML SPA
+  // fallback page stored when the dev proxy mis-routes /api/... to Vite).
+  // Without this, optional chaining ?. still tries to call .find() on a string
+  // and throws "conversations.find is not a function".
+  const conversations = Array.isArray(conversationsRaw)
+    ? conversationsRaw
+    : undefined;
   const firstActiveId = conversations?.find((c) => !c.archivedAt)?.id ?? null;
   const effectiveConvId = selectedConvId ?? firstActiveId;
 
@@ -333,25 +343,29 @@ export function MessengerNavIcon({
   }, [isOpen]);
 
   // ── Toasts ─────────────────────────────────────────────────────────────────
+  // NOTE: keep this useCallback declaration OUTSIDE the useMessengerNewMessageDetector
+  // call — React's hook detector flags hooks embedded inside argument objects.
+  const handleNewMessage = useCallback((event: NewMessageEvent) => {
+    if (!event.body) return;
+    const id = `toast-${++toastIdCounter}`;
+    setToasts((prev) =>
+      [
+        ...prev,
+        {
+          id,
+          convId: event.convId,
+          convName: event.convName,
+          senderName: event.senderName,
+          body: event.body,
+        },
+      ].slice(-3),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useMessengerNewMessageDetector({
     currentUserId,
     enabled: !isOpen && currentUserId > 0,
-    onNewMessage: useCallback((event) => {
-      if (!event.body) return;
-      const id = `toast-${++toastIdCounter}`;
-      setToasts((prev) =>
-        [
-          ...prev,
-          {
-            id,
-            convId: event.convId,
-            convName: event.convName,
-            senderName: event.senderName,
-            body: event.body,
-          },
-        ].slice(-3),
-      );
-    }, []),
+    onNewMessage: handleNewMessage,
   });
 
   const dismissToast = useCallback((id: string) => {

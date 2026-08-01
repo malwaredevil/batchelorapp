@@ -51,13 +51,15 @@ export function ElaineHistoryPanel({
   const deferredSearch = useDeferredValue(searchQuery.trim() || undefined);
   const [loadingConvId, setLoadingConvId] = useState<number | null>(null);
 
-  const { data: conversations = [], isLoading } = useListElaineConversations({
+  const { data: conversationsRaw, isLoading } = useListElaineConversations({
     q: deferredSearch,
     query: {
       queryKey: getListElaineConversationsQueryKey(deferredSearch),
       refetchOnWindowFocus: false,
     },
   });
+  // Defensive: guard against non-array (e.g. HTML SPA fallback mis-routed by dev proxy).
+  const conversations = Array.isArray(conversationsRaw) ? conversationsRaw : [];
   const deleteConversation = useDeleteElaineConversation({
     mutation: {
       onSuccess: () => {

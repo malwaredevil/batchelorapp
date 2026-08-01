@@ -64,7 +64,9 @@ function Routes() {
         <ThemePreferenceSync />
         <Header />
         <InstallBanner />
-        <main className="flex-1 min-h-0 overflow-auto">
+        {/* mx-auto max-w-6xl matches the ApplicationHeader container so page
+            content aligns with the header edges like every other app page. */}
+        <main className="mx-auto w-full max-w-6xl flex-1 min-h-0 overflow-auto px-4">
           <Switch>
             <Route path="/" component={Chat} />
             <Route path="/memory" component={Memory} />

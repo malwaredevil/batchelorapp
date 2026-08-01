@@ -22,6 +22,9 @@
     },
     {
       "path": "../../lib/api-client-react"
+    },
+    {
+      "path": "../../lib/web-core"
     }
   ]
 }

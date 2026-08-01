@@ -566,6 +566,51 @@ export default function OrnamentDetail() {
             </>
           )
         }
+        heroContent={
+          !isEditing ? (
+            <div className="space-y-4">
+              {ornament.notes && (
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  {ornament.notes}
+                </p>
+              )}
+
+              {ornament.categories?.length ? (
+                <div>
+                  <p className="mb-1.5 text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                    Categories
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {ornament.categories.map((cat) => (
+                      <Badge
+                        key={cat.id}
+                        variant="secondary"
+                        className="bg-secondary/50 font-normal"
+                      >
+                        {cat.name}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {(ornament.seriesOrCollection || ornament.condition) && (
+                <div className="flex flex-wrap gap-1.5">
+                  {ornament.seriesOrCollection && (
+                    <Badge variant="outline" className="font-normal">
+                      {ornament.seriesOrCollection}
+                    </Badge>
+                  )}
+                  {ornament.condition && (
+                    <Badge variant="outline" className="font-normal">
+                      {ornament.condition}
+                    </Badge>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : null
+        }
         fields={
           <>
             <CollectionDetailField
@@ -609,47 +654,43 @@ export default function OrnamentDetail() {
               }
               empty={!ornament.year}
             />
-            <CollectionDetailField
-              label="Series / Collection"
-              value={ornament.seriesOrCollection || "—"}
-              locked={lockedFields.includes("seriesOrCollection")}
-              onToggleLock={
-                !isEditing
-                  ? () => toggleFieldLock("seriesOrCollection")
-                  : undefined
-              }
-              editing={isEditing}
-              editSlot={
-                <Input
-                  value={draft.series}
-                  onChange={(e) =>
-                    setDraft((d) => ({ ...d, series: e.target.value }))
+            {isEditing && (
+              <>
+                <CollectionDetailField
+                  label="Series / Collection"
+                  value={ornament.seriesOrCollection || "—"}
+                  locked={lockedFields.includes("seriesOrCollection")}
+                  editing
+                  editSlot={
+                    <Input
+                      value={draft.series}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, series: e.target.value }))
+                      }
+                      className="h-8 text-sm"
+                    />
                   }
-                  className="h-8 text-sm"
+                  empty={!ornament.seriesOrCollection}
                 />
-              }
-              empty={!ornament.seriesOrCollection}
-            />
-            <CollectionDetailField
-              label="Condition"
-              value={ornament.condition || "—"}
-              locked={lockedFields.includes("condition")}
-              onToggleLock={
-                !isEditing ? () => toggleFieldLock("condition") : undefined
-              }
-              editing={isEditing}
-              editSlot={
-                <Input
-                  value={draft.condition}
-                  onChange={(e) =>
-                    setDraft((d) => ({ ...d, condition: e.target.value }))
+                <CollectionDetailField
+                  label="Condition"
+                  value={ornament.condition || "—"}
+                  locked={lockedFields.includes("condition")}
+                  editing
+                  editSlot={
+                    <Input
+                      value={draft.condition}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, condition: e.target.value }))
+                      }
+                      placeholder="e.g. Mint in Box"
+                      className="h-8 text-sm"
+                    />
                   }
-                  placeholder="e.g. Mint in Box"
-                  className="h-8 text-sm"
+                  empty={!ornament.condition}
                 />
-              }
-              empty={!ornament.condition}
-            />
+              </>
+            )}
             <CollectionDetailField
               label="Dimensions"
               value={ornament.dimensions || "—"}
@@ -700,7 +741,7 @@ export default function OrnamentDetail() {
               }
               empty={!ornament.barcodeValue}
             />
-            {(isEditing || ornament.notes) && (
+            {isEditing && (
               <CollectionDetailField
                 label="Notes"
                 value={ornament.notes || "—"}
@@ -729,23 +770,6 @@ export default function OrnamentDetail() {
                   value={selectedCategoryIds}
                   onChange={setSelectedCategoryIds}
                 />
-              </div>
-            ) : ornament.categories?.length ? (
-              <div className="py-1.5 border-b border-border/60 last:border-0">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1.5">
-                  Categories
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {ornament.categories.map((cat) => (
-                    <Badge
-                      key={cat.id}
-                      variant="secondary"
-                      className="bg-secondary/50 font-normal"
-                    >
-                      {cat.name}
-                    </Badge>
-                  ))}
-                </div>
               </div>
             ) : null}
 

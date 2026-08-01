@@ -55,6 +55,12 @@ export interface PatternRule {
    * TypeScript/JavaScript source code but should never appear in public docs.
    */
   docOnly?: boolean;
+  /**
+   * Relative paths (from repo root) that are explicitly allowed to contain
+   * this pattern. Use for files that legitimately document the mechanism the
+   * pattern guards against (e.g. agent runbooks, pre-publish scripts).
+   */
+  allowInFiles?: string[];
 }
 
 export const PATTERNS: PatternRule[] = [
@@ -76,6 +82,9 @@ export const PATTERNS: PatternRule[] = [
     label:
       "Dev screenshot bypass query param — must not appear in public documentation",
     docOnly: true,
+    // These files legitimately document the screenshot bypass mechanism for
+    // agent/developer use. The token NAME (not its value) is needed there.
+    allowInFiles: ["AGENTS.md", "replit.md", "scripts/src/pre-publish.sh"],
   },
 
   // ── Commands that embed live data ────────────────────────────────────────────
@@ -248,6 +257,8 @@ export function scanFile(
       }
 
       if (matched !== null) {
+        // allowInFiles: skip if this file is on the pattern's explicit allow-list
+        if (rule.allowInFiles?.some((f) => relPath === f)) continue;
         findings.push({
           kind: "pattern",
           file: relPath,

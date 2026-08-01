@@ -581,6 +581,9 @@ for (const file of pageFiles) {
 // that verify the specific component names at their call sites.
 //
 const KNOWN_SHARED_EXPORTS_NO_BOUNDARY_NEEDED = new Set([
+  // ── @workspace/web-core ──────────────────────────────────────────────────
+  // Pure URL utility: builds cross-app link bases, no domain policy to drift.
+  "crossAppUrl",
   // ── @workspace/elaine-ui ─────────────────────────────────────────────────
   // UI components: shared use is the point; no drift risk in the component itself.
   "ElaineWidget",

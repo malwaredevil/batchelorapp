@@ -443,7 +443,10 @@ export default function Chat() {
               </p>
               <div className="grid grid-cols-2 gap-2">
                 {images.map((img, i) => (
-                  <a key={i} href={crossAppUrl(`/modules/travels/trips/${img.tripId}`)}>
+                  <a
+                    key={i}
+                    href={crossAppUrl(`/modules/travels/trips/${img.tripId}`)}
+                  >
                     <div className="group overflow-hidden rounded-lg border border-border/50">
                       <img
                         src={img.src}

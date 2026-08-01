@@ -246,7 +246,7 @@ describe("hub hero cards and quick links — extracted hrefs must resolve to kno
   // If a file drops below its floor the regex likely stopped matching (e.g. the
   // href format changed) and the test would otherwise silently pass on nothing.
   const MIN_HREFS: Record<string, number> = {
-    "artifacts/web/src/config/apps.tsx": 5,        // 6 APPS entries
+    "artifacts/web/src/config/apps.tsx": 5, // 6 APPS entries
     "artifacts/web/src/components/AppLauncher.tsx": 15, // quick-links + stat hrefs
     "artifacts/web/src/components/widgets.tsx": 15, // widget anchor hrefs
   };
@@ -269,7 +269,7 @@ describe("hub hero cards and quick links — extracted hrefs must resolve to kno
     [...new Map(EXTRACTED.map((e) => [e.raw, e])).values()].map(
       ({ raw, file }) => ({ raw, file }),
     ),
-  )('$raw  [from: $file]', ({ raw }) => {
+  )("$raw  [from: $file]", ({ raw }) => {
     expect(
       isKnownRoute(raw),
       `"${raw}" does not match any known route.\n` +

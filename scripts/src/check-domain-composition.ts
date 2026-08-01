@@ -804,16 +804,28 @@ for (const file of pageFiles) {
 // labeled prefix (unlike the labeled form `fabricId: ${fabric.id}` caught by
 // Scan E).
 //
-// Current status: detector exported for unit tests; live scan loop pending a
-// false-positive audit (URL query params `?id=${expr.id}` and JSX template
-// attributes `htmlFor={\`...-${expr.id}\`}` currently match the pattern).
+// Detection strategy:
+//   Pattern: `\${[^{}\n]+\.id\}` with two negative lookbehinds (see below).
+//   The inner character class is `[^{}\n]+` (not `[^}\n]+`) so the match
+//   stops at any nested `${…}` opening — this prevents a complex expression
+//   like `${name || \`Fabric #${id}\`}` from matching as if the outer `${`
+//   were a bare-id interpolation.
 //
-// Detection strategy (when wired up):
-//   Pattern: (?<!\/)${<expr>.id}  (not preceded by /, so /route/${id} excluded)
 //   Three conditions must ALL be true to fire:
 //     (a) file calls usePageAssistantContext, AND
-//     (b) file contains ${expr.id} not preceded by a URL path /, AND
+//     (b) file contains ${expr.id} not excluded by the lookbehinds, AND
 //     (c) file does NOT import formatElaineContextEntity.
+//
+// Excluded (non-violation) patterns:
+//   (?<![\/\-#])   — URL path segments (/route/${id}),
+//                    JSX template suffixes (htmlFor={`key-${id}`}),
+//                    display labels  (`Fabric #${id}`)
+//   (?<![?&][a-zA-Z][a-zA-Z0-9_]*=)
+//                  — URL query params (?id=${id}, &filter=${id})
+//
+// Notably NOT excluded: a leading backtick — `usePageAssistantContext("p",
+// \`${item.id}\`)` is a real violation (context string consisting solely of a
+// bare ID) and must fire.
 //
 // Migrated pages that already import formatElaineContextEntity are safe.
 
@@ -823,11 +835,19 @@ for (const file of pageFiles) {
  * .id property-accessor interpolation (e.g. `${item.id}`) but does NOT
  * import formatElaineContextEntity.
  *
- * The negative lookbehind (?<!\/) excludes URL path segments such as
- * `/route/${item.id}`, which are not context-string violations.
+ * Negative lookbehinds exclude known non-violation patterns:
+ *   (?<![\/\-#])    — excludes URL path segments (/route/${id}),
+ *                     JSX template suffixes (htmlFor={`key-${id}`}),
+ *                     display labels with # (e.g. `Fabric #${id}`).
+ *   (?<![?&][a-zA-Z][a-zA-Z0-9_]*=)
+ *                   — excludes URL query params (?id=${id}, &filter=${id}).
+ *
+ * The inner class [^{}\n]+ (stops at { and }) prevents matching across
+ * nested template expressions such as `${name || \`#${id}\`}`.
  */
 export function hasBareEntityIdInContext(contents: string): boolean {
-  const BARE_ID_RE = /(?<!\/)\$\{[^}\n]+\.id\}/;
+  const BARE_ID_RE =
+    /(?<![\/\-#])(?<![?&][a-zA-Z][a-zA-Z0-9_]*=)\$\{[^{}\n]+\.id\}/;
   return (
     contents.includes("usePageAssistantContext") &&
     BARE_ID_RE.test(contents) &&
@@ -835,12 +855,22 @@ export function hasBareEntityIdInContext(contents: string): boolean {
   );
 }
 
-// NOTE: Scan F is not yet wired into the live violation loop because several
-// legitimate patterns (URL query params like `?id=${expr.id}` and JSX template
-// attributes like `htmlFor={\`...-${expr.id}\`}`) produce false positives with
-// the current lookbehind heuristic.  The detector function is exported above for
-// unit tests.  Wire up the scan loop here after a false-positive audit of all
-// pages that use usePageAssistantContext alongside .id property accesses.
+for (const file of pageFiles) {
+  const contents = read(file);
+  if (hasBareEntityIdInContext(contents)) {
+    violations.push(
+      `${file}: uses usePageAssistantContext with a bare inline .id` +
+        ` interpolation (e.g. \`\${item.id}\`) but does not call` +
+        ` formatElaineContextEntity\n` +
+        "  FIX: Import formatElaineContextEntity from '@workspace/elaine-ui' and\n" +
+        "       use it to embed the entity reference in the context string, e.g.:\n" +
+        "         formatElaineContextEntity({ entity: 'Item', id: item.id, label: item.name })\n" +
+        "       This gives Elaine the entity type and display label alongside the ID\n" +
+        "       so she can invoke the correct operation unambiguously.\n" +
+        "       See lib/elaine-ui/src/page-context-formatters.ts for the full API.",
+    );
+  }
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Report

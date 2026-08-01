@@ -41,7 +41,12 @@ class MessengerErrorBoundary extends Component<
     return { failed: true };
   }
   componentDidCatch(error: Error, info: { componentStack: string }) {
-    console.error("[MessengerErrorBoundary] Caught error:", error.message, "\nComponent stack:", info.componentStack);
+    console.error(
+      "[MessengerErrorBoundary] Caught error:",
+      error.message,
+      "\nComponent stack:",
+      info.componentStack,
+    );
   }
   render() {
     if (this.state.failed) return null;

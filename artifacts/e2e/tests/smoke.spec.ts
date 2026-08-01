@@ -68,9 +68,9 @@ test("hub: ShoppingListWidget, HallmarkEventStatTile, and MessengerNavIcon all r
   await page.goto("/", { waitUntil: "networkidle" });
 
   // 1. ShoppingListWidget — the link always renders even when the list is empty
-  await expect(
-    page.getByRole("link", { name: /view full list/i }),
-  ).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("link", { name: /view full list/i })).toBeVisible(
+    { timeout: 15_000 },
+  );
 
   // 2. HallmarkEventStatTile — countdown tile in the Ornaments app card.
   //    When no Hallmark GCal is connected the component falls back to the
@@ -80,9 +80,9 @@ test("hub: ShoppingListWidget, HallmarkEventStatTile, and MessengerNavIcon all r
   });
 
   // 3. MessengerNavIcon — trigger button in the app header (desktop row)
-  await expect(
-    page.getByRole("button", { name: /messenger/i }),
-  ).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("button", { name: /messenger/i })).toBeVisible({
+    timeout: 15_000,
+  });
 
   // No React "Invalid hook call" or TypeError during any of the above
   expect(

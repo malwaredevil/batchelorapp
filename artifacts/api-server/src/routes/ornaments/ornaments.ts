@@ -454,6 +454,8 @@ router.post(
   "/items/report-barcode-correction",
   requireAuth,
   async (req, res) => {
+    const { ReportBarcodeCorrectionBody, ReportBarcodeCorrectionResponse } =
+      await import("@workspace/api-zod");
     const body = ReportBarcodeCorrectionBody.parse(req.body);
     await db.execute(sql`
     INSERT INTO ornament_upc_corrections
@@ -807,7 +809,9 @@ router.delete("/items/:id", async (req, res) => {
   }
   const now = new Date();
   // Cascade soft-delete supplemental images, then the ornament row itself.
-  // Storage cleanup deferred to purge job — item stays in recycle bin 30 days.
+  // Storage objects are preserved so the item can be restored from the recycle
+  // bin within 30 days. The purge job (lib/purge-deleted.ts) removes both the
+  // DB rows and the storage objects once the item passes the purge threshold.
   await db
     .update(ornamentsImages)
     .set({ deletedAt: now })

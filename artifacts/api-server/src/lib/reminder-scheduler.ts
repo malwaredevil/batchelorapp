@@ -7,6 +7,11 @@ import {
 } from "./email";
 import { sendReminderAlertSms, smsConfigured } from "./sms";
 import { sendReminderAlertSlack, slackConfigured } from "./slack";
+import {
+  callsConfigured,
+  initiateOutboundCall,
+  buildReminderCallScript,
+} from "./calls";
 import { pullReminderAlertDaysFromCalendar } from "../routes/travels/reminders";
 import { shouldRunScheduledTask } from "./scheduler-guard";
 import { logger } from "./logger";
@@ -99,7 +104,20 @@ type SlackWorkItem = {
   formattedDate: string;
 };
 
-type WorkItem = EmailWorkItem | SmsWorkItem | SlackWorkItem;
+type CallWorkItem = {
+  channel: "call";
+  reminderId: number;
+  userId: number;
+  alertType: ReminderAlertType;
+  toPhone: string;
+  reminderTitle: string;
+  tripTitle: string;
+  tripDestination: string;
+  label: string;
+  formattedDate: string;
+};
+
+type WorkItem = EmailWorkItem | SmsWorkItem | SlackWorkItem | CallWorkItem;
 
 type WorkResult =
   | { item: WorkItem; success: true }
@@ -128,10 +146,11 @@ export async function runReminderAlerts(): Promise<void> {
   const emailEnabled = resendConfigured();
   const smsEnabled = smsConfigured();
   const slackEnabled = slackConfigured();
+  const callsEnabled = callsConfigured();
 
-  if (!emailEnabled && !smsEnabled && !slackEnabled) {
+  if (!emailEnabled && !smsEnabled && !slackEnabled && !callsEnabled) {
     logger.debug(
-      "reminder-scheduler: no alert channels configured (email/SMS/Slack), skipping",
+      "reminder-scheduler: no alert channels configured (email/SMS/Slack/call), skipping",
     );
     return;
   }
@@ -159,18 +178,20 @@ export async function runReminderAlerts(): Promise<void> {
       recipient_emails: string[];
       sms_recipient_user_ids: number[];
       slack_recipient_user_ids: number[];
+      call_recipient_user_ids: number[];
       alert_days_before: number[];
     }>(
-      `SELECT r.id                       AS reminder_id,
+      `SELECT r.id                        AS reminder_id,
               r.user_id,
-              r.title                    AS reminder_title,
-              t.title                    AS trip_title,
-              t.destination              AS trip_destination,
-              r.due_date::text           AS due_date,
-              r.recipient_emails         AS recipient_emails,
-              r.sms_recipient_user_ids   AS sms_recipient_user_ids,
-              r.slack_recipient_user_ids AS slack_recipient_user_ids,
-              r.alert_days_before        AS alert_days_before
+              r.title                     AS reminder_title,
+              t.title                     AS trip_title,
+              t.destination               AS trip_destination,
+              r.due_date::text            AS due_date,
+              r.recipient_emails          AS recipient_emails,
+              r.sms_recipient_user_ids    AS sms_recipient_user_ids,
+              r.slack_recipient_user_ids  AS slack_recipient_user_ids,
+              r.call_recipient_user_ids   AS call_recipient_user_ids,
+              r.alert_days_before         AS alert_days_before
          FROM travels_reminders r
          JOIN travels_trips  t ON t.id  = r.trip_id
         WHERE r.done = false
@@ -178,7 +199,8 @@ export async function runReminderAlerts(): Promise<void> {
           AND r.due_date <= CURRENT_DATE + 30
           AND (array_length(r.recipient_emails, 1) > 0
                OR array_length(r.sms_recipient_user_ids, 1) > 0
-               OR array_length(r.slack_recipient_user_ids, 1) > 0)`,
+               OR array_length(r.slack_recipient_user_ids, 1) > 0
+               OR array_length(r.call_recipient_user_ids, 1) > 0)`,
     );
 
     if (candidates.length === 0) return;
@@ -264,6 +286,36 @@ export async function runReminderAlerts(): Promise<void> {
       );
       for (const row of slackRows) {
         slackMap.set(row.id, row.slack_user_id);
+      }
+    }
+
+    // Pre-fetch phone numbers for ALL call candidates in one batch query.
+    // Reuses the same verified-phone lookup as SMS — both channels require
+    // a verified E.164 number on the account.
+    const allCallUserIds = [
+      ...new Set(candidates.flatMap((c) => c.call_recipient_user_ids)),
+    ];
+    const callPhoneMap = new Map<number, string>(); // userId → E.164 phone
+    if (callsEnabled && allCallUserIds.length > 0) {
+      const { rows: callPhoneRows } = await client.query<{
+        id: number;
+        phone_number: string;
+      }>(
+        `SELECT id, phone_number FROM app_users
+          WHERE id = ANY($1::int[]) AND phone_verified = true AND phone_number IS NOT NULL`,
+        [allCallUserIds],
+      );
+      for (const row of callPhoneRows) {
+        callPhoneMap.set(row.id, row.phone_number);
+      }
+    }
+
+    // Defensively normalize call_recipient_user_ids: DB rows written before
+    // this column existed (or legacy null values) would cause a runtime
+    // "not iterable" error in the inner loop below.
+    for (const candidate of candidates) {
+      if (!Array.isArray(candidate.call_recipient_user_ids)) {
+        candidate.call_recipient_user_ids = [];
       }
     }
 
@@ -383,6 +435,39 @@ export async function runReminderAlerts(): Promise<void> {
             });
           }
         }
+
+        // --- Call work items ---
+        if (callsEnabled && !alreadySentChannels.has("call")) {
+          for (const userId of candidate.call_recipient_user_ids) {
+            const phone = callPhoneMap.get(userId);
+            if (!phone) continue;
+            if (!isValidE164PhoneNumber(phone)) {
+              logger.warn(
+                {
+                  reminderId: candidate.reminder_id,
+                  alertType: type,
+                  userId,
+                },
+                "reminder-scheduler: skipping malformed phone number for call alert",
+              );
+              continue;
+            }
+            const deliveryKey = `${candidate.reminder_id}:${type}:call:${phone}`;
+            if (deliveredKeys.has(deliveryKey)) continue;
+            workItems.push({
+              channel: "call",
+              reminderId: candidate.reminder_id,
+              userId: candidate.user_id,
+              alertType: type,
+              toPhone: phone,
+              reminderTitle: candidate.reminder_title,
+              tripTitle: candidate.trip_title,
+              tripDestination: candidate.trip_destination,
+              label,
+              formattedDate,
+            });
+          }
+        }
       }
     }
   } finally {
@@ -418,6 +503,40 @@ export async function runReminderAlerts(): Promise<void> {
           item.label,
           item.formattedDate,
         );
+      } else if (item.channel === "call") {
+        // Attempt the outbound voice call; fall back to SMS on failure so
+        // the user still receives the alert even if calling is unavailable.
+        try {
+          const initialGreeting = buildReminderCallScript(
+            item.reminderTitle,
+            item.tripTitle,
+            item.tripDestination,
+            item.label,
+            item.formattedDate,
+          );
+          await initiateOutboundCall({
+            toNumber: item.toPhone,
+            initialGreeting,
+            callScreeningPurpose: `Travels trip reminder: ${item.reminderTitle}`,
+          });
+        } catch (callErr) {
+          logger.warn(
+            {
+              err: callErr,
+              reminderId: item.reminderId,
+              alertType: item.alertType,
+            },
+            "reminder-scheduler: outbound call failed — falling back to SMS",
+          );
+          await sendReminderAlertSms(
+            item.toPhone,
+            item.reminderTitle,
+            item.tripTitle,
+            item.tripDestination,
+            item.label,
+            item.formattedDate,
+          );
+        }
       } else {
         await sendReminderAlertSlack(
           item.toSlackUserId,
@@ -471,7 +590,9 @@ export async function runReminderAlerts(): Promise<void> {
           ? (result.item as EmailWorkItem).toEmail
           : result.item.channel === "sms"
             ? (result.item as SmsWorkItem).toPhone
-            : (result.item as SlackWorkItem).toSlackUserId;
+            : result.item.channel === "call"
+              ? (result.item as CallWorkItem).toPhone
+              : (result.item as SlackWorkItem).toSlackUserId;
 
       await recordClient
         .query(

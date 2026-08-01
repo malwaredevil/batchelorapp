@@ -34,6 +34,7 @@ import {
   X,
   Mail,
   MessageSquareText,
+  Phone,
   Pencil,
   Loader2,
 } from "lucide-react";
@@ -75,6 +76,7 @@ export function ReminderEditDialog({
   const [recipients, setRecipients] = useState<string[]>([]);
   const [customEmail, setCustomEmail] = useState("");
   const [smsRecipients, setSmsRecipients] = useState<number[]>([]);
+  const [callRecipients, setCallRecipients] = useState<number[]>([]);
   const [sync, setSync] = useState(true);
   const [alertDays, setAlertDays] = useState<number[]>([0]);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -93,6 +95,7 @@ export function ReminderEditDialog({
       setDueDate(reminder.dueDate ?? "");
       setRecipients(reminder.recipientEmails);
       setSmsRecipients(reminder.smsRecipientUserIds ?? []);
+      setCallRecipients(reminder.callRecipientUserIds ?? []);
       setSync(reminder.syncToCalendar);
       setAlertDays(
         reminder.alertDaysBefore && reminder.alertDaysBefore.length > 0
@@ -229,6 +232,14 @@ export function ReminderEditDialog({
     );
   }
 
+  function toggleCallRecipient(userId: number) {
+    setCallRecipients((prev) =>
+      prev.includes(userId)
+        ? prev.filter((id) => id !== userId)
+        : [...prev, userId],
+    );
+  }
+
   function addCustomEmail() {
     const email = customEmail.trim().toLowerCase();
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -254,6 +265,7 @@ export function ReminderEditDialog({
         dueDate: dueDate || null,
         recipientEmails: recipients,
         smsRecipientUserIds: smsRecipients,
+        callRecipientUserIds: callRecipients,
         syncToCalendar: sync,
         alertDaysBefore: alertDays,
       },
@@ -359,6 +371,30 @@ export function ReminderEditDialog({
                         className="inline-flex items-center gap-1 text-xs bg-muted rounded-full px-2.5 py-0.5"
                       >
                         <MessageSquareText className="w-3 h-3" />{" "}
+                        {u?.displayName ?? u?.email ?? `User ${userId}`}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {(reminder.callRecipientUserIds?.length ?? 0) > 0 && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-1.5">
+                  Called for
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {(reminder.callRecipientUserIds ?? []).map((userId) => {
+                    const u = appUsers.find(
+                      (a: TravelsAppUser) => a.id === userId,
+                    );
+                    return (
+                      <span
+                        key={userId}
+                        className="inline-flex items-center gap-1 text-xs bg-muted rounded-full px-2.5 py-0.5"
+                      >
+                        <Phone className="w-3 h-3" />{" "}
                         {u?.displayName ?? u?.email ?? `User ${userId}`}
                       </span>
                     );
@@ -608,6 +644,42 @@ export function ReminderEditDialog({
                   )}
                 </div>
               )}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">
+                Call alerts to
+              </Label>
+              {appUsers.length > 0 && (
+                <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                  {appUsers.map((u: TravelsAppUser) => (
+                    <label
+                      key={u.id}
+                      className={`flex items-center gap-1.5 text-sm ${
+                        u.phoneVerified
+                          ? "cursor-pointer"
+                          : "cursor-not-allowed opacity-50"
+                      }`}
+                    >
+                      <Checkbox
+                        checked={callRecipients.includes(u.id)}
+                        disabled={!u.phoneVerified}
+                        onCheckedChange={() => toggleCallRecipient(u.id)}
+                      />
+                      {u.displayName ?? u.email}
+                      {!u.phoneVerified && (
+                        <span className="text-xs text-muted-foreground">
+                          (no verified phone)
+                        </span>
+                      )}
+                    </label>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground pt-0.5">
+                An automated voice call is placed when the reminder fires.
+                Falls back to SMS if the call doesn&apos;t connect.
+              </p>
             </div>
 
             {travelCalendarConnected && (

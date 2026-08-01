@@ -2789,6 +2789,12 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE travels_reminders
      ADD COLUMN IF NOT EXISTS slack_recipient_user_ids INTEGER[] NOT NULL DEFAULT '{}'`,
 
+  // Voice call reminder recipients: app_users.id values (must have a verified
+  // phone number) who should receive an outbound TTS voice call alert for
+  // this reminder. Falls back to SMS if the call fails.
+  `ALTER TABLE travels_reminders
+     ADD COLUMN IF NOT EXISTS call_recipient_user_ids INTEGER[] NOT NULL DEFAULT '{}'`,
+
   // Webhook delivery dedup log for the Slack Events API.
   // Keyed by Slack's event_id — recorded before any side effect so retried
   // deliveries (Slack retries up to 3× via X-Slack-Retry-Num) are no-ops.

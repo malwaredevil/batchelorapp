@@ -38,6 +38,18 @@ vi.mock("./slack", () => ({
     sendReminderAlertSlack(...args),
 }));
 
+const callsConfigured = vi.fn().mockReturnValue(false);
+const initiateOutboundCall = vi.fn().mockResolvedValue(undefined);
+const buildReminderCallScript = vi
+  .fn()
+  .mockReturnValue("Reminder call script");
+vi.mock("./calls", () => ({
+  callsConfigured: () => callsConfigured(),
+  initiateOutboundCall: (...args: unknown[]) => initiateOutboundCall(...args),
+  buildReminderCallScript: (...args: unknown[]) =>
+    buildReminderCallScript(...args),
+}));
+
 vi.mock("../routes/travels/reminders", () => ({
   pullReminderAlertDaysFromCalendar: vi.fn((_id: number, days: number[]) =>
     Promise.resolve(days),
@@ -87,6 +99,7 @@ function pushCandidate(
     recipient_emails: string[];
     sms_recipient_user_ids: number[];
     slack_recipient_user_ids: number[];
+    call_recipient_user_ids: number[];
     alert_days_before: number[];
   }> = {},
 ) {
@@ -102,6 +115,7 @@ function pushCandidate(
         recipient_emails: ["user@example.com"],
         sms_recipient_user_ids: [],
         slack_recipient_user_ids: [],
+        call_recipient_user_ids: [],
         alert_days_before: [0],
         ...overrides,
       },
@@ -597,6 +611,7 @@ describe("runReminderAlerts — Slack delivery failure retry behaviour", () => {
           recipient_emails: [],
           sms_recipient_user_ids: [],
           slack_recipient_user_ids: [1, 2],
+          call_recipient_user_ids: [],
           alert_days_before: [0],
         },
       ],
@@ -630,5 +645,123 @@ describe("runReminderAlerts — Slack delivery failure retry behaviour", () => {
     // user 1 must be skipped because their 'sent' delivery row is in deliveredKeys.
     expect(sendReminderAlertSlack).toHaveBeenCalledTimes(1);
     expect(sendReminderAlertSlack.mock.calls[0][0]).toBe("U999XY7ZZ");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: runReminderAlerts — call channel
+// ---------------------------------------------------------------------------
+
+describe("runReminderAlerts — call channel", () => {
+  beforeEach(() => {
+    queryQueue.length = 0;
+    mockClient.query.mockClear();
+    mockClient.release.mockClear();
+    initiateOutboundCall.mockClear();
+    sendReminderAlertSms.mockClear();
+    buildReminderCallScript.mockClear();
+    resendConfigured.mockReturnValue(false);
+    smsConfigured.mockReturnValue(false);
+    slackConfigured.mockReturnValue(false);
+    callsConfigured.mockReturnValue(true);
+  });
+
+  function pushCallCandidate(
+    phoneRows: { id: number; phone_number: string }[],
+  ) {
+    pushCandidate({
+      recipient_emails: [],
+      sms_recipient_user_ids: [],
+      slack_recipient_user_ids: [],
+      call_recipient_user_ids: phoneRows.map((r) => r.id),
+    });
+    // call phone lookup query
+    queryQueue.push({ rows: phoneRows });
+  }
+
+  it("initiates an outbound call to a verified E.164 phone number", async () => {
+    pushCallCandidate([{ id: 1, phone_number: "+12025551234" }]);
+    queryQueue.push({ rows: [] }); // delivery insert
+
+    await runReminderAlerts();
+
+    expect(initiateOutboundCall).toHaveBeenCalledTimes(1);
+    expect(initiateOutboundCall.mock.calls[0][0]).toMatchObject({
+      toNumber: "+12025551234",
+    });
+    expect(sendReminderAlertSms).not.toHaveBeenCalled();
+  });
+
+  it("falls back to SMS when the outbound call throws", async () => {
+    pushCallCandidate([{ id: 1, phone_number: "+12025551234" }]);
+    queryQueue.push({ rows: [] }); // delivery insert
+    initiateOutboundCall.mockRejectedValueOnce(new Error("Call failed"));
+
+    await runReminderAlerts();
+
+    expect(initiateOutboundCall).toHaveBeenCalledTimes(1);
+    expect(sendReminderAlertSms).toHaveBeenCalledTimes(1);
+    expect(sendReminderAlertSms.mock.calls[0][0]).toBe("+12025551234");
+  });
+
+  it("records a 'sent' delivery row with channel='call' on success", async () => {
+    pushCallCandidate([{ id: 1, phone_number: "+12025551234" }]);
+    queryQueue.push({ rows: [] }); // delivery insert
+
+    await runReminderAlerts();
+
+    const deliveryInsert = mockClient.query.mock.calls.find(
+      (args: unknown[]) =>
+        typeof args[0] === "string" &&
+        args[0].includes("INSERT INTO travels_reminder_alert_deliveries"),
+    );
+    expect(deliveryInsert).toBeDefined();
+    // channel param is $4, status is $6
+    expect(deliveryInsert?.[1]?.[3]).toBe("call");
+    expect(deliveryInsert?.[1]?.[5]).toBe("sent");
+  });
+
+  it("does not attempt a call when the phone number is malformed (not E.164)", async () => {
+    pushCallCandidate([{ id: 1, phone_number: "12025551234" }]); // missing +
+
+    await runReminderAlerts();
+
+    expect(initiateOutboundCall).not.toHaveBeenCalled();
+    expect(sendReminderAlertSms).not.toHaveBeenCalled();
+  });
+
+  it("skips call recipients with no verified phone row", async () => {
+    // candidate has user 99 in call_recipient_user_ids, but phone lookup
+    // returns nothing (no verified phone for that user).
+    pushCallCandidate([]); // empty phone rows
+
+    await runReminderAlerts();
+
+    expect(initiateOutboundCall).not.toHaveBeenCalled();
+  });
+
+  it("does not make calls when callsConfigured returns false", async () => {
+    callsConfigured.mockReturnValue(false);
+    // Need at least one channel enabled to avoid early return
+    resendConfigured.mockReturnValue(true);
+    pushCandidate();
+    queryQueue.push({ rows: [] }); // delivery insert for email
+
+    await runReminderAlerts();
+
+    expect(initiateOutboundCall).not.toHaveBeenCalled();
+  });
+
+  it("defensively handles a null call_recipient_user_ids from a legacy DB row", async () => {
+    // Simulate a row written before the column existed (DB returns null).
+    pushCandidate({
+      recipient_emails: ["user@example.com"],
+      call_recipient_user_ids: null as unknown as number[],
+    });
+    queryQueue.push({ rows: [] }); // delivery insert
+
+    // Should not throw and should deliver the email normally.
+    await expect(runReminderAlerts()).resolves.toBeUndefined();
+    expect(initiateOutboundCall).not.toHaveBeenCalled();
   });
 });

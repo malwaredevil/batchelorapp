@@ -97,3 +97,24 @@ export async function initiateOutboundCall(
   const data = (await response.json()) as { id?: string };
   return { callId: data.id ?? "unknown" };
 }
+
+/**
+ * Compose a spoken reminder greeting for use with initiateOutboundCall.
+ * Written in first person so Elaine speaks it naturally.
+ */
+export function buildReminderCallScript(
+  reminderTitle: string,
+  tripTitle: string,
+  tripDestination: string,
+  label: string,
+  formattedDueDate: string,
+): string {
+  return `Hi! I'm calling with a Batchelor Travels reminder. Your reminder "${reminderTitle}" is due in ${label} on ${formattedDueDate}, for your trip "${tripTitle}" to ${tripDestination}. Have a great trip!`;
+}
+
+// AgentPhone outbound calls are available whenever the connector proxy can
+// resolve. Kept as a named export to mirror smsConfigured() and give
+// callers/UI a single place to gate on.
+export function callsConfigured(): boolean {
+  return true;
+}

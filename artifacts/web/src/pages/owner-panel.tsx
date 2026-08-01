@@ -225,9 +225,11 @@ export default function OwnerPanel() {
     <div className="min-h-screen bg-background text-foreground">
       {/* Quilting-style top bar */}
       <header
-        className="sticky top-0 z-20 flex items-stretch border-b border-border bg-background/95 backdrop-blur-sm"
+        className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur-sm"
         style={{ height: 56 }}
       >
+        {/* mx-auto max-w-6xl matches the shared ApplicationHeader container */}
+        <div className="mx-auto flex h-full max-w-6xl items-stretch px-4">
         {/* Left: back arrow + logo + title */}
         <div className="flex items-center gap-2 pl-3 pr-2 shrink-0 border-r border-border/40">
           <a
@@ -291,6 +293,7 @@ export default function OwnerPanel() {
           >
             {initials}
           </div>
+        </div>
         </div>
       </header>
 

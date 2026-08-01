@@ -123,12 +123,11 @@ export async function createWorkspaceViteConfig(
           replacement: path.resolve(artifactDir, "..", "..", "attached_assets"),
         },
       ],
-      dedupe: [
-        "react",
-        "react-dom",
-        "@tanstack/react-query",
-        "@tanstack/query-core",
-      ],
+      // NOTE: do not add "@tanstack/query-core" here — dedupe forces Rollup to
+      // resolve it from the workspace root, where it is not a direct dependency,
+      // breaking production builds. Deduping react-query already guarantees a
+      // single query-core instance (it is a regular dep of react-query).
+      dedupe: ["react", "react-dom", "@tanstack/react-query"],
     },
     root: path.resolve(artifactDir),
     define: {

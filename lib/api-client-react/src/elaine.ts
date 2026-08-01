@@ -298,6 +298,47 @@ export interface TripCardData {
   countdownDays?: number;
 }
 
+// Collection-domain widget data types — mirrors lib/elaine-ui/src/ChatWidgets.tsx.
+// Keep both in sync: elaine-ui is the canonical display layer; api-client-react
+// is the transport layer used by AssistantChatResponse.widgets.
+export interface PotteryItemData {
+  itemId?: number;
+  name: string;
+  imageUrl?: string;
+  maker?: string;
+  style?: string;
+  aiDescription?: string;
+  dominantColors?: string[];
+}
+
+export interface FabricSwatchData {
+  fabricId?: number;
+  name: string;
+  manufacturer?: string;
+  designer?: string;
+  dominantColors?: string[];
+  imageUrl?: string;
+  aiDescription?: string;
+}
+
+export interface OrnamentItemData {
+  itemId?: number;
+  name: string;
+  imageUrl?: string;
+  seriesOrCollection?: string;
+  year?: number;
+  brand?: string;
+  aiDescription?: string;
+  dominantColors?: string[];
+}
+
+export interface DestinationCardData {
+  name: string;
+  country?: string;
+  highlights?: string[];
+  mapsUrl: string;
+}
+
 export type ChatWidget =
   | { type: "weather"; locationName: string; days: WeatherDay[] }
   | {
@@ -334,7 +375,11 @@ export type ChatWidget =
       images: ChatWidgetImage[];
     }
   | { type: "exchange_rate"; from: string; to: ExchangeRateResult[]; lastUpdated: string }
-  | { type: "trip_card"; trip: TripCardData };
+  | { type: "trip_card"; trip: TripCardData }
+  | { type: "pottery_item"; item: PotteryItemData }
+  | { type: "fabric_swatch"; swatch: FabricSwatchData }
+  | { type: "ornament_item"; item: OrnamentItemData }
+  | { type: "destination_card"; card: DestinationCardData };
 
 export interface AssistantChatResponse {
   role: "assistant";

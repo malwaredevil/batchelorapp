@@ -69,17 +69,17 @@ vi.mock("sonner", () => ({
 
 // ── Mock icons ────────────────────────────────────────────────────────────────
 
-vi.mock("lucide-react", () => ({
-  AlertTriangle: () => null,
-  ArrowLeft: () => null,
-  Check: () => null,
-  DatabaseZap: () => null,
-  Loader2: () => null,
-  RefreshCw: () => null,
-  RotateCcw: () => null,
-  SlidersHorizontal: () => null,
-  X: () => null,
-}));
+// Stub every export from the real lucide-react module as a no-op component.
+// Using importOriginal means:
+//   (a) Vitest knows the full export surface and won't throw "No X export" errors.
+//   (b) New icons added to control-panel.tsx are automatically stubbed — no
+//       hardcoded list to update.
+vi.mock("lucide-react", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("lucide-react")>();
+  return Object.fromEntries(
+    Object.keys(mod as object).map((k) => [k, () => null]),
+  );
+});
 
 // ── Mock UI components ────────────────────────────────────────────────────────
 

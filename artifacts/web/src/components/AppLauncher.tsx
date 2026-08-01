@@ -74,38 +74,42 @@ import {
 const base = import.meta.env.BASE_URL;
 
 const ADD_ACTIONS = [
-  { label: "Pottery piece", href: `${base}pottery/add` },
-  { label: "Fabric", href: `${base}quilting/fabrics/add` },
-  { label: "Pattern", href: `${base}quilting/patterns/add` },
-  { label: "Quilt", href: `${base}quilting/quilts/add` },
+  { label: "Pottery piece", href: `${base}modules/pottery/add` },
+  { label: "Fabric", href: `${base}modules/quilting/fabrics/add` },
+  { label: "Pattern", href: `${base}modules/quilting/patterns/add` },
+  { label: "Quilt", href: `${base}modules/quilting/quilts/add` },
 ];
 
 const POTTERY_QUICK_LINKS = [
-  { label: "Collection", icon: Package, href: `${base}pottery/` },
-  { label: "Compare", icon: Camera, href: `${base}pottery/compare` },
+  { label: "Collection", icon: Package, href: `${base}modules/pottery/` },
+  { label: "Compare", icon: Camera, href: `${base}modules/pottery/compare` },
   {
     label: "Maintenance",
     icon: FlaskConical,
-    href: `${base}pottery/maintenance`,
+    href: `${base}modules/pottery/maintenance`,
   },
 ];
 
 const QUILTING_QUICK_LINKS = [
-  { label: "Fabrics", icon: Shirt, href: `${base}quilting/fabrics` },
-  { label: "Blocks", icon: Scissors, href: `${base}quilting/blocks` },
-  { label: "Layouts", icon: Layers, href: `${base}quilting/layouts` },
+  { label: "Fabrics", icon: Shirt, href: `${base}modules/quilting/fabrics` },
+  { label: "Blocks", icon: Scissors, href: `${base}modules/quilting/blocks` },
+  { label: "Layouts", icon: Layers, href: `${base}modules/quilting/layouts` },
 ];
 
 const TRAVELS_QUICK_LINKS = [
-  { label: "Home", icon: Activity, href: `${base}travels/` },
-  { label: "Trips", icon: Layers, href: `${base}travels/trips` },
-  { label: "Explore", icon: Rss, href: `${base}travels/explore` },
+  { label: "Home", icon: Activity, href: `${base}modules/travels/` },
+  { label: "Trips", icon: Layers, href: `${base}modules/travels/trips` },
+  { label: "Explore", icon: Rss, href: `${base}modules/travels/explore` },
 ];
 
 const ORNAMENTS_QUICK_LINKS = [
-  { label: "Collection", icon: Gift, href: `${base}ornaments/` },
-  { label: "Categories", icon: Tag, href: `${base}ornaments/categories` },
-  { label: "Stats", icon: Activity, href: `${base}ornaments/stats` },
+  { label: "Collection", icon: Gift, href: `${base}modules/ornaments/` },
+  {
+    label: "Categories",
+    icon: Tag,
+    href: `${base}modules/ornaments/categories`,
+  },
+  { label: "Stats", icon: Activity, href: `${base}modules/ornaments/stats` },
 ];
 
 /**

@@ -4774,6 +4774,25 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OrnamentsBarcodeLookupResult"
+  /ornaments/items/report-barcode-correction:
+    post:
+      operationId: reportBarcodeCorrection
+      tags:
+        - ornaments
+      summary: Submit a correction when a barcode lookup returned wrong information
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrnamentsBarcodeCorrectionInput"
+      responses:
+        "200":
+          description: Correction recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrnamentsBarcodeCorrectionResult"
   /ornaments/barcode-photo-lookup:
     post:
       operationId: extractOrnamentBarcodePhoto
@@ -10458,6 +10477,40 @@ components:
           type:
             - string
             - "null"
+    OrnamentsBarcodeCorrectionInput:
+      type: object
+      required:
+        - barcode
+      properties:
+        barcode:
+          type: string
+          minLength: 1
+          maxLength: 30
+        wrongName:
+          type: string
+          nullable: true
+        wrongBrand:
+          type: string
+          nullable: true
+        correctedName:
+          type: string
+          nullable: true
+        correctedBrand:
+          type: string
+          nullable: true
+        correctedSeriesOrCollection:
+          type: string
+          nullable: true
+        correctedYear:
+          type: integer
+          nullable: true
+    OrnamentsBarcodeCorrectionResult:
+      type: object
+      required:
+        - success
+      properties:
+        success:
+          type: boolean
     OrnamentsBarcodePhotoInput:
       type: object
       required:

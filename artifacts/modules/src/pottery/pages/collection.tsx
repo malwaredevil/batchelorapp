@@ -299,6 +299,12 @@ function PieceCard({
                   Open
                 </Link>
               </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href={`/pottery/piece/${item.id}?edit=1`}>
+                  <Pencil className="mr-2 h-3.5 w-3.5" />
+                  Edit
+                </Link>
+              </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={(e) => {
                   e.preventDefault();

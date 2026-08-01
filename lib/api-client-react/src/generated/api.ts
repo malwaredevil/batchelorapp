@@ -101,6 +101,8 @@ import type {
   OperationsOperationProvidersResponse,
   OperationsOperationsSummaryResponse,
   OperationsUpdateBudgetBody,
+  OrnamentsBarcodeCorrectionInput,
+  OrnamentsBarcodeCorrectionResult,
   OrnamentsBarcodeLookupInput,
   OrnamentsBarcodeLookupResult,
   OrnamentsBarcodePhotoInput,
@@ -15328,6 +15330,77 @@ export const useLookupBarcode = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getLookupBarcodeMutationOptions(options));
+    }
+
+export const getReportBarcodeCorrectionUrl = () => {
+
+
+
+
+  return `/api/ornaments/items/report-barcode-correction`
+}
+
+/**
+ * @summary Submit a correction when a barcode lookup returned wrong information
+ */
+export const reportBarcodeCorrection = async (ornamentsBarcodeCorrectionInput: OrnamentsBarcodeCorrectionInput, options?: RequestInit): Promise<OrnamentsBarcodeCorrectionResult> => {
+
+  return customFetch<OrnamentsBarcodeCorrectionResult>(getReportBarcodeCorrectionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      ornamentsBarcodeCorrectionInput,)
+  }
+);}
+
+
+
+
+export const getReportBarcodeCorrectionMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reportBarcodeCorrection>>, TError,{data: BodyType<OrnamentsBarcodeCorrectionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reportBarcodeCorrection>>, TError,{data: BodyType<OrnamentsBarcodeCorrectionInput>}, TContext> => {
+
+const mutationKey = ['reportBarcodeCorrection'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reportBarcodeCorrection>>, {data: BodyType<OrnamentsBarcodeCorrectionInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  reportBarcodeCorrection(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReportBarcodeCorrectionMutationResult = NonNullable<Awaited<ReturnType<typeof reportBarcodeCorrection>>>
+    export type ReportBarcodeCorrectionMutationBody = BodyType<OrnamentsBarcodeCorrectionInput>
+    export type ReportBarcodeCorrectionMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Submit a correction when a barcode lookup returned wrong information
+ */
+export const useReportBarcodeCorrection = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reportBarcodeCorrection>>, TError,{data: BodyType<OrnamentsBarcodeCorrectionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reportBarcodeCorrection>>,
+        TError,
+        {data: BodyType<OrnamentsBarcodeCorrectionInput>},
+        TContext
+      > => {
+      return useMutation(getReportBarcodeCorrectionMutationOptions(options));
     }
 
 export const getExtractOrnamentBarcodePhotoUrl = () => {

@@ -8,6 +8,35 @@ import {
 
 /// <reference path="../types/barcode-detector.d.ts" />
 
+/**
+ * Debounces rapid consecutive detections of the same barcode value.
+ * Exported for unit testing.
+ *
+ * @param windowMs - How long (ms) a code is considered "already seen". Default 2 s.
+ */
+export function createBarcodeDebouncer(windowMs = 2000) {
+  let lastCode: string | null = null;
+  let lastAt = 0;
+  return {
+    /**
+     * Returns true if `code` was already reported within the debounce window
+     * and should be suppressed; false if it is a fresh detection (and records it).
+     */
+    isDuplicate(code: string): boolean {
+      const now = Date.now();
+      if (code === lastCode && now - lastAt < windowMs) return true;
+      lastCode = code;
+      lastAt = now;
+      return false;
+    },
+    /** Clears state — call when a new scanning session starts. */
+    reset() {
+      lastCode = null;
+      lastAt = 0;
+    },
+  };
+}
+
 const BARCODE_FORMATS_ZXING = [
   BarcodeFormat.UPC_A,
   BarcodeFormat.UPC_E,
@@ -37,6 +66,7 @@ export function useBarcodeCamera(input: {
   const scanningRef = useRef(false);
   const animationFrameRef = useRef<number | null>(null);
   const onDetectedRef = useRef(input.onDetected);
+  const debouncerRef = useRef(createBarcodeDebouncer());
   const [isScanning, setIsScanning] = useState(false);
   const [hasCamera, setHasCamera] = useState(true);
 
@@ -72,6 +102,7 @@ export function useBarcodeCamera(input: {
         if (!scanningRef.current) return;
         const barcode = barcodes[0]?.rawValue?.trim();
         if (barcode) {
+          if (debouncerRef.current.isDuplicate(barcode)) return;
           stopScanning();
           onDetectedRef.current(barcode);
           return;
@@ -90,6 +121,7 @@ export function useBarcodeCamera(input: {
 
   const startScanning = useCallback(async () => {
     if (!videoRef.current || scanningRef.current) return;
+    debouncerRef.current.reset();
     scanningRef.current = true;
     setIsScanning(true);
 
@@ -129,8 +161,10 @@ export function useBarcodeCamera(input: {
           videoRef.current,
           (result, error) => {
             if (result) {
+              const code = result.getText();
+              if (debouncerRef.current.isDuplicate(code)) return;
               stopScanning();
-              onDetectedRef.current(result.getText());
+              onDetectedRef.current(code);
             } else if (error && !(error instanceof NotFoundException)) {
               console.error(error);
             }

@@ -796,6 +796,52 @@ for (const file of pageFiles) {
   }
 }
 
+// ── Scan F: bare .id property access in context strings ──────────────────────
+//
+// A page that calls usePageAssistantContext and embeds a bare .id property
+// access — e.g. `${item.id}`, `${fabric.id}`, `${note.id}` — directly in
+// the context string is bypassing formatElaineContextEntity without even a
+// labeled prefix (unlike the labeled form `fabricId: ${fabric.id}` caught by
+// Scan E).
+//
+// Current status: detector exported for unit tests; live scan loop pending a
+// false-positive audit (URL query params `?id=${expr.id}` and JSX template
+// attributes `htmlFor={\`...-${expr.id}\`}` currently match the pattern).
+//
+// Detection strategy (when wired up):
+//   Pattern: (?<!\/)${<expr>.id}  (not preceded by /, so /route/${id} excluded)
+//   Three conditions must ALL be true to fire:
+//     (a) file calls usePageAssistantContext, AND
+//     (b) file contains ${expr.id} not preceded by a URL path /, AND
+//     (c) file does NOT import formatElaineContextEntity.
+//
+// Migrated pages that already import formatElaineContextEntity are safe.
+
+/**
+ * Scan F detector — exported for unit tests.
+ * Returns true if the source uses usePageAssistantContext with a bare
+ * .id property-accessor interpolation (e.g. `${item.id}`) but does NOT
+ * import formatElaineContextEntity.
+ *
+ * The negative lookbehind (?<!\/) excludes URL path segments such as
+ * `/route/${item.id}`, which are not context-string violations.
+ */
+export function hasBareEntityIdInContext(contents: string): boolean {
+  const BARE_ID_RE = /(?<!\/)\$\{[^}\n]+\.id\}/;
+  return (
+    contents.includes("usePageAssistantContext") &&
+    BARE_ID_RE.test(contents) &&
+    !contents.includes("formatElaineContextEntity")
+  );
+}
+
+// NOTE: Scan F is not yet wired into the live violation loop because several
+// legitimate patterns (URL query params like `?id=${expr.id}` and JSX template
+// attributes like `htmlFor={\`...-${expr.id}\`}`) produce false positives with
+// the current lookbehind heuristic.  The detector function is exported above for
+// unit tests.  Wire up the scan loop here after a false-positive audit of all
+// pages that use usePageAssistantContext alongside .id property accesses.
+
 // ────────────────────────────────────────────────────────────────────────────
 // Report
 // ────────────────────────────────────────────────────────────────────────────

@@ -23,6 +23,7 @@ import {
   hasDirectOpenAIClient,
   hasInlineContextListBuilding,
   hasLabeledEntityIdInContext,
+  hasBareEntityIdInContext,
   extractSharedLibImports,
   checkRequirementContents,
   checkRequirementFile,
@@ -672,6 +673,140 @@ const label = \`threadId: \${selectedThreadId}\`;
 
 test("does NOT flag an empty file", () => {
   assert.equal(hasLabeledEntityIdInContext(""), false);
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Scan F — hasBareEntityIdInContext
+// ────────────────────────────────────────────────────────────────────────────
+
+console.log(
+  "\ncheck-domain-composition.test: Scan F — hasBareEntityIdInContext",
+);
+
+test("detects ${item.id} in a file with usePageAssistantContext (no formatter)", () => {
+  const source = `
+usePageAssistantContext("item-page", \`Item loaded: name=\${item.name}, id=\${item.id}\`);
+`;
+  assert.equal(hasBareEntityIdInContext(source), true);
+});
+
+test("detects ${fabric.id} that is NOT preceded by /", () => {
+  const source = `
+usePageAssistantContext("fabric-page", \`Fabric id=\${fabric.id}\`);
+`;
+  assert.equal(hasBareEntityIdInContext(source), true);
+});
+
+test("does NOT flag when formatElaineContextEntity is imported", () => {
+  const source = `
+import { formatElaineContextEntity } from "@workspace/elaine-ui";
+usePageAssistantContext("page", \`\${formatElaineContextEntity({ entity: "Item", id: item.id, label: item.name })}\`);
+`;
+  assert.equal(hasBareEntityIdInContext(source), false);
+});
+
+test("does NOT flag /route/${item.id} URL path (negative lookbehind)", () => {
+  const source = `
+usePageAssistantContext("fabric-add", "Add Fabric page.");
+navigate(\`/quilting/fabrics/\${fabric.id}\`);
+`;
+  assert.equal(hasBareEntityIdInContext(source), false);
+});
+
+test("does NOT flag when usePageAssistantContext is absent", () => {
+  const source = `
+const url = \`/trips/\${trip.id}\`;
+`;
+  assert.equal(hasBareEntityIdInContext(source), false);
+});
+
+test("does NOT flag multi-line expressions spanning a newline (no-span guard)", () => {
+  const source = `
+usePageAssistantContext("designer", "Designer page.");
+const cls = \`\${
+  dragOverId === panel.id
+    ? "border-primary"
+    : "border-border"
+}\`;
+`;
+  assert.equal(hasBareEntityIdInContext(source), false);
+});
+
+test("does NOT flag an empty file", () => {
+  assert.equal(hasBareEntityIdInContext(""), false);
+});
+
+// ── Integration tests: Scan B and C violation injection ─────────────────────
+
+console.log(
+  "\ncheck-domain-composition.test: Integration — Scan B and Scan C exit codes",
+);
+
+const TEMP_ROUTE_VIOLATION_FILE = join(
+  root,
+  "artifacts/api-server/src/routes/_temp_composition_guard_test_b_fixture.ts",
+);
+
+test("script exits non-zero when a direct new OpenAI() violation is injected (Scan B)", () => {
+  writeFileSync(
+    TEMP_ROUTE_VIOLATION_FILE,
+    [
+      "// Temporary test fixture injected by check-domain-composition.test.ts",
+      "// This file is cleaned up after the test regardless of outcome.",
+      'import OpenAI from "openai";',
+      "const openai = new OpenAI();",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  try {
+    const result = runScript();
+    assert.notEqual(
+      result.status,
+      0,
+      `Expected non-zero exit for new OpenAI() violation, but script exited ${result.status}`,
+    );
+  } finally {
+    try {
+      unlinkSync(TEMP_ROUTE_VIOLATION_FILE);
+    } catch {
+      // best-effort cleanup
+    }
+  }
+});
+
+const TEMP_CONTEXT_VIOLATION_FILE = join(
+  root,
+  "artifacts/modules/src/_temp_composition_guard_test_c_fixture.tsx",
+);
+
+test("script exits non-zero when an inline .join() context-list violation is injected (Scan C)", () => {
+  writeFileSync(
+    TEMP_CONTEXT_VIOLATION_FILE,
+    [
+      "// Temporary test fixture injected by check-domain-composition.test.ts",
+      "// This file is cleaned up after the test regardless of outcome.",
+      'usePageAssistantContext("page", () => ({',
+      '  data: `Items: ${items.map(i => i.name).join(", ") || "none"}`,',
+      "}));",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  try {
+    const result = runScript();
+    assert.notEqual(
+      result.status,
+      0,
+      `Expected non-zero exit for inline .join() violation, but script exited ${result.status}`,
+    );
+  } finally {
+    try {
+      unlinkSync(TEMP_CONTEXT_VIOLATION_FILE);
+    } catch {
+      // best-effort cleanup
+    }
+  }
 });
 
 // ────────────────────────────────────────────────────────────────────────────

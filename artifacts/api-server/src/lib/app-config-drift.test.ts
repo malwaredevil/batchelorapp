@@ -975,6 +975,44 @@ describe("app-config drift guard", () => {
     }
   });
 
+  it("every unique module in APP_CONFIG_DEFAULTS has a human-readable label in the Control Panel", () => {
+    // The Control Panel uses MODULE_LABELS (in artifacts/web/src/pages/control-panel.tsx)
+    // to display a friendly name for each config module grouping.  If a developer adds
+    // a new APP_CONFIG_DEFAULTS entry with a novel module name without updating MODULE_LABELS,
+    // the module header renders as a raw underscore-joined string ("my_new_module")
+    // instead of a readable title.
+    //
+    // WHY HERE: APP_CONFIG_DEFAULTS is in the api-server package; MODULE_LABELS is in
+    // the web artifact.  They cannot import each other in tests.  This test maintains
+    // the canonical set here and fails if a new module is added to APP_CONFIG_DEFAULTS
+    // without updating both this list AND MODULE_LABELS in control-panel.tsx.
+    //
+    // HOW TO FIX: Add the new module name to both:
+    //   1. The KNOWN_MODULE_LABELS set below.
+    //   2. MODULE_LABELS in artifacts/web/src/pages/control-panel.tsx.
+    const KNOWN_MODULE_LABELS = new Set([
+      "web_search",
+      "openrouter",
+      "ornaments",
+      "quilting",
+      "travels",
+    ]);
+
+    const unknownModules = [
+      ...new Set(APP_CONFIG_DEFAULTS.map((d) => d.module)),
+    ].filter((m) => !KNOWN_MODULE_LABELS.has(m));
+
+    if (unknownModules.length > 0) {
+      expect.fail(
+        `${unknownModules.length} APP_CONFIG_DEFAULTS module(s) are missing from KNOWN_MODULE_LABELS:\n` +
+          unknownModules.map((m) => `  "${m}"`).join("\n") +
+          "\n\nFix: add the module name to:\n" +
+          "  1. KNOWN_MODULE_LABELS in this test (app-config-drift.test.ts)\n" +
+          "  2. MODULE_LABELS in artifacts/web/src/pages/control-panel.tsx",
+      );
+    }
+  });
+
   it("every APP_CONFIG_DEFAULTS entry has a non-empty description", () => {
     // Catches regressions where a developer adds a new default without a
     // description — the Control Panel renders descriptions as contextual help

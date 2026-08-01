@@ -1,4 +1,5 @@
-import { ExternalLink } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ExternalLink, Activity, Clock } from "lucide-react";
 
 type Module =
   | "Pottery"
@@ -275,84 +276,250 @@ const MODULE_COLORS: Record<Module, string> = {
   Hub: "bg-zinc-100 text-zinc-700",
 };
 
-export function ServicesCatalogContent() {
+// ---------------------------------------------------------------------------
+// Health status types (mirrors integrations-health.ts response shape)
+// ---------------------------------------------------------------------------
+
+type ServiceCheckStatus = "ok" | "missing_key" | "error";
+
+interface ServiceCheckResult {
+  service: string;
+  status: ServiceCheckStatus;
+  latencyMs?: number;
+  detail?: string;
+}
+
+interface HealthData {
+  checks: ServiceCheckResult[];
+  cachedAt: string;
+  fromCache: boolean;
+}
+
+// Maps each catalog service name to the health-check service name(s) it corresponds to.
+// Multiple catalog entries (e.g. Gmail API, Google Calendar API) can share one health check
+// because they all use the same OAuth credentials.
+const HEALTH_NAME_MAP: Record<string, string[]> = {
+  Supabase: ["Supabase"],
+  OpenAI: ["OpenAI"],
+  OpenRouter: ["OpenRouter"],
+  "Jina AI": ["Jina AI"],
+  "Voyage AI": ["Voyage AI"],
+  "Google OAuth": ["Google OAuth"],
+  "Gmail API": ["Google OAuth"],
+  "Google Calendar API": ["Google OAuth"],
+  "Google Maps Platform": ["Google Maps"],
+  "Google Wallet API": ["Google Wallet"],
+  Resend: ["Resend"],
+  AgentPhone: ["AgentPhone"],
+  Slack: ["Slack"],
+  Sentry: ["Sentry"],
+  Apify: ["Apify"],
+};
+
+const STATUS_ORDER: Record<ServiceCheckStatus, number> = {
+  error: 0,
+  missing_key: 1,
+  ok: 2,
+};
+
+const STATUS_DOT: Record<ServiceCheckStatus, string> = {
+  ok: "bg-green-500",
+  missing_key: "bg-amber-400",
+  error: "bg-destructive",
+};
+
+const STATUS_LABEL: Record<ServiceCheckStatus, string> = {
+  ok: "Operational",
+  missing_key: "Not configured",
+  error: "Error",
+};
+
+const STATUS_BADGE: Record<ServiceCheckStatus, string> = {
+  ok: "bg-green-500/10 text-green-700 dark:text-green-400",
+  missing_key: "bg-amber-400/10 text-amber-700 dark:text-amber-400",
+  error: "bg-destructive/10 text-destructive",
+};
+
+/** Returns the worst status among matched health checks, or null if no match. */
+function resolveStatus(
+  svcName: string,
+  checkMap: Map<string, ServiceCheckStatus>,
+): ServiceCheckStatus | null {
+  const healthNames = HEALTH_NAME_MAP[svcName];
+  if (!healthNames) return null;
+  let worst: ServiceCheckStatus | null = null;
+  for (const hName of healthNames) {
+    const s = checkMap.get(hName);
+    if (!s) continue;
+    if (worst === null || STATUS_ORDER[s] < STATUS_ORDER[worst]) {
+      worst = s;
+    }
+  }
+  return worst;
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
+export function ServicesCatalogContent({
+  onNavigateToIntegrations,
+}: {
+  onNavigateToIntegrations?: () => void;
+}) {
+  const [health, setHealth] = useState<HealthData | null>(null);
+
+  // Fetch cached health data once on mount — uses the /cached endpoint which
+  // NEVER triggers a new health-check run; returns 204 when no cached result
+  // exists yet, in which case status dots are simply not shown.
+  useEffect(() => {
+    // raw-fetch-ok — owner-only admin endpoint
+    fetch("/api/admin/integrations/health/cached")
+      .then((r) => {
+        if (r.status === 204) return null; // no cached data — dots stay hidden
+        return r.ok ? (r.json() as Promise<HealthData>) : null;
+      })
+      .then((d) => setHealth(d))
+      .catch(() => {
+        /* ignore — status dots simply won't appear */
+      });
+  }, []);
+
+  // Build a fast lookup map: health check service name → status
+  const checkMap = new Map<string, ServiceCheckStatus>(
+    (health?.checks ?? []).map((c) => [c.service, c.status]),
+  );
+
+  const cachedAtLabel = health?.cachedAt
+    ? new Date(health.cachedAt).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold tracking-tight">
-          API Services Catalog
-        </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          All external APIs and third-party services integrated into the app.
-          This page is{" "}
-          <span className="font-medium text-foreground">
-            manually maintained
-          </span>{" "}
-          — update it whenever a new service is added or removed (required
-          before each GitHub sync per the pre-publish checklist).
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight">
+            API Services Catalog
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            All external APIs and third-party services integrated into the app.
+            This page is{" "}
+            <span className="font-medium text-foreground">
+              manually maintained
+            </span>{" "}
+            — update it whenever a new service is added or removed (required
+            before each GitHub sync per the pre-publish checklist).
+          </p>
+        </div>
+
+        {/* Run checks shortcut */}
+        {onNavigateToIntegrations && (
+          <div className="flex flex-col items-end gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={onNavigateToIntegrations}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <Activity className="h-3.5 w-3.5" />
+              Run health checks
+            </button>
+            {cachedAtLabel && (
+              <span className="flex items-center gap-1 text-[11px] text-muted-foreground/70">
+                <Clock className="h-3 w-3" />
+                Last checked {cachedAtLabel}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="space-y-3">
-        {SERVICES.map((svc) => (
-          <div
-            key={svc.name}
-            className="rounded-lg border border-border bg-card p-4"
-          >
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div>
-                <h3 className="font-semibold text-foreground">{svc.name}</h3>
-                <p className="text-xs text-muted-foreground">{svc.purpose}</p>
+        {SERVICES.map((svc) => {
+          const status = resolveStatus(svc.name, checkMap);
+          return (
+            <div
+              key={svc.name}
+              className="rounded-lg border border-border bg-card p-4"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="flex items-start gap-2 min-w-0">
+                  {/* Status dot — only rendered when a cached result exists */}
+                  {status !== null && (
+                    <span
+                      className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${STATUS_DOT[status]}`}
+                      title={STATUS_LABEL[status]}
+                    />
+                  )}
+                  <div className="min-w-0">
+                    <h3 className="font-semibold text-foreground">
+                      {svc.name}
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      {svc.purpose}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {/* Status badge — only rendered when a cached result exists */}
+                  {status !== null && (
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[status]}`}
+                    >
+                      {STATUS_LABEL[status]}
+                    </span>
+                  )}
+                  {svc.modules.map((m) => (
+                    <span
+                      key={m}
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${MODULE_COLORS[m]}`}
+                    >
+                      {m}
+                    </span>
+                  ))}
+                </div>
               </div>
-              <div className="flex flex-wrap gap-1">
-                {svc.modules.map((m) => (
-                  <span
-                    key={m}
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${MODULE_COLORS[m]}`}
-                  >
-                    {m}
-                  </span>
-                ))}
-              </div>
-            </div>
 
-            <p className="mt-2 text-sm text-foreground/80">{svc.usedFor}</p>
+              <p className="mt-2 text-sm text-foreground/80">{svc.usedFor}</p>
 
-            <div className="mt-3 space-y-1">
-              <p className="text-xs font-medium text-muted-foreground">
-                Implemented in
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {svc.implementedIn.map((f) => (
-                  <code
-                    key={f}
-                    className="rounded bg-muted px-1.5 py-0.5 text-xs text-foreground"
-                  >
-                    {f}
-                  </code>
-                ))}
-              </div>
-            </div>
-
-            {svc.env.length > 0 && (
               <div className="mt-3 space-y-1">
                 <p className="text-xs font-medium text-muted-foreground">
-                  Env / secrets
+                  Implemented in
                 </p>
                 <div className="flex flex-wrap gap-1.5">
-                  {svc.env.map((e) => (
+                  {svc.implementedIn.map((f) => (
                     <code
-                      key={e}
-                      className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono text-muted-foreground"
+                      key={f}
+                      className="rounded bg-muted px-1.5 py-0.5 text-xs text-foreground"
                     >
-                      {e}
+                      {f}
                     </code>
                   ))}
                 </div>
               </div>
-            )}
-          </div>
-        ))}
+
+              {svc.env.length > 0 && (
+                <div className="mt-3 space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Env / secrets
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {svc.env.map((e) => (
+                      <code
+                        key={e}
+                        className="rounded bg-muted px-1.5 py-0.5 text-xs font-mono text-muted-foreground"
+                      >
+                        {e}
+                      </code>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       <p className="flex items-center gap-1.5 text-xs text-muted-foreground">

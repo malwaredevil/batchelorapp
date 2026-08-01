@@ -12,6 +12,7 @@ export const ELAINE_TOOL_FAMILY_SENTINELS = {
   memory: ["remember_household_fact"],
   widgets: ["show_data_card"],
   navigation: ["suggest_navigation"],
+  admin: ["check_integrations_health"],
 } as const;
 
 export function assertElaineToolFamilyCoverage(toolNames: Iterable<string>) {

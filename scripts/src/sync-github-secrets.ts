@@ -59,8 +59,12 @@ const SECRETS: Array<{ name: string; purpose: string; required: boolean }> = [
   },
   {
     name: "SUPABASE_POOLER_HOST",
-    purpose: "Supabase connection pooler host",
-    required: true,
+    // Optional: lib/db/src/resolve-url.ts falls back to computing the pooler
+    // host as `aws-0-${SUPABASE_POOLER_REGION ?? "eu-west-1"}.pooler.supabase.com`
+    // when this is unset, so the app runs fine without it.
+    purpose:
+      "Supabase connection pooler host override (computed from region when absent)",
+    required: false,
   },
   // ── Auth ────────────────────────────────────────────────────────────────────
   {
@@ -96,8 +100,11 @@ const SECRETS: Array<{ name: string; purpose: string; required: boolean }> = [
   },
   {
     name: "GOOGLE_WALLET_ISSUER_ID",
-    purpose: "Google Wallet issuer ID",
-    required: true,
+    // Optional: env.ts exposes this as optional(); Google Wallet pass
+    // generation is skipped gracefully when this is absent. Not currently
+    // set in Replit or GitHub.
+    purpose: "Google Wallet issuer ID (pass generation skipped when absent)",
+    required: false,
   },
   {
     name: "GOOGLE_WALLET_SERVICE_ACCOUNT_JSON",
@@ -113,6 +120,23 @@ const SECRETS: Array<{ name: string; purpose: string; required: boolean }> = [
   {
     name: "OPENROUTER_API_KEY",
     purpose: "OpenRouter — fallback and broad LLM/AI model gateway",
+    required: true,
+  },
+  {
+    name: "OPENAI_WORKSPACE_API_KEY",
+    purpose:
+      "OpenAI workspace-scoped API key (separate billing envelope from OPENAI_API_KEY)",
+    required: true,
+  },
+  {
+    name: "REPLICATE_API_TOKEN",
+    purpose: "Replicate API token for image/video generation models",
+    required: true,
+  },
+  {
+    name: "REPLICATE_WEBHOOK_SIGNING_SECRET",
+    purpose:
+      "Replicate webhook HMAC signing secret for verifying async prediction callbacks",
     required: true,
   },
   {
@@ -133,13 +157,22 @@ const SECRETS: Array<{ name: string; purpose: string; required: boolean }> = [
   },
   {
     name: "RESEND_FROM_EMAIL",
-    purpose: "Resend sender address for transactional email",
-    required: true,
+    // Optional: not currently set in Replit or GitHub. The app uses this for
+    // password-reset and test emails (throws at call-time if absent) but those
+    // flows are non-critical and email.ts's resendConfigured() gates them.
+    // Set this to a verified Resend sender address to re-enable those flows.
+    purpose:
+      "Resend sender address for transactional email (password-reset / test email)",
+    required: false,
   },
   {
     name: "RESEND_REMINDER_FROM_EMAIL",
-    purpose: "Resend sender address for reminder email",
-    required: true,
+    // Optional: email.ts falls back to the hardcoded verified sender
+    // "Batchelor Travels <travel.alert@app.batchelor.app>" when this is absent.
+    // Not currently set in Replit or GitHub.
+    purpose:
+      "Resend sender address for reminder email (falls back to travel.alert@app.batchelor.app)",
+    required: false,
   },
   // ── Error tracking ──────────────────────────────────────────────────────────
   {
@@ -195,6 +228,27 @@ const SECRETS: Array<{ name: string; purpose: string; required: boolean }> = [
   {
     name: "GH_PAT",
     purpose: "GitHub Personal Access Token (repo read/write + secrets write)",
+    required: true,
+  },
+  // ── Slack ────────────────────────────────────────────────────────────────────
+  {
+    name: "SLACK_SIGNING_SECRET",
+    purpose: "Slack app signing secret for verifying inbound webhook payloads",
+    required: true,
+  },
+  {
+    name: "SLACK_BOT_TOKEN",
+    purpose: "Slack bot OAuth token for posting DM notifications",
+    required: true,
+  },
+  // ── Webhook secrets (prod only) ──────────────────────────────────────────────
+  {
+    name: "RESEND_WEBHOOK_SECRET_PROD",
+    // The dev counterpart (RESEND_WEBHOOK_SECRET_DEV) is intentionally not
+    // synced — it only needs to be set in the Replit workspace; GitHub CI
+    // uses the prod secret exclusively.
+    purpose:
+      "Resend inbound-email webhook signing secret for the production domain",
     required: true,
   },
   // ── Optional (sync when present; skip with notice when not set) ─────────────

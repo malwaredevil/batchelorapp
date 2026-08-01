@@ -103,6 +103,10 @@ run_bg pgsingleton pnpm --filter @workspace/scripts run check-pg-singleton
 # local pre-publish gate must catch Replit-only drift before it is synced.
 run_bg composition pnpm --filter @workspace/scripts run check-domain-composition
 
+# Secrets-registry drift guard: checks that every env var in env.ts has a
+# matching entry in the sync-github-secrets.ts SECRETS registry.
+run_bg secretsregistry pnpm --filter @workspace/scripts run check-secrets-registry
+
 # GitHub CI status (network-bound — runs in parallel with the local guards)
 run_bg cistatus pnpm --filter @workspace/scripts run check-ci-status
 
@@ -119,11 +123,12 @@ declare -A LABELS=(
   [uploadlimit]="Upload-limit guard"
   [pgsingleton]="pg singleton guard"
   [composition]="Composition and configuration"
+  [secretsregistry]="Secrets registry drift"
   [cistatus]="GitHub CI status"
 )
 
 FAILED=()
-for key in appconfig forbidden secretsscan uploadlimit pgsingleton composition cistatus; do
+for key in appconfig forbidden secretsscan uploadlimit pgsingleton composition secretsregistry cistatus; do
   code=$(cat "$LOGDIR/$key.exit" 2>/dev/null || echo 1)
   if [[ "$code" -eq 0 ]]; then
     echo -e "${GREEN}✓${RESET} ${LABELS[$key]}"

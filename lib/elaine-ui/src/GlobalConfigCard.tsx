@@ -385,6 +385,22 @@ export function GlobalConfigCard() {
               setFeatures({ ...features, enableOpenAIResponsesFallback: v })
             }
           />
+          <ToggleField
+            label="Use built-in web search (OpenAI native)"
+            hint="Elaine searches via OpenAI's native tool instead of Perplexity/OpenRouter, giving richer citations and one fewer API hop. Disable to revert to Perplexity."
+            checked={features.enableBuiltinWebSearch}
+            onChange={(v) =>
+              setFeatures({ ...features, enableBuiltinWebSearch: v })
+            }
+          />
+          <ToggleField
+            label="Show Elaine's reasoning in chat"
+            hint={`Displays a collapsible "Thinking\u2026" summary above each reply so you can follow Elaine's logic. Disable to hide the disclosure while keeping extended reasoning on.`}
+            checked={features.showReasoningSummary}
+            onChange={(v) =>
+              setFeatures({ ...features, showReasoningSummary: v })
+            }
+          />
         </div>
       </Section>
 

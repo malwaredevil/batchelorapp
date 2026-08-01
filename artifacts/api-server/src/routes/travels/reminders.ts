@@ -32,6 +32,7 @@ const CreateReminderBody = z.object({
   dueDate: z.string().optional(),
   recipientEmails: z.array(z.email()).optional(),
   smsRecipientUserIds: z.array(z.number().int()).optional(),
+  callRecipientUserIds: z.array(z.number().int()).optional(),
   syncToCalendar: z.boolean().optional(),
   alertDaysBefore: z.array(z.number().int().min(0)).min(1).optional(),
 });
@@ -43,6 +44,7 @@ const UpdateReminderBody = z.object({
   done: z.boolean().optional(),
   recipientEmails: z.array(z.email()).optional(),
   smsRecipientUserIds: z.array(z.number().int()).optional(),
+  callRecipientUserIds: z.array(z.number().int()).optional(),
   syncToCalendar: z.boolean().optional(),
   alertDaysBefore: z.array(z.number().int().min(0)).min(1).optional(),
 });
@@ -313,6 +315,9 @@ router.post("/trips/:id/reminders", async (req, res) => {
   const smsRecipientUserIds = body.smsRecipientUserIds
     ? await filterVerifiedPhoneUserIds(body.smsRecipientUserIds)
     : [];
+  const callRecipientUserIds = body.callRecipientUserIds
+    ? await filterVerifiedPhoneUserIds(body.callRecipientUserIds)
+    : [];
   const [row] = await db
     .insert(travelsReminders)
     .values({
@@ -324,6 +329,7 @@ router.post("/trips/:id/reminders", async (req, res) => {
       done: false,
       recipientEmails: body.recipientEmails ?? [],
       smsRecipientUserIds,
+      callRecipientUserIds,
       syncToCalendar,
       ...(body.alertDaysBefore !== undefined
         ? { alertDaysBefore: body.alertDaysBefore }
@@ -366,6 +372,10 @@ router.patch("/trips/:id/reminders/:reminderId", async (req, res) => {
   if (body.smsRecipientUserIds !== undefined)
     updateData.smsRecipientUserIds = await filterVerifiedPhoneUserIds(
       body.smsRecipientUserIds,
+    );
+  if (body.callRecipientUserIds !== undefined)
+    updateData.callRecipientUserIds = await filterVerifiedPhoneUserIds(
+      body.callRecipientUserIds,
     );
   if (body.syncToCalendar !== undefined)
     updateData.syncToCalendar = body.syncToCalendar;

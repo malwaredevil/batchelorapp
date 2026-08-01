@@ -12,7 +12,8 @@ export type ElaineCapabilityDomain =
   | "memory"
   | "research"
   | "widgets"
-  | "navigation";
+  | "navigation"
+  | "admin";
 
 export type ElaineCapabilityPolicy = {
   toolName: string;
@@ -171,6 +172,35 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
     ...ACTION_DEFAULTS,
     domain: "office",
     executorPrefix: "officeAction",
+  }),
+  // call_contact / message_contact are web-only: they send real outbound calls
+  // and SMS to other household members, so they must not be auto-triggered by
+  // an inbound SMS/voice identity (broken-access-control risk).
+  ...policies(["call_contact", "message_contact"], {
+    ...ACTION_DEFAULTS,
+    domain: "office",
+    executorPrefix: "communicationAction",
+    channels: ["web"] as const,
+  }),
+  // cancel_scheduled_contact: safe cancel action; web-only to stay consistent
+  // with the schedule tools it pairs with.
+  ...policies(["cancel_scheduled_contact"], {
+    ...ACTION_DEFAULTS,
+    domain: "office",
+    executorPrefix: "communicationAction",
+    channels: ["web"] as const,
+  }),
+  // list_scheduled_contacts: read-only soft tool; web-only (same scope as schedule/cancel).
+  ...policies(["list_scheduled_contacts"], {
+    domain: "office",
+    kind: "read",
+    risk: "none",
+    auth: "session",
+    confirmation: "never",
+    executorPrefix: "communicationRead",
+    audit: "runtime_observation",
+    retry: "read_only",
+    channels: ["web"] as const,
   }),
   ...policies(
     [
@@ -444,6 +474,17 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
     executorPrefix: "settings",
     audit: "runtime_observation",
     retry: "safe",
+    channels: ["web"],
+  }),
+  ...policies(["check_integrations_health"], {
+    domain: "admin",
+    kind: "read",
+    risk: "none",
+    auth: "session_and_owner",
+    confirmation: "never",
+    executorPrefix: "adminRead",
+    audit: "runtime_observation",
+    retry: "read_only",
     channels: ["web"],
   }),
 ];

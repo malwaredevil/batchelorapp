@@ -13,9 +13,14 @@
 import { pool } from "@workspace/db";
 import { runReminderAlerts } from "../lib/reminder-scheduler";
 import { computeAndStoreNudges } from "../lib/travels-nudges";
+import { computeAndStoreIntegrationsHealthNudges } from "../lib/integrations-health-nudges";
 import { logger } from "../lib/logger";
 
-Promise.all([runReminderAlerts(), computeAndStoreNudges()])
+Promise.all([
+  runReminderAlerts(),
+  computeAndStoreNudges(),
+  computeAndStoreIntegrationsHealthNudges(),
+])
   .then(async () => {
     logger.info("send-reminder-alerts: run complete");
     await pool.end();

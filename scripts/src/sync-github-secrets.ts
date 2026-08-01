@@ -225,6 +225,26 @@ const SECRETS: Array<{ name: string; purpose: string; required: boolean }> = [
     purpose: "GitHub Personal Access Token (repo read/write + secrets write)",
     required: true,
   },
+  // ── Slack ────────────────────────────────────────────────────────────────────
+  {
+    name: "SLACK_SIGNING_SECRET",
+    purpose: "Slack app signing secret for verifying inbound webhook payloads",
+    required: true,
+  },
+  {
+    name: "SLACK_BOT_TOKEN",
+    purpose: "Slack bot OAuth token for posting DM notifications",
+    required: true,
+  },
+  // ── Webhook secrets (prod only) ──────────────────────────────────────────────
+  {
+    name: "RESEND_WEBHOOK_SECRET_PROD",
+    // The dev counterpart (RESEND_WEBHOOK_SECRET_DEV) is intentionally not
+    // synced — it only needs to be set in the Replit workspace; GitHub CI
+    // uses the prod secret exclusively.
+    purpose: "Resend inbound-email webhook signing secret for the production domain",
+    required: true,
+  },
   // ── Optional (sync when present; skip with notice when not set) ─────────────
   {
     name: "MICROLINK_API_KEY",

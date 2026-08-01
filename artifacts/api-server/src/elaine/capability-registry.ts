@@ -172,10 +172,14 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
     domain: "office",
     executorPrefix: "officeAction",
   }),
+  // call_contact / message_contact are web-only: they send real outbound calls
+  // and SMS to other household members, so they must not be auto-triggered by
+  // an inbound SMS/voice identity (broken-access-control risk).
   ...policies(["call_contact", "message_contact"], {
     ...ACTION_DEFAULTS,
     domain: "office",
     executorPrefix: "communicationAction",
+    channels: ["web"] as const,
   }),
   ...policies(
     [

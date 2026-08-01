@@ -25,6 +25,7 @@ import marketRouter from "./market";
 import notificationsRouter from "./notifications";
 import knowledgeRouter from "./knowledge";
 import storageReconcileRouter from "./admin/storage-reconcile";
+import adminUsersRouter from "./admin/users";
 
 const router: IRouter = Router();
 
@@ -58,6 +59,7 @@ router.use(marketRouter);
 router.use("/notifications", notificationsRouter);
 router.use(knowledgeRouter);
 router.use("/admin/storage", storageReconcileRouter);
+router.use("/admin/users", adminUsersRouter);
 // Must be mounted before elaineRouter: elaineRouter applies a blanket
 // requireAuth middleware to every /elaine/* path, which would otherwise
 // swallow this unauthenticated (signature-gated) webhook route before it's

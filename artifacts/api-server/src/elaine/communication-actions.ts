@@ -82,6 +82,8 @@ interface ResolvedContact {
   phoneNumber: string | null;
   slackUserId: string | null;
   phoneVerified: boolean;
+  smsConsentAt: Date | null;
+  smsOptedOutAt: Date | null;
 }
 
 async function resolveContact(name: string): Promise<ResolvedContact | null> {
@@ -93,6 +95,8 @@ async function resolveContact(name: string): Promise<ResolvedContact | null> {
       phoneNumber: appUsers.phoneNumber,
       slackUserId: appUsers.slackUserId,
       phoneVerified: appUsers.phoneVerified,
+      smsConsentAt: appUsers.smsConsentAt,
+      smsOptedOutAt: appUsers.smsOptedOutAt,
     })
     .from(appUsers)
     .where(ilike(appUsers.displayName, `%${trimmed}%`))
@@ -132,6 +136,14 @@ export async function fireCallContact(
       status: 422,
       body: {
         error: `${contact.displayName ?? contactName} doesn't have a phone number on file. They can add one on their profile page.`,
+      },
+    };
+  }
+  if (!contact.phoneVerified) {
+    return {
+      status: 422,
+      body: {
+        error: `${contact.displayName ?? contactName}'s phone number hasn't been verified yet. They need to verify it before calls can be placed.`,
       },
     };
   }
@@ -208,6 +220,30 @@ export async function fireMessageContact(
       status: 422,
       body: {
         error: `${contact.displayName ?? contactName} has no phone number or Slack account linked. They can add these on their profile page.`,
+      },
+    };
+  }
+  if (!contact.phoneVerified) {
+    return {
+      status: 422,
+      body: {
+        error: `${contact.displayName ?? contactName}'s phone number hasn't been verified yet. They need to verify it before SMS can be sent.`,
+      },
+    };
+  }
+  if (!contact.smsConsentAt) {
+    return {
+      status: 422,
+      body: {
+        error: `${contact.displayName ?? contactName} hasn't given SMS consent. They can enable SMS notifications on their profile page.`,
+      },
+    };
+  }
+  if (contact.smsOptedOutAt) {
+    return {
+      status: 409,
+      body: {
+        error: `${contact.displayName ?? contactName} has opted out of SMS. They can re-subscribe by texting START to the Batchelor App number.`,
       },
     };
   }

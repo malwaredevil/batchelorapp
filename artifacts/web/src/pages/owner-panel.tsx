@@ -25,6 +25,12 @@ import {
   Slack,
   RefreshCw,
   Play,
+  Users,
+  Phone,
+  BadgeCheck,
+  Trash2,
+  Pencil,
+  X,
 } from "lucide-react";
 import { GlobalConfigCard } from "@workspace/elaine-ui";
 import {
@@ -48,10 +54,12 @@ type Tab =
   | "services"
   | "ai-evidence"
   | "ai-lab"
-  | "infrastructure";
+  | "infrastructure"
+  | "users";
 
 const ALL_TABS: { id: Tab; label: string; icon: typeof Globe }[] = [
   { id: "infrastructure", label: "Infrastructure", icon: Database },
+  { id: "users", label: "Users", icon: Users },
   { id: "travels", label: "Travels", icon: Globe },
   { id: "global-config", label: "Global Config", icon: Settings2 },
   { id: "control-panel", label: "Control Panel", icon: Code2 },
@@ -348,6 +356,7 @@ export default function OwnerPanel() {
         {safeTab === "ai-evidence" && isOwner && <AiEvidenceContent />}
 
         {safeTab === "ai-lab" && isOwner && <AiLabContent />}
+        {safeTab === "users" && isOwner && <UserManagementContent />}
         {safeTab === "infrastructure" && isOwner && (
           <InfrastructureContent
             status={envStatus}
@@ -356,6 +365,600 @@ export default function OwnerPanel() {
           />
         )}
       </main>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// User Management — owner-only "god mode" tab for editing every account field.
+// ---------------------------------------------------------------------------
+
+interface AdminUser {
+  id: number;
+  email: string;
+  displayName: string | null;
+  themePreference: string | null;
+  timezone: string | null;
+  travelsReminderEmail: string | null;
+  birthday: string | null;
+  isOwner: boolean;
+  phoneNumber: string | null;
+  phoneVerified: boolean;
+  phoneVerifiedAt: string | null;
+  smsConsentAt: string | null;
+  smsOptedOutAt: string | null;
+  smsFirstOutboundSentAt: string | null;
+  slackUserId: string | null;
+  createdAt: string;
+}
+
+function UserManagementContent() {
+  const { user: me } = useAuth();
+  const { toast } = useToast();
+  const [users, setUsers] = useState<AdminUser[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<AdminUser | null>(null);
+  const [deleteConfirmName, setDeleteConfirmName] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
+  // Form state mirrors AdminUser editable fields
+  const [form, setForm] = useState<{
+    displayName: string;
+    email: string;
+    birthday: string;
+    themePreference: string;
+    timezone: string;
+    travelsReminderEmail: string;
+    isOwner: boolean;
+    phoneNumber: string;
+    phoneVerified: boolean;
+    smsConsentNow: boolean;
+    smsOptedOut: boolean;
+    slackUserId: string;
+  }>({
+    displayName: "",
+    email: "",
+    birthday: "",
+    themePreference: "",
+    timezone: "",
+    travelsReminderEmail: "",
+    isOwner: false,
+    phoneNumber: "",
+    phoneVerified: false,
+    smsConsentNow: false,
+    smsOptedOut: false,
+    slackUserId: "",
+  });
+
+  const loadUsers = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    // raw-fetch-ok — owner-only admin endpoint
+    fetch("/api/admin/users")
+      .then((r) => (r.ok ? (r.json() as Promise<{ users: AdminUser[] }>) : Promise.reject(r.status)))
+      .then((d) => {
+        setUsers(d.users);
+        setLoading(false);
+      })
+      .catch((e) => {
+        setError(`Failed to load users: ${String(e)}`);
+        setLoading(false);
+      });
+  }, []);
+
+  useEffect(() => {
+    loadUsers();
+  }, [loadUsers]);
+
+  const openEdit = (u: AdminUser) => {
+    setEditingUser(u);
+    setForm({
+      displayName: u.displayName ?? "",
+      email: u.email,
+      birthday: u.birthday ?? "",
+      themePreference: u.themePreference ?? "",
+      timezone: u.timezone ?? "",
+      travelsReminderEmail: u.travelsReminderEmail ?? "",
+      isOwner: u.isOwner,
+      phoneNumber: u.phoneNumber ?? "",
+      phoneVerified: u.phoneVerified,
+      smsConsentNow: !!u.smsConsentAt,
+      smsOptedOut: !!u.smsOptedOutAt,
+      slackUserId: u.slackUserId ?? "",
+    });
+  };
+
+  const handleSave = async () => {
+    if (!editingUser) return;
+    setSaving(true);
+    try {
+      const body: Record<string, unknown> = {
+        displayName: form.displayName.trim() || null,
+        email: form.email.trim(),
+        birthday: form.birthday.trim() || null,
+        themePreference: form.themePreference.trim() || null,
+        timezone: form.timezone.trim() || null,
+        travelsReminderEmail: form.travelsReminderEmail.trim() || null,
+        isOwner: form.isOwner,
+        phoneNumber: form.phoneNumber.trim() || null,
+        phoneVerified: form.phoneVerified,
+        smsConsentNow: form.smsConsentNow,
+        smsOptedOut: form.smsOptedOut,
+        slackUserId: form.slackUserId.trim() || null,
+      };
+      const resp = await fetch(`/api/admin/users/${editingUser.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = (await resp.json()) as { user?: AdminUser; error?: unknown };
+      if (!resp.ok) {
+        toast({ title: "Save failed", description: String(data.error ?? "Unknown error"), variant: "destructive" });
+      } else {
+        toast({ title: "Saved", description: `${data.user?.displayName ?? data.user?.email} updated.` });
+        setEditingUser(null);
+        loadUsers();
+      }
+    } catch (e) {
+      toast({ title: "Save failed", description: String(e), variant: "destructive" });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    const expectedName = (deleteTarget.displayName ?? deleteTarget.email).trim();
+    if (deleteConfirmName.trim() !== expectedName) {
+      toast({ title: "Name doesn't match", description: "Type the exact name/email shown to confirm.", variant: "destructive" });
+      return;
+    }
+    setDeleting(true);
+    try {
+      const resp = await fetch(`/api/admin/users/${deleteTarget.id}`, { method: "DELETE" });
+      const data = (await resp.json()) as { deleted?: boolean; error?: unknown };
+      if (!resp.ok) {
+        toast({ title: "Delete failed", description: String(data.error ?? "Unknown error"), variant: "destructive" });
+      } else {
+        toast({ title: "User deleted" });
+        setDeleteTarget(null);
+        setDeleteConfirmName("");
+        loadUsers();
+      }
+    } catch (e) {
+      toast({ title: "Delete failed", description: String(e), variant: "destructive" });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const smsStatus = (u: AdminUser) => {
+    if (u.smsOptedOutAt) return { label: "Opted Out", color: "text-red-500" };
+    if (u.smsConsentAt) return { label: "Consented", color: "text-green-600" };
+    return { label: "None", color: "text-muted-foreground" };
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
+        Loading users…
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-lg border border-destructive/40 bg-destructive/8 px-4 py-3 text-sm text-destructive">
+        {error}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-lg font-semibold tracking-tight">Users</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Household members — edit identity, preferences, permissions, phone/SMS,
+          and Slack. Hub widget preferences are excluded (managed by each user).
+        </p>
+      </div>
+
+      {/* User table */}
+      <div className="rounded-lg border border-border overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-muted/40 text-muted-foreground text-xs uppercase tracking-wide">
+              <th className="px-4 py-2.5 text-left font-medium">Member</th>
+              <th className="px-4 py-2.5 text-left font-medium hidden sm:table-cell">Phone</th>
+              <th className="px-4 py-2.5 text-left font-medium hidden md:table-cell">SMS</th>
+              <th className="px-4 py-2.5 text-left font-medium hidden lg:table-cell">Slack</th>
+              <th className="px-4 py-2.5 text-left font-medium hidden lg:table-cell">Joined</th>
+              <th className="px-4 py-2.5 text-right font-medium">Edit</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(users ?? []).map((u, i) => {
+              const name = (u.displayName ?? "").trim() || u.email;
+              const initials = name
+                .split(" ")
+                .filter(Boolean)
+                .slice(0, 2)
+                .map((w) => w[0].toUpperCase())
+                .join("");
+              const sms = smsStatus(u);
+              const isSelf = u.id === me?.id;
+              return (
+                <tr
+                  key={u.id}
+                  className={`border-t border-border transition-colors ${i % 2 === 1 ? "bg-muted/20" : ""}`}
+                >
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        className="h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+                        style={{ background: "hsl(var(--primary))", color: "hsl(var(--primary-foreground))" }}
+                      >
+                        {initials || "?"}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-medium text-foreground truncate max-w-[160px]">
+                          {name}
+                          {u.isOwner && (
+                            <span className="ml-1.5 inline-flex items-center rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                              owner
+                            </span>
+                          )}
+                          {isSelf && (
+                            <span className="ml-1.5 inline-flex items-center rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                              you
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground truncate max-w-[160px]">{u.email}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 hidden sm:table-cell">
+                    {u.phoneNumber ? (
+                      <div className="flex items-center gap-1 text-xs">
+                        <span className="font-mono">{u.phoneNumber}</span>
+                        {u.phoneVerified && (
+                          <BadgeCheck className="h-3.5 w-3.5 text-green-600 shrink-0" />
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 hidden md:table-cell">
+                    <span className={`text-xs font-medium ${sms.color}`}>{sms.label}</span>
+                  </td>
+                  <td className="px-4 py-3 hidden lg:table-cell">
+                    {u.slackUserId ? (
+                      <div className="flex items-center gap-1 text-xs">
+                        <Slack className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <span className="font-mono text-muted-foreground">{u.slackUserId}</span>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 hidden lg:table-cell text-xs text-muted-foreground">
+                    {new Date(u.createdAt).toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      type="button"
+                      onClick={() => openEdit(u)}
+                      className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium text-muted-foreground border border-border hover:bg-muted hover:text-foreground transition-colors"
+                    >
+                      <Pencil className="h-3 w-3" />
+                      Edit
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Edit dialog */}
+      {editingUser && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) setEditingUser(null); }}
+        >
+          <div className="bg-background border border-border rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-background z-10">
+              <div>
+                <h3 className="font-semibold text-base">
+                  Edit {(editingUser.displayName ?? "").trim() || editingUser.email}
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">ID: {editingUser.id}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingUser(null)}
+                className="rounded p-1 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="px-6 py-5 space-y-6">
+              {/* Identity */}
+              <section className="space-y-3">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Identity</h4>
+                <div className="space-y-2">
+                  <label className="block">
+                    <span className="text-xs text-muted-foreground">Display name</span>
+                    <input
+                      className="mt-1 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      value={form.displayName}
+                      onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
+                      placeholder="Jane Smith"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs text-muted-foreground">Email</span>
+                    <input
+                      type="email"
+                      className="mt-1 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      value={form.email}
+                      onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs text-muted-foreground">Birthday (MM-DD)</span>
+                    <input
+                      className="mt-1 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring"
+                      value={form.birthday}
+                      onChange={(e) => setForm((f) => ({ ...f, birthday: e.target.value }))}
+                      placeholder="07-04"
+                      maxLength={5}
+                    />
+                  </label>
+                </div>
+              </section>
+
+              {/* Preferences */}
+              <section className="space-y-3">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Preferences</h4>
+                <div className="space-y-2">
+                  <label className="block">
+                    <span className="text-xs text-muted-foreground">Theme preference</span>
+                    <input
+                      className="mt-1 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      value={form.themePreference}
+                      onChange={(e) => setForm((f) => ({ ...f, themePreference: e.target.value }))}
+                      placeholder="light / dark / system"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs text-muted-foreground">Timezone (IANA)</span>
+                    <input
+                      className="mt-1 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring"
+                      value={form.timezone}
+                      onChange={(e) => setForm((f) => ({ ...f, timezone: e.target.value }))}
+                      placeholder="America/Denver"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs text-muted-foreground">Travels reminder email</span>
+                    <input
+                      type="email"
+                      className="mt-1 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                      value={form.travelsReminderEmail}
+                      onChange={(e) => setForm((f) => ({ ...f, travelsReminderEmail: e.target.value }))}
+                      placeholder="jane@example.com"
+                    />
+                  </label>
+                </div>
+              </section>
+
+              {/* Permissions */}
+              <section className="space-y-3">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Permissions</h4>
+                <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
+                  <div>
+                    <div className="text-sm font-medium">Owner</div>
+                    <div className="text-xs text-muted-foreground">
+                      {editingUser.id === me?.id
+                        ? "You cannot remove your own owner status."
+                        : "Full admin access to Owner Panel."}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={editingUser.id === me?.id}
+                    onClick={() => setForm((f) => ({ ...f, isOwner: !f.isOwner }))}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 ${form.isOwner ? "bg-primary" : "bg-input"}`}
+                    role="switch"
+                    aria-checked={form.isOwner}
+                  >
+                    <span
+                      className={`pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform ${form.isOwner ? "translate-x-4" : "translate-x-0"}`}
+                    />
+                  </button>
+                </div>
+              </section>
+
+              {/* Phone & SMS — God Mode */}
+              <section className="space-y-3">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <Phone className="h-3.5 w-3.5" />
+                  Phone &amp; SMS — God Mode
+                </h4>
+                <div className="space-y-2">
+                  <label className="block">
+                    <span className="text-xs text-muted-foreground">Phone number (E.164)</span>
+                    <input
+                      className="mt-1 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring"
+                      value={form.phoneNumber}
+                      onChange={(e) => setForm((f) => ({ ...f, phoneNumber: e.target.value }))}
+                      placeholder="+12105551234"
+                    />
+                  </label>
+                  {(
+                    [
+                      { key: "phoneVerified", label: "Phone verified", description: "Mark this number as verified without the OTP flow." },
+                      { key: "smsConsentNow", label: "Has SMS consent", description: "Sets / clears smsConsentAt timestamp." },
+                      { key: "smsOptedOut", label: "SMS opted out", description: "Sets / clears smsOptedOutAt timestamp." },
+                    ] as const
+                  ).map(({ key, label, description }) => (
+                    <div key={key} className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
+                      <div>
+                        <div className="text-sm font-medium">{label}</div>
+                        <div className="text-xs text-muted-foreground">{description}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setForm((f) => ({ ...f, [key]: !f[key] }))}
+                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${form[key] ? "bg-primary" : "bg-input"}`}
+                        role="switch"
+                        aria-checked={form[key]}
+                      >
+                        <span
+                          className={`pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform ${form[key] ? "translate-x-4" : "translate-x-0"}`}
+                        />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* Slack */}
+              <section className="space-y-3">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <Slack className="h-3.5 w-3.5" />
+                  Slack
+                </h4>
+                <label className="block">
+                  <span className="text-xs text-muted-foreground">Slack user ID</span>
+                  <input
+                    className="mt-1 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring"
+                    value={form.slackUserId}
+                    onChange={(e) => setForm((f) => ({ ...f, slackUserId: e.target.value }))}
+                    placeholder="U1234567890"
+                  />
+                </label>
+              </section>
+
+              {/* Account (read-only) */}
+              <section className="space-y-2 rounded-lg border border-border/60 bg-muted/20 px-4 py-3">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Account (read-only)</h4>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                  <span className="text-muted-foreground">ID</span>
+                  <span className="font-mono">{editingUser.id}</span>
+                  <span className="text-muted-foreground">Created</span>
+                  <span>{new Date(editingUser.createdAt).toLocaleString()}</span>
+                </div>
+              </section>
+            </div>
+
+            {/* Footer actions */}
+            <div className="flex items-center justify-between px-6 py-4 border-t border-border bg-muted/20 sticky bottom-0">
+              {editingUser.id !== me?.id ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeleteTarget(editingUser);
+                    setDeleteConfirmName("");
+                    setEditingUser(null);
+                  }}
+                  className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-destructive border border-destructive/40 hover:bg-destructive/10 transition-colors"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  Delete user
+                </button>
+              ) : (
+                <span />
+              )}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingUser(null)}
+                  className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground border border-border hover:bg-muted transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="rounded-md px-4 py-1.5 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-60"
+                >
+                  {saving ? "Saving…" : "Save"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete confirmation dialog */}
+      {deleteTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={(e) => { if (e.target === e.currentTarget) { setDeleteTarget(null); setDeleteConfirmName(""); } }}
+        >
+          <div className="bg-background border border-border rounded-xl shadow-2xl w-full max-w-sm">
+            <div className="px-6 py-5 space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="rounded-full bg-destructive/10 p-2 shrink-0 mt-0.5">
+                  <Trash2 className="h-4 w-4 text-destructive" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-base">Delete user?</h3>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    This permanently deletes{" "}
+                    <strong>{(deleteTarget.displayName ?? "").trim() || deleteTarget.email}</strong>{" "}
+                    and all their data. This cannot be undone.
+                  </p>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">
+                  Type{" "}
+                  <strong className="text-foreground font-mono">
+                    {(deleteTarget.displayName ?? "").trim() || deleteTarget.email}
+                  </strong>{" "}
+                  to confirm
+                </label>
+                <input
+                  autoFocus
+                  className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-destructive/50"
+                  value={deleteConfirmName}
+                  onChange={(e) => setDeleteConfirmName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") void handleDelete(); }}
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-border">
+              <button
+                type="button"
+                onClick={() => { setDeleteTarget(null); setDeleteConfirmName(""); }}
+                className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground border border-border hover:bg-muted transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={deleting}
+                className="rounded-md px-4 py-1.5 text-sm font-medium bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors disabled:opacity-60"
+              >
+                {deleting ? "Deleting…" : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

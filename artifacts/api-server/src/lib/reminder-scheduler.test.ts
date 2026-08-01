@@ -717,8 +717,9 @@ describe("runReminderAlerts — call channel", () => {
     );
     expect(deliveryInsert).toBeDefined();
     // channel param is $4, status is $6
-    expect(deliveryInsert?.[1]?.[3]).toBe("call");
-    expect(deliveryInsert?.[1]?.[5]).toBe("sent");
+    const dParams = (deliveryInsert as unknown[][])?.[1] as unknown[];
+    expect(dParams?.[3]).toBe("call");
+    expect(dParams?.[5]).toBe("sent");
   });
 
   it("does not attempt a call when the phone number is malformed (not E.164)", async () => {

@@ -8512,6 +8512,13 @@ const RESTRICTED_EXCLUDED_ACTION_TYPES = new Set<string>([
   // Admin-only action — requires the owner to be looking at the Control Panel
   // with config keys visible on screen; not meaningful over SMS/voice/email.
   "update_app_config",
+  // Outbound-contact actions: sending real calls/SMS to another household
+  // member must never be auto-triggered by an inbound SMS/voice identity —
+  // that would let any caller direct outbound communications to any member.
+  // Restricted to web channel where the requesting user is authenticated and
+  // explicitly confirms the action in the UI.
+  "call_contact",
+  "message_contact",
 ]);
 
 // Full parity with the in-app chat widget's action tools, minus the

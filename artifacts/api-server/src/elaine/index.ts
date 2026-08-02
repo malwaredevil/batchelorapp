@@ -7300,12 +7300,12 @@ const RESTRICTED_EXCLUDED_ACTION_TYPES = new Set<string>([
   // (an SMS-triggered broadcast would echo back to the SMS channel it came
   // from) and to ensure the user consciously triggers it from the web UI.
   "broadcast_message",
-  // call_contact / message_contact: sending outbound calls or messages to
-  // another household member via an inbound-identity channel (SMS, voice,
-  // email, Slack) would let any caller direct outbound communications to
-  // any household member without the authenticated UI confirmation the web
-  // channel provides. Restricted to web-only until a per-channel
-  // authorization mechanism is in place.
+  // call_contact / message_contact: excluded from the base allowlist so
+  // the email channel — where inbound From headers are spoofable — cannot
+  // trigger outbound calls or messages to household members. SMS/voice and
+  // Slack re-allow them via channelAllowedExtras because sender identity is
+  // strongly verified on those channels (E.164 phone HMAC / Slack OAuth)
+  // before the turn runs. See capability-registry.ts for the full reasoning.
   "call_contact",
   "message_contact",
 ]);
@@ -7325,6 +7325,21 @@ export const AGENTPHONE_ACTION_TYPES = new Set<string>(
 
 const AGENTPHONE_ACTION_TOOLS = ACTION_TOOLS.filter(
   (t) => t.type === "function" && AGENTPHONE_ACTION_TYPES.has(t.function.name),
+);
+
+// Actions that are available on SMS/voice and Slack but NOT on email. These
+// are excluded from AGENTPHONE_ACTION_TYPES (via RESTRICTED_EXCLUDED_ACTION_TYPES)
+// so the email channel never sees them. SMS/voice and Slack callers pass this
+// set as channelAllowedExtras, which adds them to both the model's tool list
+// and the execution gate for that specific channel.
+export const SMS_SLACK_CHANNEL_EXTRAS = new Set<string>([
+  "call_contact",
+  "message_contact",
+]);
+
+const SMS_SLACK_CHANNEL_EXTRA_TOOLS = ACTION_TOOLS.filter(
+  (t) =>
+    t.type === "function" && SMS_SLACK_CHANNEL_EXTRAS.has(t.function.name),
 );
 
 // Read/utility "soft" tools also given to the restricted channels — this is
@@ -7977,7 +7992,7 @@ export interface AgentphoneChatMessage {
 }
 
 const AGENTPHONE_CHANNEL_ADDENDUM =
-  "CHANNEL: You are replying over SMS or a phone call. Keep replies short — one to three sentences, plain text only, no markdown, no emojis, no bullet points, since this may be read aloud or sent as a text message. Use share_app_link to give the user a direct URL whenever a request needs an actual screen (e.g. connecting a calendar, uploading a photo). Actions run immediately — always briefly confirm what you did (or that it failed). CALLBACK CALLS: You have the call_me tool — use it when the user says 'call me back', 'give me a call', 'I'd rather talk', 'I'm driving — call me', or any similar request. This calls THE SAME USER who is texting you on their own verified phone number (not a household member). If they have no verified phone, relay the error and suggest they add one in settings. OUTBOUND CALLS & MESSAGES TO OTHERS: Calling or messaging other household members (call_contact, message_contact) is not available from SMS — use the app instead, or ask the user to open the web app and do it from there. CHANNEL SWITCHING: You also have the continue_in_channel tool, which sends a message to THE SAME USER (not a household member) on their Slack, SMS, or email. Use it when they say 'text me that', 'send this to my Slack', 'email me a summary', or 'let's continue on [channel]'. After calling it, confirm in your reply which channel you forwarded to.";
+  "CHANNEL: You are replying over SMS or a phone call. Keep replies short — one to three sentences, plain text only, no markdown, no emojis, no bullet points, since this may be read aloud or sent as a text message. Use share_app_link to give the user a direct URL whenever a request needs an actual screen (e.g. connecting a calendar, uploading a photo). Actions run immediately — always briefly confirm what you did (or that it failed). CALLBACK CALLS: You have the call_me tool — use it when the user says 'call me back', 'give me a call', 'I'd rather talk', 'I'm driving — call me', or any similar request. This calls THE SAME USER who is texting you on their own verified phone number (not a household member). If they have no verified phone, relay the error and suggest they add one in settings. OUTBOUND CALLS & MESSAGES TO OTHERS: You can call or message other household members using the call_contact and message_contact tools. These work from SMS because your phone number is verified. Available message channels: sms, slack, email, elaine_chat (writes to their Elaine chat widget in the app). If the user hasn't specified a channel, call list_contact_channels first to see what's reachable, then ask which they prefer in one short sentence. CHANNEL SWITCHING: You also have the continue_in_channel tool, which sends a message to THE SAME USER (not a household member) on their Slack, SMS, or email. Use it when they say 'text me that', 'send this to my Slack', 'email me a summary', or 'let's continue on [channel]'. After calling it, confirm in your reply which channel you forwarded to.";
 
 // Builds a compact text snapshot of trips/reminders/packing lists standing
 // in for the on-screen state the web widget's tools normally rely on to
@@ -8083,6 +8098,11 @@ async function runRestrictedElaineTurn(params: {
   formattingNote?: string;
   onWidget?: (w: Record<string, unknown>) => void;
   overrideTools?: OpenAI.Chat.Completions.ChatCompletionTool[];
+  /** Extra action-tool names allowed on this specific channel beyond the base
+   *  AGENTPHONE_ACTION_TYPES allowlist. Used to permit call_contact /
+   *  message_contact on SMS/voice and Slack (strong sender identity) while
+   *  keeping them excluded for email (spoofable From header). */
+  channelAllowedExtras?: Set<string>;
 }): Promise<{
   replyText: string;
   history: Array<{ role: "user" | "assistant"; content: string }>;
@@ -8097,6 +8117,7 @@ async function runRestrictedElaineTurn(params: {
     formattingNote,
     onWidget,
     overrideTools,
+    channelAllowedExtras,
   } = params;
   // Group all model calls in this restricted turn under one Sentry AI
   // Conversation keyed by channel + user so threads stay stable over time.
@@ -8141,6 +8162,24 @@ async function runRestrictedElaineTurn(params: {
     { role: "user", content: inputText },
   ];
 
+  // Build the tool list for this specific channel. overrideTools (email) takes
+  // priority; otherwise start from the base set and splice in any per-channel
+  // extras (call_contact / message_contact on SMS/voice and Slack).
+  const channelTools: OpenAI.Chat.Completions.ChatCompletionTool[] =
+    overrideTools ??
+    (channelAllowedExtras && channelAllowedExtras.size > 0
+      ? [
+          ...AGENTPHONE_ACTION_TOOLS,
+          ...SMS_SLACK_CHANNEL_EXTRA_TOOLS.filter((t) =>
+            channelAllowedExtras.has(
+              (t as { function: { name: string } }).function.name,
+            ),
+          ),
+          ...RESTRICTED_SOFT_TOOLS,
+          RESTRICTED_NAVIGATE_TOOL,
+        ]
+      : RESTRICTED_TOOLS);
+
   let replyText = "";
   const MAX_ROUNDS = 3;
   for (let round = 0; round < MAX_ROUNDS; round++) {
@@ -8149,7 +8188,7 @@ async function runRestrictedElaineTurn(params: {
         model,
         max_tokens: maxTokens,
         messages,
-        tools: overrideTools ?? RESTRICTED_TOOLS,
+        tools: channelTools,
       }),
     );
     const message = completion.choices[0]?.message;
@@ -8442,7 +8481,10 @@ async function runRestrictedElaineTurn(params: {
           name,
           call.function.arguments,
         );
-      } else if (AGENTPHONE_ACTION_TYPES.has(name)) {
+      } else if (
+        AGENTPHONE_ACTION_TYPES.has(name) ||
+        channelAllowedExtras?.has(name)
+      ) {
         try {
           const finalAction = await tryBuildAction(
             name,
@@ -8540,6 +8582,7 @@ export async function runAgentphoneTurn(params: {
     channelAddendum: AGENTPHONE_CHANNEL_ADDENDUM,
     formattingNote:
       "Your replies will be sent as SMS text or read aloud over a phone call. Use plain text only — NO markdown, NO emojis, NO bullet points. Keep it to one to three sentences.",
+    channelAllowedExtras: SMS_SLACK_CHANNEL_EXTRAS,
   });
 }
 
@@ -8656,7 +8699,7 @@ export interface ElaineSlackChatMessage {
 }
 
 const ELAINE_SLACK_CHANNEL_ADDENDUM =
-  "CHANNEL: You are replying via Slack DM. Use share_app_link to give the user a direct URL whenever a request needs an actual screen (e.g. connecting a calendar, uploading a photo). Actions run immediately — always briefly confirm what you did (or that it failed). Slack supports basic markdown (*bold*, _italic_) — use it lightly. OUTBOUND CALLS & MESSAGES TO OTHERS: Calling or messaging other household members (call_contact, message_contact) is not available via Slack — direct the user to do it from the web app instead, or provide a link with share_app_link. CHANNEL SWITCHING: You also have the continue_in_channel tool, which sends a message to THE SAME USER (not a household member) on their SMS, email, or another channel. Use it when they say 'text me that', 'email me a summary', or 'let's continue on [channel]'. After calling it, confirm in your reply which channel you forwarded to.";
+  "CHANNEL: You are replying via Slack DM. Use share_app_link to give the user a direct URL whenever a request needs an actual screen (e.g. connecting a calendar, uploading a photo). Actions run immediately — always briefly confirm what you did (or that it failed). Slack supports basic markdown (*bold*, _italic_) — use it lightly. OUTBOUND CALLS & MESSAGES TO OTHERS: You can call or message other household members using the call_contact and message_contact tools. These work from Slack because your identity is verified via the Slack OAuth integration. Available message channels: sms, slack, email, elaine_chat (writes to their Elaine chat widget in the app). If the user hasn't specified a channel, call list_contact_channels first to see what's reachable, then ask which they prefer in one short line. CHANNEL SWITCHING: You also have the continue_in_channel tool, which sends a message to THE SAME USER (not a household member) on their SMS, email, or another channel. Use it when they say 'text me that', 'email me a summary', or 'let's continue on [channel]'. After calling it, confirm in your reply which channel you forwarded to.";
 
 export async function runElaineSlackTurn(params: {
   userId: number;
@@ -8670,6 +8713,7 @@ export async function runElaineSlackTurn(params: {
     channelAddendum: ELAINE_SLACK_CHANNEL_ADDENDUM,
     formattingNote:
       "Your replies will be sent as Slack messages. You may use basic Slack markdown (*bold*, _italic_) lightly. Keep responses concise — two to four sentences is usually ideal, though more detail is fine when genuinely needed. Do not use email-style sign-offs.",
+    channelAllowedExtras: SMS_SLACK_CHANNEL_EXTRAS,
   });
 }
 

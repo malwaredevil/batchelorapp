@@ -32,6 +32,10 @@ export interface CrossChannelEntry {
   gist: string;
   /** Short date string for human readability, e.g. "Aug 2". */
   ts: string;
+  /** Full ISO-8601 timestamp for programmatic age comparisons. Added later than
+   *  `ts`; absent on entries written before this field existed — treat those as
+   *  having unknown/old age. */
+  iso?: string;
 }
 
 const MAX_ENTRIES = 15;
@@ -170,11 +174,13 @@ export async function appendCrossChannelEntry(
     // Use a fixed separator that cannot be mistaken for a prompt delimiter.
     const gist = `topic: ${userSanitized} | reply: ${replySanitized}`;
 
-    const ts = new Date().toLocaleDateString("en-US", {
+    const now = new Date();
+    const ts = now.toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
     });
-    const newEntry: CrossChannelEntry = { channel, gist, ts };
+    const iso = now.toISOString();
+    const newEntry: CrossChannelEntry = { channel, gist, ts, iso };
 
     // Read-modify-write: fire-and-forget so a race (two concurrent turns for
     // the same user) may lose one entry — totally acceptable for context logs.

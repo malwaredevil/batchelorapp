@@ -1392,7 +1392,11 @@ export function useRegenerateElaineDailyBrief(options?: {
 export interface CrossChannelEntry {
   channel: string;
   gist: string;
+  /** Short date string for display, e.g. "Aug 2". */
   ts: string;
+  /** Full ISO-8601 timestamp for age comparisons. Absent on entries written
+   *  before this field was added — treat those as having unknown/old age. */
+  iso?: string;
 }
 
 export interface CrossChannelContext {

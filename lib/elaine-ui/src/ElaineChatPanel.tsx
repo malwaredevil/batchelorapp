@@ -327,8 +327,14 @@ export function ElaineChatPanel({
     mutation: { onSuccess: () => void refetchCrossChannel() },
   });
   const crossChannelEntries: CrossChannelEntry[] = crossChannel?.entries ?? [];
-  // Show at most 2 most-recent entries (server already orders by recency)
-  const recentEntries = crossChannelEntries.slice(0, 2);
+  // Show at most 2 most-recent entries, but only those within the last 7 days.
+  // Uses the ISO timestamp added to new entries; entries that predate the field
+  // (no `iso`) are treated as too old and silently excluded.
+  const now = Date.now();
+  const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+  const recentEntries = crossChannelEntries
+    .filter((e) => e.iso != null && now - new Date(e.iso).getTime() <= SEVEN_DAYS_MS)
+    .slice(0, 2);
   const showCrossChannel = !hideBrief && recentEntries.length > 0;
 
   return (

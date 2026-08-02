@@ -219,7 +219,10 @@ export default function OwnerPanel() {
   useEffect(() => {
     if (!devMenuOpen) return;
     function handleClick(e: MouseEvent) {
-      if (devMenuRef.current && !devMenuRef.current.contains(e.target as Node)) {
+      if (
+        devMenuRef.current &&
+        !devMenuRef.current.contains(e.target as Node)
+      ) {
         setDevMenuOpen(false);
       }
     }
@@ -287,7 +290,10 @@ export default function OwnerPanel() {
           {/* Center: tab navigation */}
           <div className="flex-1 min-w-0">
             <div className="flex items-stretch h-full px-1">
-              {(isOwner ? TOP_TABS : ALL_TABS.filter((t) => t.id === "travels")).map((tab) => {
+              {(isOwner
+                ? TOP_TABS
+                : ALL_TABS.filter((t) => t.id === "travels")
+              ).map((tab) => {
                 const Icon = tab.icon;
                 const active = safeTab === tab.id;
                 return (
@@ -323,7 +329,8 @@ export default function OwnerPanel() {
                     }`}
                   >
                     <Code2 className="h-3.5 w-3.5 shrink-0" />
-                    {DEV_TABS.find((t) => t.id === safeTab)?.label ?? "Dev Tools"}
+                    {DEV_TABS.find((t) => t.id === safeTab)?.label ??
+                      "Dev Tools"}
                     <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
                     {DEV_TABS.some((t) => t.id === safeTab) && (
                       <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-t-full bg-primary" />

@@ -4,16 +4,7 @@ on:
   workflow_dispatch:
   pull_request:
     branches: [main]
-    paths:
-      - ".github/workflows/database-bootstrap.yml"
-      - "lib/db/src/**"
-      - "lib/db/package.json"
-      - "artifacts/api-server/src/lib/startup-migrate.ts"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
-  push:
-    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - ".github/workflows/database-bootstrap.yml"
       - "lib/db/src/**"
@@ -59,15 +50,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
-        with:
-          version: 10
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: 24
-          cache: "pnpm"
-
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-workspace
 
       # Some schema statements intentionally name Supabase's Data API roles
       # and Realtime publication. Recreate only those names in the disposable
@@ -174,8 +157,5 @@ jobs:
           WHERE schemaname = 'public';
           SQL
 
-      # Pull requests also exercise the focused database unit suite. Main-push
-      # runs stay dedicated to proving the committed schema can bootstrap.
       - name: Run database package tests
-        if: github.event_name == 'pull_request'
         run: pnpm --filter @workspace/db run test

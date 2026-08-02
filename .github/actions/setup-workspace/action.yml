@@ -1,0 +1,28 @@
+name: Setup workspace
+description: >
+  Shared pnpm + Node.js + frozen-lockfile install used by every CI job in
+  this repo. Defined once here so a toolchain bump (Node version, pnpm
+  version) is a single-file change instead of a find-and-replace across
+  every workflow job.
+
+  NOTE: this action does NOT check out the repository. GitHub Actions can
+  only resolve a local action reference (`uses: ./path`) from files already
+  present in $GITHUB_WORKSPACE, so every calling job must run its own
+  `actions/checkout` step (with persist-credentials: false, and fetch-depth
+  set as needed) *before* this action — a composite action step cannot check
+  out the code that defines it.
+
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
+      with:
+        version: 10
+
+    - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+      with:
+        node-version: 24
+        cache: "pnpm"
+
+    - run: pnpm install --frozen-lockfile
+      shell: bash

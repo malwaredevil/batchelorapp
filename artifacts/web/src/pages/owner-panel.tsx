@@ -280,8 +280,8 @@ export default function OwnerPanel() {
             </div>
 
             {/* Center: tab navigation */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-stretch h-full px-1">
+            <div className="flex-1 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="flex items-stretch h-full w-max px-1">
                 {(isOwner
                   ? TOP_TABS
                   : ALL_TABS.filter((t) => t.id === "travels")
@@ -293,7 +293,7 @@ export default function OwnerPanel() {
                       key={tab.id}
                       type="button"
                       onClick={() => navigateTab(tab.id)}
-                      className={`relative flex items-center gap-1.5 px-3 h-full text-sm font-medium transition-colors whitespace-nowrap focus-visible:outline-none ${
+                      className={`relative flex shrink-0 items-center gap-1.5 px-3 h-full text-sm font-medium transition-colors whitespace-nowrap focus-visible:outline-none ${
                         active
                           ? "text-foreground"
                           : "text-muted-foreground hover:text-foreground"
@@ -310,7 +310,10 @@ export default function OwnerPanel() {
 
                 {/* Dev Tools dropdown — collapses the 5 dev/debug tabs */}
                 {isOwner && (
-                  <div ref={devMenuRef} className="relative flex items-stretch">
+                  <div
+                    ref={devMenuRef}
+                    className="relative flex shrink-0 items-stretch"
+                  >
                     <button
                       type="button"
                       onClick={() => setDevMenuOpen((o) => !o)}

@@ -25,13 +25,25 @@ interface AgentCredentials {
   phoneNumberId: string | null;
 }
 
-let cachedCredentials: AgentCredentials | null = null;
+interface CachedCredentials {
+  credentials: AgentCredentials;
+  /** Unix timestamp (ms) after which the cache entry is considered stale. */
+  expiresAt: number;
+}
+
+/** TTL for the agent-credentials cache: 10 minutes. */
+const CREDENTIALS_TTL_MS = 10 * 60 * 1_000;
+
+let cachedCredentials: CachedCredentials | null = null;
 
 // Lazily fetches and caches the AgentPhone agent ID and its current phone
-// number for this workspace. Caches both together so outbound calls always
-// use the number that is actually attached to the agent right now.
+// number for this workspace. The cache has a 10-minute TTL so that number
+// changes (e.g. after an account upgrade) are picked up automatically without
+// requiring a server restart.
 async function getAgentCredentials(): Promise<AgentCredentials> {
-  if (cachedCredentials) return cachedCredentials;
+  if (cachedCredentials && Date.now() < cachedCredentials.expiresAt) {
+    return cachedCredentials.credentials;
+  }
   const response = await connectors.proxy("agentphone", "/v1/agents", {
     method: "GET",
   });
@@ -51,10 +63,23 @@ async function getAgentCredentials(): Promise<AgentCredentials> {
     throw new Error("AgentPhone: no agent found in account");
   }
   cachedCredentials = {
-    agentId: agent.id,
-    phoneNumberId: agent.numbers?.[0]?.id ?? null,
+    credentials: {
+      agentId: agent.id,
+      phoneNumberId: agent.numbers?.[0]?.id ?? null,
+    },
+    expiresAt: Date.now() + CREDENTIALS_TTL_MS,
   };
-  return cachedCredentials;
+  return cachedCredentials.credentials;
+}
+
+/**
+ * Clears the cached agent credentials so the next call to
+ * {@link getAgentCredentials} refetches from the AgentPhone API. Call this
+ * when a call outcome suggests the cached number may be stale (e.g. 0-duration
+ * "completed" that was likely screened due to a wrong caller-ID).
+ */
+export function clearAgentCredentialsCache(): void {
+  cachedCredentials = null;
 }
 
 export interface OutboundCallOptions {
@@ -195,9 +220,16 @@ export async function waitForCallOutcome(
       const duration = data.durationSeconds ?? 0;
       // AgentPhone marks immediately-ended calls as "completed" with 0 duration
       // (e.g. call blocked by screening). Only treat it as answered if the call
-      // actually had voice time.
-      if (status === "completed")
-        return duration > 0 ? "answered" : "no-answer";
+      // actually had voice time. On a 0-duration completion the cached phoneNumberId
+      // may be stale (old number still in cache after a plan upgrade), so
+      // invalidate it so the next call refetches the current number.
+      if (status === "completed") {
+        if (duration === 0) {
+          clearAgentCredentialsCache();
+          return "no-answer";
+        }
+        return "answered";
+      }
       if (status === "no-answer" || status === "busy") return "no-answer";
       if (status === "failed") return "error";
       if (status === "voicemail") return "voicemail";

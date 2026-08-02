@@ -57,6 +57,20 @@ const ContinueInChannelPayload = z.object({
   ),
 });
 
+// call_me: initiate an outbound voice call to the requesting user's OWN
+// verified phone number. Self-directed — always resolves from userId, never
+// from a contact name. Available on web + SMS (excluded from email).
+const CallMePayload = z.object({
+  greeting: z
+    .string()
+    .min(1)
+    .max(500)
+    .optional()
+    .describe(
+      "Opening words Elaine says when the call connects. Omit for the default warm greeting.",
+    ),
+});
+
 export const communicationActionSchemas = [
   z.object({
     type: z.literal("call_contact"),
@@ -74,6 +88,10 @@ export const communicationActionSchemas = [
     type: z.literal("continue_in_channel"),
     payload: ContinueInChannelPayload,
   }),
+  z.object({
+    type: z.literal("call_me"),
+    payload: CallMePayload,
+  }),
 ] as const;
 
 export const COMMUNICATION_ACTION_TYPES = [
@@ -81,6 +99,7 @@ export const COMMUNICATION_ACTION_TYPES = [
   "message_contact",
   "cancel_scheduled_contact",
   "continue_in_channel",
+  "call_me",
 ] as const;
 
 export type CommunicationActionType =
@@ -593,6 +612,87 @@ export const communicationActionExecutors: Record<
     return { status: 400, body: { error: "Unknown target channel." } };
   }) as ActionExecutor,
 
+  call_me: (async (
+    payload: z.infer<typeof CallMePayload>,
+    userId: number,
+  ) => {
+    // Look up the requesting user's own verified phone number.
+    const [user] = await db
+      .select({
+        phoneNumber: appUsers.phoneNumber,
+        phoneVerified: appUsers.phoneVerified,
+        smsOptedOutAt: appUsers.smsOptedOutAt,
+        displayName: appUsers.displayName,
+      })
+      .from(appUsers)
+      .where(eq(appUsers.id, userId));
+
+    if (!user) {
+      return { status: 404, body: { error: "User account not found." } };
+    }
+    if (!user.phoneNumber) {
+      return {
+        status: 422,
+        body: {
+          error:
+            "You don't have a phone number on file. Add and verify one in your account settings, then ask me to call you again.",
+        },
+      };
+    }
+    if (!user.phoneVerified) {
+      return {
+        status: 422,
+        body: {
+          error:
+            "Your phone number hasn't been verified yet. Verify it in your account settings first.",
+        },
+      };
+    }
+    if (user.smsOptedOutAt) {
+      return {
+        status: 409,
+        body: {
+          error:
+            "You've opted out of SMS and voice calls. Text START to the Batchelor App number to re-subscribe, then ask me to call you again.",
+        },
+      };
+    }
+
+    const greeting =
+      payload.greeting ??
+      (user.displayName
+        ? `Hi ${user.displayName}, it's Elaine from the Batchelor app calling. How can I help you?`
+        : "Hi, it's Elaine from the Batchelor app. How can I help you?");
+
+    try {
+      const { callId } = await initiateOutboundCall({
+        toNumber: user.phoneNumber,
+        initialGreeting: greeting,
+        callScreeningPurpose: "Elaine callback request",
+      });
+      logger.info(
+        { callId, toNumber: user.phoneNumber, userId },
+        "elaine: initiated self-callback call",
+      );
+      return {
+        status: 200,
+        body: {
+          type: "call_me",
+          result: {
+            callId,
+            confirmationMessage: "Calling you now — pick up in a moment!",
+          },
+        },
+      };
+    } catch (err) {
+      logger.error({ err }, "elaine: failed to initiate self-callback call");
+      return {
+        status: 500,
+        body: { error: "Failed to place the call. Please try again shortly." },
+      };
+    }
+  }) as ActionExecutor,
+
   cancel_scheduled_contact: (async (
     payload: z.infer<typeof CancelScheduledContactPayload>,
     userId: number,
@@ -782,6 +882,9 @@ export async function buildCommunicationActionLabel(action: {
       const channelLabels = { slack: "Slack", sms: "SMS", email: "email" };
       return `Continue conversation on ${channelLabels[payload.targetChannel]}`;
     }
+    case "call_me": {
+      return "Call me back on my phone";
+    }
   }
 }
 
@@ -917,6 +1020,31 @@ export const communicationActionTools: OpenAI.Chat.Completions.ChatCompletionToo
             },
           },
           required: ["targetChannel", "message"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "call_me",
+        description:
+          "Initiate an outbound voice call to THE REQUESTING USER'S OWN verified phone number. " +
+          "Use this when the user says 'call me back', 'give me a call', 'can you call me?', " +
+          "'I'd rather talk — call my phone', 'I'm driving, call me', or any similar request. " +
+          "This calls THE SAME USER who is chatting, never another household member — use call_contact for that. " +
+          "Available on web and SMS channels. NOT available over email. " +
+          "After proposing, confirm in your reply that Elaine is calling them. " +
+          "If they have no verified phone number, the executor returns an error message you should relay.",
+        parameters: {
+          type: "object",
+          properties: {
+            greeting: {
+              type: "string",
+              description:
+                "Optional opening words Elaine says when the call connects (1–2 warm sentences). Omit to use the default greeting.",
+            },
+          },
+          required: [],
         },
       },
     },

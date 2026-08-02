@@ -207,6 +207,17 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
     executorPrefix: "communicationAction",
     channels: ALL_READ_CHANNELS,
   }),
+  // call_me: initiates an outbound call to THE REQUESTING USER'S OWN verified
+  // phone. Always resolves to userId (never a contact name), so it is safe on
+  // SMS/voice — the identity is already verified before the turn runs.
+  // Excluded from email because outbound calls are disruptive and email is
+  // async; users who want a callback should switch to SMS or the web app.
+  ...policies(["call_me"], {
+    ...ACTION_DEFAULTS,
+    domain: "office",
+    executorPrefix: "communicationAction",
+    channels: ["web", "sms"] as const,
+  }),
   // list_scheduled_contacts: read-only soft tool; web-only (same scope as schedule/cancel).
   ...policies(["list_scheduled_contacts"], {
     domain: "office",

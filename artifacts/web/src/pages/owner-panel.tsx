@@ -319,9 +319,7 @@ export default function OwnerPanel() {
                   className="flex items-stretch h-full gap-1 px-1"
                 >
                   {TAB_GROUPS.map((group) => {
-                    const activeTab = group.tabs.find(
-                      (t) => t.id === safeTab,
-                    );
+                    const activeTab = group.tabs.find((t) => t.id === safeTab);
                     const GroupIcon = activeTab?.icon ?? group.icon;
                     const isGroupActive = !!activeTab;
                     const isOpen = openGroupKey === group.key;
@@ -3244,7 +3242,15 @@ function CommCheckScheduleCard() {
           <input
             type="time"
             value={schedule[timeKey]}
-            onChange={(e) => void saveField(timeKey, e.target.value)}
+            onChange={(e) => {
+              // Native time inputs fire onChange with "" while the user is
+              // mid-edit (e.g. clearing the field before typing a new value).
+              // Saving that intermediate value 400s against the server's
+              // 24h "HH:MM" validation (see app-config.ts case "time").
+              // Only persist once a complete time is present.
+              if (!e.target.value) return;
+              void saveField(timeKey, e.target.value);
+            }}
             disabled={saving === timeKey}
             className="rounded border border-border bg-background px-2 py-1 text-xs disabled:opacity-50"
           />

@@ -22,11 +22,15 @@ import {
   Play,
   Square,
   Sun,
+  Radio,
 } from "lucide-react";
 import {
   useGetElaineDailyBrief,
   useDismissElaineDailyBrief,
+  useGetElaineCrossChannelContext,
+  type CrossChannelEntry,
 } from "@workspace/api-client-react";
+import { crossAppUrl } from "@workspace/web-core/cross-app";
 import { useVoiceInput } from "./useVoiceInput";
 import { useTTS, DEFAULT_VOICE_PREVIEW_KEY } from "./useTTS";
 import { Button } from "@workspace/ui";
@@ -315,6 +319,13 @@ export function ElaineChatPanel({
   const showBrief =
     !hideBrief && brief != null && !brief.dismissed && brief.content.length > 0;
 
+  // Cross-channel activity — compact summary of recent SMS/email/Slack turns
+  const { data: crossChannel } = useGetElaineCrossChannelContext();
+  const crossChannelEntries: CrossChannelEntry[] = crossChannel?.entries ?? [];
+  // Show at most 2 most-recent entries (server already orders by recency)
+  const recentEntries = crossChannelEntries.slice(0, 2);
+  const showCrossChannel = !hideBrief && recentEntries.length > 0;
+
   return (
     <>
       <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
@@ -331,6 +342,32 @@ export function ElaineChatPanel({
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
+          </div>
+        )}
+        {showCrossChannel && (
+          <div className="rounded-xl border border-border/60 bg-muted/40 px-3.5 py-3 text-sm">
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                <Radio className="w-3 h-3" />
+                Recent on other channels
+              </div>
+              <a
+                href={crossAppUrl("/elaine/memory")}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors underline-offset-2 hover:underline"
+              >
+                See all
+              </a>
+            </div>
+            <ul className="space-y-1.5">
+              {recentEntries.map((entry: CrossChannelEntry, i: number) => (
+                <li key={i} className="flex items-start gap-2 text-xs text-foreground/80 leading-relaxed">
+                  <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground leading-none mt-0.5">
+                    {entry.channel}
+                  </span>
+                  <span className="flex-1 line-clamp-2">{entry.gist}</span>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
         {messages.length === 0 &&

@@ -7332,6 +7332,14 @@ const EMAIL_SAFE_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   ...RESTRICTED_SOFT_TOOLS.filter(
     (t) => t.type === "function" && EMAIL_SAFE_TOOL_NAMES.has(t.function.name),
   ),
+  // continue_in_channel is an action tool (not a soft tool) but safe for the
+  // email channel: the executor resolves the target from userId (the verified
+  // DB record), never from the inbound From address. See capability-registry.ts
+  // for the full security reasoning.
+  ...AGENTPHONE_ACTION_TOOLS.filter(
+    (t) =>
+      t.type === "function" && t.function.name === "continue_in_channel",
+  ),
   RESTRICTED_NAVIGATE_TOOL,
 ];
 
@@ -8388,7 +8396,7 @@ export interface ElaineEmailChatMessage {
 }
 
 const ELAINE_EMAIL_CHANNEL_ADDENDUM =
-  "CHANNEL: You are replying by email. You can look up household data, check the weather, search for flights, and answer factual questions. You CANNOT create, edit, or delete any records over email — if someone asks you to make a change, politely explain they need to do that in the app and give them a link with share_app_link. Use share_app_link whenever a request needs an actual screen. Sign off naturally as Elaine; do not repeat a greeting like 'Hi' if the message is a quick reply. OUTBOUND CALLS & MESSAGES: You do have the ability to initiate phone calls and send cross-channel messages (Slack DM or SMS) to household members — these are real capabilities. However, the call_contact and message_contact tools are only available in the web interface, not over email, because they require authenticated confirmation. If asked to call or message someone from email, say you can do it but it must be requested from the web app chat, then use share_app_link to give them a direct link.";
+  "CHANNEL: You are replying by email. You can look up household data, check the weather, search for flights, and answer factual questions. You CANNOT create, edit, or delete any records over email — if someone asks you to make a change, politely explain they need to do that in the app and give them a link with share_app_link. Use share_app_link whenever a request needs an actual screen. Sign off naturally as Elaine; do not repeat a greeting like 'Hi' if the message is a quick reply. CHANNEL SWITCHING: You have the continue_in_channel tool, which sends a message to THE SAME USER (not a household member) on their SMS or Slack. Use it when they say 'text me that', 'send this to my Slack', or 'let's continue on [channel]'. After calling it, confirm in your reply which channel you forwarded to. OUTBOUND CALLS & MESSAGES: You do have the ability to initiate phone calls and send cross-channel messages (Slack DM or SMS) to household members — these are real capabilities. However, the call_contact and message_contact tools are only available in the web interface, not over email, because they require authenticated confirmation. If asked to call or message someone from email, say you can do it but it must be requested from the web app chat, then use share_app_link to give them a direct link.";
 
 // Runs one restricted, non-streaming Elaine turn for an inbound email from a
 // known household member. Mirrors runAgentphoneTurn's shape/behavior exactly

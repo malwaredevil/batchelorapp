@@ -193,14 +193,19 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
   // continue_in_channel: sends a message to THE SAME USER on another channel
   // (self-directed channel-switching). Unlike call_contact/message_contact
   // (which target other household members), this always sends to the requesting
-  // user themselves, so it is safe on all trusted channels (web, SMS, voice).
-  // Email is excluded because email action tools are intentionally disabled
-  // (weaker identity) and sending email-to-email would be circular.
+  // user themselves. Email channel inclusion is safe because:
+  // 1. The inbound sender is verified against app_users.email before the turn runs.
+  // 2. The executor resolves the target from userId (the verified DB record),
+  //    never from the inbound From address itself.
+  // 3. Worst-case spoofed From: the legitimate account owner receives an
+  //    unexpected Slack/SMS from Elaine — not a privilege-escalation risk.
+  // 4. email→email is not circular: email users typically switch to SMS/Slack,
+  //    and even if they request email, the outbound goes to the verified address.
   ...policies(["continue_in_channel"], {
     ...ACTION_DEFAULTS,
     domain: "office",
     executorPrefix: "communicationAction",
-    channels: WEB_AND_TRUSTED_CHANNELS,
+    channels: ALL_READ_CHANNELS,
   }),
   // list_scheduled_contacts: read-only soft tool; web-only (same scope as schedule/cancel).
   ...policies(["list_scheduled_contacts"], {

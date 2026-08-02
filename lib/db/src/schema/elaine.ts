@@ -447,3 +447,28 @@ export type ElaineCrossChannelContextRow =
   typeof elaineCrossChannelContext.$inferSelect;
 export type InsertElaineCrossChannelContext =
   typeof elaineCrossChannelContext.$inferInsert;
+
+// Broadcast rate-limit log — one row per successful broadcast_message action.
+// checkBroadcastRateLimit counts rows WHERE user_id = ? AND created_at > now()
+// - interval '1 hour'; if ≥ 3, the request is rejected with a 429. Storing
+// this in the DB (not an in-memory Map) makes the 3-per-hour cap survive
+// server restarts and deployments.
+export const elaineBroadcastLog = pgTable(
+  "elaine_broadcast_log",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("elaine_broadcast_log_user_created_idx").on(
+      table.userId,
+      table.createdAt,
+    ),
+  ],
+).enableRLS();
+
+export type ElaineBroadcastLogRow = typeof elaineBroadcastLog.$inferSelect;
+export type InsertElaineBroadcastLog = typeof elaineBroadcastLog.$inferInsert;

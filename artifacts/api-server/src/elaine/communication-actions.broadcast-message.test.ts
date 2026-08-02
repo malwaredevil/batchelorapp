@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const {
   mockDbWhere,
+  broadcastLog,
   mockSendSms,
   mockOpenDmChannel,
   mockPostSlackMessage,
@@ -27,6 +28,10 @@ const {
   }
   return {
     mockDbWhere: vi.fn(),
+    // In-memory store that mirrors the elaine_broadcast_log table. Each entry
+    // is the Date the broadcast was reserved. Tests use unique userIds so
+    // entries from different tests never collide.
+    broadcastLog: new Map<number, Date[]>(),
     mockSendSms: vi.fn(),
     mockOpenDmChannel: vi.fn(),
     mockPostSlackMessage: vi.fn(),
@@ -38,10 +43,65 @@ const {
   };
 });
 
-// broadcast_message does: await db.select({...}).from(appUsers).where(eq(...))
-// — no .limit() call, so the mock chain must be thenable at .where().
+// The DB mock supports two access patterns used by broadcast_message:
+//
+// 1. db.transaction(callback) — atomic rate-limit check + insert.
+//    The mock implements pg_advisory_xact_lock via tx.execute, which captures
+//    the userId from the sql template's interpolated values. tx.select counts
+//    in-memory broadcastLog entries; tx.insert appends to it.
+//
+// 2. db.select().from(appUsers).where() — user lookup, delegates to mockDbWhere.
+//
+// Each userId is unique per test scenario so broadcastLog entries never leak
+// between unrelated tests.
 vi.mock("@workspace/db", () => ({
   db: {
+    transaction: vi.fn(
+      async (callback: (tx: unknown) => Promise<unknown>) => {
+        let capturedUserId = 0;
+        const WINDOW_MS = 60 * 60 * 1000;
+
+        const tx = {
+          // pg_advisory_xact_lock(userId::bigint) — extract userId from the
+          // sql template's interpolated values array.
+          execute: vi.fn().mockImplementation(
+            (sqlObj: { _values?: unknown[] }) => {
+              capturedUserId = Number(sqlObj?._values?.[0] ?? 0);
+              return Promise.resolve([]);
+            },
+          ),
+
+          // Rate-limit count + min query on elaine_broadcast_log.
+          select: (_fields: unknown) => ({
+            from: (_table: unknown) => ({
+              where: (_cond: unknown) => {
+                const now = Date.now();
+                const cutoff = now - WINDOW_MS;
+                const entries = (broadcastLog.get(capturedUserId) ?? []).filter(
+                  (ts) => ts.getTime() > cutoff,
+                );
+                const oldest = entries.length > 0 ? (entries[0] ?? null) : null;
+                return Promise.resolve([{ total: entries.length, oldest }]);
+              },
+            }),
+          }),
+
+          // Insert a reservation row.
+          insert: (_table: unknown) => ({
+            values: (data: { userId: number }) => {
+              const log = broadcastLog.get(data.userId) ?? [];
+              log.push(new Date());
+              broadcastLog.set(data.userId, log);
+              return Promise.resolve();
+            },
+          }),
+        };
+
+        return callback(tx);
+      },
+    ),
+
+    // User-lookup path: db.select().from(appUsers).where()
     select: () => ({
       from: () => ({
         where: (..._args: unknown[]) => mockDbWhere(),
@@ -49,6 +109,8 @@ vi.mock("@workspace/db", () => ({
     }),
   },
   appUsers: {},
+  elaineBroadcastLog: {},
+  elaineScheduledActions: {},
 }));
 
 vi.mock("../lib/sms", () => ({
@@ -76,11 +138,20 @@ vi.mock("../lib/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
+// drizzle-orm: sql is used as a tagged template literal; we return an object
+// exposing the interpolated values so the tx.execute mock can extract userId.
 vi.mock("drizzle-orm", () => ({
   eq: vi.fn(),
   and: vi.fn(),
   ilike: vi.fn(),
   lte: vi.fn(),
+  gt: vi.fn(),
+  count: vi.fn().mockReturnValue("count_field"),
+  min: vi.fn().mockReturnValue("min_field"),
+  sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({
+    _strings: strings,
+    _values: values,
+  }),
   inArray: vi.fn(),
 }));
 

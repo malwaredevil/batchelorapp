@@ -3031,4 +3031,18 @@ END $$`,
   `ALTER TABLE elaine_cross_channel_context ENABLE ROW LEVEL SECURITY`,
   `CREATE INDEX IF NOT EXISTS elaine_cross_channel_context_user_id_idx
      ON elaine_cross_channel_context (user_id)`,
+
+  // ── Elaine broadcast rate-limit log (Task #585) ───────────────────────────
+  // One row per successful broadcast_message action. The rate limiter counts
+  // rows WHERE user_id = ? AND created_at > now() - interval '1 hour'; if
+  // ≥ 3, the request is rejected. Persisting in DB makes the cap survive
+  // server restarts, unlike the previous in-memory Map approach.
+  `CREATE TABLE IF NOT EXISTS elaine_broadcast_log (
+     id         SERIAL PRIMARY KEY,
+     user_id    INTEGER NOT NULL,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE elaine_broadcast_log ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS elaine_broadcast_log_user_created_idx
+     ON elaine_broadcast_log (user_id, created_at)`,
 ];

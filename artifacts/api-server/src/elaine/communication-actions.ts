@@ -1,7 +1,12 @@
 import { z } from "zod/v4";
 import type OpenAI from "openai";
-import { and, eq, ilike, lte } from "drizzle-orm";
-import { db, appUsers, elaineScheduledActions } from "@workspace/db";
+import { and, count, eq, gt, ilike, lte, min, sql } from "drizzle-orm";
+import {
+  db,
+  appUsers,
+  elaineBroadcastLog,
+  elaineScheduledActions,
+} from "@workspace/db";
 import {
   sendSms,
   SmsOptedOutError,
@@ -69,30 +74,61 @@ const BroadcastMessagePayload = z.object({
     .describe("The text to broadcast to all your connected channels."),
 });
 
-// Per-user broadcast rate limit: max 3 per hour (in-process rolling window).
-// Single-process Node.js server — in-memory is fine; restarts reset the
-// counter, which is acceptable for an abuse-prevention guard.
-const _broadcastTimestamps = new Map<number, number[]>();
+// Per-user broadcast rate limit: max 3 per hour.
+// Persisted in the DB so the cap survives server restarts and deployments.
+// Each successful broadcast inserts a row into elaine_broadcast_log; the
+// check counts rows WHERE user_id = ? AND created_at > now() - 1 hour.
 const BROADCAST_HOURLY_LIMIT = 3;
 const BROADCAST_WINDOW_MS = 60 * 60 * 1000;
 
-function checkBroadcastRateLimit(userId: number): {
+async function checkBroadcastRateLimit(userId: number): Promise<{
   allowed: boolean;
   resetInMinutes: number;
-} {
-  const now = Date.now();
-  const cutoff = now - BROADCAST_WINDOW_MS;
-  const prev = (_broadcastTimestamps.get(userId) ?? []).filter(
-    (ts) => ts > cutoff,
-  );
-  if (prev.length >= BROADCAST_HOURLY_LIMIT) {
-    const oldest = prev[0] ?? now;
-    const resetInMs = oldest + BROADCAST_WINDOW_MS - now;
-    return { allowed: false, resetInMinutes: Math.ceil(resetInMs / 60_000) };
-  }
-  prev.push(now);
-  _broadcastTimestamps.set(userId, prev);
-  return { allowed: true, resetInMinutes: 0 };
+}> {
+  // Wrap count + insert in a transaction protected by a per-user PostgreSQL
+  // advisory transaction lock. pg_advisory_xact_lock serializes concurrent
+  // requests for the same userId so two simultaneous callers cannot both
+  // observe count < 3 and each sneak in a row (and a broadcast). The lock is
+  // released automatically when the transaction ends.
+  //
+  // The row is inserted BEFORE delivery begins (a "slot reservation" model):
+  // this means a delivery failure does not reclaim the slot, which is
+  // intentional — it prevents retries from bypassing the limit.
+  return await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(${userId}::bigint)`,
+    );
+
+    const cutoff = new Date(Date.now() - BROADCAST_WINDOW_MS);
+    const [result] = await tx
+      .select({
+        total: count(),
+        oldest: min(elaineBroadcastLog.createdAt),
+      })
+      .from(elaineBroadcastLog)
+      .where(
+        and(
+          eq(elaineBroadcastLog.userId, userId),
+          gt(elaineBroadcastLog.createdAt, cutoff),
+        ),
+      );
+
+    const total = result?.total ?? 0;
+    if (total >= BROADCAST_HOURLY_LIMIT) {
+      const oldestMs = result?.oldest
+        ? new Date(result.oldest).getTime()
+        : Date.now();
+      const resetInMs = oldestMs + BROADCAST_WINDOW_MS - Date.now();
+      return {
+        allowed: false,
+        resetInMinutes: Math.max(1, Math.ceil(resetInMs / 60_000)),
+      };
+    }
+
+    // Reserve this slot atomically inside the same transaction.
+    await tx.insert(elaineBroadcastLog).values({ userId });
+    return { allowed: true, resetInMinutes: 0 };
+  });
 }
 
 // call_me: initiate an outbound voice call to the requesting user's OWN
@@ -659,8 +695,8 @@ export const communicationActionExecutors: Record<
     payload: z.infer<typeof BroadcastMessagePayload>,
     userId: number,
   ) => {
-    // Rate-limit check first — before any DB work.
-    const rateCheck = checkBroadcastRateLimit(userId);
+    // Rate-limit check first — inserts a log row if allowed, queries count if not.
+    const rateCheck = await checkBroadcastRateLimit(userId);
     if (!rateCheck.allowed) {
       return {
         status: 429,

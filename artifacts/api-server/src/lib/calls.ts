@@ -1,7 +1,5 @@
-import { ReplitConnectors } from "@replit/connectors-sdk";
 import { logger } from "./logger";
-
-const connectors = new ReplitConnectors();
+import { agentphoneRequest } from "./agentphone-http";
 
 interface AgentPhoneNumber {
   id: string;
@@ -20,8 +18,9 @@ interface AgentPhoneListAgentsResponse {
 interface AgentCredentials {
   agentId: string;
   /** ID of the phone number currently attached to this agent. Passed as
-   *  `phoneNumberId` on outbound calls so AgentPhone uses the right number
-   *  rather than a stale/deleted one it may have cached internally. */
+   *  `fromNumberId` on outbound calls so AgentPhone uses the right number
+   *  as caller ID rather than whichever number it otherwise treats as the
+   *  agent's "first assigned" number (which can be a stale/released one). */
   phoneNumberId: string | null;
 }
 
@@ -44,9 +43,11 @@ async function getAgentCredentials(): Promise<AgentCredentials> {
   if (cachedCredentials && Date.now() < cachedCredentials.expiresAt) {
     return cachedCredentials.credentials;
   }
-  const response = await connectors.proxy("agentphone", "/v1/agents", {
-    method: "GET",
-  });
+  const response = await agentphoneRequest(
+    "/v1/agents",
+    { method: "GET" },
+    { op: "list-agents" },
+  );
   if (!response.ok) {
     const text = await response.text().catch(() => "");
     logger.error(
@@ -118,20 +119,24 @@ export async function initiateOutboundCall(
   const { agentId, phoneNumberId } = await getAgentCredentials();
 
   const body: Record<string, string> = { agentId, toNumber: opts.toNumber };
-  // Explicitly pin the phoneNumberId so AgentPhone uses the number currently
-  // attached to the agent, not whatever it has cached from a previous
-  // (possibly deleted) number. fromNumber in the response is read-only;
-  // phoneNumberId in the request body is the writable selector.
-  if (phoneNumberId) body.phoneNumberId = phoneNumberId;
+  // Explicitly pin the caller-ID number so AgentPhone uses the number
+  // currently attached to the agent, not whatever it otherwise treats as
+  // the agent's "first assigned" number (which can be a stale/released
+  // one). Per AgentPhone's POST /v1/calls docs, the writable selector field
+  // is `fromNumberId` — NOT `phoneNumberId` (that name only appears in
+  // *responses*, e.g. from GET /v1/calls/:id). Sending `phoneNumberId` in
+  // the request body is silently ignored by the API.
+  if (phoneNumberId) body.fromNumberId = phoneNumberId;
   if (opts.initialGreeting) body.initialGreeting = opts.initialGreeting;
   body.callScreeningIdentity = opts.callScreeningIdentity ?? "Elaine";
   if (opts.callScreeningPurpose)
     body.callScreeningPurpose = opts.callScreeningPurpose;
 
-  const response = await connectors.proxy("agentphone", "/v1/calls", {
-    method: "POST",
-    body,
-  });
+  const response = await agentphoneRequest(
+    "/v1/calls",
+    { method: "POST", body },
+    { op: "create-call" },
+  );
   if (!response.ok) {
     const text = await response.text().catch(() => "");
     logger.error(
@@ -206,10 +211,10 @@ export async function waitForCallOutcome(
     delay = Math.min(Math.round(delay * 1.6), 4_000);
 
     try {
-      const response = await connectors.proxy(
-        "agentphone",
+      const response = await agentphoneRequest(
         `/v1/calls/${callId}`,
         { method: "GET" },
+        { op: "poll-call-outcome", callId },
       );
       if (!response.ok) break; // unexpected error — stop polling
       const data = (await response.json()) as {

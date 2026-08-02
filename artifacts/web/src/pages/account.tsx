@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
+import { ApplicationHeader } from "@workspace/app-shell";
 import {
   useChangePassword,
   useUpdateCurrentUser,
@@ -15,10 +16,10 @@ import { useGmailStatus, useGmailDisconnect } from "@workspace/gmail-ui";
 import { toast } from "sonner";
 import {
   AlertTriangle,
-  ArrowLeft,
   Cake,
   CheckCircle2,
   ChevronRight,
+  Clock,
   ExternalLink,
   KeyRound,
   Loader2,
@@ -34,7 +35,13 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AppLogo } from "@/components/app-logo";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useAuth } from "@/lib/auth";
 import { useTheme, ElaineSettingsCard } from "@workspace/elaine-ui";
 import { usePageAssistantContext } from "@/lib/assistant-context";
@@ -52,6 +59,29 @@ function extractError(err: unknown, fallback: string): string {
 
 const BIRTHDAY_RE = /^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
+const COMMON_TIMEZONES = [
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+  "America/Anchorage",
+  "Pacific/Honolulu",
+  "America/Toronto",
+  "America/Vancouver",
+  "Europe/London",
+  "Europe/Paris",
+  "Europe/Berlin",
+  "Europe/Madrid",
+  "Europe/Rome",
+  "Asia/Tokyo",
+  "Asia/Shanghai",
+  "Asia/Kolkata",
+  "Asia/Dubai",
+  "Australia/Sydney",
+  "Pacific/Auckland",
+  "UTC",
+];
+
 function formatBirthdayDisplay(mmdd: string): string {
   const [mm, dd] = mmdd.split("-");
   const date = new Date(2000, Number(mm) - 1, Number(dd));
@@ -63,6 +93,22 @@ function ProfileCard() {
   const queryClient = useQueryClient();
   const [displayName, setDisplayName] = useState(user?.displayName ?? "");
   const [birthday, setBirthday] = useState(user?.birthday ?? "");
+  const [timezone, setTimezone] = useState(user?.timezone ?? "");
+
+  const browserTz = (() => {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone;
+    } catch {
+      return null;
+    }
+  })();
+
+  const timezoneOptions = (() => {
+    const set = new Set(COMMON_TIMEZONES);
+    if (browserTz) set.add(browserTz);
+    if (timezone) set.add(timezone);
+    return Array.from(set).sort();
+  })();
 
   const update = useUpdateCurrentUser({
     mutation: {
@@ -99,6 +145,7 @@ function ProfileCard() {
       data: {
         displayName: displayName.trim() || null,
         birthday: trimmedBirthday || null,
+        timezone: timezone || null,
       },
     });
   }
@@ -146,6 +193,52 @@ function ProfileCard() {
             <p className="text-xs text-muted-foreground">
               {formatBirthdayDisplay(birthday.trim())} — Elaine will send you a
               birthday email and a banner will appear when you log in! 🎂
+            </p>
+          )}
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <Clock className="h-3.5 w-3.5" />
+              Timezone
+            </span>
+          </Label>
+          <Select
+            value={timezone || undefined}
+            onValueChange={(tz) => setTimezone(tz)}
+          >
+            <SelectTrigger data-testid="select-timezone">
+              <SelectValue
+                placeholder={
+                  browserTz ? `Not set (detected: ${browserTz})` : "Not set"
+                }
+              />
+            </SelectTrigger>
+            <SelectContent
+              position="popper"
+              className="max-h-[min(40vh,_280px)] overflow-y-auto"
+            >
+              {timezoneOptions.map((tz) => (
+                <SelectItem key={tz} value={tz}>
+                  {tz}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {!timezone && browserTz && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setTimezone(browserTz)}
+            >
+              Use detected timezone ({browserTz})
+            </Button>
+          )}
+          {user?.isOwner && (
+            <p className="text-xs text-muted-foreground">
+              Also used to schedule the owner comms check (Owner Panel →
+              Infrastructure).
             </p>
           )}
         </div>
@@ -760,24 +853,7 @@ export default function Account() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur-md">
-        {/* mx-auto max-w-6xl matches the shared ApplicationHeader container */}
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
-          <Link
-            href="/"
-            className="flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to apps
-          </Link>
-          <div className="flex items-center gap-2">
-            <AppLogo className="h-7 w-7" />
-            <span className="font-semibold tracking-tight text-primary">
-              Batchelor
-            </span>
-          </div>
-        </div>
-      </header>
+      <ApplicationHeader currentAppId="hub" />
 
       <main className="mx-auto max-w-6xl space-y-6 p-6 md:p-8">
         <div>

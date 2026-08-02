@@ -34,6 +34,9 @@ vi.mock("@workspace/db", () => ({
 }));
 vi.mock("../lib/calls", () => ({
   initiateOutboundCall: mockInitiateOutboundCall,
+  // waitForCallOutcome is called after every successful call — mock it so
+  // tests don't hit the real AgentPhone connector.
+  waitForCallOutcome: vi.fn().mockResolvedValue("answered"),
 }));
 vi.mock("../lib/sms", () => ({
   sendSms: mockSendSms,

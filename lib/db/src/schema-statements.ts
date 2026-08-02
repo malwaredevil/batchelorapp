@@ -2983,6 +2983,11 @@ END $$`,
   `CREATE UNIQUE INDEX IF NOT EXISTS comm_checks_check_date_unique
      ON comm_checks (check_date)`,
 
+  // Phone call lane added to comm_checks
+  `ALTER TABLE comm_checks ADD COLUMN IF NOT EXISTS phone_status TEXT NOT NULL DEFAULT 'pending'`,
+  `ALTER TABLE comm_checks ADD COLUMN IF NOT EXISTS phone_sent_at TIMESTAMPTZ`,
+  `ALTER TABLE comm_checks ADD COLUMN IF NOT EXISTS phone_error TEXT`,
+
   // ── Elaine scheduled-actions table (Task #511) ────────────────────────────
   // Durable future-action scheduler: Elaine writes a row when the user asks
   // her to call/message someone at a future time. A background job polls
@@ -3010,4 +3015,39 @@ END $$`,
   // before this column was added.
   `ALTER TABLE elaine_history_messages
      ADD COLUMN IF NOT EXISTS reasoning_summary TEXT`,
+
+  // ── Elaine history channel label (Task #574) ─────────────────────────────
+  // "web", "Slack", "SMS/voice", or "email". NULL on rows written before this
+  // column; UI treats NULL as "web".
+  `ALTER TABLE elaine_history_messages
+     ADD COLUMN IF NOT EXISTS channel TEXT`,
+
+  // ── Elaine cross-channel context (Task #556) ──────────────────────────────
+  // Rolling log of recent Elaine turns across all channels (web, Slack, SMS,
+  // email). One row per user; entries[] is newest-first, capped at 15.
+  // Each entry: {channel, gist, ts}. Injected into every system prompt so
+  // Elaine has continuity across channels without merging separate histories.
+  `CREATE TABLE IF NOT EXISTS elaine_cross_channel_context (
+     id          SERIAL PRIMARY KEY,
+     user_id     INTEGER NOT NULL UNIQUE,
+     entries     JSONB NOT NULL DEFAULT '[]'::jsonb,
+     updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE elaine_cross_channel_context ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS elaine_cross_channel_context_user_id_idx
+     ON elaine_cross_channel_context (user_id)`,
+
+  // ── Elaine broadcast rate-limit log (Task #585) ───────────────────────────
+  // One row per successful broadcast_message action. The rate limiter counts
+  // rows WHERE user_id = ? AND created_at > now() - interval '1 hour'; if
+  // ≥ 3, the request is rejected. Persisting in DB makes the cap survive
+  // server restarts, unlike the previous in-memory Map approach.
+  `CREATE TABLE IF NOT EXISTS elaine_broadcast_log (
+     id         SERIAL PRIMARY KEY,
+     user_id    INTEGER NOT NULL,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE elaine_broadcast_log ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS elaine_broadcast_log_user_created_idx
+     ON elaine_broadcast_log (user_id, created_at)`,
 ];

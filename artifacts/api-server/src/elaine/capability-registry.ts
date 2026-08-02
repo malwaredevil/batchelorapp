@@ -25,7 +25,7 @@ export type ElaineCapabilityPolicy = {
   executor: string;
   audit: "runtime_observation" | "runtime_action_result";
   retry: "safe" | "read_only" | "never_automatic";
-  channels: readonly ("web" | "sms" | "voice" | "email")[];
+  channels: readonly ("web" | "sms" | "voice" | "email" | "slack")[];
 };
 
 export type ElaineCapability = ElaineCapabilityPolicy & {
@@ -61,7 +61,15 @@ function policies(
 }
 
 const WEB_AND_TRUSTED_CHANNELS = ["web", "sms", "voice"] as const;
-const ALL_READ_CHANNELS = ["web", "sms", "voice", "email"] as const;
+// Slack identity is verified by the Slack API OAuth flow: only a workspace
+// member with a real Slack account can send events to the Elaine bot.
+const WEB_TRUSTED_AND_SLACK_CHANNELS = [
+  "web",
+  "sms",
+  "voice",
+  "slack",
+] as const;
+const ALL_READ_CHANNELS = ["web", "sms", "voice", "email", "slack"] as const;
 
 const ACTION_DEFAULTS = {
   kind: "action",
@@ -173,18 +181,74 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
     domain: "office",
     executorPrefix: "officeAction",
   }),
-  // call_contact / message_contact are web-only: they send real outbound calls
-  // and SMS to other household members, so they must not be auto-triggered by
-  // an inbound SMS/voice identity (broken-access-control risk).
+  // call_contact / message_contact: available on web, SMS, voice, and Slack.
+  // Email is excluded: inbound email From headers are spoofable and do not
+  // constitute strong sender authentication. SMS/voice use E.164-verified phone
+  // numbers matched against app_users before the turn runs. Slack identity is
+  // verified by the Slack API OAuth flow.
   ...policies(["call_contact", "message_contact"], {
     ...ACTION_DEFAULTS,
     domain: "office",
     executorPrefix: "communicationAction",
-    channels: ["web"] as const,
+    channels: WEB_TRUSTED_AND_SLACK_CHANNELS,
   }),
-  // cancel_scheduled_contact: safe cancel action; web-only to stay consistent
-  // with the schedule tools it pairs with.
+  // cancel_scheduled_contact: same trust-boundary reasoning as above.
+  // Executor scopes every query by initiatedByUserId — no IDOR risk.
   ...policies(["cancel_scheduled_contact"], {
+    ...ACTION_DEFAULTS,
+    domain: "office",
+    executorPrefix: "communicationAction",
+    channels: WEB_TRUSTED_AND_SLACK_CHANNELS,
+  }),
+  // list_contact_channels: read-only — returns which channels are reachable for
+  // a given household member. Available on web/SMS/voice/Slack so Elaine can
+  // ask for clarification before picking a delivery channel.
+  // Email excluded (outbound actions it leads to are not available on email).
+  ...policies(["list_contact_channels"], {
+    domain: "office",
+    kind: "read",
+    risk: "none",
+    auth: "session",
+    confirmation: "never",
+    executorPrefix: "communicationRead",
+    audit: "runtime_observation",
+    retry: "read_only",
+    channels: WEB_TRUSTED_AND_SLACK_CHANNELS,
+  }),
+  // continue_in_channel: sends a message to THE SAME USER on another channel
+  // (self-directed channel-switching). Unlike call_contact/message_contact
+  // (which target other household members), this always sends to the requesting
+  // user themselves. Email channel inclusion is safe because:
+  // 1. The inbound sender is verified against app_users.email before the turn runs.
+  // 2. The executor resolves the target from userId (the verified DB record),
+  //    never from the inbound From address itself.
+  // 3. Worst-case spoofed From: the legitimate account owner receives an
+  //    unexpected Slack/SMS from Elaine — not a privilege-escalation risk.
+  // 4. email→email is not circular: email users typically switch to SMS/Slack,
+  //    and even if they request email, the outbound goes to the verified address.
+  ...policies(["continue_in_channel"], {
+    ...ACTION_DEFAULTS,
+    domain: "office",
+    executorPrefix: "communicationAction",
+    channels: ALL_READ_CHANNELS,
+  }),
+  // call_me: initiates an outbound call to THE REQUESTING USER'S OWN verified
+  // phone. Always resolves to userId (never a contact name), so it is safe on
+  // SMS/voice — the identity is already verified before the turn runs.
+  // Excluded from email because outbound calls are disruptive and email is
+  // async; users who want a callback should switch to SMS or the web app.
+  ...policies(["call_me"], {
+    ...ACTION_DEFAULTS,
+    domain: "office",
+    executorPrefix: "communicationAction",
+    channels: ["web", "sms"] as const,
+  }),
+  // broadcast_message: fans out a message to ALL of the requesting user's own
+  // connected channels simultaneously. Web-only to prevent delivery loops
+  // (an inbound SMS/Slack/email broadcast would echo back to that same channel)
+  // and because the confirmation UI is needed to make the multi-channel blast
+  // intentional.
+  ...policies(["broadcast_message"], {
     ...ACTION_DEFAULTS,
     domain: "office",
     executorPrefix: "communicationAction",

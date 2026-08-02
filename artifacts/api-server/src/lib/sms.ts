@@ -1,11 +1,7 @@
-import { ReplitConnectors } from "@replit/connectors-sdk";
 import { eq } from "drizzle-orm";
 import { db, appUsers } from "@workspace/db";
 import { logger } from "./logger";
-
-const connectors = new ReplitConnectors();
-
-let cachedFromNumber: string | null = null;
+import { agentphoneRequest } from "./agentphone-http";
 
 interface AgentPhoneNumber {
   phoneNumber: string;
@@ -15,16 +11,31 @@ interface AgentPhoneListResponse {
   data: AgentPhoneNumber[];
 }
 
+interface CachedFromNumber {
+  number: string;
+  /** Unix timestamp (ms) after which the cache entry is considered stale. */
+  expiresAt: number;
+}
+
+/** TTL for the cached sending number: 10 minutes. Mirrors the TTL used for
+ *  voice caller-ID credentials in calls.ts, so a number rotation (release +
+ *  re-provision) is picked up without requiring a server restart. */
+const FROM_NUMBER_TTL_MS = 10 * 60 * 1_000;
+
+let cachedFromNumber: CachedFromNumber | null = null;
+
 // AgentPhone has exactly one provisioned number for this workspace.
-// We look it up lazily (and cache it) rather than hardcoding it, so a
-// future re-provision doesn't require a code change.
+// We look it up lazily (and cache it with a TTL) rather than hardcoding it,
+// so a future re-provision doesn't require a code change or restart.
 async function getFromNumber(): Promise<string> {
-  if (cachedFromNumber) {
-    return cachedFromNumber;
+  if (cachedFromNumber && Date.now() < cachedFromNumber.expiresAt) {
+    return cachedFromNumber.number;
   }
-  const response = await connectors.proxy("agentphone", "/v1/numbers", {
-    method: "GET",
-  });
+  const response = await agentphoneRequest(
+    "/v1/numbers",
+    { method: "GET" },
+    { op: "list-numbers" },
+  );
   if (!response.ok) {
     const text = await response.text().catch(() => "");
     logger.error(
@@ -40,7 +51,7 @@ async function getFromNumber(): Promise<string> {
   if (!number) {
     throw new Error("AgentPhone: no provisioned phone number found");
   }
-  cachedFromNumber = number;
+  cachedFromNumber = { number, expiresAt: Date.now() + FROM_NUMBER_TTL_MS };
   return number;
 }
 
@@ -134,14 +145,18 @@ export async function sendSms(
     : body;
 
   const from = await getFromNumber();
-  const response = await connectors.proxy("agentphone", "/v1/messages", {
-    method: "POST",
-    body: {
-      to_number: toNumber,
-      from_number: from,
-      body: messageBody,
+  const response = await agentphoneRequest(
+    "/v1/messages",
+    {
+      method: "POST",
+      body: {
+        to_number: toNumber,
+        from_number: from,
+        body: messageBody,
+      },
     },
-  });
+    { op: "send-message" },
+  );
   if (!response.ok) {
     const text = await response.text().catch(() => "");
     logger.error(

@@ -528,8 +528,11 @@ describe("POST /api/elaine/email-webhook — event type routing", () => {
         text: "When does my flight leave?",
       },
     });
-    // DB returns a matching user, then the conversation row.
+    // DB returns a matching user, then the fire-and-forget markCommCheckVerified
+    // owner/timezone lookup (queued empty — falls back to DEFAULT_TIMEZONE),
+    // then the conversation row.
     selectQueue.push([{ id: 7, email: "user@example.com" }]);
+    selectQueue.push([]);
     selectQueue.push([{ id: 1, userId: 7, messages: [], lastMessageId: null }]);
     const app = await buildApp();
 

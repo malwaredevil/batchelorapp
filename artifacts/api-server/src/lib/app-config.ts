@@ -21,10 +21,23 @@ export interface AppConfigDefault {
   module: string;
   key: string;
   value: string;
-  type: "string" | "integer" | "float" | "boolean";
+  type: "string" | "integer" | "float" | "boolean" | "time" | "day-list";
   label: string;
   description?: string;
 }
+
+// Canonical weekday codes used by "day-list" config values, Sunday-first to
+// match Intl's default week ordering.
+export const DAY_LIST_CODES = [
+  "sun",
+  "mon",
+  "tue",
+  "wed",
+  "thu",
+  "fri",
+  "sat",
+] as const;
+export type DayListCode = (typeof DAY_LIST_CODES)[number];
 
 export const APP_CONFIG_DEFAULTS: AppConfigDefault[] = [
   // ── web_search ────────────────────────────────────────────────────────────
@@ -225,6 +238,46 @@ export const APP_CONFIG_DEFAULTS: AppConfigDefault[] = [
     label: "General sender address",
     description:
       "From address for password-reset, test, and comms-check emails. Seeded from RESEND_FROM_EMAIL on first boot; editable in the Control Panel thereafter.",
+  },
+
+  // ── comm_check ────────────────────────────────────────────────────────────
+  // Schedule for the daily comms-check scheduler (see lib/comm-check-scheduler.ts).
+  // Times are "HH:MM" 24h strings interpreted in the owner account's timezone
+  // (app_users.timezone), falling back to Europe/Berlin when unset. Day lists
+  // are comma-separated weekday codes (sun,mon,tue,wed,thu,fri,sat).
+  {
+    module: "comm_check",
+    key: "daily_time",
+    value: "00:01",
+    type: "time",
+    label: "Email/SMS/Slack check time",
+    description:
+      "Time of day (owner's timezone) the daily email/SMS/Slack comms check fires.",
+  },
+  {
+    module: "comm_check",
+    key: "daily_days",
+    value: "sun,mon,tue,wed,thu,fri,sat",
+    type: "day-list",
+    label: "Email/SMS/Slack check days",
+    description:
+      "Days of the week the daily email/SMS/Slack comms check fires.",
+  },
+  {
+    module: "comm_check",
+    key: "phone_time",
+    value: "19:00",
+    type: "time",
+    label: "Phone check time",
+    description: "Time of day (owner's timezone) the phone comms check fires.",
+  },
+  {
+    module: "comm_check",
+    key: "phone_days",
+    value: "sun,mon,tue,wed,thu,fri,sat",
+    type: "day-list",
+    label: "Phone check days",
+    description: "Days of the week the phone comms check fires.",
   },
 ];
 
@@ -679,10 +732,13 @@ export async function getAllConfig(
  * Returns `null` on success, or an error message string on failure.
  *
  * Rules:
- *  - integer : must parse as a whole number (no decimal), must be >= 0
- *  - float   : must parse as a valid finite number, must be >= 0
- *  - boolean : must be exactly "true" or "false"
- *  - string  : any non-empty string is accepted
+ *  - integer  : must parse as a whole number (no decimal), must be >= 0
+ *  - float    : must parse as a valid finite number, must be >= 0
+ *  - boolean  : must be exactly "true" or "false"
+ *  - string   : any non-empty string is accepted
+ *  - time     : must be "HH:MM" 24-hour (00:00–23:59)
+ *  - day-list : comma-separated weekday codes from DAY_LIST_CODES, no
+ *               duplicates, at least one day
  */
 export function validateConfigValue(
   type: AppConfigDefault["type"],
@@ -713,6 +769,31 @@ export function validateConfigValue(
     case "boolean": {
       if (value !== "true" && value !== "false") {
         return `Value must be "true" or "false" (got "${value}")`;
+      }
+      return null;
+    }
+    case "time": {
+      if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(value.trim())) {
+        return `Value must be a 24-hour "HH:MM" time (got "${value}")`;
+      }
+      return null;
+    }
+    case "day-list": {
+      const parts = value
+        .split(",")
+        .map((p) => p.trim().toLowerCase())
+        .filter((p) => p.length > 0);
+      if (parts.length === 0) {
+        return "At least one day must be selected";
+      }
+      const invalid = parts.filter(
+        (p) => !(DAY_LIST_CODES as readonly string[]).includes(p),
+      );
+      if (invalid.length > 0) {
+        return `Unrecognized day code(s): ${invalid.join(", ")}`;
+      }
+      if (new Set(parts).size !== parts.length) {
+        return "Day list contains duplicates";
       }
       return null;
     }

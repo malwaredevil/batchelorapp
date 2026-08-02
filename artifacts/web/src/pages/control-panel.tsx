@@ -34,6 +34,7 @@ const MODULE_LABELS: Record<string, string> = {
   ornaments: "Ornaments",
   quilting: "Quilting",
   travels: "Travels",
+  comm_check: "Comm Check",
 };
 
 function moduleLabel(mod: string): string {

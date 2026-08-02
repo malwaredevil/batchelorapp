@@ -109,7 +109,12 @@ function parseCommunicationResult(result: unknown): {
   channel?: string;
   contactName?: string;
   callId?: string;
-  recipients?: Array<{ name: string; channel: string | null; ok: boolean; error: string | null }>;
+  recipients?: Array<{
+    name: string;
+    channel: string | null;
+    ok: boolean;
+    error: string | null;
+  }>;
   error?: string;
 } {
   if (!result || typeof result !== "object") return {};
@@ -119,10 +124,16 @@ function parseCommunicationResult(result: unknown): {
   if (!inner) return {};
   return {
     channel: typeof inner.channel === "string" ? inner.channel : undefined,
-    contactName: typeof inner.contactName === "string" ? inner.contactName : undefined,
+    contactName:
+      typeof inner.contactName === "string" ? inner.contactName : undefined,
     callId: typeof inner.callId === "string" ? inner.callId : undefined,
     recipients: Array.isArray(inner.recipients)
-      ? (inner.recipients as Array<{ name: string; channel: string | null; ok: boolean; error: string | null }>)
+      ? (inner.recipients as Array<{
+          name: string;
+          channel: string | null;
+          ok: boolean;
+          error: string | null;
+        }>)
       : undefined,
   };
 }
@@ -496,7 +507,9 @@ export function ElaineChatPanel({
   const now = Date.now();
   const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
   const recentEntries = crossChannelEntries
-    .filter((e) => e.iso != null && now - new Date(e.iso).getTime() <= SEVEN_DAYS_MS)
+    .filter(
+      (e) => e.iso != null && now - new Date(e.iso).getTime() <= SEVEN_DAYS_MS,
+    )
     .slice(0, 2);
   const showCrossChannel = !hideBrief && recentEntries.length > 0;
 
@@ -543,7 +556,10 @@ export function ElaineChatPanel({
             </div>
             <ul className="space-y-1.5">
               {recentEntries.map((entry: CrossChannelEntry, i: number) => (
-                <li key={i} className="flex items-start gap-2 text-xs text-foreground/80 leading-relaxed">
+                <li
+                  key={i}
+                  className="flex items-start gap-2 text-xs text-foreground/80 leading-relaxed"
+                >
                   <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground leading-none mt-0.5">
                     {entry.channel}
                   </span>
@@ -902,146 +918,155 @@ export function ElaineChatPanel({
           </div>
         )}
 
-        {actionDone && executedActions.length > 0 && (() => {
-          // Separate communication actions from generic ones
-          const commActions = executedActions.filter(
-            (a) => a.type === "message_contact" || a.type === "call_contact",
-          );
-          const otherActions = executedActions.filter(
-            (a) => a.type !== "message_contact" && a.type !== "call_contact",
-          );
+        {actionDone &&
+          executedActions.length > 0 &&
+          (() => {
+            // Separate communication actions from generic ones
+            const commActions = executedActions.filter(
+              (a) => a.type === "message_contact" || a.type === "call_contact",
+            );
+            const otherActions = executedActions.filter(
+              (a) => a.type !== "message_contact" && a.type !== "call_contact",
+            );
 
-          return (
-            <>
-              {/* Generic "Done" for non-communication actions */}
-              {otherActions.length > 0 && (
-                <div className="ml-8 rounded-xl border border-green-200 bg-green-50/60 px-3 py-2 dark:border-green-800 dark:bg-green-950/30">
-                  <p className="text-xs font-medium text-green-800 dark:text-green-300">
-                    <Check className="mr-1 inline h-3.5 w-3.5" />
-                    Done
-                  </p>
-                </div>
-              )}
+            return (
+              <>
+                {/* Generic "Done" for non-communication actions */}
+                {otherActions.length > 0 && (
+                  <div className="ml-8 rounded-xl border border-green-200 bg-green-50/60 px-3 py-2 dark:border-green-800 dark:bg-green-950/30">
+                    <p className="text-xs font-medium text-green-800 dark:text-green-300">
+                      <Check className="mr-1 inline h-3.5 w-3.5" />
+                      Done
+                    </p>
+                  </div>
+                )}
 
-              {/* Rich result cards for communication actions */}
-              {commActions.map((action, idx) => {
-                const parsed = parseCommunicationResult(action.result);
+                {/* Rich result cards for communication actions */}
+                {commActions.map((action, idx) => {
+                  const parsed = parseCommunicationResult(action.result);
 
-                // Error result
-                if (parsed.error) {
-                  return (
-                    <div
-                      key={idx}
-                      className="ml-8 rounded-xl border border-red-200 bg-red-50/60 px-3 py-2 dark:border-red-800 dark:bg-red-950/30"
-                    >
-                      <p className="text-xs font-medium text-red-800 dark:text-red-300 flex items-center gap-1">
-                        <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                        {parsed.error}
-                      </p>
-                    </div>
-                  );
-                }
+                  // Error result
+                  if (parsed.error) {
+                    return (
+                      <div
+                        key={idx}
+                        className="ml-8 rounded-xl border border-red-200 bg-red-50/60 px-3 py-2 dark:border-red-800 dark:bg-red-950/30"
+                      >
+                        <p className="text-xs font-medium text-red-800 dark:text-red-300 flex items-center gap-1">
+                          <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                          {parsed.error}
+                        </p>
+                      </div>
+                    );
+                  }
 
-                // call_contact result
-                if (action.type === "call_contact") {
+                  // call_contact result
+                  if (action.type === "call_contact") {
+                    return (
+                      <div
+                        key={idx}
+                        className="ml-8 rounded-xl border border-green-200 bg-green-50/60 px-3 py-2 dark:border-green-800 dark:bg-green-950/30"
+                      >
+                        <p className="text-xs font-medium text-green-800 dark:text-green-300 flex items-center gap-1">
+                          <Phone className="h-3.5 w-3.5 shrink-0" />
+                          Call initiated
+                          {parsed.contactName
+                            ? ` to ${parsed.contactName}`
+                            : ""}
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  // message_contact multi-recipient
+                  if (parsed.recipients && parsed.recipients.length > 0) {
+                    const delivered = parsed.recipients.filter((r) => r.ok);
+                    const failed = parsed.recipients.filter((r) => !r.ok);
+                    return (
+                      <div
+                        key={idx}
+                        className="ml-8 rounded-xl border border-green-200 bg-green-50/60 px-3 py-2 dark:border-green-800 dark:bg-green-950/30"
+                      >
+                        <p className="text-xs font-medium text-green-800 dark:text-green-300 flex items-center gap-1 mb-1.5">
+                          <Users className="h-3.5 w-3.5 shrink-0" />
+                          Message sent to {delivered.length}/
+                          {parsed.recipients.length}
+                        </p>
+                        <ul className="space-y-0.5">
+                          {parsed.recipients.map((r, ri) => (
+                            <li
+                              key={ri}
+                              className="flex items-center gap-1.5 text-xs"
+                            >
+                              {r.ok && r.channel ? (
+                                <>
+                                  <ChannelIcon
+                                    channel={r.channel}
+                                    className="h-3 w-3 shrink-0 text-green-600 dark:text-green-400"
+                                  />
+                                  <span className="text-green-800 dark:text-green-300">
+                                    {r.name} — {channelDisplayLabel(r.channel)}
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <AlertCircle className="h-3 w-3 shrink-0 text-red-500" />
+                                  <span className="text-red-700 dark:text-red-400">
+                                    {r.name}: {r.error ?? "Failed"}
+                                  </span>
+                                </>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                        {failed.length > 0 && delivered.length === 0 && (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Check each contact's profile to add a reachable
+                            channel.
+                          </p>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  // message_contact single recipient
                   return (
                     <div
                       key={idx}
                       className="ml-8 rounded-xl border border-green-200 bg-green-50/60 px-3 py-2 dark:border-green-800 dark:bg-green-950/30"
                     >
                       <p className="text-xs font-medium text-green-800 dark:text-green-300 flex items-center gap-1">
-                        <Phone className="h-3.5 w-3.5 shrink-0" />
-                        Call initiated
+                        {parsed.channel ? (
+                          <ChannelIcon
+                            channel={parsed.channel}
+                            className="h-3.5 w-3.5 shrink-0"
+                          />
+                        ) : (
+                          <Check className="h-3.5 w-3.5 shrink-0" />
+                        )}
+                        {parsed.channel
+                          ? `Sent via ${channelDisplayLabel(parsed.channel)}`
+                          : "Sent"}
                         {parsed.contactName ? ` to ${parsed.contactName}` : ""}
                       </p>
                     </div>
                   );
-                }
+                })}
 
-                // message_contact multi-recipient
-                if (parsed.recipients && parsed.recipients.length > 0) {
-                  const delivered = parsed.recipients.filter((r) => r.ok);
-                  const failed = parsed.recipients.filter((r) => !r.ok);
-                  return (
-                    <div
-                      key={idx}
-                      className="ml-8 rounded-xl border border-green-200 bg-green-50/60 px-3 py-2 dark:border-green-800 dark:bg-green-950/30"
-                    >
-                      <p className="text-xs font-medium text-green-800 dark:text-green-300 flex items-center gap-1 mb-1.5">
-                        <Users className="h-3.5 w-3.5 shrink-0" />
-                        Message sent to {delivered.length}/{parsed.recipients.length}
-                      </p>
-                      <ul className="space-y-0.5">
-                        {parsed.recipients.map((r, ri) => (
-                          <li key={ri} className="flex items-center gap-1.5 text-xs">
-                            {r.ok && r.channel ? (
-                              <>
-                                <ChannelIcon
-                                  channel={r.channel}
-                                  className="h-3 w-3 shrink-0 text-green-600 dark:text-green-400"
-                                />
-                                <span className="text-green-800 dark:text-green-300">
-                                  {r.name} — {channelDisplayLabel(r.channel)}
-                                </span>
-                              </>
-                            ) : (
-                              <>
-                                <AlertCircle className="h-3 w-3 shrink-0 text-red-500" />
-                                <span className="text-red-700 dark:text-red-400">
-                                  {r.name}: {r.error ?? "Failed"}
-                                </span>
-                              </>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                      {failed.length > 0 && delivered.length === 0 && (
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Check each contact's profile to add a reachable channel.
-                        </p>
-                      )}
-                    </div>
-                  );
-                }
-
-                // message_contact single recipient
-                return (
-                  <div
-                    key={idx}
-                    className="ml-8 rounded-xl border border-green-200 bg-green-50/60 px-3 py-2 dark:border-green-800 dark:bg-green-950/30"
-                  >
-                    <p className="text-xs font-medium text-green-800 dark:text-green-300 flex items-center gap-1">
-                      {parsed.channel ? (
-                        <ChannelIcon
-                          channel={parsed.channel}
-                          className="h-3.5 w-3.5 shrink-0"
-                        />
-                      ) : (
-                        <Check className="h-3.5 w-3.5 shrink-0" />
-                      )}
-                      {parsed.channel
-                        ? `Sent via ${channelDisplayLabel(parsed.channel)}`
-                        : "Sent"}
-                      {parsed.contactName ? ` to ${parsed.contactName}` : ""}
-                    </p>
-                  </div>
-                );
-              })}
-
-              {/* If ALL executed actions were communication and all errored,
+                {/* If ALL executed actions were communication and all errored,
                   there may be nothing else shown — show a fallback Done for
                   any remaining non-error comm actions with no rich data */}
-              {commActions.length === 0 && otherActions.length === 0 && (
-                <div className="ml-8 rounded-xl border border-green-200 bg-green-50/60 px-3 py-2 dark:border-green-800 dark:bg-green-950/30">
-                  <p className="text-xs font-medium text-green-800 dark:text-green-300">
-                    <Check className="mr-1 inline h-3.5 w-3.5" />
-                    Done
-                  </p>
-                </div>
-              )}
-            </>
-          );
-        })()}
+                {commActions.length === 0 && otherActions.length === 0 && (
+                  <div className="ml-8 rounded-xl border border-green-200 bg-green-50/60 px-3 py-2 dark:border-green-800 dark:bg-green-950/30">
+                    <p className="text-xs font-medium text-green-800 dark:text-green-300">
+                      <Check className="mr-1 inline h-3.5 w-3.5" />
+                      Done
+                    </p>
+                  </div>
+                )}
+              </>
+            );
+          })()}
 
         <div ref={endRef} />
       </div>

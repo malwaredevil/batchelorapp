@@ -213,10 +213,7 @@ describe("continue_in_channel executor — SMS path", () => {
       1,
     );
     expect(result.status).toBe(200);
-    expect(mockSendSms).toHaveBeenCalledWith(
-      "+12105559876",
-      "Text me this.",
-    );
+    expect(mockSendSms).toHaveBeenCalledWith("+12105559876", "Text me this.");
     expect((result.body as Record<string, unknown>).result).toMatchObject({
       channel: "sms",
       sent: true,

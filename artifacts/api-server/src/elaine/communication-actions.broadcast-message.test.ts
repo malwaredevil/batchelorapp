@@ -56,50 +56,48 @@ const {
 // between unrelated tests.
 vi.mock("@workspace/db", () => ({
   db: {
-    transaction: vi.fn(
-      async (callback: (tx: unknown) => Promise<unknown>) => {
-        let capturedUserId = 0;
-        const WINDOW_MS = 60 * 60 * 1000;
+    transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => {
+      let capturedUserId = 0;
+      const WINDOW_MS = 60 * 60 * 1000;
 
-        const tx = {
-          // pg_advisory_xact_lock(userId::bigint) — extract userId from the
-          // sql template's interpolated values array.
-          execute: vi.fn().mockImplementation(
-            (sqlObj: { _values?: unknown[] }) => {
-              capturedUserId = Number(sqlObj?._values?.[0] ?? 0);
-              return Promise.resolve([]);
-            },
-          ),
-
-          // Rate-limit count + min query on elaine_broadcast_log.
-          select: (_fields: unknown) => ({
-            from: (_table: unknown) => ({
-              where: (_cond: unknown) => {
-                const now = Date.now();
-                const cutoff = now - WINDOW_MS;
-                const entries = (broadcastLog.get(capturedUserId) ?? []).filter(
-                  (ts) => ts.getTime() > cutoff,
-                );
-                const oldest = entries.length > 0 ? (entries[0] ?? null) : null;
-                return Promise.resolve([{ total: entries.length, oldest }]);
-              },
-            }),
+      const tx = {
+        // pg_advisory_xact_lock(userId::bigint) — extract userId from the
+        // sql template's interpolated values array.
+        execute: vi
+          .fn()
+          .mockImplementation((sqlObj: { _values?: unknown[] }) => {
+            capturedUserId = Number(sqlObj?._values?.[0] ?? 0);
+            return Promise.resolve([]);
           }),
 
-          // Insert a reservation row.
-          insert: (_table: unknown) => ({
-            values: (data: { userId: number }) => {
-              const log = broadcastLog.get(data.userId) ?? [];
-              log.push(new Date());
-              broadcastLog.set(data.userId, log);
-              return Promise.resolve();
+        // Rate-limit count + min query on elaine_broadcast_log.
+        select: (_fields: unknown) => ({
+          from: (_table: unknown) => ({
+            where: (_cond: unknown) => {
+              const now = Date.now();
+              const cutoff = now - WINDOW_MS;
+              const entries = (broadcastLog.get(capturedUserId) ?? []).filter(
+                (ts) => ts.getTime() > cutoff,
+              );
+              const oldest = entries.length > 0 ? (entries[0] ?? null) : null;
+              return Promise.resolve([{ total: entries.length, oldest }]);
             },
           }),
-        };
+        }),
 
-        return callback(tx);
-      },
-    ),
+        // Insert a reservation row.
+        insert: (_table: unknown) => ({
+          values: (data: { userId: number }) => {
+            const log = broadcastLog.get(data.userId) ?? [];
+            log.push(new Date());
+            broadcastLog.set(data.userId, log);
+            return Promise.resolve();
+          },
+        }),
+      };
+
+      return callback(tx);
+    }),
 
     // User-lookup path: db.select().from(appUsers).where()
     select: () => ({
@@ -211,7 +209,11 @@ describe("broadcast_message executor — happy path (all channels)", () => {
     expect(result.status).toBe(200);
     const body = result.body as {
       type: string;
-      result: { sent: string[]; skipped: string[]; confirmationMessage: string };
+      result: {
+        sent: string[];
+        skipped: string[];
+        confirmationMessage: string;
+      };
     };
     expect(body.type).toBe("broadcast_message");
     expect(body.result.sent).toContain("Slack ✓");
@@ -274,7 +276,11 @@ describe("broadcast_message executor — Slack skipped (not connected)", () => {
     expect(result.status).toBe(200);
     const body = result.body as {
       type: string;
-      result: { sent: string[]; skipped: string[]; confirmationMessage: string };
+      result: {
+        sent: string[];
+        skipped: string[];
+        confirmationMessage: string;
+      };
     };
     expect(body.result.skipped).toContain("Slack (not connected)");
     expect(body.result.sent).not.toContain("Slack ✓");
@@ -472,17 +478,29 @@ describe("broadcast_message executor — rate limit", () => {
     const userId = nextRateLimitUserId();
     const payload = { message: "Rate limit test" } as never;
 
-    const r1 = await communicationActionExecutors.broadcast_message(payload, userId);
+    const r1 = await communicationActionExecutors.broadcast_message(
+      payload,
+      userId,
+    );
     expect(r1.status).toBe(200);
 
-    const r2 = await communicationActionExecutors.broadcast_message(payload, userId);
+    const r2 = await communicationActionExecutors.broadcast_message(
+      payload,
+      userId,
+    );
     expect(r2.status).toBe(200);
 
-    const r3 = await communicationActionExecutors.broadcast_message(payload, userId);
+    const r3 = await communicationActionExecutors.broadcast_message(
+      payload,
+      userId,
+    );
     expect(r3.status).toBe(200);
 
     // 4th call must be rate-limited
-    const r4 = await communicationActionExecutors.broadcast_message(payload, userId);
+    const r4 = await communicationActionExecutors.broadcast_message(
+      payload,
+      userId,
+    );
     expect(r4.status).toBe(429);
     const body = r4.body as { error: string };
     // Error must tell the user when they can try again
@@ -501,7 +519,10 @@ describe("broadcast_message executor — rate limit", () => {
     await communicationActionExecutors.broadcast_message(payload, userId);
     await communicationActionExecutors.broadcast_message(payload, userId);
 
-    const r4 = await communicationActionExecutors.broadcast_message(payload, userId);
+    const r4 = await communicationActionExecutors.broadcast_message(
+      payload,
+      userId,
+    );
     expect(r4.status).toBe(429);
     const error = (r4.body as { error: string }).error;
     // The message should contain a duration like "60 minutes" or "59 minutes"

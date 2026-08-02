@@ -27,37 +27,50 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // reference them without triggering temporal dead-zone errors.
 // ---------------------------------------------------------------------------
 
-const { mockDbSelect, mockCallModel, mockBroadcastMessageExecutor, passthrough } =
-  vi.hoisted(() => {
-    // Recursive chainable builder — resolves to [] when awaited, and exposes
-    // every method that Drizzle's select query builder might chain (innerJoin,
-    // leftJoin, where, orderBy, limit, groupBy, having, etc.).
-    function makeChain(): unknown {
-      const handler: Record<string, unknown> = {};
-      const methods = [
-        "from", "where", "limit", "orderBy", "innerJoin", "leftJoin",
-        "rightJoin", "fullJoin", "groupBy", "having", "offset",
-      ];
-      for (const m of methods) {
-        handler[m] = vi.fn(() => makeChain());
-      }
-      // Make it thenable so `await db.select()....` resolves to [].
-      handler.then = (resolve: (v: unknown[]) => void, _reject?: unknown) => {
-        resolve([]);
-        return Promise.resolve([]);
-      };
-      handler.catch = (_fn: unknown) => Promise.resolve([]);
-      return handler;
+const {
+  mockDbSelect,
+  mockCallModel,
+  mockBroadcastMessageExecutor,
+  passthrough,
+} = vi.hoisted(() => {
+  // Recursive chainable builder — resolves to [] when awaited, and exposes
+  // every method that Drizzle's select query builder might chain (innerJoin,
+  // leftJoin, where, orderBy, limit, groupBy, having, etc.).
+  function makeChain(): unknown {
+    const handler: Record<string, unknown> = {};
+    const methods = [
+      "from",
+      "where",
+      "limit",
+      "orderBy",
+      "innerJoin",
+      "leftJoin",
+      "rightJoin",
+      "fullJoin",
+      "groupBy",
+      "having",
+      "offset",
+    ];
+    for (const m of methods) {
+      handler[m] = vi.fn(() => makeChain());
     }
-    const mockDbSelect = vi.fn(() => makeChain());
-    const passthrough = (_r: unknown, _s: unknown, next: () => void) => next();
-    return {
-      mockDbSelect,
-      mockCallModel: vi.fn(),
-      mockBroadcastMessageExecutor: vi.fn(),
-      passthrough,
+    // Make it thenable so `await db.select()....` resolves to [].
+    handler.then = (resolve: (v: unknown[]) => void, _reject?: unknown) => {
+      resolve([]);
+      return Promise.resolve([]);
     };
-  });
+    handler.catch = (_fn: unknown) => Promise.resolve([]);
+    return handler;
+  }
+  const mockDbSelect = vi.fn(() => makeChain());
+  const passthrough = (_r: unknown, _s: unknown, next: () => void) => next();
+  return {
+    mockDbSelect,
+    mockCallModel: vi.fn(),
+    mockBroadcastMessageExecutor: vi.fn(),
+    passthrough,
+  };
+});
 
 // ---------------------------------------------------------------------------
 // Module mocks — order matters only insofar as they must all appear before
@@ -296,12 +309,12 @@ vi.mock("./runtime", () => ({
   aggregateElaineTraceEvaluations: vi.fn().mockReturnValue([]),
   decideElaineModelStreamRecovery: vi.fn().mockReturnValue("abort"),
   loadElaineTurnTracesForMessages: vi.fn().mockResolvedValue([]),
-  mapWithConcurrency: vi.fn().mockImplementation(
-    async (
-      items: unknown[],
-      fn: (item: unknown) => Promise<unknown>,
-    ) => Promise.all(items.map(fn)),
-  ),
+  mapWithConcurrency: vi
+    .fn()
+    .mockImplementation(
+      async (items: unknown[], fn: (item: unknown) => Promise<unknown>) =>
+        Promise.all(items.map(fn)),
+    ),
   sanitizeRuntimeText: vi.fn().mockImplementation((t: string) => t),
   selectElaineReplanTool: vi.fn().mockReturnValue(null),
   isReusableElaineResponseState: vi.fn().mockReturnValue(false),
@@ -316,8 +329,7 @@ vi.mock("./runtime", () => ({
 }));
 
 vi.mock("./capability-registry", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("./capability-registry")>();
+  const actual = await importOriginal<typeof import("./capability-registry")>();
   return {
     ...actual,
     buildElaineCapabilityRegistry: vi.fn().mockReturnValue({}),
@@ -531,20 +543,22 @@ describe("runAgentphoneTurn — broadcast_message hallucination guard", () => {
         const fakeClient = {
           chat: {
             completions: {
-              create: vi.fn().mockImplementation(
-                (params: {
-                  tools?: Array<{ type: string; function: { name: string } }>;
-                }) => {
-                  if (params.tools) {
-                    capturedToolNames.push(
-                      ...params.tools
-                        .filter((t) => t.type === "function")
-                        .map((t) => t.function.name),
-                    );
-                  }
-                  return Promise.resolve(makeTextCompletion("OK."));
-                },
-              ),
+              create: vi
+                .fn()
+                .mockImplementation(
+                  (params: {
+                    tools?: Array<{ type: string; function: { name: string } }>;
+                  }) => {
+                    if (params.tools) {
+                      capturedToolNames.push(
+                        ...params.tools
+                          .filter((t) => t.type === "function")
+                          .map((t) => t.function.name),
+                      );
+                    }
+                    return Promise.resolve(makeTextCompletion("OK."));
+                  },
+                ),
             },
           },
         };

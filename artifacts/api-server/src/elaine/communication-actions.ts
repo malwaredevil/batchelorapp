@@ -70,12 +70,16 @@ const CancelScheduledContactPayload = z.object({
 // household-member contact, so it is safe to execute from any channel.
 // It should NOT be added to RESTRICTED_EXCLUDED_ACTION_TYPES.
 const ContinueInChannelPayload = z.object({
-  targetChannel: z.enum(["slack", "sms", "email"]).describe(
-    "Channel to deliver the continuation message on. Choose whichever the user asked for.",
-  ),
-  message: z.string().min(1).max(2000).describe(
-    "The text to deliver to the user on the target channel.",
-  ),
+  targetChannel: z
+    .enum(["slack", "sms", "email"])
+    .describe(
+      "Channel to deliver the continuation message on. Choose whichever the user asked for.",
+    ),
+  message: z
+    .string()
+    .min(1)
+    .max(2000)
+    .describe("The text to deliver to the user on the target channel."),
 });
 
 // broadcast_message: fan out a message to ALL of the requesting user's own
@@ -111,9 +115,7 @@ async function checkBroadcastRateLimit(userId: number): Promise<{
   // this means a delivery failure does not reclaim the slot, which is
   // intentional — it prevents retries from bypassing the limit.
   return await db.transaction(async (tx) => {
-    await tx.execute(
-      sql`SELECT pg_advisory_xact_lock(${userId}::bigint)`,
-    );
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(${userId}::bigint)`);
 
     const cutoff = new Date(Date.now() - BROADCAST_WINDOW_MS);
     const [result] = await tx
@@ -306,7 +308,10 @@ async function deliverElaineChat(
       { contactId: contact.id },
       "elaine: deliverElaineChat — could not find or create conversation",
     );
-    return { status: 500, body: { error: "Failed to deliver in-app message." } };
+    return {
+      status: 500,
+      body: { error: "Failed to deliver in-app message." },
+    };
   }
 
   await db.insert(elaineHistoryMessages).values({
@@ -497,10 +502,7 @@ export async function fireCallContact(
     // Returns "pending" if the 12-second window closes without a terminal
     // status — callers should treat "pending" as "call initiated, outcome unknown".
     const callStatus = await waitForCallOutcome(callId);
-    logger.info(
-      { callId, callStatus },
-      "elaine: outbound call outcome",
-    );
+    logger.info({ callId, callStatus }, "elaine: outbound call outcome");
 
     return {
       status: 200,
@@ -563,11 +565,7 @@ async function fireMessageContactToResolved(
       };
     }
     try {
-      await sendAssistantEmail(
-        contact.email,
-        "Message from Elaine",
-        message,
-      );
+      await sendAssistantEmail(contact.email, "Message from Elaine", message);
       return {
         status: 200,
         body: {
@@ -576,7 +574,10 @@ async function fireMessageContactToResolved(
         },
       };
     } catch (err) {
-      logger.error({ err, contactId: contact.id }, "elaine: email to contact failed");
+      logger.error(
+        { err, contactId: contact.id },
+        "elaine: email to contact failed",
+      );
       return { status: 500, body: { error: "Failed to send the email." } };
     }
   }
@@ -622,8 +623,17 @@ async function fireMessageContactToResolved(
     } catch (err) {
       if (channel === "slack") {
         // send failed mid-flight — don't fall back
-        logger.error({ err, contactId: contact.id }, "elaine: explicit slack DM failed");
-        return { status: 500, body: { error: "Failed to send the Slack message. Slack may be temporarily unavailable." } };
+        logger.error(
+          { err, contactId: contact.id },
+          "elaine: explicit slack DM failed",
+        );
+        return {
+          status: 500,
+          body: {
+            error:
+              "Failed to send the Slack message. Slack may be temporarily unavailable.",
+          },
+        };
       }
       logger.warn({ err }, "elaine: slack DM failed, falling back to SMS");
       // fall through to SMS for "auto"
@@ -638,7 +648,9 @@ async function fireMessageContactToResolved(
         : `${name} has no phone number or Slack account linked.`;
     return {
       status: 422,
-      body: { error: `${channelHint} They can add these on their profile page.` },
+      body: {
+        error: `${channelHint} They can add these on their profile page.`,
+      },
     };
   }
   if (!contact.phoneVerified) {
@@ -697,7 +709,8 @@ async function fireMessageContactToResolved(
       return {
         status: 503,
         body: {
-          error: "SMS isn't fully enabled yet — carrier registration is still pending. Try again in a few days.",
+          error:
+            "SMS isn't fully enabled yet — carrier registration is still pending. Try again in a few days.",
         },
       };
     }
@@ -1212,10 +1225,7 @@ export const communicationActionExecutors: Record<
     };
   }) as ActionExecutor,
 
-  call_me: (async (
-    payload: z.infer<typeof CallMePayload>,
-    userId: number,
-  ) => {
+  call_me: (async (payload: z.infer<typeof CallMePayload>, userId: number) => {
     // Look up the requesting user's own verified phone number.
     const [user] = await db
       .select({

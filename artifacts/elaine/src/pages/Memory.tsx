@@ -473,8 +473,7 @@ const CHANNEL_BADGE_COLORS: Record<string, string> = {
 
 function channelBadgeColor(ch: string): string {
   return (
-    CHANNEL_BADGE_COLORS[ch.toLowerCase()] ??
-    "bg-muted text-muted-foreground"
+    CHANNEL_BADGE_COLORS[ch.toLowerCase()] ?? "bg-muted text-muted-foreground"
   );
 }
 
@@ -483,9 +482,7 @@ function localDateLabel(iso: string): string {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const msgDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const diff = Math.round(
-    (today.getTime() - msgDay.getTime()) / 86400000,
-  );
+  const diff = Math.round((today.getTime() - msgDay.getTime()) / 86400000);
   if (diff === 0) return "Today";
   if (diff === 1) return "Yesterday";
   return d.toLocaleDateString(undefined, {
@@ -510,8 +507,7 @@ interface FullHistoryProps {
 
 function FullHistory({ channelFilter, onChannelChange }: FullHistoryProps) {
   const [page, setPage] = useState(1);
-  const effectiveChannel =
-    channelFilter === "all" ? undefined : channelFilter;
+  const effectiveChannel = channelFilter === "all" ? undefined : channelFilter;
   const { data, isLoading, isFetching } = useGetElaineUnifiedHistory(
     page,
     effectiveChannel,
@@ -610,10 +606,7 @@ function FullHistory({ channelFilter, onChannelChange }: FullHistoryProps) {
         {items.map((item, idx) => {
           if (item.kind === "sep") {
             return (
-              <div
-                key={`sep-${idx}`}
-                className="flex items-center gap-3 py-3"
-              >
+              <div key={`sep-${idx}`} className="flex items-center gap-3 py-3">
                 <div className="flex-1 h-px bg-border" />
                 <span className="text-xs font-medium text-muted-foreground shrink-0">
                   {item.label}
@@ -848,350 +841,355 @@ export default function Memory() {
       {/* Memory tab content */}
       {activeTab === "memory" && (
         <>
-
-      {/* ── Conversation Summary ── */}
-      {!isLoading && (
-        <div className="rounded-xl border border-card-border bg-card overflow-hidden">
-          <div className="flex items-center gap-2.5 px-4 pt-4 pb-3 border-b border-card-border">
-            <ScrollText className="h-4 w-4 text-primary shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-foreground">
-                Conversation Summary
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Your personal continuity summary — explicit facts remain
-                separately auditable below
-              </p>
+          {/* ── Conversation Summary ── */}
+          {!isLoading && (
+            <div className="rounded-xl border border-card-border bg-card overflow-hidden">
+              <div className="flex items-center gap-2.5 px-4 pt-4 pb-3 border-b border-card-border">
+                <ScrollText className="h-4 w-4 text-primary shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-foreground">
+                    Conversation Summary
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Your personal continuity summary — explicit facts remain
+                    separately auditable below
+                  </p>
+                </div>
+                {summary && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs text-muted-foreground hover:text-destructive gap-1 shrink-0"
+                    onClick={handleClearSummary}
+                    disabled={clearingSum}
+                    title="Clear summary — Elaine will rebuild it from scratch"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    Clear
+                  </Button>
+                )}
+              </div>
+              <div className="px-4 py-4">
+                {summary ? (
+                  <div className="space-y-2">
+                    <p className="text-sm text-foreground leading-relaxed">
+                      {summary.content}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Last updated {formatRelative(summary.updatedAt)}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Clock className="h-4 w-4 shrink-0" />
+                    <span>
+                      No summary yet — it builds up automatically as you chat
+                      with <ElaineName />.
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
-            {summary && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs text-muted-foreground hover:text-destructive gap-1 shrink-0"
-                onClick={handleClearSummary}
-                disabled={clearingSum}
-                title="Clear summary — Elaine will rebuild it from scratch"
-              >
-                <RefreshCw className="h-3.5 w-3.5" />
-                Clear
-              </Button>
-            )}
-          </div>
-          <div className="px-4 py-4">
-            {summary ? (
-              <div className="space-y-2">
-                <p className="text-sm text-foreground leading-relaxed">
-                  {summary.content}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Last updated {formatRelative(summary.updatedAt)}
-                </p>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Clock className="h-4 w-4 shrink-0" />
-                <span>
-                  No summary yet — it builds up automatically as you chat with{" "}
-                  <ElaineName />.
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+          )}
 
-      {/* ── Cross-channel Activity ── */}
-      {!ccLoading && (
-        <div className="rounded-xl border border-card-border bg-card overflow-hidden">
-          <div className="flex items-center gap-2.5 px-4 pt-4 pb-3 border-b border-card-border">
-            <Radio className="h-4 w-4 text-primary shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-foreground">
-                Recent activity across channels
-              </p>
-              <p className="text-xs text-muted-foreground">
-                What <ElaineName /> has discussed with you on web, Slack, SMS,
-                and email
-              </p>
-            </div>
-            {(crossChannelData?.entries ?? []).length > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs text-muted-foreground hover:text-destructive gap-1 shrink-0"
-                onClick={handleClearCrossChannel}
-                disabled={clearCrossChannel.isPending}
-                title="Clear cross-channel activity log"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Clear
-              </Button>
-            )}
-          </div>
-          <div className="px-4 py-3">
-            {(crossChannelData?.entries ?? []).length === 0 ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground py-1">
-                <Clock className="h-4 w-4 shrink-0" />
-                <span>
-                  No activity yet — each conversation on any channel will appear
-                  here.
-                </span>
+          {/* ── Cross-channel Activity ── */}
+          {!ccLoading && (
+            <div className="rounded-xl border border-card-border bg-card overflow-hidden">
+              <div className="flex items-center gap-2.5 px-4 pt-4 pb-3 border-b border-card-border">
+                <Radio className="h-4 w-4 text-primary shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-foreground">
+                    Recent activity across channels
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    What <ElaineName /> has discussed with you on web, Slack,
+                    SMS, and email
+                  </p>
+                </div>
+                {(crossChannelData?.entries ?? []).length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs text-muted-foreground hover:text-destructive gap-1 shrink-0"
+                    onClick={handleClearCrossChannel}
+                    disabled={clearCrossChannel.isPending}
+                    title="Clear cross-channel activity log"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Clear
+                  </Button>
+                )}
               </div>
-            ) : (
-              <div className="space-y-2.5">
-                {(crossChannelData?.entries ?? []).map(
-                  (entry: CrossChannelEntry, i: number) => {
-                    const ChanIcon = channelIcon(entry.channel);
-                    const parts = gistParts(entry.gist);
-                    return (
-                      <div key={i} className="flex gap-3 items-start">
-                        <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-muted">
-                          <ChanIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-xs font-medium text-foreground">
-                              {channelLabel(entry.channel)}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              · {entry.ts}
-                            </span>
-                          </div>
-                          {parts ? (
-                            <div className="mt-0.5 space-y-0.5">
-                              <p className="text-xs text-foreground/80 leading-relaxed truncate">
-                                <span className="text-muted-foreground">
-                                  You:{" "}
-                                </span>
-                                {parts.topic}
-                              </p>
-                              <p className="text-xs text-foreground/80 leading-relaxed truncate">
-                                <span className="text-muted-foreground">
-                                  Elaine:{" "}
-                                </span>
-                                {parts.reply}
-                              </p>
+              <div className="px-4 py-3">
+                {(crossChannelData?.entries ?? []).length === 0 ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground py-1">
+                    <Clock className="h-4 w-4 shrink-0" />
+                    <span>
+                      No activity yet — each conversation on any channel will
+                      appear here.
+                    </span>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {(crossChannelData?.entries ?? []).map(
+                      (entry: CrossChannelEntry, i: number) => {
+                        const ChanIcon = channelIcon(entry.channel);
+                        const parts = gistParts(entry.gist);
+                        return (
+                          <div key={i} className="flex gap-3 items-start">
+                            <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-muted">
+                              <ChanIcon className="h-3.5 w-3.5 text-muted-foreground" />
                             </div>
-                          ) : (
-                            <p className="mt-0.5 text-xs text-foreground/80 leading-relaxed truncate">
-                              {entry.gist}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  },
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-xs font-medium text-foreground">
+                                  {channelLabel(entry.channel)}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  · {entry.ts}
+                                </span>
+                              </div>
+                              {parts ? (
+                                <div className="mt-0.5 space-y-0.5">
+                                  <p className="text-xs text-foreground/80 leading-relaxed truncate">
+                                    <span className="text-muted-foreground">
+                                      You:{" "}
+                                    </span>
+                                    {parts.topic}
+                                  </p>
+                                  <p className="text-xs text-foreground/80 leading-relaxed truncate">
+                                    <span className="text-muted-foreground">
+                                      Elaine:{" "}
+                                    </span>
+                                    {parts.reply}
+                                  </p>
+                                </div>
+                              ) : (
+                                <p className="mt-0.5 text-xs text-foreground/80 leading-relaxed truncate">
+                                  {entry.gist}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      },
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              {
+                label: "Household",
+                count: householdCount,
+                scope: "household" as MemoryScope,
+              },
+              {
+                label: "Personal",
+                count: personalCount,
+                scope: "personal" as MemoryScope,
+              },
+              {
+                label: "Temporary",
+                count: tempCount,
+                scope: "temporary" as MemoryScope,
+              },
+            ].map(({ label, count, scope }) => {
+              const ScopeIcon = SCOPE_ICONS[scope];
+              return (
+                <button
+                  key={scope}
+                  onClick={() =>
+                    setScopeFilter(scopeFilter === scope ? "all" : scope)
+                  }
+                  className={`rounded-xl border p-3 text-left transition-all hover:border-primary/30 ${
+                    scopeFilter === scope
+                      ? "border-primary/40 bg-primary/5"
+                      : "border-card-border bg-card"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <ScopeIcon className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">
+                      {label}
+                    </span>
+                  </div>
+                  <p className="text-2xl font-semibold text-foreground">
+                    {count}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+
+          {showAdd && (
+            <AddMemoryForm
+              onAdded={() => {
+                refresh();
+                setShowAdd(false);
+              }}
+              onCancel={() => setShowAdd(false)}
+            />
+          )}
+
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search memories…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowFilters(!showFilters)}
+                className="shrink-0"
+              >
+                Filters
+                {showFilters ? (
+                  <ChevronUp className="h-4 w-4 ml-1" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 ml-1" />
+                )}
+              </Button>
+            </div>
+
+            {showFilters && (
+              <div className="flex flex-wrap gap-2 p-3 rounded-lg bg-muted/40 border border-card-border">
+                <Select
+                  value={scopeFilter}
+                  onValueChange={(v) =>
+                    setScopeFilter(v as "all" | MemoryScope)
+                  }
+                >
+                  <SelectTrigger className="w-36 h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SCOPE_FILTER_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={categoryFilter}
+                  onValueChange={(v) =>
+                    setCategoryFilter(v as "all" | MemoryCategory)
+                  }
+                >
+                  <SelectTrigger className="w-40 h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CATEGORY_FILTER_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {(scopeFilter !== "all" || categoryFilter !== "all") && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setScopeFilter("all");
+                      setCategoryFilter("all");
+                    }}
+                    className="h-8 text-xs"
+                  >
+                    Clear
+                  </Button>
                 )}
               </div>
             )}
           </div>
-        </div>
-      )}
 
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          {
-            label: "Household",
-            count: householdCount,
-            scope: "household" as MemoryScope,
-          },
-          {
-            label: "Personal",
-            count: personalCount,
-            scope: "personal" as MemoryScope,
-          },
-          {
-            label: "Temporary",
-            count: tempCount,
-            scope: "temporary" as MemoryScope,
-          },
-        ].map(({ label, count, scope }) => {
-          const ScopeIcon = SCOPE_ICONS[scope];
-          return (
-            <button
-              key={scope}
-              onClick={() =>
-                setScopeFilter(scopeFilter === scope ? "all" : scope)
-              }
-              className={`rounded-xl border p-3 text-left transition-all hover:border-primary/30 ${
-                scopeFilter === scope
-                  ? "border-primary/40 bg-primary/5"
-                  : "border-card-border bg-card"
-              }`}
-            >
-              <div className="flex items-center gap-2 mb-1">
-                <ScopeIcon className="h-4 w-4 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">{label}</span>
+          {isLoading && (
+            <div className="flex justify-center py-12 text-muted-foreground text-sm">
+              Loading memories…
+            </div>
+          )}
+
+          {!isLoading && facts.length === 0 && (
+            <div className="flex flex-col items-center gap-3 py-16 text-center">
+              <ElaineAvatar size={48} />
+              <div>
+                <p className="font-medium text-foreground">
+                  Nothing remembered yet
+                </p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  As you chat with <ElaineName />, she'll build up useful
+                  context about your household.
+                </p>
               </div>
-              <p className="text-2xl font-semibold text-foreground">{count}</p>
-            </button>
-          );
-        })}
-      </div>
-
-      {showAdd && (
-        <AddMemoryForm
-          onAdded={() => {
-            refresh();
-            setShowAdd(false);
-          }}
-          onCancel={() => setShowAdd(false)}
-        />
-      )}
-
-      <div className="space-y-2">
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search memories…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowFilters(!showFilters)}
-            className="shrink-0"
-          >
-            Filters
-            {showFilters ? (
-              <ChevronUp className="h-4 w-4 ml-1" />
-            ) : (
-              <ChevronDown className="h-4 w-4 ml-1" />
-            )}
-          </Button>
-        </div>
-
-        {showFilters && (
-          <div className="flex flex-wrap gap-2 p-3 rounded-lg bg-muted/40 border border-card-border">
-            <Select
-              value={scopeFilter}
-              onValueChange={(v) => setScopeFilter(v as "all" | MemoryScope)}
-            >
-              <SelectTrigger className="w-36 h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {SCOPE_FILTER_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select
-              value={categoryFilter}
-              onValueChange={(v) =>
-                setCategoryFilter(v as "all" | MemoryCategory)
-              }
-            >
-              <SelectTrigger className="w-40 h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {CATEGORY_FILTER_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {(scopeFilter !== "all" || categoryFilter !== "all") && (
               <Button
-                variant="ghost"
                 size="sm"
+                variant="outline"
+                onClick={() => setShowAdd(true)}
+                className="mt-2"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add your first memory
+              </Button>
+            </div>
+          )}
+
+          {!isLoading && facts.length > 0 && filtered.length === 0 && (
+            <div className="py-12 text-center text-sm text-muted-foreground">
+              No memories match your filters.{" "}
+              <button
                 onClick={() => {
+                  setSearch("");
                   setScopeFilter("all");
                   setCategoryFilter("all");
                 }}
-                className="h-8 text-xs"
+                className="underline underline-offset-2 hover:text-foreground"
               >
-                Clear
-              </Button>
-            )}
-          </div>
-        )}
-      </div>
-
-      {isLoading && (
-        <div className="flex justify-center py-12 text-muted-foreground text-sm">
-          Loading memories…
-        </div>
-      )}
-
-      {!isLoading && facts.length === 0 && (
-        <div className="flex flex-col items-center gap-3 py-16 text-center">
-          <ElaineAvatar size={48} />
-          <div>
-            <p className="font-medium text-foreground">
-              Nothing remembered yet
-            </p>
-            <p className="text-sm text-muted-foreground mt-1">
-              As you chat with <ElaineName />, she'll build up useful context
-              about your household.
-            </p>
-          </div>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setShowAdd(true)}
-            className="mt-2"
-          >
-            <Plus className="h-4 w-4 mr-1" />
-            Add your first memory
-          </Button>
-        </div>
-      )}
-
-      {!isLoading && facts.length > 0 && filtered.length === 0 && (
-        <div className="py-12 text-center text-sm text-muted-foreground">
-          No memories match your filters.{" "}
-          <button
-            onClick={() => {
-              setSearch("");
-              setScopeFilter("all");
-              setCategoryFilter("all");
-            }}
-            className="underline underline-offset-2 hover:text-foreground"
-          >
-            Clear filters
-          </button>
-        </div>
-      )}
-
-      {filtered.length > 0 && (
-        <div className="space-y-2">
-          {filtered.map((item) => (
-            <MemoryCard
-              key={item.id}
-              item={item}
-              onDeleted={refresh}
-              onUpdated={refresh}
-            />
-          ))}
-          {filtered.length < facts.length && (
-            <p className="text-xs text-center text-muted-foreground pt-2">
-              Showing {filtered.length} of {facts.length} memories
-            </p>
+                Clear filters
+              </button>
+            </div>
           )}
-        </div>
-      )}
 
-      <div className="rounded-xl border border-card-border bg-muted/30 p-4">
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          <strong className="text-foreground">Household</strong> memories are
-          visible to everyone in the household.{" "}
-          <strong className="text-foreground">Personal</strong> memories are
-          only used in your own conversations.{" "}
-          <strong className="text-foreground">Temporary</strong> memories expire
-          automatically. High-sensitivity memories are shown only in contexts
-          where they're explicitly relevant.
-        </p>
-      </div>
-      </>
+          {filtered.length > 0 && (
+            <div className="space-y-2">
+              {filtered.map((item) => (
+                <MemoryCard
+                  key={item.id}
+                  item={item}
+                  onDeleted={refresh}
+                  onUpdated={refresh}
+                />
+              ))}
+              {filtered.length < facts.length && (
+                <p className="text-xs text-center text-muted-foreground pt-2">
+                  Showing {filtered.length} of {facts.length} memories
+                </p>
+              )}
+            </div>
+          )}
+
+          <div className="rounded-xl border border-card-border bg-muted/30 p-4">
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              <strong className="text-foreground">Household</strong> memories
+              are visible to everyone in the household.{" "}
+              <strong className="text-foreground">Personal</strong> memories are
+              only used in your own conversations.{" "}
+              <strong className="text-foreground">Temporary</strong> memories
+              expire automatically. High-sensitivity memories are shown only in
+              contexts where they're explicitly relevant.
+            </p>
+          </div>
+        </>
       )}
     </div>
   );

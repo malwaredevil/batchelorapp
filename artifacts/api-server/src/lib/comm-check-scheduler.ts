@@ -478,7 +478,7 @@ export async function runChannelCheck(
 // run after that threshold.
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000;
-const SEND_AFTER_MINUTE = 1;           // 00:01 Stuttgart — email/SMS/Slack
+const SEND_AFTER_MINUTE = 1; // 00:01 Stuttgart — email/SMS/Slack
 const PHONE_SEND_AFTER_MINUTE = 19 * 60; // 19:00 Stuttgart — phone call
 
 export function startCommCheckScheduler(): () => void {

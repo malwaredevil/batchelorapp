@@ -116,7 +116,10 @@ export function sanitizeCrossChannelGist(raw: string): string {
   s = s.replace(TAG_RE, "");
 
   // Strip code fences, triple-dash separators, triple-hash markers
-  s = s.replace(CODE_FENCE_RE, "").replace(TRIPLE_DASH_RE, "").replace(TRIPLE_HASH_RE, "");
+  s = s
+    .replace(CODE_FENCE_RE, "")
+    .replace(TRIPLE_DASH_RE, "")
+    .replace(TRIPLE_HASH_RE, "");
 
   // Collapse repeated whitespace
   s = s.replace(/\s{2,}/g, " ").trim();

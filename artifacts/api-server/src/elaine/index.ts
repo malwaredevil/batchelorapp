@@ -7338,8 +7338,7 @@ export const SMS_SLACK_CHANNEL_EXTRAS = new Set<string>([
 ]);
 
 const SMS_SLACK_CHANNEL_EXTRA_TOOLS = ACTION_TOOLS.filter(
-  (t) =>
-    t.type === "function" && SMS_SLACK_CHANNEL_EXTRAS.has(t.function.name),
+  (t) => t.type === "function" && SMS_SLACK_CHANNEL_EXTRAS.has(t.function.name),
 );
 
 // Read/utility "soft" tools also given to the restricted channels — this is
@@ -7467,48 +7466,13 @@ const RESTRICTED_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
 // Excluded: all ACTION_TOOLS, remember_household_fact (DB write),
 // show_* widget tools (no screen), consult_experts (expensive subagent),
 // ebay_search (low value for email replies).
-const EMAIL_SAFE_TOOL_NAMES = new Set<string>([
-  SEARCH_HOUSEHOLD_TOOL_NAME,
-  QUERY_HOUSEHOLD_TOOL_NAME,
-  SEARCH_TRIP_DOCUMENTS_TOOL_NAME,
-  WEB_SEARCH_TOOL_NAME,
-  FETCH_PAGE_TOOL_NAME,
-  SEARCH_FLIGHTS_TOOL_NAME,
-  GET_EXCHANGE_RATE_TOOL_NAME,
-  GET_WEATHER_TOOL_NAME,
-  FIND_NEARBY_PLACES_TOOL_NAME,
-  GET_ROUTE_INFO_TOOL_NAME,
-  GET_AIR_QUALITY_TOOL_NAME,
-  GET_POLLEN_FORECAST_TOOL_NAME,
-  SEARCH_HALLMARK_TOOL_NAME,
-  LOOKUP_BARCODE_TOOL_NAME,
-  CALCULATE_YARDAGE_TOOL_NAME,
-  // list_contact_channels excluded from email: the outbound-contact actions it
-  // unlocks (call_contact/message_contact) are themselves excluded from email
-  // because inbound email From headers are spoofable and do not constitute strong
-  // sender authentication. Offering the lookup tool without the actions it leads
-  // to creates a confusing dead end — omit it entirely on this channel.
-]);
-
-const EMAIL_SAFE_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
-  ...RESTRICTED_SOFT_TOOLS.filter(
-    (t) => t.type === "function" && EMAIL_SAFE_TOOL_NAMES.has(t.function.name),
-  ),
-  // continue_in_channel is an action tool (not a soft tool) but safe for the
-  // email channel: the executor resolves the target from userId (the verified
-  // DB record), never from the inbound From address. See capability-registry.ts
-  // for the full security reasoning.
-  // call_contact and message_contact are intentionally excluded: the inbound
-  // email From header is spoofable and does not constitute strong sender
-  // authentication. Outbound-contact actions over email would allow any sender
-  // who knows a valid account email address to trigger real calls and messages
-  // to household members. These actions require SMS/voice (E.164 verified) or
-  // the web app (session cookie + explicit confirmation UI).
-  ...AGENTPHONE_ACTION_TOOLS.filter(
-    (t) => t.type === "function" && t.function.name === "continue_in_channel",
-  ),
-  RESTRICTED_NAVIGATE_TOOL,
-];
+// Email channel uses the same RESTRICTED_TOOLS base as SMS/voice and Slack —
+// full action parity minus the items in RESTRICTED_EXCLUDED_ACTION_TYPES.
+// call_contact and message_contact remain excluded (they're in
+// RESTRICTED_EXCLUDED_ACTION_TYPES) because inbound email From headers are
+// spoofable and cannot constitute strong sender authentication for directing
+// outbound calls/messages to other household members. All other actions
+// (create/edit trips, pottery, packing lists, reminders, etc.) are available.
 
 // Executes one of the read/utility "soft" tools for a restricted channel
 // turn and returns the text to feed back to the model. Mirrors the logic in
@@ -8602,7 +8566,7 @@ export interface ElaineEmailChatMessage {
 }
 
 const ELAINE_EMAIL_CHANNEL_ADDENDUM =
-  "CHANNEL: You are replying by email. You can look up household data, check the weather, search for flights, and answer factual questions. You CANNOT create, edit, or delete household records over email — if someone asks you to make changes to trips, pottery, quilting, or similar data, explain they need to do that in the app and give them a link with share_app_link. Use share_app_link whenever a request needs an actual screen. Sign off naturally as Elaine; do not repeat a greeting like 'Hi' if the message is a quick reply. CHANNEL SWITCHING: You have the continue_in_channel tool, which sends a message to THE SAME USER (not a household member) on their SMS or Slack. Use it when they say 'text me that', 'send this to my Slack', or 'let's continue on [channel]'. After calling it, confirm in your reply which channel you forwarded to. OUTBOUND CALLS & MESSAGES TO OTHERS: Calling or messaging other household members (call_contact, message_contact) is not available over email — email sender identity cannot be reliably verified. If asked to call or message someone else, explain you can do it from the web app or by sending you an SMS, then use share_app_link to give them a direct link.";
+  "CHANNEL: You are replying by email. You have full access to household actions — you can create, edit, and delete trips, pottery, packing lists, reminders, and other records just as you would in the web app or over SMS. Actions run immediately — always briefly confirm what you did (or that it failed). Use share_app_link to give the user a direct URL whenever a request needs an actual screen (e.g. uploading a photo, connecting a calendar). Sign off naturally as Elaine; do not repeat a greeting like 'Hi' if the message is a quick reply. CHANNEL SWITCHING: You have the continue_in_channel tool, which sends a message to THE SAME USER (not a household member) on their SMS or Slack. Use it when they say 'text me that', 'send this to my Slack', or 'let's continue on [channel]'. After calling it, confirm in your reply which channel you forwarded to. OUTBOUND CALLS & MESSAGES TO OTHERS: Calling or messaging other household members (call_contact, message_contact) is not available over email — email sender identity cannot be reliably verified. If asked to call or message someone else, explain you can do it from the web app or by sending you an SMS, then use share_app_link to give them a direct link.";
 
 // Runs one restricted, non-streaming Elaine turn for an inbound email from a
 // known household member. Mirrors runAgentphoneTurn's shape/behavior exactly
@@ -8621,7 +8585,9 @@ export async function runElaineEmailTurn(params: {
     channelAddendum: ELAINE_EMAIL_CHANNEL_ADDENDUM,
     formattingNote:
       "Your replies will be sent as plain-text email. Use NO markdown syntax (no **, no #, no - lists). A short paragraph or two is usually enough.",
-    overrideTools: EMAIL_SAFE_TOOLS,
+    // No overrideTools — email uses the same RESTRICTED_TOOLS base as
+    // SMS/voice and Slack, giving full action parity. call_contact and
+    // message_contact are still blocked via RESTRICTED_EXCLUDED_ACTION_TYPES.
   });
 }
 

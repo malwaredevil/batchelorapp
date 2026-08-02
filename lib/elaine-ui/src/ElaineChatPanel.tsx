@@ -23,6 +23,12 @@ import {
   Square,
   Sun,
   Radio,
+  Phone,
+  Mail,
+  MessageSquare,
+  Hash,
+  AlertCircle,
+  Users,
 } from "lucide-react";
 import {
   useGetElaineDailyBrief,
@@ -50,6 +56,76 @@ import { MarkdownMessage } from "./MarkdownMessage";
 import { ChatWidget } from "./ChatWidgets";
 import { LinkPreviewCard } from "./LinkPreviewCard";
 import { ElainePlanProgress } from "./ElainePlanProgress";
+
+// ─── Communication action result helpers ─────────────────────────────────────
+
+type DeliveryChannel = "sms" | "voice" | "email" | "slack" | "elaine_chat";
+
+function ChannelIcon({
+  channel,
+  className,
+}: {
+  channel: string;
+  className?: string;
+}) {
+  switch (channel as DeliveryChannel) {
+    case "sms":
+    case "voice":
+      return <Phone className={className} />;
+    case "email":
+      return <Mail className={className} />;
+    case "slack":
+      return <Hash className={className} />;
+    case "elaine_chat":
+      return <MessageSquare className={className} />;
+    default:
+      return <MessageSquare className={className} />;
+  }
+}
+
+function channelDisplayLabel(channel: string): string {
+  switch (channel as DeliveryChannel) {
+    case "sms":
+      return "SMS";
+    case "voice":
+      return "Phone call";
+    case "email":
+      return "Email";
+    case "slack":
+      return "Slack DM";
+    case "elaine_chat":
+      return "Elaine chat";
+    default:
+      return channel;
+  }
+}
+
+/**
+ * Extracts the communication result payload from an executed action's result
+ * body. The server wraps successful results as `{ type, result: { ... } }` and
+ * errors as `{ error: string }`.
+ */
+function parseCommunicationResult(result: unknown): {
+  channel?: string;
+  contactName?: string;
+  callId?: string;
+  recipients?: Array<{ name: string; channel: string | null; ok: boolean; error: string | null }>;
+  error?: string;
+} {
+  if (!result || typeof result !== "object") return {};
+  const body = result as Record<string, unknown>;
+  if (typeof body.error === "string") return { error: body.error };
+  const inner = body.result as Record<string, unknown> | undefined;
+  if (!inner) return {};
+  return {
+    channel: typeof inner.channel === "string" ? inner.channel : undefined,
+    contactName: typeof inner.contactName === "string" ? inner.contactName : undefined,
+    callId: typeof inner.callId === "string" ? inner.callId : undefined,
+    recipients: Array.isArray(inner.recipients)
+      ? (inner.recipients as Array<{ name: string; channel: string | null; ok: boolean; error: string | null }>)
+      : undefined,
+  };
+}
 
 // ─── Response-complete chime ──────────────────────────────────────────────────
 function playResponseChime(): void {
@@ -826,14 +902,146 @@ export function ElaineChatPanel({
           </div>
         )}
 
-        {actionDone && executedActions.length > 0 && (
-          <div className="ml-8 rounded-xl border border-green-200 bg-green-50/60 px-3 py-2 dark:border-green-800 dark:bg-green-950/30">
-            <p className="text-xs font-medium text-green-800 dark:text-green-300">
-              <Check className="mr-1 inline h-3.5 w-3.5" />
-              Done
-            </p>
-          </div>
-        )}
+        {actionDone && executedActions.length > 0 && (() => {
+          // Separate communication actions from generic ones
+          const commActions = executedActions.filter(
+            (a) => a.type === "message_contact" || a.type === "call_contact",
+          );
+          const otherActions = executedActions.filter(
+            (a) => a.type !== "message_contact" && a.type !== "call_contact",
+          );
+
+          return (
+            <>
+              {/* Generic "Done" for non-communication actions */}
+              {otherActions.length > 0 && (
+                <div className="ml-8 rounded-xl border border-green-200 bg-green-50/60 px-3 py-2 dark:border-green-800 dark:bg-green-950/30">
+                  <p className="text-xs font-medium text-green-800 dark:text-green-300">
+                    <Check className="mr-1 inline h-3.5 w-3.5" />
+                    Done
+                  </p>
+                </div>
+              )}
+
+              {/* Rich result cards for communication actions */}
+              {commActions.map((action, idx) => {
+                const parsed = parseCommunicationResult(action.result);
+
+                // Error result
+                if (parsed.error) {
+                  return (
+                    <div
+                      key={idx}
+                      className="ml-8 rounded-xl border border-red-200 bg-red-50/60 px-3 py-2 dark:border-red-800 dark:bg-red-950/30"
+                    >
+                      <p className="text-xs font-medium text-red-800 dark:text-red-300 flex items-center gap-1">
+                        <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                        {parsed.error}
+                      </p>
+                    </div>
+                  );
+                }
+
+                // call_contact result
+                if (action.type === "call_contact") {
+                  return (
+                    <div
+                      key={idx}
+                      className="ml-8 rounded-xl border border-green-200 bg-green-50/60 px-3 py-2 dark:border-green-800 dark:bg-green-950/30"
+                    >
+                      <p className="text-xs font-medium text-green-800 dark:text-green-300 flex items-center gap-1">
+                        <Phone className="h-3.5 w-3.5 shrink-0" />
+                        Call initiated
+                        {parsed.contactName ? ` to ${parsed.contactName}` : ""}
+                      </p>
+                    </div>
+                  );
+                }
+
+                // message_contact multi-recipient
+                if (parsed.recipients && parsed.recipients.length > 0) {
+                  const delivered = parsed.recipients.filter((r) => r.ok);
+                  const failed = parsed.recipients.filter((r) => !r.ok);
+                  return (
+                    <div
+                      key={idx}
+                      className="ml-8 rounded-xl border border-green-200 bg-green-50/60 px-3 py-2 dark:border-green-800 dark:bg-green-950/30"
+                    >
+                      <p className="text-xs font-medium text-green-800 dark:text-green-300 flex items-center gap-1 mb-1.5">
+                        <Users className="h-3.5 w-3.5 shrink-0" />
+                        Message sent to {delivered.length}/{parsed.recipients.length}
+                      </p>
+                      <ul className="space-y-0.5">
+                        {parsed.recipients.map((r, ri) => (
+                          <li key={ri} className="flex items-center gap-1.5 text-xs">
+                            {r.ok && r.channel ? (
+                              <>
+                                <ChannelIcon
+                                  channel={r.channel}
+                                  className="h-3 w-3 shrink-0 text-green-600 dark:text-green-400"
+                                />
+                                <span className="text-green-800 dark:text-green-300">
+                                  {r.name} — {channelDisplayLabel(r.channel)}
+                                </span>
+                              </>
+                            ) : (
+                              <>
+                                <AlertCircle className="h-3 w-3 shrink-0 text-red-500" />
+                                <span className="text-red-700 dark:text-red-400">
+                                  {r.name}: {r.error ?? "Failed"}
+                                </span>
+                              </>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                      {failed.length > 0 && delivered.length === 0 && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Check each contact's profile to add a reachable channel.
+                        </p>
+                      )}
+                    </div>
+                  );
+                }
+
+                // message_contact single recipient
+                return (
+                  <div
+                    key={idx}
+                    className="ml-8 rounded-xl border border-green-200 bg-green-50/60 px-3 py-2 dark:border-green-800 dark:bg-green-950/30"
+                  >
+                    <p className="text-xs font-medium text-green-800 dark:text-green-300 flex items-center gap-1">
+                      {parsed.channel ? (
+                        <ChannelIcon
+                          channel={parsed.channel}
+                          className="h-3.5 w-3.5 shrink-0"
+                        />
+                      ) : (
+                        <Check className="h-3.5 w-3.5 shrink-0" />
+                      )}
+                      {parsed.channel
+                        ? `Sent via ${channelDisplayLabel(parsed.channel)}`
+                        : "Sent"}
+                      {parsed.contactName ? ` to ${parsed.contactName}` : ""}
+                    </p>
+                  </div>
+                );
+              })}
+
+              {/* If ALL executed actions were communication and all errored,
+                  there may be nothing else shown — show a fallback Done for
+                  any remaining non-error comm actions with no rich data */}
+              {commActions.length === 0 && otherActions.length === 0 && (
+                <div className="ml-8 rounded-xl border border-green-200 bg-green-50/60 px-3 py-2 dark:border-green-800 dark:bg-green-950/30">
+                  <p className="text-xs font-medium text-green-800 dark:text-green-300">
+                    <Check className="mr-1 inline h-3.5 w-3.5" />
+                    Done
+                  </p>
+                </div>
+              )}
+            </>
+          );
+        })()}
 
         <div ref={endRef} />
       </div>

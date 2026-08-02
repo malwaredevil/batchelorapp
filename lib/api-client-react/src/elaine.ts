@@ -233,7 +233,13 @@ export type AssistantActionType =
   | "forget_memory"
   | "queue_research_task"
   | "cancel_elaine_task"
-  | "execute_app_operation";
+  | "execute_app_operation"
+  | "message_contact"
+  | "call_contact"
+  | "cancel_scheduled_contact"
+  | "continue_in_channel"
+  | "call_me"
+  | "broadcast_message";
 
 export interface AssistantAction {
   type: AssistantActionType;

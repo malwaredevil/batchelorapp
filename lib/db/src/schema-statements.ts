@@ -3010,4 +3010,19 @@ END $$`,
   // before this column was added.
   `ALTER TABLE elaine_history_messages
      ADD COLUMN IF NOT EXISTS reasoning_summary TEXT`,
+
+  // ── Elaine cross-channel context (Task #556) ──────────────────────────────
+  // Rolling log of recent Elaine turns across all channels (web, Slack, SMS,
+  // email). One row per user; entries[] is newest-first, capped at 15.
+  // Each entry: {channel, gist, ts}. Injected into every system prompt so
+  // Elaine has continuity across channels without merging separate histories.
+  `CREATE TABLE IF NOT EXISTS elaine_cross_channel_context (
+     id          SERIAL PRIMARY KEY,
+     user_id     INTEGER NOT NULL UNIQUE,
+     entries     JSONB NOT NULL DEFAULT '[]'::jsonb,
+     updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE elaine_cross_channel_context ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS elaine_cross_channel_context_user_id_idx
+     ON elaine_cross_channel_context (user_id)`,
 ];

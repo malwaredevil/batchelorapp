@@ -9,6 +9,7 @@ import {
 } from "../lib/sms";
 import { initiateOutboundCall } from "../lib/calls";
 import { openDmChannel, postSlackMessage, slackConfigured } from "../lib/slack";
+import { sendAssistantEmail } from "../lib/email";
 import { logger } from "../lib/logger";
 
 // ---------------------------------------------------------------------------
@@ -43,6 +44,19 @@ const CancelScheduledContactPayload = z.object({
   scheduledActionId: z.number().int().positive(),
 });
 
+// continue_in_channel: send a message to the requesting user's OWN account on
+// another channel. This is purely self-directed (user → themselves), not a
+// household-member contact, so it is safe to execute from any channel.
+// It should NOT be added to RESTRICTED_EXCLUDED_ACTION_TYPES.
+const ContinueInChannelPayload = z.object({
+  targetChannel: z.enum(["slack", "sms", "email"]).describe(
+    "Channel to deliver the continuation message on. Choose whichever the user asked for.",
+  ),
+  message: z.string().min(1).max(2000).describe(
+    "The text to deliver to the user on the target channel.",
+  ),
+});
+
 export const communicationActionSchemas = [
   z.object({
     type: z.literal("call_contact"),
@@ -56,12 +70,17 @@ export const communicationActionSchemas = [
     type: z.literal("cancel_scheduled_contact"),
     payload: CancelScheduledContactPayload,
   }),
+  z.object({
+    type: z.literal("continue_in_channel"),
+    payload: ContinueInChannelPayload,
+  }),
 ] as const;
 
 export const COMMUNICATION_ACTION_TYPES = [
   "call_contact",
   "message_contact",
   "cancel_scheduled_contact",
+  "continue_in_channel",
 ] as const;
 
 export type CommunicationActionType =
@@ -416,6 +435,164 @@ export const communicationActionExecutors: Record<
     );
   }) as ActionExecutor,
 
+  continue_in_channel: (async (
+    payload: z.infer<typeof ContinueInChannelPayload>,
+    userId: number,
+  ) => {
+    // Look up the requesting user's OWN contact details (not a household member).
+    const [user] = await db
+      .select({
+        email: appUsers.email,
+        phoneNumber: appUsers.phoneNumber,
+        phoneVerified: appUsers.phoneVerified,
+        smsConsentAt: appUsers.smsConsentAt,
+        smsOptedOutAt: appUsers.smsOptedOutAt,
+        slackUserId: appUsers.slackUserId,
+        displayName: appUsers.displayName,
+      })
+      .from(appUsers)
+      .where(eq(appUsers.id, userId));
+
+    if (!user) {
+      return { status: 404, body: { error: "User account not found." } };
+    }
+
+    const { targetChannel, message } = payload;
+
+    if (targetChannel === "slack") {
+      if (!user.slackUserId) {
+        return {
+          status: 422,
+          body: {
+            error:
+              "You don't have a Slack account linked. You can connect it from your account settings in the app.",
+          },
+        };
+      }
+      if (!slackConfigured()) {
+        return {
+          status: 503,
+          body: { error: "Slack isn't configured on this installation." },
+        };
+      }
+      try {
+        const channelId = await openDmChannel(user.slackUserId);
+        await postSlackMessage(channelId, message);
+        return {
+          status: 200,
+          body: {
+            type: "continue_in_channel",
+            result: { channel: "slack", sent: true },
+          },
+        };
+      } catch (err) {
+        logger.error({ err }, "elaine: continue_in_channel slack send failed");
+        return {
+          status: 500,
+          body: { error: "Failed to send the Slack message. Try again." },
+        };
+      }
+    }
+
+    if (targetChannel === "sms") {
+      if (!user.phoneNumber) {
+        return {
+          status: 422,
+          body: {
+            error:
+              "You don't have a phone number on file. Add and verify one from your account settings.",
+          },
+        };
+      }
+      if (!user.phoneVerified) {
+        return {
+          status: 422,
+          body: {
+            error:
+              "Your phone number hasn't been verified yet. Verify it from your account settings before SMS can be used.",
+          },
+        };
+      }
+      if (!user.smsConsentAt) {
+        return {
+          status: 422,
+          body: {
+            error:
+              "You haven't given SMS consent. Enable SMS notifications on your profile page.",
+          },
+        };
+      }
+      if (user.smsOptedOutAt) {
+        return {
+          status: 409,
+          body: {
+            error:
+              "You've opted out of SMS. Text START to the Batchelor App number to re-subscribe.",
+          },
+        };
+      }
+      try {
+        await sendSms(user.phoneNumber, message);
+        return {
+          status: 200,
+          body: {
+            type: "continue_in_channel",
+            result: { channel: "sms", sent: true },
+          },
+        };
+      } catch (err) {
+        if (err instanceof SmsOptedOutError) {
+          return {
+            status: 409,
+            body: {
+              error:
+                "You've opted out of SMS. Text START to the Batchelor App number to re-subscribe.",
+            },
+          };
+        }
+        if (err instanceof SmsRegistrationPendingError) {
+          return {
+            status: 503,
+            body: {
+              error:
+                "SMS isn't fully enabled yet — carrier registration is pending. Try again in a few days.",
+            },
+          };
+        }
+        logger.error({ err }, "elaine: continue_in_channel sms send failed");
+        return {
+          status: 500,
+          body: { error: "Failed to send the SMS. Try again." },
+        };
+      }
+    }
+
+    if (targetChannel === "email") {
+      try {
+        await sendAssistantEmail(
+          user.email,
+          "From Elaine — continued conversation",
+          message,
+        );
+        return {
+          status: 200,
+          body: {
+            type: "continue_in_channel",
+            result: { channel: "email", sent: true },
+          },
+        };
+      } catch (err) {
+        logger.error({ err }, "elaine: continue_in_channel email send failed");
+        return {
+          status: 500,
+          body: { error: "Failed to send the email. Try again." },
+        };
+      }
+    }
+
+    return { status: 400, body: { error: "Unknown target channel." } };
+  }) as ActionExecutor,
+
   cancel_scheduled_contact: (async (
     payload: z.infer<typeof CancelScheduledContactPayload>,
     userId: number,
@@ -600,6 +777,11 @@ export async function buildCommunicationActionLabel(action: {
       const payload = CancelScheduledContactPayload.parse(action.payload);
       return `Cancel scheduled contact #${payload.scheduledActionId}`;
     }
+    case "continue_in_channel": {
+      const payload = ContinueInChannelPayload.parse(action.payload);
+      const channelLabels = { slack: "Slack", sms: "SMS", email: "email" };
+      return `Continue conversation on ${channelLabels[payload.targetChannel]}`;
+    }
   }
 }
 
@@ -705,6 +887,36 @@ export const communicationActionTools: OpenAI.Chat.Completions.ChatCompletionToo
             },
           },
           required: ["scheduledActionId"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "continue_in_channel",
+        description:
+          "Send a message to the REQUESTING USER THEMSELVES on a different channel (Slack DM, SMS, or email). " +
+          "Use this when the user asks to move or continue the current conversation on another channel — " +
+          "e.g. 'text me that', 'send this to my Slack', 'let's continue on Slack', 'email me a summary'. " +
+          "IMPORTANT: this sends to THE SAME USER who is talking to you, not to a household member. " +
+          "After calling this tool, confirm in your visible reply that you've forwarded the message and on which channel. " +
+          "Do NOT use this to send information to other people — use message_contact for that.",
+        parameters: {
+          type: "object",
+          properties: {
+            targetChannel: {
+              type: "string",
+              enum: ["slack", "sms", "email"],
+              description:
+                "The channel to deliver the message on. Match what the user asked for.",
+            },
+            message: {
+              type: "string",
+              description:
+                "The text to deliver to the user on the target channel. Can be a summary, a continuation, or the exact reply — whatever makes sense in context.",
+            },
+          },
+          required: ["targetChannel", "message"],
         },
       },
     },

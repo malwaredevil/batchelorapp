@@ -416,3 +416,31 @@ export const elaineDailyBriefs = pgTable("elaine_daily_briefs", {
 
 export type ElaineDailyBriefRow = typeof elaineDailyBriefs.$inferSelect;
 export type InsertElaineDailyBrief = typeof elaineDailyBriefs.$inferInsert;
+
+// Rolling cross-channel context — one row per user, shared across all channels
+// (web widget, Slack, SMS/voice, email). After every Elaine turn on any channel,
+// a compact entry is prepended here (newest first) recording which channel was
+// used and a brief gist of what was discussed. The last ~15 entries are injected
+// into the system prompt of every subsequent turn as "CROSS-CHANNEL CONTEXT" so
+// Elaine can reference earlier exchanges on any channel without separate history
+// merging. Deliberately lightweight: entries are plain text, never tool payloads
+// or raw prompts, so injection cost stays well under 400 tokens.
+export const elaineCrossChannelContext = pgTable(
+  "elaine_cross_channel_context",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id").notNull().unique(),
+    // Array of {channel, gist, ts} objects, newest first, capped at 15 entries.
+    entries: jsonb("entries")
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+).enableRLS();
+
+export type ElaineCrossChannelContextRow =
+  typeof elaineCrossChannelContext.$inferSelect;
+export type InsertElaineCrossChannelContext =
+  typeof elaineCrossChannelContext.$inferInsert;

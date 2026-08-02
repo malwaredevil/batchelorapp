@@ -68,12 +68,20 @@ type Tab =
   | "integrations";
 
 type TabDef = { id: Tab; label: string; icon: typeof Globe };
+type TabGroup = {
+  key: string;
+  label: string;
+  icon: typeof Globe;
+  tabs: TabDef[];
+};
 
-/** Always-visible tabs in the top nav bar */
-const TOP_TABS: TabDef[] = [
+const DATA_ACCESS_TABS: TabDef[] = [
   { id: "infrastructure", label: "Infrastructure", icon: Database },
   { id: "integrations", label: "Integrations", icon: Activity },
   { id: "users", label: "Users", icon: Users },
+];
+
+const CONFIG_TABS: TabDef[] = [
   { id: "travels", label: "Travels", icon: Globe },
   { id: "global-config", label: "Global Config", icon: Settings2 },
 ];
@@ -87,7 +95,30 @@ const DEV_TABS: TabDef[] = [
   { id: "ai-lab", label: "Lab", icon: FlaskConical },
 ];
 
-const ALL_TABS: TabDef[] = [...TOP_TABS, ...DEV_TABS];
+/**
+ * The owner nav bar has too many destinations (10 tabs) to fit as flat
+ * buttons at any reasonable header width without either overflowing or
+ * bleeding into the global header icons. Grouped into 3 dropdown menus
+ * instead of a horizontal-scroll row, so every tab stays visible and
+ * clickable without discovering a hidden scroll affordance (#toolbar-jumble).
+ */
+const TAB_GROUPS: TabGroup[] = [
+  {
+    key: "data-access",
+    label: "Data & Access",
+    icon: Database,
+    tabs: DATA_ACCESS_TABS,
+  },
+  {
+    key: "config",
+    label: "Configuration",
+    icon: Settings2,
+    tabs: CONFIG_TABS,
+  },
+  { key: "dev-tools", label: "Dev Tools", icon: Code2, tabs: DEV_TABS },
+];
+
+const ALL_TABS: TabDef[] = TAB_GROUPS.flatMap((g) => g.tabs);
 
 /**
  * Sanitize the ?from= query-parameter into a safe same-origin href.
@@ -195,8 +226,8 @@ export default function OwnerPanel() {
 
   const [envStatus, setEnvStatus] = useState<DbStatus | null>(null);
   const [envLoading, setEnvLoading] = useState(true);
-  const [devMenuOpen, setDevMenuOpen] = useState(false);
-  const devMenuRef = useRef<HTMLDivElement>(null);
+  const [openGroupKey, setOpenGroupKey] = useState<string | null>(null);
+  const groupMenuRef = useRef<HTMLDivElement>(null);
 
   const reloadEnvStatus = useCallback(() => {
     setEnvLoading(true);
@@ -219,20 +250,20 @@ export default function OwnerPanel() {
     else setEnvLoading(false);
   }, [isOwner, reloadEnvStatus]);
 
-  // Close Dev Tools dropdown when clicking outside
+  // Close whichever nav group dropdown is open when clicking outside the nav bar
   useEffect(() => {
-    if (!devMenuOpen) return;
+    if (!openGroupKey) return;
     function handleClick(e: MouseEvent) {
       if (
-        devMenuRef.current &&
-        !devMenuRef.current.contains(e.target as Node)
+        groupMenuRef.current &&
+        !groupMenuRef.current.contains(e.target as Node)
       ) {
-        setDevMenuOpen(false);
+        setOpenGroupKey(null);
       }
     }
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
-  }, [devMenuOpen]);
+  }, [openGroupKey]);
 
   const visibleTabs = isOwner
     ? ALL_TABS
@@ -279,88 +310,103 @@ export default function OwnerPanel() {
               </span>
             </div>
 
-            {/* Center: tab navigation */}
-            <div className="flex-1 min-w-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <div className="flex items-stretch h-full w-max px-1">
-                {(isOwner
-                  ? TOP_TABS
-                  : ALL_TABS.filter((t) => t.id === "travels")
-                ).map((tab) => {
-                  const Icon = tab.icon;
-                  const active = safeTab === tab.id;
-                  return (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => navigateTab(tab.id)}
-                      className={`relative flex shrink-0 items-center gap-1.5 px-3 h-full text-sm font-medium transition-colors whitespace-nowrap focus-visible:outline-none ${
-                        active
-                          ? "text-foreground"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      <Icon className="h-3.5 w-3.5 shrink-0" />
-                      {tab.label}
-                      {active && (
-                        <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-t-full bg-primary" />
-                      )}
-                    </button>
-                  );
-                })}
+            {/* Center: tab navigation — grouped into dropdown menus so every
+                destination stays reachable without a hidden horizontal scroll. */}
+            <div className="flex-1 min-w-0 flex justify-center">
+              {isOwner ? (
+                <div
+                  ref={groupMenuRef}
+                  className="flex items-stretch h-full gap-1 px-1"
+                >
+                  {TAB_GROUPS.map((group) => {
+                    const activeTab = group.tabs.find(
+                      (t) => t.id === safeTab,
+                    );
+                    const GroupIcon = activeTab?.icon ?? group.icon;
+                    const isGroupActive = !!activeTab;
+                    const isOpen = openGroupKey === group.key;
+                    return (
+                      <div
+                        key={group.key}
+                        className="relative flex shrink-0 items-stretch"
+                      >
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setOpenGroupKey(isOpen ? null : group.key)
+                          }
+                          aria-haspopup="menu"
+                          aria-expanded={isOpen}
+                          className={`relative flex items-center gap-1.5 px-3 h-full text-sm font-medium transition-colors whitespace-nowrap focus-visible:outline-none ${
+                            isGroupActive
+                              ? "text-foreground"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          <GroupIcon className="h-3.5 w-3.5 shrink-0" />
+                          {activeTab?.label ?? group.label}
+                          <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
+                          {isGroupActive && (
+                            <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-t-full bg-primary" />
+                          )}
+                        </button>
 
-                {/* Dev Tools dropdown — collapses the 5 dev/debug tabs */}
-                {isOwner && (
-                  <div
-                    ref={devMenuRef}
-                    className="relative flex shrink-0 items-stretch"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setDevMenuOpen((o) => !o)}
-                      className={`relative flex items-center gap-1.5 px-3 h-full text-sm font-medium transition-colors whitespace-nowrap focus-visible:outline-none ${
-                        DEV_TABS.some((t) => t.id === safeTab)
-                          ? "text-foreground"
-                          : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      <Code2 className="h-3.5 w-3.5 shrink-0" />
-                      {DEV_TABS.find((t) => t.id === safeTab)?.label ??
-                        "Dev Tools"}
-                      <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
-                      {DEV_TABS.some((t) => t.id === safeTab) && (
-                        <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-t-full bg-primary" />
-                      )}
-                    </button>
-
-                    {devMenuOpen && (
-                      <div className="absolute top-full left-0 z-30 mt-1 w-44 rounded-md border border-border bg-background shadow-md py-1">
-                        {DEV_TABS.map((tab) => {
-                          const Icon = tab.icon;
-                          const active = safeTab === tab.id;
-                          return (
-                            <button
-                              key={tab.id}
-                              type="button"
-                              onClick={() => {
-                                navigateTab(tab.id);
-                                setDevMenuOpen(false);
-                              }}
-                              className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors ${
-                                active
-                                  ? "text-foreground bg-muted"
-                                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                              }`}
-                            >
-                              <Icon className="h-3.5 w-3.5 shrink-0" />
-                              {tab.label}
-                            </button>
-                          );
-                        })}
+                        {isOpen && (
+                          <div className="absolute top-full left-0 z-30 mt-1 w-48 rounded-md border border-border bg-background shadow-md py-1">
+                            {group.tabs.map((tab) => {
+                              const Icon = tab.icon;
+                              const active = safeTab === tab.id;
+                              return (
+                                <button
+                                  key={tab.id}
+                                  type="button"
+                                  onClick={() => {
+                                    navigateTab(tab.id);
+                                    setOpenGroupKey(null);
+                                  }}
+                                  className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors ${
+                                    active
+                                      ? "text-foreground bg-muted"
+                                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                                  }`}
+                                >
+                                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                                  {tab.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                )}
-              </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="flex items-stretch h-full px-1">
+                  {ALL_TABS.filter((t) => t.id === "travels").map((tab) => {
+                    const Icon = tab.icon;
+                    const active = safeTab === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => navigateTab(tab.id)}
+                        className={`relative flex shrink-0 items-center gap-1.5 px-3 h-full text-sm font-medium transition-colors whitespace-nowrap focus-visible:outline-none ${
+                          active
+                            ? "text-foreground"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        <Icon className="h-3.5 w-3.5 shrink-0" />
+                        {tab.label}
+                        {active && (
+                          <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-t-full bg-primary" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         }

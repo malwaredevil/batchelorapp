@@ -20,8 +20,9 @@ interface AgentPhoneListAgentsResponse {
 interface AgentCredentials {
   agentId: string;
   /** ID of the phone number currently attached to this agent. Passed as
-   *  `phoneNumberId` on outbound calls so AgentPhone uses the right number
-   *  rather than a stale/deleted one it may have cached internally. */
+   *  `fromNumberId` on outbound calls so AgentPhone uses the right number
+   *  as caller ID rather than whichever number it otherwise treats as the
+   *  agent's "first assigned" number (which can be a stale/released one). */
   phoneNumberId: string | null;
 }
 
@@ -118,11 +119,14 @@ export async function initiateOutboundCall(
   const { agentId, phoneNumberId } = await getAgentCredentials();
 
   const body: Record<string, string> = { agentId, toNumber: opts.toNumber };
-  // Explicitly pin the phoneNumberId so AgentPhone uses the number currently
-  // attached to the agent, not whatever it has cached from a previous
-  // (possibly deleted) number. fromNumber in the response is read-only;
-  // phoneNumberId in the request body is the writable selector.
-  if (phoneNumberId) body.phoneNumberId = phoneNumberId;
+  // Explicitly pin the caller-ID number so AgentPhone uses the number
+  // currently attached to the agent, not whatever it otherwise treats as
+  // the agent's "first assigned" number (which can be a stale/released
+  // one). Per AgentPhone's POST /v1/calls docs, the writable selector field
+  // is `fromNumberId` — NOT `phoneNumberId` (that name only appears in
+  // *responses*, e.g. from GET /v1/calls/:id). Sending `phoneNumberId` in
+  // the request body is silently ignored by the API.
+  if (phoneNumberId) body.fromNumberId = phoneNumberId;
   if (opts.initialGreeting) body.initialGreeting = opts.initialGreeting;
   body.callScreeningIdentity = opts.callScreeningIdentity ?? "Elaine";
   if (opts.callScreeningPurpose)

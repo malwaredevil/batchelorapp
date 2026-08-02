@@ -2983,6 +2983,11 @@ END $$`,
   `CREATE UNIQUE INDEX IF NOT EXISTS comm_checks_check_date_unique
      ON comm_checks (check_date)`,
 
+  // Phone call lane added to comm_checks
+  `ALTER TABLE comm_checks ADD COLUMN IF NOT EXISTS phone_status TEXT NOT NULL DEFAULT 'pending'`,
+  `ALTER TABLE comm_checks ADD COLUMN IF NOT EXISTS phone_sent_at TIMESTAMPTZ`,
+  `ALTER TABLE comm_checks ADD COLUMN IF NOT EXISTS phone_error TEXT`,
+
   // ── Elaine scheduled-actions table (Task #511) ────────────────────────────
   // Durable future-action scheduler: Elaine writes a row when the user asks
   // her to call/message someone at a future time. A background job polls

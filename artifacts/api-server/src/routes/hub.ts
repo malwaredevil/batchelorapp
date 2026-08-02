@@ -7,6 +7,7 @@ import { requireOwner } from "../middleware/owner";
 import { provisionAllBuckets } from "../lib/bucket-provisioning";
 import {
   runDailyCommCheck,
+  runPhoneCommCheck,
   runChannelCheck,
   getStuttgartDateString,
 } from "../lib/comm-check-scheduler";
@@ -672,8 +673,22 @@ router.post(
   requireOwner,
   async (req, res) => {
     try {
-      const result = await runDailyCommCheck();
-      res.json({ ok: true, ...result });
+      // Serialize: runDailyCommCheck inserts (or no-ops on conflict) the row
+      // first, then runPhoneCommCheck finds it and atomically claims the phone
+      // slot via UPDATE WHERE phone_status='pending'. Running them concurrently
+      // would race on the INSERT and cause whichever lost to return alreadyRan
+      // without sending its channels.
+      const mainResult = await runDailyCommCheck();
+      const phoneResult = await runPhoneCommCheck();
+      res.json({
+        ok: true,
+        alreadyRan: mainResult.alreadyRan && phoneResult.alreadySent,
+        date: mainResult.date,
+        email: mainResult.email,
+        sms: mainResult.sms,
+        slack: mainResult.slack,
+        phone: phoneResult.phone,
+      });
     } catch (err) {
       req.log.error({ err }, "hub/comm-checks/run: failed");
       res.status(500).json({
@@ -685,7 +700,7 @@ router.post(
 );
 
 // POST /hub/comm-checks/run/:channel — trigger a single channel (owner-only)
-const VALID_CHANNELS = ["email", "sms", "slack"] as const;
+const VALID_CHANNELS = ["email", "sms", "slack", "phone"] as const;
 type CommChannel = (typeof VALID_CHANNELS)[number];
 
 router.post(

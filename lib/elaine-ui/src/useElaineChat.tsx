@@ -254,6 +254,7 @@ export function useElaineChat({
           m.attachmentUrls.length > 0 ? m.attachmentUrls : undefined,
         ...(m.runtimeTrace ? { runtimeTrace: m.runtimeTrace } : {}),
         ...(m.reasoningSummary ? { reasoningSummary: m.reasoningSummary } : {}),
+        createdAt: m.createdAt,
       })) as AssistantMessage[],
     );
   }

@@ -287,6 +287,9 @@ export const elaineHistoryMessages = pgTable(
     /** Model-produced reasoning summary for the assistant turn, null for user
      *  messages and older rows written before this column existed. */
     reasoningSummary: text("reasoning_summary"),
+    /** Channel the message came from: "web", "Slack", "SMS/voice", "email".
+     *  Null on rows written before this column was added — render as "web". */
+    channel: text("channel"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -416,3 +419,56 @@ export const elaineDailyBriefs = pgTable("elaine_daily_briefs", {
 
 export type ElaineDailyBriefRow = typeof elaineDailyBriefs.$inferSelect;
 export type InsertElaineDailyBrief = typeof elaineDailyBriefs.$inferInsert;
+
+// Rolling cross-channel context — one row per user, shared across all channels
+// (web widget, Slack, SMS/voice, email). After every Elaine turn on any channel,
+// a compact entry is prepended here (newest first) recording which channel was
+// used and a brief gist of what was discussed. The last ~15 entries are injected
+// into the system prompt of every subsequent turn as "CROSS-CHANNEL CONTEXT" so
+// Elaine can reference earlier exchanges on any channel without separate history
+// merging. Deliberately lightweight: entries are plain text, never tool payloads
+// or raw prompts, so injection cost stays well under 400 tokens.
+export const elaineCrossChannelContext = pgTable(
+  "elaine_cross_channel_context",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id").notNull().unique(),
+    // Array of {channel, gist, ts} objects, newest first, capped at 15 entries.
+    entries: jsonb("entries")
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+).enableRLS();
+
+export type ElaineCrossChannelContextRow =
+  typeof elaineCrossChannelContext.$inferSelect;
+export type InsertElaineCrossChannelContext =
+  typeof elaineCrossChannelContext.$inferInsert;
+
+// Broadcast rate-limit log — one row per successful broadcast_message action.
+// checkBroadcastRateLimit counts rows WHERE user_id = ? AND created_at > now()
+// - interval '1 hour'; if ≥ 3, the request is rejected with a 429. Storing
+// this in the DB (not an in-memory Map) makes the 3-per-hour cap survive
+// server restarts and deployments.
+export const elaineBroadcastLog = pgTable(
+  "elaine_broadcast_log",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("elaine_broadcast_log_user_created_idx").on(
+      table.userId,
+      table.createdAt,
+    ),
+  ],
+).enableRLS();
+
+export type ElaineBroadcastLogRow = typeof elaineBroadcastLog.$inferSelect;
+export type InsertElaineBroadcastLog = typeof elaineBroadcastLog.$inferInsert;

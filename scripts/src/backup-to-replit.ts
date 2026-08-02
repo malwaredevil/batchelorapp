@@ -97,6 +97,14 @@ CREATE TABLE IF NOT EXISTS agentphone_conversations (
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Elaine cross-channel context (rolling per-user log of recent turns)
+CREATE TABLE IF NOT EXISTS elaine_cross_channel_context (
+  id          SERIAL PRIMARY KEY,
+  user_id     INTEGER NOT NULL UNIQUE,
+  entries     JSONB NOT NULL DEFAULT '[]'::jsonb,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS agentphone_webhook_deliveries (
   id           TEXT PRIMARY KEY,
   received_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -2623,6 +2631,14 @@ async function main() {
     jsonbColumns: ["attachment_urls"],
   });
   await resetSequence(dest, "elaine_history_messages", "id");
+
+  summary["elaine_cross_channel_context"] = await copyTable(source, dest, {
+    table: "elaine_cross_channel_context",
+    columns: ["id", "user_id", "entries", "updated_at"],
+    orderBy: "id",
+    jsonbColumns: ["entries"],
+  });
+  await resetSequence(dest, "elaine_cross_channel_context", "id");
 
   // ── Gmail travel-document scanning ───────────────────────────────────────
   summary["travels_gmail_connections"] = await copyTable(source, dest, {

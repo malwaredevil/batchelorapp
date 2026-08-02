@@ -13,13 +13,16 @@
 import { pool } from "@workspace/db";
 import { runReminderAlerts } from "../lib/reminder-scheduler";
 import { computeAndStoreNudges } from "../lib/travels-nudges";
-import { computeAndStoreIntegrationsHealthNudges } from "../lib/integrations-health-nudges";
+import { runScheduledIntegrationsHealthNudges } from "../lib/integrations-health-nudges";
 import { logger } from "../lib/logger";
 
 Promise.all([
   runReminderAlerts(),
   computeAndStoreNudges(),
-  computeAndStoreIntegrationsHealthNudges(),
+  // Use the stateless scheduled path: inserts failure nudges for every
+  // currently-failing service using stable per-error slug keys, with
+  // ON CONFLICT DO NOTHING deduplicating already-known failures.
+  runScheduledIntegrationsHealthNudges(),
 ])
   .then(async () => {
     logger.info("send-reminder-alerts: run complete");

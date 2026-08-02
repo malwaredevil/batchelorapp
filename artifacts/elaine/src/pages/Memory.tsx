@@ -32,11 +32,13 @@ import {
   useGetElaineCrossChannelContext,
   useClearElaineCrossChannelContext,
   getGetElaineCrossChannelContextQueryKey,
+  useGetElaineUnifiedHistory,
   type HouseholdMemoryItem,
   type MemoryScope,
   type MemoryCategory,
   type MemorySensitivity,
   type CrossChannelEntry,
+  type UnifiedHistoryMessage,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -451,6 +453,253 @@ const CHANNEL_ICONS: Record<string, typeof Radio> = {
   email: Mail,
 };
 
+const CHANNEL_FILTER_OPTIONS = [
+  { value: "all", label: "All channels" },
+  { value: "web", label: "Web" },
+  { value: "Slack", label: "Slack" },
+  { value: "SMS/voice", label: "SMS / Voice" },
+  { value: "email", label: "Email" },
+] as const;
+
+const CHANNEL_BADGE_COLORS: Record<string, string> = {
+  web: "bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300",
+  slack:
+    "bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300",
+  "sms/voice":
+    "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
+  email:
+    "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
+};
+
+function channelBadgeColor(ch: string): string {
+  return (
+    CHANNEL_BADGE_COLORS[ch.toLowerCase()] ??
+    "bg-muted text-muted-foreground"
+  );
+}
+
+function localDateLabel(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const msgDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const diff = Math.round(
+    (today.getTime() - msgDay.getTime()) / 86400000,
+  );
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Yesterday";
+  return d.toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: d.getFullYear() !== now.getFullYear() ? "numeric" : undefined,
+  });
+}
+
+function formatHistoryTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+interface FullHistoryProps {
+  channelFilter: string;
+  onChannelChange: (ch: string) => void;
+}
+
+function FullHistory({ channelFilter, onChannelChange }: FullHistoryProps) {
+  const [page, setPage] = useState(1);
+  const effectiveChannel =
+    channelFilter === "all" ? undefined : channelFilter;
+  const { data, isLoading, isFetching } = useGetElaineUnifiedHistory(
+    page,
+    effectiveChannel,
+  );
+
+  const messages = data?.messages ?? [];
+  const hasMore = data?.hasMore ?? false;
+  const total = data?.total ?? 0;
+
+  // Build display list with date separators
+  type DisplayItem =
+    | { kind: "sep"; label: string }
+    | { kind: "msg"; msg: UnifiedHistoryMessage; isRunEnd: boolean };
+
+  const items: DisplayItem[] = [];
+  let lastDateLabel = "";
+  let lastChannel = "";
+  let lastRole = "";
+
+  // messages are newest-first from API; reverse to render oldest-first
+  const ordered = [...messages].reverse();
+  for (let i = 0; i < ordered.length; i++) {
+    const msg = ordered[i]!;
+    const dl = localDateLabel(msg.createdAt);
+    if (dl !== lastDateLabel) {
+      items.push({ kind: "sep", label: dl });
+      lastDateLabel = dl;
+      lastChannel = "";
+      lastRole = "";
+    }
+    const next = ordered[i + 1];
+    const isRunEnd =
+      !next ||
+      localDateLabel(next.createdAt) !== dl ||
+      next.channel !== msg.channel ||
+      (msg.role === "assistant" && next.role === "user") ||
+      (msg.role === "user" && next.role !== "assistant");
+    if (msg.channel !== lastChannel || msg.role !== lastRole) {
+      lastChannel = msg.channel;
+      lastRole = msg.role;
+    }
+    items.push({ kind: "msg", msg, isRunEnd });
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-16 text-sm text-muted-foreground">
+        Loading history…
+      </div>
+    );
+  }
+
+  if (!isLoading && total === 0) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-16 text-center">
+        <Clock className="h-8 w-8 text-muted-foreground/40" />
+        <p className="text-sm text-muted-foreground">
+          {channelFilter === "all"
+            ? "No message history yet."
+            : `No messages from ${channelLabel(channelFilter)} yet.`}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Channel filter pills */}
+      <div className="flex flex-wrap gap-2">
+        {CHANNEL_FILTER_OPTIONS.map((opt) => {
+          const Icon =
+            opt.value === "all" ? Radio : channelIcon(opt.value as string);
+          const active = channelFilter === opt.value;
+          return (
+            <button
+              key={opt.value}
+              onClick={() => {
+                onChannelChange(opt.value);
+                setPage(1);
+              }}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-all border ${
+                active
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-card text-muted-foreground border-card-border hover:border-primary/30"
+              }`}
+            >
+              <Icon className="h-3 w-3" />
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Timeline */}
+      <div className="space-y-1">
+        {items.map((item, idx) => {
+          if (item.kind === "sep") {
+            return (
+              <div
+                key={`sep-${idx}`}
+                className="flex items-center gap-3 py-3"
+              >
+                <div className="flex-1 h-px bg-border" />
+                <span className="text-xs font-medium text-muted-foreground shrink-0">
+                  {item.label}
+                </span>
+                <div className="flex-1 h-px bg-border" />
+              </div>
+            );
+          }
+
+          const { msg, isRunEnd } = item;
+          const ChanIcon = channelIcon(msg.channel);
+          const isUser = msg.role === "user";
+
+          return (
+            <div
+              key={msg.id}
+              className={`flex gap-2.5 ${isUser ? "flex-row-reverse" : "flex-row"}`}
+            >
+              {/* Channel icon — show only at start of a run */}
+              <div className="w-6 shrink-0 flex flex-col items-center">
+                {!isUser && (
+                  <div className="mt-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary/10">
+                    <ChanIcon className="h-3 w-3 text-primary" />
+                  </div>
+                )}
+              </div>
+
+              <div
+                className={`flex flex-col gap-0.5 max-w-[80%] ${isUser ? "items-end" : "items-start"}`}
+              >
+                <div
+                  className={`rounded-2xl px-3 py-2 text-sm leading-relaxed ${
+                    isUser
+                      ? "bg-primary text-primary-foreground rounded-tr-sm"
+                      : "bg-muted text-foreground rounded-tl-sm"
+                  }`}
+                >
+                  {msg.content}
+                </div>
+                {isRunEnd && (
+                  <div
+                    className={`flex items-center gap-1.5 ${isUser ? "flex-row-reverse" : "flex-row"}`}
+                  >
+                    <span className="text-[11px] text-muted-foreground/60">
+                      {formatHistoryTime(msg.createdAt)}
+                    </span>
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${channelBadgeColor(msg.channel)}`}
+                    >
+                      <ChanIcon className="h-2.5 w-2.5" />
+                      {channelLabel(msg.channel)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Pagination */}
+      {(hasMore || page > 1) && (
+        <div className="flex items-center justify-between pt-2">
+          <button
+            disabled={page <= 1 || isFetching}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-40 transition-colors"
+          >
+            ← Newer
+          </button>
+          <span className="text-xs text-muted-foreground">
+            {total} message{total !== 1 ? "s" : ""}
+          </span>
+          <button
+            disabled={!hasMore || isFetching}
+            onClick={() => setPage((p) => p + 1)}
+            className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-40 transition-colors"
+          >
+            Older →
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function channelIcon(channel: string): typeof Radio {
   const key = channel.toLowerCase();
   return CHANNEL_ICONS[key] ?? Radio;
@@ -482,6 +731,8 @@ export default function Memory() {
   const [showFilters, setShowFilters] = useState(false);
   const [clearingSum, setClearingSum] = useState(false);
   const deleteMemory = useDeleteElaineMemoryItem();
+  const [activeTab, setActiveTab] = useState<"memory" | "history">("memory");
+  const [historyChannel, setHistoryChannel] = useState("all");
 
   const summary = memory.find((m) => m.type === "summary") ?? null;
   const facts = memory.filter((m) => m.type !== "summary");
@@ -548,15 +799,55 @@ export default function Memory() {
             Facts, preferences, and context stored for future conversations
           </p>
         </div>
-        <Button
-          className="ml-auto"
-          size="sm"
-          onClick={() => setShowAdd(!showAdd)}
-        >
-          <Plus className="h-4 w-4 mr-1" />
-          Add
-        </Button>
+        {activeTab === "memory" && (
+          <Button
+            className="ml-auto"
+            size="sm"
+            onClick={() => setShowAdd(!showAdd)}
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            Add
+          </Button>
+        )}
       </div>
+
+      {/* Tab switcher */}
+      <div className="flex gap-1 rounded-xl bg-muted/50 p-1 border border-card-border">
+        <button
+          onClick={() => setActiveTab("memory")}
+          className={`flex-1 flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all ${
+            activeTab === "memory"
+              ? "bg-card text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Brain className="h-4 w-4" />
+          Memory
+        </button>
+        <button
+          onClick={() => setActiveTab("history")}
+          className={`flex-1 flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-all ${
+            activeTab === "history"
+              ? "bg-card text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <ScrollText className="h-4 w-4" />
+          Full history
+        </button>
+      </div>
+
+      {/* Full history tab */}
+      {activeTab === "history" && (
+        <FullHistory
+          channelFilter={historyChannel}
+          onChannelChange={setHistoryChannel}
+        />
+      )}
+
+      {/* Memory tab content */}
+      {activeTab === "memory" && (
+        <>
 
       {/* ── Conversation Summary ── */}
       {!isLoading && (
@@ -900,6 +1191,8 @@ export default function Memory() {
           where they're explicitly relevant.
         </p>
       </div>
+      </>
+      )}
     </div>
   );
 }

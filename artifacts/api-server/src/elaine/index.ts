@@ -5981,6 +5981,7 @@ router.post("/chat", async (req, res) => {
           role: "user",
           content: message,
           attachmentUrls: allAttachmentUrls,
+          channel: "web",
         },
         {
           conversationId: histConvId,
@@ -5989,6 +5990,7 @@ router.post("/chat", async (req, res) => {
           content,
           attachmentUrls: [],
           reasoningSummary: finalReasoningSummary ?? null,
+          channel: "web",
         },
       ])
       .returning({
@@ -7163,6 +7165,70 @@ router.delete("/cross-channel-context", async (req, res) => {
   } catch (err) {
     logger.warn({ err, userId }, "cross-channel: DELETE context failed");
     res.status(500).json({ error: "Failed to clear cross-channel context" });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Unified cross-channel history — paginated, newest-first, 50/page
+// ---------------------------------------------------------------------------
+
+router.get("/history/unified", async (req, res) => {
+  const userId = req.session.userId as number;
+  const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10) || 1);
+  const pageSize = 50;
+  const channelFilter = req.query.channel
+    ? String(req.query.channel)
+    : undefined;
+
+  try {
+    const where = and(
+      eq(elaineHistoryMessages.userId, userId),
+      channelFilter
+        ? channelFilter === "web"
+          ? or(
+              eq(elaineHistoryMessages.channel, "web"),
+              isNull(elaineHistoryMessages.channel),
+            )
+          : eq(elaineHistoryMessages.channel, channelFilter)
+        : undefined,
+    );
+
+    const [totalRow, rows] = await Promise.all([
+      db
+        .select({ count: count() })
+        .from(elaineHistoryMessages)
+        .where(where),
+      db
+        .select({
+          id: elaineHistoryMessages.id,
+          conversationId: elaineHistoryMessages.conversationId,
+          role: elaineHistoryMessages.role,
+          content: elaineHistoryMessages.content,
+          channel: elaineHistoryMessages.channel,
+          createdAt: elaineHistoryMessages.createdAt,
+        })
+        .from(elaineHistoryMessages)
+        .where(where)
+        .orderBy(desc(elaineHistoryMessages.createdAt))
+        .limit(pageSize)
+        .offset((page - 1) * pageSize),
+    ]);
+
+    const total = totalRow[0]?.count ?? 0;
+    res.json({
+      messages: rows.map((r) => ({
+        ...r,
+        channel: r.channel ?? "web",
+        createdAt: r.createdAt.toISOString(),
+      })),
+      total,
+      page,
+      pageSize,
+      hasMore: page * pageSize < total,
+    });
+  } catch (err) {
+    logger.warn({ err, userId }, "unified history GET failed");
+    res.status(500).json({ error: "Failed to load history" });
   }
 });
 

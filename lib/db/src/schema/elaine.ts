@@ -287,6 +287,9 @@ export const elaineHistoryMessages = pgTable(
     /** Model-produced reasoning summary for the assistant turn, null for user
      *  messages and older rows written before this column existed. */
     reasoningSummary: text("reasoning_summary"),
+    /** Channel the message came from: "web", "Slack", "SMS/voice", "email".
+     *  Null on rows written before this column was added — render as "web". */
+    channel: text("channel"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

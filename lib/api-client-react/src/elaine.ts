@@ -1454,6 +1454,75 @@ export function useClearElaineCrossChannelContext(options?: {
   return useMutation({ mutationFn, ...options?.mutation });
 }
 
+// ---------------------------------------------------------------------------
+// Unified cross-channel history
+// ---------------------------------------------------------------------------
+
+export interface UnifiedHistoryMessage {
+  id: number;
+  conversationId: number;
+  role: "user" | "assistant";
+  content: string;
+  /** Channel label; pre-normalized to "web" for NULL rows. */
+  channel: string;
+  createdAt: string;
+}
+
+export interface UnifiedHistoryPage {
+  messages: UnifiedHistoryMessage[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+}
+
+export const getElaineUnifiedHistoryQueryKey = (
+  page: number,
+  channel?: string,
+) => [`/api/elaine/history/unified`, { page, channel }] as const;
+
+const getElaineUnifiedHistoryFn = (
+  page: number,
+  channel?: string,
+  options?: RequestInit,
+): Promise<UnifiedHistoryPage> => {
+  const params = new URLSearchParams({ page: String(page) });
+  if (channel) params.set("channel", channel);
+  return customFetch<UnifiedHistoryPage>(
+    `/api/elaine/history/unified?${params.toString()}`,
+    { ...options, method: "GET" },
+  );
+};
+
+export function useGetElaineUnifiedHistory<
+  TData = UnifiedHistoryPage,
+  TError = unknown,
+>(
+  page: number,
+  channel?: string,
+  options?: {
+    query?: UseQueryOptions<UnifiedHistoryPage, TError, TData>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey =
+    queryOptions?.queryKey ?? getElaineUnifiedHistoryQueryKey(page, channel);
+  const queryFn: QueryFunction<UnifiedHistoryPage> = ({ signal }) =>
+    getElaineUnifiedHistoryFn(page, channel, { signal });
+  const queryOpts = {
+    queryKey,
+    queryFn,
+    staleTime: 30 * 1000,
+    ...queryOptions,
+  } as UseQueryOptions<UnifiedHistoryPage, TError, TData> & {
+    queryKey: QueryKey;
+  };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
 export function useListElaineAdminModels<
   TData = OpenRouterModelSummary[],
   TError = unknown,

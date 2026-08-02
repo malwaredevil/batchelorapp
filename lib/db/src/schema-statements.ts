@@ -3011,6 +3011,12 @@ END $$`,
   `ALTER TABLE elaine_history_messages
      ADD COLUMN IF NOT EXISTS reasoning_summary TEXT`,
 
+  // ── Elaine history channel label (Task #574) ─────────────────────────────
+  // "web", "Slack", "SMS/voice", or "email". NULL on rows written before this
+  // column; UI treats NULL as "web".
+  `ALTER TABLE elaine_history_messages
+     ADD COLUMN IF NOT EXISTS channel TEXT`,
+
   // ── Elaine cross-channel context (Task #556) ──────────────────────────────
   // Rolling log of recent Elaine turns across all channels (web, Slack, SMS,
   // email). One row per user; entries[] is newest-first, capped at 15.

@@ -6265,6 +6265,10 @@ components:
           type: string
           nullable: true
           description: Slack member ID used to deliver reminder DMs and enable the Elaine Slack bot.
+        timezone:
+          type: string
+          nullable: true
+          description: IANA timezone name (e.g. "America/Denver"). Used to render dates/times and to schedule the daily comms check for the owner account.
     Error:
       type: object
       required:
@@ -6292,6 +6296,10 @@ components:
           type: string
           nullable: true
           description: Slack member ID used to deliver reminder DMs and enable the Elaine Slack bot.
+        timezone:
+          type: string
+          nullable: true
+          description: IANA timezone name (e.g. "America/Denver"). Used to render dates/times and to schedule the daily comms check for the owner account.
     AuthProviders:
       type: object
       required:

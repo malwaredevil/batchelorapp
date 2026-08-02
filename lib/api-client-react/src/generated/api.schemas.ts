@@ -60,6 +60,8 @@ export interface AuthUser {
   birthday?: string | null;
   /** Slack member ID used to deliver reminder DMs and enable the Elaine Slack bot. */
   slackUserId?: string | null;
+  /** IANA timezone name (e.g. "America/Denver"). Used to render dates/times and to schedule the daily comms check for the owner account. */
+  timezone?: string | null;
 }
 
 export interface Error {
@@ -81,6 +83,8 @@ export interface UpdateAccountInput {
   birthday?: string | null;
   /** Slack member ID used to deliver reminder DMs and enable the Elaine Slack bot. */
   slackUserId?: string | null;
+  /** IANA timezone name (e.g. "America/Denver"). Used to render dates/times and to schedule the daily comms check for the owner account. */
+  timezone?: string | null;
 }
 
 export interface AuthProviders {

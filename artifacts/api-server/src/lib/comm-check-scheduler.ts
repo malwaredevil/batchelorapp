@@ -4,7 +4,8 @@ import { db, pool, appUsers } from "@workspace/db";
 import { sendSms } from "./sms";
 import { openDmChannel, postSlackMessage, slackConfigured } from "./slack";
 import { logger } from "./logger";
-import { getConfig } from "./app-config";
+import { getConfig, type DayListCode } from "./app-config";
+import { isValidIanaTimeZone } from "./timezone";
 import {
   initiateOutboundCall,
   callsConfigured,
@@ -14,8 +15,13 @@ import {
 // ---------------------------------------------------------------------------
 // Daily comms check scheduler.
 //
-// Email, SMS, and Slack fire at 00:01 Stuttgart time each calendar day.
-// Phone call fires separately at 19:00 Stuttgart time.
+// Email, SMS, and Slack fire once per day at a configurable time + set of
+// weekdays. Phone call fires separately on its own configurable time + days.
+// Both schedules are interpreted in the owner account's timezone
+// (app_users.timezone), falling back to Europe/Berlin when unset — see
+// getEffectiveTimezone(). The schedule itself lives in app_config under the
+// "comm_check" module (daily_time/daily_days/phone_time/phone_days),
+// editable from the owner panel.
 //
 // Any reply from the owner on email/SMS/Slack marks that channel "verified".
 // Phone has no reply-based verification — call placed = success (sent).
@@ -26,23 +32,49 @@ import {
 //   - routes/slack.ts        → markCommCheckVerified("slack")
 // ---------------------------------------------------------------------------
 
-// ── Stuttgart date / time helpers ────────────────────────────────────────────
+// ── Timezone / date / time helpers ──────────────────────────────────────────
 
-// Returns today's date string in Europe/Berlin as "YYYY-MM-DD".
+const DEFAULT_TIMEZONE = "Europe/Berlin";
+const TIMEZONE_CACHE_MS = 5 * 60 * 1000;
+
+let _tzCache: { value: string; expiresAt: number } | null = null;
+
+// Resolves the timezone the comm-check schedule should run in: the owner
+// account's `timezone` field if set and valid, otherwise DEFAULT_TIMEZONE.
+// Cached briefly since this is called on every inbound webhook message via
+// markCommCheckVerified, not just the 5-minute scheduler tick.
+export async function getEffectiveTimezone(): Promise<string> {
+  if (_tzCache && _tzCache.expiresAt > Date.now()) {
+    return _tzCache.value;
+  }
+  const [owner] = await db
+    .select({ timezone: appUsers.timezone })
+    .from(appUsers)
+    .where(eq(appUsers.isOwner, true))
+    .limit(1);
+  const tz =
+    owner?.timezone && isValidIanaTimeZone(owner.timezone)
+      ? owner.timezone
+      : DEFAULT_TIMEZONE;
+  _tzCache = { value: tz, expiresAt: Date.now() + TIMEZONE_CACHE_MS };
+  return tz;
+}
+
+// Returns today's date string in the given timezone as "YYYY-MM-DD".
 // sv-SE locale natively formats to ISO date order.
-export function getStuttgartDateString(now: Date = new Date()): string {
+function getDateStringInTz(tz: string, now: Date = new Date()): string {
   return new Intl.DateTimeFormat("sv-SE", {
-    timeZone: "Europe/Berlin",
+    timeZone: tz,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
   }).format(now);
 }
 
-// Returns minutes since midnight in Europe/Berlin (0–1439).
-function getStuttgartMinuteOfDay(now: Date = new Date()): number {
+// Returns minutes since midnight in the given timezone (0–1439).
+function getMinuteOfDayInTz(tz: string, now: Date = new Date()): number {
   const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Europe/Berlin",
+    timeZone: tz,
     hour: "numeric",
     minute: "2-digit",
     hour12: false,
@@ -55,6 +87,50 @@ function getStuttgartMinuteOfDay(now: Date = new Date()): number {
   return hour * 60 + minute;
 }
 
+const WEEKDAY_TO_CODE: Record<string, DayListCode> = {
+  Sun: "sun",
+  Mon: "mon",
+  Tue: "tue",
+  Wed: "wed",
+  Thu: "thu",
+  Fri: "fri",
+  Sat: "sat",
+};
+
+// Returns today's weekday code ("sun".."sat") in the given timezone.
+function getWeekdayCodeInTz(tz: string, now: Date = new Date()): DayListCode {
+  const short = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    weekday: "short",
+  }).format(now);
+  return WEEKDAY_TO_CODE[short] ?? "sun";
+}
+
+// Parses an "HH:MM" string into minutes since midnight. Falls back to 0 for
+// malformed input (should not happen — values are validated on write via
+// validateConfigValue's "time" case).
+function parseTimeToMinutes(hhmm: string): number {
+  const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(hhmm.trim());
+  if (!match) return 0;
+  return parseInt(match[1]!, 10) * 60 + parseInt(match[2]!, 10);
+}
+
+// Parses a comma-separated day-list config value into a Set of day codes.
+function parseDayList(csv: string): Set<string> {
+  return new Set(
+    csv
+      .split(",")
+      .map((p) => p.trim().toLowerCase())
+      .filter((p) => p.length > 0),
+  );
+}
+
+// Resolves today's date string using the effective (owner) timezone.
+export async function getEffectiveDateString(now?: Date): Promise<string> {
+  const tz = await getEffectiveTimezone();
+  return getDateStringInTz(tz, now);
+}
+
 // ── Response verification ─────────────────────────────────────────────────────
 // Called by inbound webhook handlers (agentphone / elaine-email / slack).
 // Marks today's comm check for the given channel as 'verified' if it is
@@ -63,7 +139,7 @@ function getStuttgartMinuteOfDay(now: Date = new Date()): number {
 export async function markCommCheckVerified(
   channel: "email" | "sms" | "slack",
 ): Promise<void> {
-  const today = getStuttgartDateString();
+  const today = await getEffectiveDateString();
   // Column names are constructed from a safe typed enum — not user input.
   const statusCol = `${channel}_status`;
   const verifiedAtCol = `${channel}_verified_at`;
@@ -185,7 +261,7 @@ export interface CommCheckResult {
 }
 
 export async function runDailyCommCheck(): Promise<CommCheckResult> {
-  const today = getStuttgartDateString();
+  const today = await getEffectiveDateString();
 
   const claimResult = await pool.query<{ check_date: string }>(
     `INSERT INTO comm_checks (check_date)
@@ -323,7 +399,7 @@ export interface PhoneCheckResult {
 }
 
 export async function runPhoneCommCheck(): Promise<PhoneCheckResult> {
-  const today = getStuttgartDateString();
+  const today = await getEffectiveDateString();
 
   // Ensure today's row exists (may have been inserted at 00:01 already).
   await pool.query(
@@ -402,7 +478,7 @@ export interface ChannelCheckResult {
 export async function runChannelCheck(
   channel: "email" | "sms" | "slack" | "phone",
 ): Promise<ChannelCheckResult> {
-  const today = getStuttgartDateString();
+  const today = await getEffectiveDateString();
 
   // Ensure today's row exists (insert if not already present).
   await pool.query(
@@ -498,22 +574,47 @@ export async function runChannelCheck(
 
 // ── Scheduler ─────────────────────────────────────────────────────────────────
 // Polls every 5 minutes.
-//   • Email / SMS / Slack fire once per day at or after 00:01 Stuttgart.
-//   • Phone call fires once per day at or after 19:00 Stuttgart.
-// If the server was down at the trigger time it catches up on the first poll
-// run after that threshold.
+//   • Email / SMS / Slack fire once per day, on the configured days, at or
+//     after the configured time ("comm_check"/"daily_days"+"daily_time").
+//   • Phone call fires once per day, on its own configured days/time
+//     ("comm_check"/"phone_days"+"phone_time").
+// All times/days are interpreted in the owner's effective timezone (see
+// getEffectiveTimezone()). If the server was down at the trigger time, or the
+// schedule was reconfigured after the trigger time already passed today, it
+// catches up on the first poll run after the threshold — as long as today is
+// still a scheduled day.
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000;
-const SEND_AFTER_MINUTE = 1; // 00:01 Stuttgart — email/SMS/Slack
-const PHONE_SEND_AFTER_MINUTE = 19 * 60; // 19:00 Stuttgart — phone call
 
 export function startCommCheckScheduler(): () => void {
   const tick = async (): Promise<void> => {
     try {
-      const minuteOfDay = getStuttgartMinuteOfDay();
+      const tz = await getEffectiveTimezone();
+      const minuteOfDay = getMinuteOfDayInTz(tz);
+      const weekday = getWeekdayCodeInTz(tz);
 
-      // Email / SMS / Slack — 00:01
-      if (minuteOfDay >= SEND_AFTER_MINUTE) {
+      // Fallbacks below mirror the APP_CONFIG_DEFAULTS values in app-config.ts
+      // (kept as inline literals, not named constants, so the app-config
+      // drift guard can statically verify their JS type against the
+      // declared "time"/"day-list" config type).
+      const dailyTime = await getConfig("comm_check", "daily_time", "00:01");
+      const dailyDays = await getConfig(
+        "comm_check",
+        "daily_days",
+        "sun,mon,tue,wed,thu,fri,sat",
+      );
+      const phoneTime = await getConfig("comm_check", "phone_time", "19:00");
+      const phoneDays = await getConfig(
+        "comm_check",
+        "phone_days",
+        "sun,mon,tue,wed,thu,fri,sat",
+      );
+
+      // Email / SMS / Slack
+      if (
+        parseDayList(dailyDays).has(weekday) &&
+        minuteOfDay >= parseTimeToMinutes(dailyTime)
+      ) {
         const result = await runDailyCommCheck();
         if (!result.alreadyRan) {
           logger.info(
@@ -528,8 +629,11 @@ export function startCommCheckScheduler(): () => void {
         }
       }
 
-      // Phone call — 19:00
-      if (minuteOfDay >= PHONE_SEND_AFTER_MINUTE) {
+      // Phone call
+      if (
+        parseDayList(phoneDays).has(weekday) &&
+        minuteOfDay >= parseTimeToMinutes(phoneTime)
+      ) {
         const phoneResult = await runPhoneCommCheck();
         if (!phoneResult.alreadySent) {
           logger.info(
@@ -549,7 +653,7 @@ export function startCommCheckScheduler(): () => void {
   interval.unref();
 
   logger.info(
-    "comm-check-scheduler: started (polls every 5 min, sends at 00:01 Stuttgart / phone at 19:00 Stuttgart)",
+    "comm-check-scheduler: started (polls every 5 min; schedule is configurable via app config module 'comm_check')",
   );
   return () => clearInterval(interval);
 }

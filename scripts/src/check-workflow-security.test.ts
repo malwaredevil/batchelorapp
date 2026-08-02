@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import { inspectWorkflow, inspectActionFile } from "./check-workflow-security.js";
+import {
+  inspectWorkflow,
+  inspectActionFile,
+} from "./check-workflow-security.js";
 
 const safe = `
 name: Safe

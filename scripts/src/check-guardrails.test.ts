@@ -78,7 +78,9 @@ assert.deepEqual(
 
 // --- destructive SQL ---
 assert.deepEqual(
-  checkDestructiveSqlFromDiff("+DROP TABLE foo;\n+CREATE TABLE IF NOT EXISTS bar (id int);\n"),
+  checkDestructiveSqlFromDiff(
+    "+DROP TABLE foo;\n+CREATE TABLE IF NOT EXISTS bar (id int);\n",
+  ),
   ["+DROP TABLE foo;"],
 );
 assert.deepEqual(

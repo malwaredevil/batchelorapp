@@ -115,6 +115,14 @@ export const AD_HOC_OPENAI_HELP = [
 // ---------------------------------------------------------------------------
 // Check 4: rate limiters must fail closed.
 // ---------------------------------------------------------------------------
+// This script's own help text and unit-test fixtures intentionally contain
+// the literal string "passOnStoreError: true" — they describe/exercise the
+// ban, they don't commit it. Same self-exclusion problem as check 1 below.
+const PASS_ON_STORE_ERROR_SELF_EXEMPT = new Set([
+  "scripts/src/check-guardrails.ts",
+  "scripts/src/check-guardrails.test.ts",
+]);
+
 export function checkPassOnStoreErrorFromFiles(
   files: string[],
   readFile: (file: string) => string | null,
@@ -122,6 +130,7 @@ export function checkPassOnStoreErrorFromFiles(
   const violations: string[] = [];
   for (const file of files) {
     if (!/\.(ts|tsx)$/.test(file)) continue;
+    if (PASS_ON_STORE_ERROR_SELF_EXEMPT.has(file)) continue;
     const content = readFile(file);
     if (content === null) continue;
     content.split("\n").forEach((line, index) => {
@@ -164,9 +173,7 @@ export const DESTRUCTIVE_SQL_HELP = [
 // Check 6: the restricted-channel exclusion set may only grow, never shrink.
 // ---------------------------------------------------------------------------
 export function countExclusionEntries(source: string): number {
-  const match = source.match(
-    /RESTRICTED_EXCLUDED_ACTION_TYPES[\s\S]{0,2000}/,
-  );
+  const match = source.match(/RESTRICTED_EXCLUDED_ACTION_TYPES[\s\S]{0,2000}/);
   if (!match) return 0;
   return (match[0].match(/^\s*"[a-z][a-z_]+"/gm) || []).length;
 }
@@ -245,6 +252,7 @@ export function runGuardrailChecks(base: string): CheckResult[] {
     ":!.github/**",
     ":!scripts/src/check-guardrails.ts",
     ":!scripts/src/check-guardrails.test.ts",
+    ":!scripts/src/pre-publish.sh",
     ":!*.md",
     ":!*.txt",
   ]);

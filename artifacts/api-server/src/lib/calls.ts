@@ -19,9 +19,10 @@ interface AgentPhoneListAgentsResponse {
 
 interface AgentCredentials {
   agentId: string;
-  /** E.164 number currently attached to this agent (used as fromNumber on
-   *  outbound calls so AgentPhone doesn't fall back to a stale/old number). */
-  fromNumber: string | null;
+  /** ID of the phone number currently attached to this agent. Passed as
+   *  `phoneNumberId` on outbound calls so AgentPhone uses the right number
+   *  rather than a stale/deleted one it may have cached internally. */
+  phoneNumberId: string | null;
 }
 
 let cachedCredentials: AgentCredentials | null = null;
@@ -51,7 +52,7 @@ async function getAgentCredentials(): Promise<AgentCredentials> {
   }
   cachedCredentials = {
     agentId: agent.id,
-    fromNumber: agent.numbers?.[0]?.phoneNumber ?? null,
+    phoneNumberId: agent.numbers?.[0]?.id ?? null,
   };
   return cachedCredentials;
 }
@@ -89,13 +90,14 @@ export interface OutboundCallOptions {
 export async function initiateOutboundCall(
   opts: OutboundCallOptions,
 ): Promise<{ callId: string }> {
-  const { agentId, fromNumber } = await getAgentCredentials();
+  const { agentId, phoneNumberId } = await getAgentCredentials();
 
   const body: Record<string, string> = { agentId, toNumber: opts.toNumber };
-  // Explicitly pin the fromNumber so AgentPhone uses the number that is
-  // currently attached to the agent, not whatever it has cached from a
-  // previous (possibly deleted) number.
-  if (fromNumber) body.fromNumber = fromNumber;
+  // Explicitly pin the phoneNumberId so AgentPhone uses the number currently
+  // attached to the agent, not whatever it has cached from a previous
+  // (possibly deleted) number. fromNumber in the response is read-only;
+  // phoneNumberId in the request body is the writable selector.
+  if (phoneNumberId) body.phoneNumberId = phoneNumberId;
   if (opts.initialGreeting) body.initialGreeting = opts.initialGreeting;
   body.callScreeningIdentity = opts.callScreeningIdentity ?? "Elaine";
   if (opts.callScreeningPurpose)

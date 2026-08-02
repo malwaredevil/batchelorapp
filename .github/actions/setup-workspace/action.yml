@@ -1,24 +1,20 @@
 name: Setup workspace
 description: >
-  Shared setup used by every CI job in this repo: checkout, pnpm, Node, and a
-  frozen-lockfile install. Defined once here so a toolchain bump (Node
-  version, pnpm version, checkout pinning) is a single-file change instead of
-  a find-and-replace across every workflow job.
+  Shared pnpm + Node.js + frozen-lockfile install used by every CI job in
+  this repo. Defined once here so a toolchain bump (Node version, pnpm
+  version) is a single-file change instead of a find-and-replace across
+  every workflow job.
 
-inputs:
-  fetch-depth:
-    description: "Number of commits to fetch. Use '0' for full history (needed by jobs that diff against a base ref)."
-    required: false
-    default: "1"
+  NOTE: this action does NOT check out the repository. GitHub Actions can
+  only resolve a local action reference (`uses: ./path`) from files already
+  present in $GITHUB_WORKSPACE, so every calling job must run its own
+  `actions/checkout` step (with persist-credentials: false, and fetch-depth
+  set as needed) *before* this action — a composite action step cannot check
+  out the code that defines it.
 
 runs:
   using: composite
   steps:
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      with:
-        persist-credentials: false
-        fetch-depth: ${{ inputs.fetch-depth }}
-
     - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
       with:
         version: 10

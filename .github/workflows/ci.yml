@@ -28,6 +28,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-workspace
       - run: pnpm run typecheck
 
@@ -39,6 +42,9 @@ jobs:
     env:
       NODE_ENV: production
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-workspace
       - run: pnpm --filter @workspace/api-server run build
 
@@ -52,6 +58,9 @@ jobs:
       PORT: "3001"
       BASE_PATH: "/modules/"
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-workspace
       - run: pnpm --filter @workspace/modules run build
 
@@ -65,6 +74,9 @@ jobs:
       PORT: "3002"
       BASE_PATH: "/"
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-workspace
       - run: pnpm --filter @workspace/web run build
 
@@ -78,6 +90,9 @@ jobs:
       PORT: "3003"
       BASE_PATH: "/elaine/"
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-workspace
       - run: pnpm --filter @workspace/elaine run build
 
@@ -86,6 +101,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-workspace
       - run: pnpm run lint
 
@@ -94,6 +112,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-workspace
       - run: pnpm --filter @workspace/api-server run lint:config
 
@@ -102,6 +123,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-workspace
       - run: pnpm --filter @workspace/scripts run check-workflow-security
 
@@ -114,6 +138,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-workspace
       - name: Run composition and configuration guard
         run: pnpm --filter @workspace/scripts run check-domain-composition
@@ -127,6 +154,9 @@ jobs:
     # PR is not blocked by this while it is still being worked on.
     if: github.event.pull_request.draft == false
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-workspace
       - run: pnpm --filter @workspace/scripts run elaine:capability-parity
       - run: pnpm --filter @workspace/scripts run elaine:operation-catalog
@@ -136,6 +166,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-workspace
       - run: pnpm --filter @workspace/api-server run test
 
@@ -144,6 +177,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-workspace
       - run: pnpm --filter @workspace/api-client-react run test
 
@@ -152,6 +188,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-workspace
       - run: pnpm --filter @workspace/app-shell run test
       - run: pnpm --filter @workspace/scripts run check-app-shell
@@ -161,6 +200,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-workspace
       - name: Scan all public files for credentials and secret patterns
         run: pnpm --filter @workspace/scripts run check-public-file-secrets
@@ -170,6 +212,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-workspace
       - name: Check for forbidden provisioning-script filenames
         run: |
@@ -206,6 +251,9 @@ jobs:
     # elaine-capability-parity above for why this is safe.
     if: github.event.pull_request.draft == false
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-workspace
       - run: pnpm --filter @workspace/api-spec run codegen
       - name: Fail if codegen produced a diff
@@ -227,6 +275,9 @@ jobs:
       BASE_PATH: "/"
       NODE_ENV: production
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-workspace
       - name: Install Playwright Chromium
         run: pnpm --filter @workspace/e2e exec playwright install chromium --with-deps
@@ -279,6 +330,9 @@ jobs:
       BASE_PATH: "/modules/"
       NODE_ENV: production
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-workspace
       - name: Install Playwright Chromium
         run: pnpm --filter @workspace/e2e exec playwright install chromium --with-deps
@@ -304,6 +358,9 @@ jobs:
       BASE_PATH: "/elaine/"
       NODE_ENV: production
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-workspace
       - name: Install Playwright Chromium
         run: pnpm --filter @workspace/e2e exec playwright install chromium --with-deps

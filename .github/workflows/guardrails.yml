@@ -22,9 +22,11 @@ jobs:
     steps:
       # Full history is required so check-guardrails.ts can diff against
       # origin/main.
-      - uses: ./.github/actions/setup-workspace
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          persist-credentials: false
           fetch-depth: "0"
+      - uses: ./.github/actions/setup-workspace
 
       - name: "Guardrail checks (single source of truth: scripts/src/check-guardrails.ts)"
         run: pnpm --filter @workspace/scripts run check-guardrails -- --base origin/main

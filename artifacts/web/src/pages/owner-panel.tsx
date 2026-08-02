@@ -63,18 +63,27 @@ type Tab =
   | "users"
   | "integrations";
 
-const ALL_TABS: { id: Tab; label: string; icon: typeof Globe }[] = [
+type TabDef = { id: Tab; label: string; icon: typeof Globe };
+
+/** Always-visible tabs in the top nav bar */
+const TOP_TABS: TabDef[] = [
   { id: "infrastructure", label: "Infrastructure", icon: Database },
   { id: "integrations", label: "Integrations", icon: Activity },
   { id: "users", label: "Users", icon: Users },
   { id: "travels", label: "Travels", icon: Globe },
   { id: "global-config", label: "Global Config", icon: Settings2 },
+];
+
+/** Collapsed into the "Dev Tools" dropdown */
+const DEV_TABS: TabDef[] = [
   { id: "control-panel", label: "Control Panel", icon: Code2 },
   { id: "google-apis", label: "Google APIs", icon: Map },
   { id: "services", label: "Services", icon: Puzzle },
   { id: "ai-evidence", label: "AI Evidence", icon: Microscope },
   { id: "ai-lab", label: "Lab", icon: FlaskConical },
 ];
+
+const ALL_TABS: TabDef[] = [...TOP_TABS, ...DEV_TABS];
 
 /**
  * Sanitize the ?from= query-parameter into a safe same-origin href.
@@ -182,6 +191,8 @@ export default function OwnerPanel() {
 
   const [envStatus, setEnvStatus] = useState<DbStatus | null>(null);
   const [envLoading, setEnvLoading] = useState(true);
+  const [devMenuOpen, setDevMenuOpen] = useState(false);
+  const devMenuRef = useRef<HTMLDivElement>(null);
 
   const reloadEnvStatus = useCallback(() => {
     setEnvLoading(true);
@@ -203,6 +214,21 @@ export default function OwnerPanel() {
     if (isOwner) reloadEnvStatus();
     else setEnvLoading(false);
   }, [isOwner, reloadEnvStatus]);
+
+  // Close Dev Tools dropdown when clicking outside
+  useEffect(() => {
+    if (!devMenuOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (
+        devMenuRef.current &&
+        !devMenuRef.current.contains(e.target as Node)
+      ) {
+        setDevMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [devMenuOpen]);
 
   const visibleTabs = isOwner
     ? ALL_TABS
@@ -261,10 +287,13 @@ export default function OwnerPanel() {
             </span>
           </div>
 
-          {/* Center: tab navigation, horizontally scrollable */}
-          <div className="flex-1 overflow-x-auto scrollbar-none">
-            <div className="flex items-stretch h-full min-w-max px-1">
-              {visibleTabs.map((tab) => {
+          {/* Center: tab navigation */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-stretch h-full px-1">
+              {(isOwner
+                ? TOP_TABS
+                : ALL_TABS.filter((t) => t.id === "travels")
+              ).map((tab) => {
                 const Icon = tab.icon;
                 const active = safeTab === tab.id;
                 return (
@@ -286,6 +315,56 @@ export default function OwnerPanel() {
                   </button>
                 );
               })}
+
+              {/* Dev Tools dropdown — collapses the 5 dev/debug tabs */}
+              {isOwner && (
+                <div ref={devMenuRef} className="relative flex items-stretch">
+                  <button
+                    type="button"
+                    onClick={() => setDevMenuOpen((o) => !o)}
+                    className={`relative flex items-center gap-1.5 px-3 h-full text-sm font-medium transition-colors whitespace-nowrap focus-visible:outline-none ${
+                      DEV_TABS.some((t) => t.id === safeTab)
+                        ? "text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <Code2 className="h-3.5 w-3.5 shrink-0" />
+                    {DEV_TABS.find((t) => t.id === safeTab)?.label ??
+                      "Dev Tools"}
+                    <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
+                    {DEV_TABS.some((t) => t.id === safeTab) && (
+                      <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-t-full bg-primary" />
+                    )}
+                  </button>
+
+                  {devMenuOpen && (
+                    <div className="absolute top-full left-0 z-30 mt-1 w-44 rounded-md border border-border bg-background shadow-md py-1">
+                      {DEV_TABS.map((tab) => {
+                        const Icon = tab.icon;
+                        const active = safeTab === tab.id;
+                        return (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => {
+                              navigateTab(tab.id);
+                              setDevMenuOpen(false);
+                            }}
+                            className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors ${
+                              active
+                                ? "text-foreground bg-muted"
+                                : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                            }`}
+                          >
+                            <Icon className="h-3.5 w-3.5 shrink-0" />
+                            {tab.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 

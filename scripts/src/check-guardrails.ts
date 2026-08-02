@@ -194,9 +194,24 @@ export const EXCLUSION_SHRINK_HELP = [
 // ---------------------------------------------------------------------------
 const ELAINE_INDEX_PATH = "artifacts/api-server/src/elaine/index.ts";
 
-function git(args: string[]): string {
+// This script is invoked via `pnpm --filter @workspace/scripts run
+// check-guardrails`, which runs with cwd set to scripts/, not the repo root.
+// All paths below (changed-file lists, diff pathspecs, elaine/index.ts) are
+// repo-root-relative, so every git invocation is pinned to the repo root
+// with `-C`, and every fs read is joined against it explicitly. Resolving
+// against process.cwd() here previously silently no-op'd two of the six
+// checks (the exclusion-shrink guard read this-commit content as `null`, and
+// the drizzle-kit-push exclusion pathspecs never matched anything, so the
+// script's own help text tripped its own ban).
+function repoRoot(): string {
+  return execFileSync("git", ["rev-parse", "--show-toplevel"], {
+    encoding: "utf8",
+  }).trim();
+}
+
+function git(root: string, args: string[]): string {
   try {
-    return execFileSync("git", args, {
+    return execFileSync("git", ["-C", root, ...args], {
       encoding: "utf8",
       maxBuffer: 1024 * 1024 * 128,
     });
@@ -207,21 +222,22 @@ function git(args: string[]): string {
   }
 }
 
-function readFileOrNull(file: string): string | null {
+function readFileOrNull(root: string, file: string): string | null {
   try {
-    return fs.readFileSync(file, "utf8");
+    return fs.readFileSync(`${root}/${file}`, "utf8");
   } catch {
     return null;
   }
 }
 
 export function runGuardrailChecks(base: string): CheckResult[] {
-  const changedFiles = git(["diff", "--name-only", `${base}...HEAD`])
+  const root = repoRoot();
+  const changedFiles = git(root, ["diff", "--name-only", `${base}...HEAD`])
     .split("\n")
     .map((s) => s.trim())
     .filter(Boolean);
 
-  const fullDiff = git([
+  const fullDiff = git(root, [
     "diff",
     `${base}...HEAD`,
     "--",
@@ -233,7 +249,7 @@ export function runGuardrailChecks(base: string): CheckResult[] {
     ":!*.txt",
   ]);
 
-  const schemaDiff = git([
+  const schemaDiff = git(root, [
     "diff",
     `${base}...HEAD`,
     "--",
@@ -242,10 +258,12 @@ export function runGuardrailChecks(base: string): CheckResult[] {
 
   let baseElaineIndex: string | null = null;
   try {
-    baseElaineIndex = git(["show", `${base}:${ELAINE_INDEX_PATH}`]);
+    baseElaineIndex = git(root, ["show", `${base}:${ELAINE_INDEX_PATH}`]);
   } catch {
     baseElaineIndex = null;
   }
+
+  const readFile = (file: string) => readFileOrNull(root, file);
 
   return [
     {
@@ -260,12 +278,12 @@ export function runGuardrailChecks(base: string): CheckResult[] {
     },
     {
       name: "Ban: ad-hoc direct OpenAI SDK instantiation",
-      violations: checkAdHocOpenAIFromFiles(changedFiles, readFileOrNull),
+      violations: checkAdHocOpenAIFromFiles(changedFiles, readFile),
       helpText: AD_HOC_OPENAI_HELP,
     },
     {
       name: "Ban: passOnStoreError: true in rate limiters",
-      violations: checkPassOnStoreErrorFromFiles(changedFiles, readFileOrNull),
+      violations: checkPassOnStoreErrorFromFiles(changedFiles, readFile),
       helpText: PASS_ON_STORE_ERROR_HELP,
     },
     {
@@ -276,7 +294,7 @@ export function runGuardrailChecks(base: string): CheckResult[] {
     {
       name: "Guard: RESTRICTED_EXCLUDED_ACTION_TYPES must not shrink",
       violations: checkExclusionSetShrink(
-        readFileOrNull(ELAINE_INDEX_PATH),
+        readFile(ELAINE_INDEX_PATH),
         baseElaineIndex,
       ),
       helpText: EXCLUSION_SHRINK_HELP,

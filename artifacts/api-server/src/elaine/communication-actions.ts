@@ -15,7 +15,7 @@ import {
   SmsOptedOutError,
   SmsRegistrationPendingError,
 } from "../lib/sms";
-import { initiateOutboundCall } from "../lib/calls";
+import { initiateOutboundCall, waitForCallOutcome } from "../lib/calls";
 import { openDmChannel, postSlackMessage, slackConfigured } from "../lib/slack";
 import { sendAssistantEmail, resendConfigured } from "../lib/email";
 import { logger } from "../lib/logger";
@@ -492,12 +492,23 @@ export async function fireCallContact(
       { callId, toNumber: contact.phoneNumber },
       "elaine: initiated outbound call",
     );
+
+    // Poll for a terminal status (answered / voicemail / no-answer / error).
+    // Returns "pending" if the 12-second window closes without a terminal
+    // status — callers should treat "pending" as "call initiated, outcome unknown".
+    const callStatus = await waitForCallOutcome(callId);
+    logger.info(
+      { callId, callStatus },
+      "elaine: outbound call outcome",
+    );
+
     return {
       status: 200,
       body: {
         type: "call_contact",
         result: {
           callId,
+          callStatus,
           contactName: contact.displayName ?? contactName,
         },
       },
@@ -1569,7 +1580,13 @@ export const communicationActionTools: OpenAI.Chat.Completions.ChatCompletionToo
           "RIGHT: 'Hey, just a reminder to pick up the cat from the vet today!' " +
           "Confirm the contact name and message wording before proposing this action. " +
           "If the user wants the call at a future time, include `scheduleAt` as an ISO 8601 datetime (e.g. '2026-08-01T15:45:00+02:00'). " +
-          "When scheduling: confirm the time in your visible reply before calling this tool.",
+          "When scheduling: confirm the time in your visible reply before calling this tool. " +
+          "After the tool returns, the result includes a `callStatus` field — incorporate it naturally: " +
+          "'answered' → 'I called [name] — they answered.'; " +
+          "'voicemail' → 'I called [name] — went to voicemail.'; " +
+          "'no-answer' → 'I called [name] — no answer.'; " +
+          "'error' → 'I tried calling [name] but the call failed.'; " +
+          "'pending' → 'Call initiated — I'll let you know if there's an issue.'",
         parameters: {
           type: "object",
           properties: {

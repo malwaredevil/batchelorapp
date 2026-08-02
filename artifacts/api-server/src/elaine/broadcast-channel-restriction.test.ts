@@ -1,9 +1,11 @@
 /**
  * Confirms that `broadcast_message` cannot be triggered from the SMS or
  * AgentPhone channel (or the email channel, which shares the same tool
- * allowlist).
+ * allowlist), and that `call_contact` / `message_contact` ARE available on
+ * SMS/voice and Slack (where sender identity is strongly verified) but NOT
+ * on email (where inbound From headers are spoofable).
  *
- * Two enforcement layers are verified:
+ * Two enforcement layers are verified for broadcast_message:
  *  1. STATIC — `broadcast_message` is absent from AGENTPHONE_ACTION_TYPES,
  *     the set that governs which action tools the restricted-channel model
  *     is offered.  An action not in this set is never sent to the model, so
@@ -15,9 +17,12 @@
  *     `AGENTPHONE_ACTION_TYPES.has(name)` check fails, so the executor is
  *     never invoked and the reply continues without executing the action.
  *
- * Together these prevent the delivery loop: an SMS-triggered broadcast would
- * echo back to the SMS channel it originated from and to every other channel
- * the user has configured, amplifying a single inbound message into a flood.
+ * For call_contact / message_contact the per-channel allowance is verified:
+ *  - SMS_SLACK_CHANNEL_EXTRAS contains both names and each is a real ACTION_TOOL.
+ *  - Both names are ABSENT from AGENTPHONE_ACTION_TYPES (they are extras, not
+ *    part of the base set that email shares).
+ *  - Both tools are offered to the model on SMS/voice and Slack turns.
+ *  - Neither tool is offered on email turns; a hallucinated call is dropped.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -31,6 +36,8 @@ const {
   mockDbSelect,
   mockCallModel,
   mockBroadcastMessageExecutor,
+  mockCallContactExecutor,
+  mockMessageContactExecutor,
   passthrough,
 } = vi.hoisted(() => {
   // Recursive chainable builder — resolves to [] when awaited, and exposes
@@ -68,6 +75,12 @@ const {
     mockDbSelect,
     mockCallModel: vi.fn(),
     mockBroadcastMessageExecutor: vi.fn(),
+    mockCallContactExecutor: vi
+      .fn()
+      .mockResolvedValue({ status: 200, body: {} }),
+    mockMessageContactExecutor: vi
+      .fn()
+      .mockResolvedValue({ status: 200, body: {} }),
     passthrough,
   };
 });
@@ -354,8 +367,8 @@ vi.mock("./office-actions", async (importOriginal) => {
   };
 });
 
-// broadcast_message executor spy — the hoisted ref is injected here so the
-// factory can reference it without a temporal dead-zone error.
+// Communication action executor spies — the hoisted refs are injected here so
+// the factory can reference them without a temporal dead-zone error.
 vi.mock("./communication-actions", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("./communication-actions")>();
@@ -364,6 +377,8 @@ vi.mock("./communication-actions", async (importOriginal) => {
     communicationActionExecutors: {
       ...actual.communicationActionExecutors,
       broadcast_message: mockBroadcastMessageExecutor,
+      call_contact: mockCallContactExecutor,
+      message_contact: mockMessageContactExecutor,
     },
   };
 });
@@ -378,7 +393,13 @@ vi.mock("../lib/ai-client", () => ({
 // Import modules under test (after all vi.mock() calls)
 // ---------------------------------------------------------------------------
 
-import { AGENTPHONE_ACTION_TYPES, runAgentphoneTurn } from "./index";
+import {
+  AGENTPHONE_ACTION_TYPES,
+  SMS_SLACK_CHANNEL_EXTRAS,
+  runAgentphoneTurn,
+  runElaineEmailTurn,
+  runElaineSlackTurn,
+} from "./index";
 import { ACTION_TOOLS } from "./planner-tool-catalog";
 
 // ---------------------------------------------------------------------------
@@ -576,5 +597,236 @@ describe("runAgentphoneTurn — broadcast_message hallucination guard", () => {
     // channel model.  If it does, the model could call it legitimately
     // (not just via hallucination) and the delivery loop would occur.
     expect(capturedToolNames).not.toContain("broadcast_message");
+  });
+});
+
+// ── 3. Per-channel extras: call_contact / message_contact ────────────────────
+
+describe("SMS_SLACK_CHANNEL_EXTRAS — call_contact / message_contact", () => {
+  it("contains call_contact and message_contact", () => {
+    expect(SMS_SLACK_CHANNEL_EXTRAS.has("call_contact")).toBe(true);
+    expect(SMS_SLACK_CHANNEL_EXTRAS.has("message_contact")).toBe(true);
+  });
+
+  it("call_contact and message_contact are NOT in AGENTPHONE_ACTION_TYPES (they are extras, not base)", () => {
+    // These must stay out of the base allowlist so the email channel (which
+    // shares that allowlist) cannot trigger outbound calls/messages.
+    expect(AGENTPHONE_ACTION_TYPES.has("call_contact")).toBe(false);
+    expect(AGENTPHONE_ACTION_TYPES.has("message_contact")).toBe(false);
+  });
+
+  it("every name in SMS_SLACK_CHANNEL_EXTRAS is a real action tool", () => {
+    const actionToolNames = new Set(
+      ACTION_TOOLS.filter(
+        (t): t is Extract<typeof t, { type: "function" }> =>
+          t.type === "function",
+      ).map((t) => t.function.name),
+    );
+    for (const name of SMS_SLACK_CHANNEL_EXTRAS) {
+      expect(
+        actionToolNames.has(name),
+        `SMS_SLACK_CHANNEL_EXTRAS contains "${name}" but it is not in ACTION_TOOLS`,
+      ).toBe(true);
+    }
+  });
+});
+
+// ── 4. SMS channel offers call_contact / message_contact to the model ─────────
+
+describe("runAgentphoneTurn — call_contact / message_contact offered and executed", () => {
+  it("includes call_contact and message_contact in the tools offered over SMS", async () => {
+    const capturedToolNames: string[] = [];
+
+    mockCallModel.mockImplementation(
+      (_model: unknown, fn: (client: unknown, model: unknown) => unknown) => {
+        const fakeClient = {
+          chat: {
+            completions: {
+              create: vi
+                .fn()
+                .mockImplementation(
+                  (params: {
+                    tools?: Array<{ type: string; function: { name: string } }>;
+                  }) => {
+                    if (params.tools) {
+                      capturedToolNames.push(
+                        ...params.tools
+                          .filter((t) => t.type === "function")
+                          .map((t) => t.function.name),
+                      );
+                    }
+                    return Promise.resolve(makeTextCompletion("OK."));
+                  },
+                ),
+            },
+          },
+        };
+        return fn(fakeClient, "openai/gpt-4o-mini");
+      },
+    );
+
+    await runAgentphoneTurn({
+      userId: 42,
+      inputText: "message my wife that dinner is ready",
+      history: [],
+    });
+
+    expect(capturedToolNames).toContain("call_contact");
+    expect(capturedToolNames).toContain("message_contact");
+    // Sanity: broadcast_message must still be absent
+    expect(capturedToolNames).not.toContain("broadcast_message");
+  });
+
+  it("executes the call_contact executor when the model calls it over SMS", async () => {
+    // Arrange: model first calls call_contact, then returns a text reply.
+    let callCount = 0;
+    mockCallModel.mockImplementation(
+      (_model: unknown, fn: (client: unknown, model: unknown) => unknown) => {
+        callCount += 1;
+        const response =
+          callCount === 1
+            ? makeToolCallCompletion("call_contact", {
+                contactName: "Alice",
+                message: "Please call me when you're free.",
+              })
+            : makeTextCompletion("I've initiated a call to Alice for you.");
+        return fn(makeFakeClient(response), "openai/gpt-4o-mini");
+      },
+    );
+
+    const result = await runAgentphoneTurn({
+      userId: 42,
+      inputText: "call Alice and ask her to call me back",
+      history: [],
+    });
+
+    // The call_contact executor must have been invoked (not gated out).
+    expect(mockCallContactExecutor).toHaveBeenCalled();
+
+    // The turn must still return a reply.
+    expect(typeof result.replyText).toBe("string");
+    expect(result.replyText.length).toBeGreaterThan(0);
+  });
+});
+
+// ── 5. Slack channel offers call_contact / message_contact to the model ────────
+
+describe("runElaineSlackTurn — call_contact / message_contact offered to model", () => {
+  it("includes call_contact and message_contact in the tools offered over Slack", async () => {
+    const capturedToolNames: string[] = [];
+
+    mockCallModel.mockImplementation(
+      (_model: unknown, fn: (client: unknown, model: unknown) => unknown) => {
+        const fakeClient = {
+          chat: {
+            completions: {
+              create: vi
+                .fn()
+                .mockImplementation(
+                  (params: {
+                    tools?: Array<{ type: string; function: { name: string } }>;
+                  }) => {
+                    if (params.tools) {
+                      capturedToolNames.push(
+                        ...params.tools
+                          .filter((t) => t.type === "function")
+                          .map((t) => t.function.name),
+                      );
+                    }
+                    return Promise.resolve(makeTextCompletion("OK."));
+                  },
+                ),
+            },
+          },
+        };
+        return fn(fakeClient, "openai/gpt-4o-mini");
+      },
+    );
+
+    await runElaineSlackTurn({
+      userId: 42,
+      inputText: "message my husband",
+      history: [],
+    });
+
+    expect(capturedToolNames).toContain("call_contact");
+    expect(capturedToolNames).toContain("message_contact");
+    expect(capturedToolNames).not.toContain("broadcast_message");
+  });
+});
+
+// ── 6. Email channel does NOT offer call_contact / message_contact ────────────
+
+describe("runElaineEmailTurn — call_contact / message_contact excluded from model", () => {
+  it("does not include call_contact or message_contact in the tools offered over email", async () => {
+    const capturedToolNames: string[] = [];
+
+    mockCallModel.mockImplementation(
+      (_model: unknown, fn: (client: unknown, model: unknown) => unknown) => {
+        const fakeClient = {
+          chat: {
+            completions: {
+              create: vi
+                .fn()
+                .mockImplementation(
+                  (params: {
+                    tools?: Array<{ type: string; function: { name: string } }>;
+                  }) => {
+                    if (params.tools) {
+                      capturedToolNames.push(
+                        ...params.tools
+                          .filter((t) => t.type === "function")
+                          .map((t) => t.function.name),
+                      );
+                    }
+                    return Promise.resolve(makeTextCompletion("OK."));
+                  },
+                ),
+            },
+          },
+        };
+        return fn(fakeClient, "openai/gpt-4o-mini");
+      },
+    );
+
+    await runElaineEmailTurn({
+      userId: 42,
+      inputText: "message my wife",
+      history: [],
+    });
+
+    // Email channel must never offer call_contact or message_contact:
+    // inbound From headers are spoofable and cannot constitute strong sender
+    // authentication for outbound-contact actions.
+    expect(capturedToolNames).not.toContain("call_contact");
+    expect(capturedToolNames).not.toContain("message_contact");
+  });
+
+  it("does not execute the call_contact executor even if hallucinated over email", async () => {
+    let callCount = 0;
+    mockCallModel.mockImplementation(
+      (_model: unknown, fn: (client: unknown, model: unknown) => unknown) => {
+        callCount += 1;
+        const response =
+          callCount === 1
+            ? makeToolCallCompletion("call_contact", {
+                contactName: "Bob",
+                message: "Call me.",
+              })
+            : makeTextCompletion("Sorry, I can't do that over email.");
+        return fn(makeFakeClient(response), "openai/gpt-4o-mini");
+      },
+    );
+
+    await runElaineEmailTurn({
+      userId: 42,
+      inputText: "call Bob from email",
+      history: [],
+    });
+
+    // The executor must not have been invoked — the hallucinated tool call
+    // was silently dropped because call_contact is absent from the email
+    // channel's tool allowlist and execution gate.
+    expect(mockCallContactExecutor).not.toHaveBeenCalled();
   });
 });

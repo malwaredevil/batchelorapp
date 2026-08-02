@@ -54,7 +54,6 @@ attached_assets/
 .replit
 .replitignore
 replit.nix
-**/.replit-artifact/
 
 # Husky generated hooks (not the actual hook scripts)
 .husky/_/

@@ -5,7 +5,11 @@ import { sendSms } from "./sms";
 import { openDmChannel, postSlackMessage, slackConfigured } from "./slack";
 import { logger } from "./logger";
 import { getConfig } from "./app-config";
-import { initiateOutboundCall, callsConfigured, waitForCallOutcome } from "./calls";
+import {
+  initiateOutboundCall,
+  callsConfigured,
+  waitForCallOutcome,
+} from "./calls";
 
 // ---------------------------------------------------------------------------
 // Daily comms check scheduler.

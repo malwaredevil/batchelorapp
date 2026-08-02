@@ -2674,11 +2674,20 @@ interface CommCheckRow {
   slackSentAt: string | null;
   slackVerifiedAt: string | null;
   slackError: string | null;
+  // Phone: no verified_at — sent = success (call placed = test passed)
+  phoneStatus: CommStatus;
+  phoneSentAt: string | null;
+  phoneError: string | null;
   createdAt: string;
 }
 
-function statusBadge(status: CommStatus, error?: string | null) {
-  if (status === "verified") {
+// treatSentAsVerified: phone channel — placing the call = success, no reply needed
+function statusBadge(
+  status: CommStatus,
+  error?: string | null,
+  treatSentAsVerified = false,
+) {
+  if (status === "verified" || (treatSentAsVerified && status === "sent")) {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-green-500/15 px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-400">
         <CheckCircle2 className="h-3 w-3" />
@@ -2718,7 +2727,9 @@ function CommCheckCard() {
   const [today, setToday] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
-  const [channelRunning, setChannelRunning] = useState<CommStatus | null>(null);
+  const [channelRunning, setChannelRunning] = useState<
+    "email" | "sms" | "slack" | "phone" | null
+  >(null);
   const [runMsg, setRunMsg] = useState<string | null>(null);
   const { toast } = useToast();
 
@@ -2754,6 +2765,7 @@ function CommCheckCard() {
         email?: string;
         sms?: string;
         slack?: string;
+        phone?: string;
         error?: string;
       };
       if (d.alreadyRan) {
@@ -2761,7 +2773,9 @@ function CommCheckCard() {
           "Already ran today — use the per-channel Send buttons to resend individual channels.",
         );
       } else if (d.ok) {
-        setRunMsg(`Sent — email: ${d.email}, SMS: ${d.sms}, Slack: ${d.slack}`);
+        setRunMsg(
+          `Sent — email: ${d.email}, SMS: ${d.sms}, Slack: ${d.slack}, Phone: ${d.phone}`,
+        );
         toast({ title: "All comms checks sent" });
       } else {
         setRunMsg(d.error ?? "Run failed.");
@@ -2781,8 +2795,8 @@ function CommCheckCard() {
     }
   };
 
-  const runChannel = async (channel: "email" | "sms" | "slack") => {
-    setChannelRunning(channel as unknown as CommStatus);
+  const runChannel = async (channel: "email" | "sms" | "slack" | "phone") => {
+    setChannelRunning(channel);
     setRunMsg(null);
     try {
       // raw-fetch-ok — owner-only admin endpoint, no Orval hook
@@ -2824,12 +2838,15 @@ function CommCheckCard() {
   const anyRunning = running || channelRunning !== null;
 
   const channelRow = (
-    channel: "email" | "sms" | "slack",
+    channel: "email" | "sms" | "slack" | "phone",
     icon: React.ReactNode,
     label: string,
     status: CommStatus,
     error: string | null,
-    verifiedAt: string | null,
+    // For email/SMS/Slack: the verified_at timestamp. For phone: sent_at.
+    timestampAt: string | null,
+    // Phone: treat "sent" as verified (call placed = success, no reply needed).
+    treatSentAsVerified = false,
   ) => (
     <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
       <div className="flex items-center gap-2">
@@ -2837,10 +2854,10 @@ function CommCheckCard() {
         <span className="text-sm font-medium">{label}</span>
       </div>
       <div className="flex items-center gap-2">
-        {statusBadge(status, error)}
-        {verifiedAt && (
+        {statusBadge(status, error, treatSentAsVerified)}
+        {timestampAt && (
           <span className="text-xs text-muted-foreground">
-            {new Date(verifiedAt).toLocaleTimeString([], {
+            {new Date(timestampAt).toLocaleTimeString([], {
               hour: "2-digit",
               minute: "2-digit",
             })}
@@ -2853,7 +2870,7 @@ function CommCheckCard() {
           title={`Send ${label} check now`}
           className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium text-muted-foreground border border-border hover:bg-muted hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
-          {channelRunning === (channel as unknown as CommStatus) ? (
+          {channelRunning === channel ? (
             <RefreshCw className="h-3 w-3 animate-spin" />
           ) : (
             <Play className="h-3 w-3" />
@@ -2903,6 +2920,7 @@ function CommCheckCard() {
           <div className="h-10 rounded-md border border-border bg-muted/20 animate-pulse" />
           <div className="h-10 rounded-md border border-border bg-muted/20 animate-pulse" />
           <div className="h-10 rounded-md border border-border bg-muted/20 animate-pulse" />
+          <div className="h-10 rounded-md border border-border bg-muted/20 animate-pulse" />
         </div>
       ) : !todayRow ? (
         <div className="space-y-2">
@@ -2934,6 +2952,15 @@ function CommCheckCard() {
             null,
             null,
           )}
+          {channelRow(
+            "phone",
+            <Phone className="h-4 w-4 text-muted-foreground" />,
+            "Phone Call",
+            "pending",
+            null,
+            null,
+            true,
+          )}
         </div>
       ) : (
         <div className="space-y-2">
@@ -2960,6 +2987,16 @@ function CommCheckCard() {
             todayRow.slackStatus,
             todayRow.slackError,
             todayRow.slackVerifiedAt,
+          )}
+          {channelRow(
+            "phone",
+            <Phone className="h-4 w-4 text-muted-foreground" />,
+            "Phone Call",
+            todayRow.phoneStatus,
+            todayRow.phoneError,
+            // Show sent_at for phone (no verified_at); call placed = success
+            todayRow.phoneSentAt,
+            true,
           )}
         </div>
       )}
@@ -2992,6 +3029,9 @@ function CommCheckCard() {
                   <th className="px-2 py-1.5 font-medium text-muted-foreground">
                     Slack
                   </th>
+                  <th className="px-2 py-1.5 font-medium text-muted-foreground">
+                    Phone
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -3011,6 +3051,9 @@ function CommCheckCard() {
                     </td>
                     <td className="px-2 py-1.5">
                       {statusBadge(row.slackStatus)}
+                    </td>
+                    <td className="px-2 py-1.5">
+                      {statusBadge(row.phoneStatus, row.phoneError, true)}
                     </td>
                   </tr>
                 ))}

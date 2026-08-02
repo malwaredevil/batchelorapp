@@ -260,6 +260,7 @@ async function appendScheduledActionChatMessage(
     role: "assistant",
     content,
     attachmentUrls: [],
+    channel: "web",
   });
 
   await db

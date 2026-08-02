@@ -5,13 +5,16 @@ import { sendSms } from "./sms";
 import { openDmChannel, postSlackMessage, slackConfigured } from "./slack";
 import { logger } from "./logger";
 import { getConfig } from "./app-config";
+import { initiateOutboundCall, callsConfigured } from "./calls";
 
 // ---------------------------------------------------------------------------
 // Daily comms check scheduler.
 //
-// Sends one email, one SMS, and one Slack DM to the owner at 00:01
-// Stuttgart time (Europe/Berlin) every calendar day. Any reply from the
-// owner on that channel within the same day marks it "verified".
+// Email, SMS, and Slack fire at 00:01 Stuttgart time each calendar day.
+// Phone call fires separately at 19:00 Stuttgart time.
+//
+// Any reply from the owner on email/SMS/Slack marks that channel "verified".
+// Phone has no reply-based verification — call placed = success (sent).
 //
 // Response detection is handled by the inbound webhook handlers:
 //   - routes/agentphone.ts  → markCommCheckVerified("sms")
@@ -146,7 +149,24 @@ async function sendCommCheckSlack(
   );
 }
 
-// ── Core run function ─────────────────────────────────────────────────────────
+// Phone comms check — just places the call; call going through = success.
+// No verbal reply required; answering-machine pickup counts.
+async function sendCommCheckPhone(
+  toNumber: string,
+  date: string,
+): Promise<void> {
+  if (!callsConfigured()) {
+    throw new Error("AgentPhone connector not configured");
+  }
+  await initiateOutboundCall({
+    toNumber,
+    initialGreeting: `Hi! This is your daily Batchelor App communications check for ${date}. The phone lane is working correctly. Have a great evening!`,
+    callScreeningIdentity: "Elaine from Batchelor App",
+    callScreeningPurpose: "daily communications test",
+  });
+}
+
+// ── Core run function (email / SMS / Slack — fires at 00:01) ─────────────────
 // Attempts to atomically INSERT a new row for today (Stuttgart date).
 // If the row already exists the INSERT is a no-op and nothing is sent.
 // If newly inserted, sends all three channels independently and records each
@@ -287,18 +307,86 @@ export async function runDailyCommCheck(): Promise<CommCheckResult> {
   return { alreadyRan: false, date: today, ...results };
 }
 
+// ── Phone-only run function (fires at 19:00) ──────────────────────────────────
+// Ensures today's row exists, then atomically claims the phone slot by
+// updating from 'pending' → 'sent' (or records an error). Safe to call
+// repeatedly — returns alreadySent: true if the row was already claimed.
+
+export interface PhoneCheckResult {
+  alreadySent: boolean;
+  date: string;
+  phone: string;
+}
+
+export async function runPhoneCommCheck(): Promise<PhoneCheckResult> {
+  const today = getStuttgartDateString();
+
+  // Ensure today's row exists (may have been inserted at 00:01 already).
+  await pool.query(
+    `INSERT INTO comm_checks (check_date) VALUES ($1) ON CONFLICT (check_date) DO NOTHING`,
+    [today],
+  );
+
+  const owner = await getOwner();
+  if (!owner || !owner.phoneNumber) {
+    const msg = owner ? "No phone number on owner account" : "No owner account";
+    await pool.query(
+      `UPDATE comm_checks SET phone_status = 'error', phone_error = $2 WHERE check_date = $1`,
+      [today, msg],
+    );
+    logger.warn({ date: today }, `comm-check: phone skipped — ${msg}`);
+    return { alreadySent: false, date: today, phone: `error: ${msg}` };
+  }
+
+  // Atomic two-phase claim:
+  //   1. Optimistically flip pending → sent in a single UPDATE (the idempotency
+  //      guard). If 0 rows touched, another process already claimed this slot.
+  //   2. If the outbound call subsequently fails, overwrite to error.
+  //
+  // This avoids any intermediate "calling" state that could stick forever on
+  // crash or network hang. In the rare case of a crash between steps 1 and 2
+  // the row remains "sent" (a false positive); that is preferable to a broken
+  // state that blocks every future scheduler tick.
+  const claim = await pool.query<{ check_date: string }>(
+    `UPDATE comm_checks
+     SET phone_status = 'sent', phone_sent_at = NOW(), phone_error = NULL
+     WHERE check_date = $1 AND phone_status = 'pending'
+     RETURNING check_date`,
+    [today],
+  );
+
+  if ((claim.rowCount ?? 0) === 0) {
+    return { alreadySent: true, date: today, phone: "n/a" };
+  }
+
+  try {
+    await sendCommCheckPhone(owner.phoneNumber, today);
+    logger.info({ date: today }, "comm-check: phone call placed");
+    return { alreadySent: false, date: today, phone: "sent" };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // Roll the status back to error — the row is no longer "sent".
+    await pool.query(
+      `UPDATE comm_checks SET phone_status = 'error', phone_sent_at = NULL, phone_error = $2 WHERE check_date = $1`,
+      [today, msg],
+    );
+    logger.error({ err, date: today }, "comm-check: phone call failed");
+    return { alreadySent: false, date: today, phone: `error: ${msg}` };
+  }
+}
+
 // ── Single-channel send ───────────────────────────────────────────────────────
 // Ensures today's row exists, then (re)sends a single channel regardless of
 // its current status. Intended for manual "Send now" triggers from the UI.
 
 export interface ChannelCheckResult {
   date: string;
-  channel: "email" | "sms" | "slack";
+  channel: "email" | "sms" | "slack" | "phone";
   result: string;
 }
 
 export async function runChannelCheck(
-  channel: "email" | "sms" | "slack",
+  channel: "email" | "sms" | "slack" | "phone",
 ): Promise<ChannelCheckResult> {
   const today = getStuttgartDateString();
 
@@ -328,24 +416,42 @@ export async function runChannelCheck(
       if (!owner.phoneNumber)
         throw new Error("No phone number on owner account");
       await sendCommCheckSms(owner.phoneNumber, today);
-    } else {
+    } else if (channel === "slack") {
       if (!owner.slackUserId)
         throw new Error("No Slack user ID on owner account");
       await sendCommCheckSlack(owner.slackUserId, today);
+    } else {
+      // phone
+      if (!owner.phoneNumber)
+        throw new Error("No phone number on owner account");
+      await sendCommCheckPhone(owner.phoneNumber, today);
     }
 
     const statusCol = `${channel}_status`;
     const sentAtCol = `${channel}_sent_at`;
-    const verifiedAtCol = `${channel}_verified_at`;
     const errorCol = `${channel}_error`;
-    // Re-open the verified state — a manual resend clears prior verification.
-    await pool.query(
-      `UPDATE comm_checks
-       SET ${statusCol} = 'sent', ${sentAtCol} = NOW(),
-           ${verifiedAtCol} = NULL, ${errorCol} = NULL
-       WHERE check_date = $1`,
-      [today],
-    );
+
+    if (channel === "phone") {
+      // Phone has no verified_at — just reset to sent.
+      await pool.query(
+        `UPDATE comm_checks
+         SET ${statusCol} = 'sent', ${sentAtCol} = NOW(),
+             ${errorCol} = NULL
+         WHERE check_date = $1`,
+        [today],
+      );
+    } else {
+      const verifiedAtCol = `${channel}_verified_at`;
+      // Re-open the verified state — a manual resend clears prior verification.
+      await pool.query(
+        `UPDATE comm_checks
+         SET ${statusCol} = 'sent', ${sentAtCol} = NOW(),
+             ${verifiedAtCol} = NULL, ${errorCol} = NULL
+         WHERE check_date = $1`,
+        [today],
+      );
+    }
+
     logger.info({ date: today, channel }, "comm-check: manual channel send");
     return { date: today, channel, result: "sent" };
   } catch (err) {
@@ -365,28 +471,47 @@ export async function runChannelCheck(
 }
 
 // ── Scheduler ─────────────────────────────────────────────────────────────────
-// Polls every 5 minutes. Fires the check once per Stuttgart calendar day,
-// starting from 00:01. If the server was down at midnight it catches up on
-// the first poll run after 00:01.
+// Polls every 5 minutes.
+//   • Email / SMS / Slack fire once per day at or after 00:01 Stuttgart.
+//   • Phone call fires once per day at or after 19:00 Stuttgart.
+// If the server was down at the trigger time it catches up on the first poll
+// run after that threshold.
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000;
-const SEND_AFTER_MINUTE = 1; // 00:01 Stuttgart
+const SEND_AFTER_MINUTE = 1; // 00:01 Stuttgart — email/SMS/Slack
+const PHONE_SEND_AFTER_MINUTE = 19 * 60; // 19:00 Stuttgart — phone call
 
 export function startCommCheckScheduler(): () => void {
   const tick = async (): Promise<void> => {
     try {
-      if (getStuttgartMinuteOfDay() < SEND_AFTER_MINUTE) return;
-      const result = await runDailyCommCheck();
-      if (result.alreadyRan) return;
-      logger.info(
-        {
-          date: result.date,
-          email: result.email,
-          sms: result.sms,
-          slack: result.slack,
-        },
-        "comm-check: daily check completed",
-      );
+      const minuteOfDay = getStuttgartMinuteOfDay();
+
+      // Email / SMS / Slack — 00:01
+      if (minuteOfDay >= SEND_AFTER_MINUTE) {
+        const result = await runDailyCommCheck();
+        if (!result.alreadyRan) {
+          logger.info(
+            {
+              date: result.date,
+              email: result.email,
+              sms: result.sms,
+              slack: result.slack,
+            },
+            "comm-check: daily check completed",
+          );
+        }
+      }
+
+      // Phone call — 19:00
+      if (minuteOfDay >= PHONE_SEND_AFTER_MINUTE) {
+        const phoneResult = await runPhoneCommCheck();
+        if (!phoneResult.alreadySent) {
+          logger.info(
+            { date: phoneResult.date, phone: phoneResult.phone },
+            "comm-check: phone check completed",
+          );
+        }
+      }
     } catch (err) {
       logger.error({ err }, "comm-check: scheduler tick failed");
     }
@@ -398,7 +523,7 @@ export function startCommCheckScheduler(): () => void {
   interval.unref();
 
   logger.info(
-    "comm-check-scheduler: started (polls every 5 min, sends at 00:01 Stuttgart)",
+    "comm-check-scheduler: started (polls every 5 min, sends at 00:01 Stuttgart / phone at 19:00 Stuttgart)",
   );
   return () => clearInterval(interval);
 }

@@ -179,6 +179,9 @@ export interface AssistantMessage {
   /** Model-produced reasoning summary for this assistant turn. Absent when
    *  the model emitted no reasoning or the feature is disabled. */
   reasoningSummary?: string | null;
+  /** ISO timestamp from the server. Present on history-loaded messages;
+   *  absent on optimistically-inserted messages (streaming in progress). */
+  createdAt?: string;
 }
 
 export type TravelActionType =
@@ -230,7 +233,13 @@ export type AssistantActionType =
   | "forget_memory"
   | "queue_research_task"
   | "cancel_elaine_task"
-  | "execute_app_operation";
+  | "execute_app_operation"
+  | "message_contact"
+  | "call_contact"
+  | "cancel_scheduled_contact"
+  | "continue_in_channel"
+  | "call_me"
+  | "broadcast_message";
 
 export interface AssistantAction {
   type: AssistantActionType;
@@ -1383,6 +1392,141 @@ export function useRegenerateElaineDailyBrief(options?: {
   const mutationFn: MutationFunction<DailyBrief, void> = () =>
     regenerateElaineDailyBriefFn();
   return useMutation({ mutationFn, ...options?.mutation });
+}
+
+// ---------------------------------------------------------------------------
+// Cross-channel context
+// ---------------------------------------------------------------------------
+
+export interface CrossChannelEntry {
+  channel: string;
+  gist: string;
+  /** Short date string for display, e.g. "Aug 2". */
+  ts: string;
+  /** Full ISO-8601 timestamp for age comparisons. Absent on entries written
+   *  before this field was added — treat those as having unknown/old age. */
+  iso?: string;
+}
+
+export interface CrossChannelContext {
+  entries: CrossChannelEntry[];
+  updatedAt: string | null;
+}
+
+export const getGetElaineCrossChannelContextQueryKey = () =>
+  [`/api/elaine/cross-channel-context`] as const;
+
+const getElaineCrossChannelContextFn = (
+  options?: RequestInit,
+): Promise<CrossChannelContext> =>
+  customFetch<CrossChannelContext>("/api/elaine/cross-channel-context", {
+    ...options,
+    method: "GET",
+  });
+
+export function useGetElaineCrossChannelContext<
+  TData = CrossChannelContext,
+  TError = unknown,
+>(options?: {
+  query?: UseQueryOptions<CrossChannelContext, TError, TData>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey =
+    queryOptions?.queryKey ?? getGetElaineCrossChannelContextQueryKey();
+  const queryFn: QueryFunction<CrossChannelContext> = ({ signal }) =>
+    getElaineCrossChannelContextFn({ signal });
+  const queryOpts = {
+    queryKey,
+    queryFn,
+    staleTime: 30 * 1000,
+    ...queryOptions,
+  } as UseQueryOptions<CrossChannelContext, TError, TData> & {
+    queryKey: QueryKey;
+  };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+const clearElaineCrossChannelContextFn = (): Promise<void> =>
+  customFetch<void>("/api/elaine/cross-channel-context", { method: "DELETE" });
+
+export function useClearElaineCrossChannelContext(options?: {
+  mutation?: UseMutationOptions<void, unknown, void>;
+}): UseMutationResult<void, unknown, void> {
+  const mutationFn: MutationFunction<void, void> = () =>
+    clearElaineCrossChannelContextFn();
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
+// ---------------------------------------------------------------------------
+// Unified cross-channel history
+// ---------------------------------------------------------------------------
+
+export interface UnifiedHistoryMessage {
+  id: number;
+  conversationId: number;
+  role: "user" | "assistant";
+  content: string;
+  /** Channel label; pre-normalized to "web" for NULL rows. */
+  channel: string;
+  createdAt: string;
+}
+
+export interface UnifiedHistoryPage {
+  messages: UnifiedHistoryMessage[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+}
+
+export const getElaineUnifiedHistoryQueryKey = (
+  page: number,
+  channel?: string,
+) => [`/api/elaine/history/unified`, { page, channel }] as const;
+
+const getElaineUnifiedHistoryFn = (
+  page: number,
+  channel?: string,
+  options?: RequestInit,
+): Promise<UnifiedHistoryPage> => {
+  const params = new URLSearchParams({ page: String(page) });
+  if (channel) params.set("channel", channel);
+  return customFetch<UnifiedHistoryPage>(
+    `/api/elaine/history/unified?${params.toString()}`,
+    { ...options, method: "GET" },
+  );
+};
+
+export function useGetElaineUnifiedHistory<
+  TData = UnifiedHistoryPage,
+  TError = unknown,
+>(
+  page: number,
+  channel?: string,
+  options?: {
+    query?: UseQueryOptions<UnifiedHistoryPage, TError, TData>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey =
+    queryOptions?.queryKey ?? getElaineUnifiedHistoryQueryKey(page, channel);
+  const queryFn: QueryFunction<UnifiedHistoryPage> = ({ signal }) =>
+    getElaineUnifiedHistoryFn(page, channel, { signal });
+  const queryOpts = {
+    queryKey,
+    queryFn,
+    staleTime: 30 * 1000,
+    ...queryOptions,
+  } as UseQueryOptions<UnifiedHistoryPage, TError, TData> & {
+    queryKey: QueryKey;
+  };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+  return { ...query, queryKey: queryOpts.queryKey };
 }
 
 export function useListElaineAdminModels<

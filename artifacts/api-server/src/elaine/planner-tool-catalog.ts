@@ -28,6 +28,7 @@ import { officeActionTools } from "./office-actions";
 import { universalReadTools } from "./universal-read-tools";
 import {
   listScheduledContactsTool,
+  listContactChannelsTool,
   communicationActionTools,
 } from "./communication-actions";
 
@@ -1159,6 +1160,7 @@ export const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   ...universalReadTools,
   ...appOperationReadTools,
   listScheduledContactsTool,
+  listContactChannelsTool,
   {
     type: "function",
     function: {

@@ -274,6 +274,10 @@ export const commChecks = pgTable("comm_checks", {
   slackSentAt: timestamp("slack_sent_at", { withTimezone: true }),
   slackVerifiedAt: timestamp("slack_verified_at", { withTimezone: true }),
   slackError: text("slack_error"),
+  // Phone call lane — fires at 19:00 Stuttgart. No verified_at: call placed = success.
+  phoneStatus: text("phone_status").notNull().default("pending"),
+  phoneSentAt: timestamp("phone_sent_at", { withTimezone: true }),
+  phoneError: text("phone_error"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

@@ -118,3 +118,63 @@ export function buildReminderCallScript(
 export function callsConfigured(): boolean {
   return true;
 }
+
+// ---------------------------------------------------------------------------
+// Outcome polling — optional best-effort status check after initiateOutboundCall.
+// Poll-based because AgentPhone delivers status via the call lifecycle, not a
+// synchronous create-call response. Resolves as soon as we see a terminal
+// status, or returns "pending" when the timeout expires.
+// ---------------------------------------------------------------------------
+
+export type CallOutcome =
+  | "answered"
+  | "voicemail"
+  | "no-answer"
+  | "error"
+  | "pending";
+
+/**
+ * Poll AgentPhone GET /v1/calls/{callId} until a terminal status is reached
+ * or timeoutMs elapses. Uses short exponential backoff (1 s → 2 s → 3 s …).
+ *
+ * Terminal statuses (AgentPhone lifecycle):
+ *   completed  → answered (recipient or voicemail engaged Elaine)
+ *   no-answer  → no-answer
+ *   busy       → no-answer (treated as "not reached")
+ *   failed     → error
+ *
+ * Returns "pending" when the timeout fires before a terminal status appears.
+ * All network errors are swallowed — callers should treat "pending" gracefully.
+ */
+export async function waitForCallOutcome(
+  callId: string,
+  timeoutMs = 12_000,
+): Promise<CallOutcome> {
+  const deadline = Date.now() + timeoutMs;
+  let delay = 1_000;
+
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    delay = Math.min(Math.round(delay * 1.6), 4_000);
+
+    try {
+      const response = await connectors.proxy(
+        "agentphone",
+        `/v1/calls/${callId}`,
+        { method: "GET" },
+      );
+      if (!response.ok) break; // unexpected error — stop polling
+      const data = (await response.json()) as { status?: string };
+      const status = (data.status ?? "").toLowerCase().replace(/_/g, "-");
+      if (status === "completed") return "answered";
+      if (status === "no-answer" || status === "busy") return "no-answer";
+      if (status === "failed") return "error";
+      if (status === "voicemail") return "voicemail";
+      // "ringing" / "in-progress" — still live, keep polling
+    } catch {
+      break; // network error — give up, report "pending"
+    }
+  }
+
+  return "pending";
+}

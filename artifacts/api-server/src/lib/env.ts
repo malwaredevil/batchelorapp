@@ -49,6 +49,11 @@ export const env = {
   // Optional at the env layer so the rest of the app boots fine without it —
   // the webhook route itself returns 503 until this is set.
   agentphoneWebhookSecret: optional("AGENTPHONE_WEBHOOK_SECRET"),
+  // Bearer token for direct calls to api.agentphone.ai (list numbers/agents,
+  // send messages, place/poll calls). Optional at the env layer so the app
+  // boots without it — callers.ts/sms.ts throw a clear error if a send is
+  // attempted while unset.
+  agentphoneApiKey: optional("AGENTPHONE_API_KEY"),
   // Resend inbound-email webhook signing secret for
   // `/api/elaine/email-webhook`. Two separate webhooks were provisioned in
   // Resend (one per environment domain), so the secret to verify against is

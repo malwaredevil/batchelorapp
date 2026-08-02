@@ -1,7 +1,5 @@
-import { ReplitConnectors } from "@replit/connectors-sdk";
 import { logger } from "./logger";
-
-const connectors = new ReplitConnectors();
+import { agentphoneRequest } from "./agentphone-http";
 
 interface AgentPhoneNumber {
   id: string;
@@ -45,9 +43,11 @@ async function getAgentCredentials(): Promise<AgentCredentials> {
   if (cachedCredentials && Date.now() < cachedCredentials.expiresAt) {
     return cachedCredentials.credentials;
   }
-  const response = await connectors.proxy("agentphone", "/v1/agents", {
-    method: "GET",
-  });
+  const response = await agentphoneRequest(
+    "/v1/agents",
+    { method: "GET" },
+    { op: "list-agents" },
+  );
   if (!response.ok) {
     const text = await response.text().catch(() => "");
     logger.error(
@@ -132,10 +132,11 @@ export async function initiateOutboundCall(
   if (opts.callScreeningPurpose)
     body.callScreeningPurpose = opts.callScreeningPurpose;
 
-  const response = await connectors.proxy("agentphone", "/v1/calls", {
-    method: "POST",
-    body,
-  });
+  const response = await agentphoneRequest(
+    "/v1/calls",
+    { method: "POST", body },
+    { op: "create-call" },
+  );
   if (!response.ok) {
     const text = await response.text().catch(() => "");
     logger.error(
@@ -210,10 +211,10 @@ export async function waitForCallOutcome(
     delay = Math.min(Math.round(delay * 1.6), 4_000);
 
     try {
-      const response = await connectors.proxy(
-        "agentphone",
+      const response = await agentphoneRequest(
         `/v1/calls/${callId}`,
         { method: "GET" },
+        { op: "poll-call-outcome", callId },
       );
       if (!response.ok) break; // unexpected error — stop polling
       const data = (await response.json()) as {

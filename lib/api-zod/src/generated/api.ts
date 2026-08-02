@@ -40,7 +40,8 @@ export const LoginResponse = zod.object({
   "phoneNumber": zod.string().nullish(),
   "phoneVerified": zod.boolean().optional(),
   "birthday": zod.string().nullish().describe('Birthday as MM-DD (e.g. 03-15 for March 15th). Year is omitted.'),
-  "slackUserId": zod.string().nullish().describe('Slack member ID used to deliver reminder DMs and enable the Elaine Slack bot.')
+  "slackUserId": zod.string().nullish().describe('Slack member ID used to deliver reminder DMs and enable the Elaine Slack bot.'),
+  "timezone": zod.string().nullish().describe('IANA timezone name (e.g. "America/Denver").')
 })
 
 
@@ -56,7 +57,8 @@ export const GetCurrentUserResponse = zod.object({
   "phoneNumber": zod.string().nullish(),
   "phoneVerified": zod.boolean().optional(),
   "birthday": zod.string().nullish().describe('Birthday as MM-DD (e.g. 03-15 for March 15th). Year is omitted.'),
-  "slackUserId": zod.string().nullish().describe('Slack member ID used to deliver reminder DMs and enable the Elaine Slack bot.')
+  "slackUserId": zod.string().nullish().describe('Slack member ID used to deliver reminder DMs and enable the Elaine Slack bot.'),
+  "timezone": zod.string().nullish().describe('IANA timezone name (e.g. "America/Denver").')
 })
 
 
@@ -67,7 +69,8 @@ export const UpdateCurrentUserBody = zod.object({
   "displayName": zod.string().nullish(),
   "themePreference": zod.enum(['light', 'dark']).nullish(),
   "birthday": zod.string().nullish().describe('Birthday as MM-DD (e.g. 03-15 for March 15th). Year is omitted.'),
-  "slackUserId": zod.string().nullish().describe('Slack member ID used to deliver reminder DMs and enable the Elaine Slack bot.')
+  "slackUserId": zod.string().nullish().describe('Slack member ID used to deliver reminder DMs and enable the Elaine Slack bot.'),
+  "timezone": zod.string().nullish().describe('IANA timezone name (e.g. "America/Denver"). Used to render dates/times and to schedule the daily comms check for the owner account.')
 })
 
 export const UpdateCurrentUserResponse = zod.object({
@@ -79,7 +82,8 @@ export const UpdateCurrentUserResponse = zod.object({
   "phoneNumber": zod.string().nullish(),
   "phoneVerified": zod.boolean().optional(),
   "birthday": zod.string().nullish().describe('Birthday as MM-DD (e.g. 03-15 for March 15th). Year is omitted.'),
-  "slackUserId": zod.string().nullish().describe('Slack member ID used to deliver reminder DMs and enable the Elaine Slack bot.')
+  "slackUserId": zod.string().nullish().describe('Slack member ID used to deliver reminder DMs and enable the Elaine Slack bot.'),
+  "timezone": zod.string().nullish().describe('IANA timezone name (e.g. "America/Denver").')
 })
 
 

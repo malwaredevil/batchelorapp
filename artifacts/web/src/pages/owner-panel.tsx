@@ -38,6 +38,7 @@ import {
   Zap,
 } from "lucide-react";
 import { GlobalConfigCard } from "@workspace/elaine-ui";
+import { appendScreenshotToken } from "@workspace/api-client-react";
 import {
   ReminderEmailCard,
   TimezoneCard,
@@ -3044,6 +3045,234 @@ function CommCheckCard() {
   );
 }
 
+const SCHEDULE_DAY_OPTIONS: { code: string; label: string }[] = [
+  { code: "sun", label: "Sun" },
+  { code: "mon", label: "Mon" },
+  { code: "tue", label: "Tue" },
+  { code: "wed", label: "Wed" },
+  { code: "thu", label: "Thu" },
+  { code: "fri", label: "Fri" },
+  { code: "sat", label: "Sat" },
+];
+
+interface CommCheckScheduleState {
+  daily_time: string;
+  daily_days: string;
+  phone_time: string;
+  phone_days: string;
+}
+
+function CommCheckScheduleCard() {
+  const [schedule, setSchedule] = useState<CommCheckScheduleState | null>(
+    null,
+  );
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState<string | null>(null);
+  const [timezone, setTimezone] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  const load = useCallback(() => {
+    setLoading(true);
+    Promise.all([
+      // raw-fetch-ok — generic owner config endpoint, no Orval hook
+      fetch(appendScreenshotToken("/api/config/comm_check")).then((r) =>
+        r.ok
+          ? (r.json() as Promise<{
+              config: Array<{ key: string; value: string }>;
+            }>)
+          : Promise.reject(r.status),
+      ),
+      // raw-fetch-ok — owner-only admin endpoint, no Orval hook
+      fetch(appendScreenshotToken("/api/hub/comm-checks")).then((r) =>
+        r.ok
+          ? (r.json() as Promise<{ effectiveTimezone?: string }>)
+          : Promise.reject(r.status),
+      ),
+    ])
+      .then(([configRes, hubRes]) => {
+        const byKey = Object.fromEntries(
+          configRes.config.map((c) => [c.key, c.value]),
+        );
+        setSchedule({
+          daily_time: byKey.daily_time ?? "00:01",
+          daily_days: byKey.daily_days ?? "sun,mon,tue,wed,thu,fri,sat",
+          phone_time: byKey.phone_time ?? "19:00",
+          phone_days: byKey.phone_days ?? "sun,mon,tue,wed,thu,fri,sat",
+        });
+        setTimezone(hubRes.effectiveTimezone ?? null);
+      })
+      .catch(() =>
+        toast({
+          title: "Could not load comms check schedule",
+          variant: "destructive",
+        }),
+      )
+      .finally(() => setLoading(false));
+  }, [toast]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const saveField = useCallback(
+    async (key: keyof CommCheckScheduleState, value: string) => {
+      setSchedule((s) => (s ? { ...s, [key]: value } : s));
+      setSaving(key);
+      try {
+        const r = await fetch(`/api/config/comm_check/${key}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ value }),
+        });
+        if (!r.ok) {
+          const d = (await r.json().catch(() => ({}))) as { error?: string };
+          throw new Error(d.error ?? "Save failed");
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Network error.";
+        toast({
+          title: "Could not save schedule",
+          description: msg,
+          variant: "destructive",
+        });
+        load();
+      } finally {
+        setSaving(null);
+      }
+    },
+    [toast, load],
+  );
+
+  const toggleDay = (
+    daysKey: "daily_days" | "phone_days",
+    code: string,
+  ) => {
+    if (!schedule) return;
+    const current = new Set(schedule[daysKey].split(",").filter(Boolean));
+    if (current.has(code)) {
+      if (current.size === 1) {
+        toast({
+          title: "At least one day must be selected",
+          variant: "destructive",
+        });
+        return;
+      }
+      current.delete(code);
+    } else {
+      current.add(code);
+    }
+    const ordered = SCHEDULE_DAY_OPTIONS.map((d) => d.code).filter((c) =>
+      current.has(c),
+    );
+    void saveField(daysKey, ordered.join(","));
+  };
+
+  const laneEditor = (
+    label: string,
+    icon: React.ReactNode,
+    timeKey: "daily_time" | "phone_time",
+    daysKey: "daily_days" | "phone_days",
+  ) => {
+    if (!schedule) return null;
+    const selectedDays = new Set(schedule[daysKey].split(",").filter(Boolean));
+    return (
+      <div className="rounded-md border border-border px-3 py-3 space-y-2.5">
+        <div className="flex items-center gap-2">
+          {icon}
+          <span className="text-sm font-medium">{label}</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {SCHEDULE_DAY_OPTIONS.map((d) => (
+            <button
+              key={d.code}
+              type="button"
+              onClick={() => toggleDay(daysKey, d.code)}
+              disabled={saving === daysKey}
+              className={`h-7 w-10 rounded text-xs font-medium border transition-colors disabled:opacity-50 ${
+                selectedDays.has(d.code)
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "border-border text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              {d.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+          <input
+            type="time"
+            value={schedule[timeKey]}
+            onChange={(e) => void saveField(timeKey, e.target.value)}
+            disabled={saving === timeKey}
+            className="rounded border border-border bg-background px-2 py-1 text-xs disabled:opacity-50"
+          />
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Clock className="h-4 w-4 text-muted-foreground" />
+          <h3 className="text-sm font-semibold">Comms Check Schedule</h3>
+        </div>
+        <button
+          type="button"
+          onClick={load}
+          disabled={loading}
+          className="text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
+          title="Refresh"
+        >
+          <RefreshCw
+            className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
+          />
+        </button>
+      </div>
+
+      {loading || !schedule ? (
+        <div className="space-y-2">
+          <div className="h-20 rounded-md border border-border bg-muted/20 animate-pulse" />
+          <div className="h-20 rounded-md border border-border bg-muted/20 animate-pulse" />
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {laneEditor(
+            "Email / SMS / Slack",
+            <Mail className="h-4 w-4 text-muted-foreground" />,
+            "daily_time",
+            "daily_days",
+          )}
+          {laneEditor(
+            "Phone Call",
+            <Phone className="h-4 w-4 text-muted-foreground" />,
+            "phone_time",
+            "phone_days",
+          )}
+        </div>
+      )}
+
+      <p className="text-xs text-muted-foreground border-t border-border pt-2">
+        Times run in{" "}
+        <span className="font-medium text-foreground">
+          {timezone ?? "…"}
+        </span>{" "}
+        — the owner account's timezone, editable from the{" "}
+        <Link
+          href="/owner-panel?tab=users"
+          className="underline hover:text-foreground"
+        >
+          Users tab
+        </Link>
+        . The Send / Send All buttons above always run immediately, regardless
+        of this schedule.
+      </p>
+    </div>
+  );
+}
+
 function InfrastructureContent({
   status,
   loading,
@@ -3165,6 +3394,9 @@ function InfrastructureContent({
 
       {/* Daily comms check card */}
       <CommCheckCard />
+
+      {/* Comms check schedule */}
+      <CommCheckScheduleCard />
 
       {/* Bootstrap card */}
       <div className="rounded-lg border border-border bg-card p-5 space-y-3">

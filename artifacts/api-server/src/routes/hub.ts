@@ -9,7 +9,8 @@ import {
   runDailyCommCheck,
   runPhoneCommCheck,
   runChannelCheck,
-  getStuttgartDateString,
+  getEffectiveDateString,
+  getEffectiveTimezone,
 } from "../lib/comm-check-scheduler";
 import dns from "node:dns";
 import { isIP } from "node:net";
@@ -659,8 +660,9 @@ router.get("/hub/comm-checks", requireAuth, requireOwner, async (req, res) => {
       .from(commChecks)
       .orderBy(desc(commChecks.checkDate))
       .limit(7);
-    const today = getStuttgartDateString();
-    res.json({ today, rows });
+    const today = await getEffectiveDateString();
+    const effectiveTimezone = await getEffectiveTimezone();
+    res.json({ today, rows, effectiveTimezone });
   } catch (err) {
     req.log.error({ err }, "hub/comm-checks: fetch failed");
     res.status(500).json({ error: "Failed to fetch comm checks" });

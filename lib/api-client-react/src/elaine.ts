@@ -179,6 +179,9 @@ export interface AssistantMessage {
   /** Model-produced reasoning summary for this assistant turn. Absent when
    *  the model emitted no reasoning or the feature is disabled. */
   reasoningSummary?: string | null;
+  /** ISO timestamp from the server. Present on history-loaded messages;
+   *  absent on optimistically-inserted messages (streaming in progress). */
+  createdAt?: string;
 }
 
 export type TravelActionType =

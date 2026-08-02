@@ -328,6 +328,10 @@ type ChatMessage = {
   runtimeTrace?: ElaineRuntimeTrace;
   /** Reasoning summary for assistant turns — undefined for user messages. */
   reasoningSummary?: string;
+  /** ISO 8601 timestamp set when the message is first persisted. Absent on
+   *  messages stored before this field was added (treated as no-timestamp on
+   *  the client). */
+  createdAt?: string;
 };
 
 // A single image/PDF attachment stored alongside a user message. `name` is
@@ -2813,9 +2817,14 @@ async function applyUnseenNudges(userId: number): Promise<ChatMessage[]> {
 
   if (unseen.length === 0) return history;
 
+  const nudgeTimestamp = new Date().toISOString();
   const updatedHistory: ChatMessage[] = [
     ...history,
-    ...unseen.map((n) => ({ role: "assistant" as const, content: n.message })),
+    ...unseen.map((n) => ({
+      role: "assistant" as const,
+      content: n.message,
+      createdAt: nudgeTimestamp,
+    })),
   ].slice(-50);
 
   await db
@@ -5936,12 +5945,14 @@ router.post("/chat", async (req, res) => {
     allCitations.length > 0 ? `\x1f${JSON.stringify(allCitations)}` : "";
   const content = rawContent.trim() + citationSuffix;
 
+  const turnTimestamp = new Date().toISOString();
   const updatedHistory: ChatMessage[] = (
     [
       ...history,
       {
         role: "user" as const,
         content: message,
+        createdAt: turnTimestamp,
         ...(allAttachmentUrls.length > 0
           ? { attachmentUrls: allAttachmentUrls }
           : {}),
@@ -5949,6 +5960,7 @@ router.post("/chat", async (req, res) => {
       {
         role: "assistant" as const,
         content,
+        createdAt: turnTimestamp,
         runtimeTrace: finalTrace,
         ...(finalReasoningSummary
           ? { reasoningSummary: finalReasoningSummary }

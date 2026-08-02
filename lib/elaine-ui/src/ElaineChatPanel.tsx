@@ -30,6 +30,7 @@ import {
   useGetElaineCrossChannelContext,
   useClearElaineCrossChannelContext,
   type CrossChannelEntry,
+  type AssistantMessage,
 } from "@workspace/api-client-react";
 import { crossAppUrl } from "@workspace/web-core/cross-app";
 import { useVoiceInput } from "./useVoiceInput";
@@ -85,6 +86,92 @@ function parseMessageCitations(content: string): {
     citations = [];
   }
   return { text: content.slice(0, nullIdx), citations };
+}
+
+// ─── Timestamp helpers ────────────────────────────────────────────────────────
+
+/** Local calendar date string "YYYY-MM-DD" for an ISO timestamp. */
+function localDateStr(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+/** "Today", "Yesterday", "Mon", "Aug 1" label for a date separator. */
+function formatSeparatorLabel(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffDays = Math.floor(diffMs / 86_400_000);
+  if (localDateStr(iso) === localDateStr(now.toISOString())) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7)
+    return d.toLocaleDateString(undefined, { weekday: "short" });
+  if (d.getFullYear() === now.getFullYear())
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+/** "2:34 PM" time string for an inline run-end timestamp. */
+function formatMessageTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+// ─── Chat item model ──────────────────────────────────────────────────────────
+
+/** Pre-processed flat list of things to render in the chat panel. */
+type ChatItem =
+  | { kind: "separator"; label: string; key: string }
+  | {
+      kind: "message";
+      msg: AssistantMessage;
+      index: number;
+      /** Show an inline time string below this message (end of a sender run). */
+      showTimestamp: boolean;
+    };
+
+function buildChatItems(messages: AssistantMessage[]): ChatItem[] {
+  const items: ChatItem[] = [];
+  let lastDateStr = "";
+
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i]!;
+
+    // Date separator when the calendar date changes between messages.
+    if (msg.createdAt) {
+      const dateStr = localDateStr(msg.createdAt);
+      if (dateStr !== lastDateStr) {
+        items.push({
+          kind: "separator",
+          label: formatSeparatorLabel(msg.createdAt),
+          key: `sep-${dateStr}`,
+        });
+        lastDateStr = dateStr;
+      }
+    }
+
+    // Show a timestamp on this message if it is the last in its sender run:
+    //   • next message has a different role, OR
+    //   • next message falls on a different calendar day, OR
+    //   • this is the last message in the list.
+    const next = messages[i + 1];
+    const runEnds =
+      msg.createdAt != null &&
+      (!next ||
+        next.role !== msg.role ||
+        !next.createdAt ||
+        localDateStr(next.createdAt) !== localDateStr(msg.createdAt));
+
+    items.push({ kind: "message", msg, index: i, showTimestamp: runEnds });
+  }
+
+  return items;
 }
 
 /** Renders message text with markdown + [N] citation markers turned into clickable links. */
@@ -402,7 +489,25 @@ export function ElaineChatPanel({
             </div>
           ))}
 
-        {messages.map((msg, i) => {
+        {buildChatItems(messages).map((item) => {
+          if (item.kind === "separator") {
+            return (
+              <div
+                key={item.key}
+                className="flex items-center gap-3 px-1 py-1"
+                aria-hidden="true"
+              >
+                <div className="h-px flex-1 bg-border/50" />
+                <span className="shrink-0 text-[11px] text-muted-foreground/60 font-normal select-none">
+                  {item.label}
+                </span>
+                <div className="h-px flex-1 bg-border/50" />
+              </div>
+            );
+          }
+
+          const { msg, index: i, showTimestamp } = item;
+
           if (msg.role === "user") {
             const firstUserUrl = extractFirstUrl(msg.content);
             return (
@@ -469,6 +574,11 @@ export function ElaineChatPanel({
                     )}
                   </div>
                 </div>
+                {showTimestamp && msg.createdAt && (
+                  <span className="mr-1 text-[11px] text-muted-foreground/50 select-none tabular-nums">
+                    {formatMessageTime(msg.createdAt)}
+                  </span>
+                )}
                 {firstUserUrl && <LinkPreviewCard url={firstUserUrl} />}
               </div>
             );
@@ -528,6 +638,11 @@ export function ElaineChatPanel({
                 )}
                 {firstAssistantUrl && (
                   <LinkPreviewCard url={firstAssistantUrl} />
+                )}
+                {showTimestamp && msg.createdAt && (
+                  <span className="ml-1 text-[11px] text-muted-foreground/50 select-none tabular-nums">
+                    {formatMessageTime(msg.createdAt)}
+                  </span>
                 )}
               </div>
             </div>

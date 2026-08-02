@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
+import { ApplicationHeader } from "@workspace/app-shell";
 import {
   useChangePassword,
   useUpdateCurrentUser,
@@ -15,7 +16,6 @@ import { useGmailStatus, useGmailDisconnect } from "@workspace/gmail-ui";
 import { toast } from "sonner";
 import {
   AlertTriangle,
-  ArrowLeft,
   Cake,
   CheckCircle2,
   ChevronRight,
@@ -34,7 +34,6 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AppLogo } from "@/components/app-logo";
 import { useAuth } from "@/lib/auth";
 import { useTheme, ElaineSettingsCard } from "@workspace/elaine-ui";
 import { usePageAssistantContext } from "@/lib/assistant-context";
@@ -760,24 +759,7 @@ export default function Account() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur-md">
-        {/* mx-auto max-w-6xl matches the shared ApplicationHeader container */}
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
-          <Link
-            href="/"
-            className="flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to apps
-          </Link>
-          <div className="flex items-center gap-2">
-            <AppLogo className="h-7 w-7" />
-            <span className="font-semibold tracking-tight text-primary">
-              Batchelor
-            </span>
-          </div>
-        </div>
-      </header>
+      <ApplicationHeader currentAppId="hub" />
 
       <main className="mx-auto max-w-6xl space-y-6 p-6 md:p-8">
         <div>

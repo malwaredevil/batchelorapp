@@ -44,7 +44,7 @@ import {
   GmailSyncCard,
   CalendarSyncCard,
 } from "@workspace/travels-settings-ui";
-import { AppLogo } from "@/components/app-logo";
+import { ApplicationHeader } from "@workspace/app-shell";
 import { useAuth } from "@/lib/auth";
 import { usePageAssistantContext } from "@/lib/assistant-context";
 import { ControlPanelContent } from "@/pages/control-panel";
@@ -248,15 +248,6 @@ export default function OwnerPanel() {
     navigate(`/owner-panel?${params.toString()}`, { replace: true });
   };
 
-  const displayName =
-    (user?.displayName ?? "").trim() || user?.email || "Owner";
-  const initials = displayName
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w: string) => w[0].toUpperCase())
-    .join("");
-
   usePageAssistantContext(
     "hub-owner-panel",
     `On the Owner Panel page (Travels app settings, Global Configuration, Control Panel, and Google APIs demo). Signed in as ${user?.email ?? "unknown"}${isOwner ? " (owner)" : ""}.`,
@@ -264,132 +255,112 @@ export default function OwnerPanel() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {/* Quilting-style top bar */}
-      <header
-        className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur-sm"
-        style={{ height: 56 }}
-      >
-        {/* mx-auto max-w-6xl matches the shared ApplicationHeader container */}
-        <div className="mx-auto flex h-full max-w-6xl items-stretch px-4">
-          {/* Left: back arrow + logo + title */}
-          <div className="flex items-center gap-2 pl-3 pr-2 shrink-0 border-r border-border/40">
-            <a
-              href={backHref}
-              aria-label={backLabel}
-              title={backLabel}
-              className="flex items-center justify-center w-7 h-7 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </a>
-            <AppLogo className="h-6 w-6 shrink-0" />
-            <span className="font-semibold text-sm tracking-tight whitespace-nowrap">
-              Owner Panel
-            </span>
-          </div>
-
-          {/* Center: tab navigation */}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-stretch h-full px-1">
-              {(isOwner
-                ? TOP_TABS
-                : ALL_TABS.filter((t) => t.id === "travels")
-              ).map((tab) => {
-                const Icon = tab.icon;
-                const active = safeTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => navigateTab(tab.id)}
-                    className={`relative flex items-center gap-1.5 px-3 h-full text-sm font-medium transition-colors whitespace-nowrap focus-visible:outline-none ${
-                      active
-                        ? "text-foreground"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <Icon className="h-3.5 w-3.5 shrink-0" />
-                    {tab.label}
-                    {active && (
-                      <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-t-full bg-primary" />
-                    )}
-                  </button>
-                );
-              })}
-
-              {/* Dev Tools dropdown — collapses the 5 dev/debug tabs */}
-              {isOwner && (
-                <div ref={devMenuRef} className="relative flex items-stretch">
-                  <button
-                    type="button"
-                    onClick={() => setDevMenuOpen((o) => !o)}
-                    className={`relative flex items-center gap-1.5 px-3 h-full text-sm font-medium transition-colors whitespace-nowrap focus-visible:outline-none ${
-                      DEV_TABS.some((t) => t.id === safeTab)
-                        ? "text-foreground"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <Code2 className="h-3.5 w-3.5 shrink-0" />
-                    {DEV_TABS.find((t) => t.id === safeTab)?.label ??
-                      "Dev Tools"}
-                    <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
-                    {DEV_TABS.some((t) => t.id === safeTab) && (
-                      <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-t-full bg-primary" />
-                    )}
-                  </button>
-
-                  {devMenuOpen && (
-                    <div className="absolute top-full left-0 z-30 mt-1 w-44 rounded-md border border-border bg-background shadow-md py-1">
-                      {DEV_TABS.map((tab) => {
-                        const Icon = tab.icon;
-                        const active = safeTab === tab.id;
-                        return (
-                          <button
-                            key={tab.id}
-                            type="button"
-                            onClick={() => {
-                              navigateTab(tab.id);
-                              setDevMenuOpen(false);
-                            }}
-                            className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors ${
-                              active
-                                ? "text-foreground bg-muted"
-                                : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                            }`}
-                          >
-                            <Icon className="h-3.5 w-3.5 shrink-0" />
-                            {tab.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
+      <ApplicationHeader
+        currentAppId="hub"
+        navigationVisibility="always"
+        navigation={
+          <div className="flex items-stretch w-full min-w-0">
+            {/* Left: back arrow + title */}
+            <div className="flex items-center gap-2 pr-3 shrink-0 border-r border-border/40">
+              <a
+                href={backHref}
+                aria-label={backLabel}
+                title={backLabel}
+                className="flex items-center justify-center w-7 h-7 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </a>
+              <span className="font-semibold text-sm tracking-tight whitespace-nowrap">
+                Owner Panel
+              </span>
             </div>
-          </div>
 
-          {/* Right: user avatar + info */}
-          <div className="flex items-center gap-2.5 pr-3 pl-3 shrink-0 border-l border-border/40">
-            <div className="text-right hidden sm:block">
-              <div className="text-xs font-semibold leading-tight truncate max-w-[130px]">
-                {displayName.split(" ").slice(0, 2).join(" ")}
-              </div>
-              <div className="text-[10px] text-muted-foreground leading-tight truncate max-w-[130px]">
-                {user?.email}
+            {/* Center: tab navigation */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-stretch h-full px-1">
+                {(isOwner
+                  ? TOP_TABS
+                  : ALL_TABS.filter((t) => t.id === "travels")
+                ).map((tab) => {
+                  const Icon = tab.icon;
+                  const active = safeTab === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => navigateTab(tab.id)}
+                      className={`relative flex items-center gap-1.5 px-3 h-full text-sm font-medium transition-colors whitespace-nowrap focus-visible:outline-none ${
+                        active
+                          ? "text-foreground"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <Icon className="h-3.5 w-3.5 shrink-0" />
+                      {tab.label}
+                      {active && (
+                        <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-t-full bg-primary" />
+                      )}
+                    </button>
+                  );
+                })}
+
+                {/* Dev Tools dropdown — collapses the 5 dev/debug tabs */}
+                {isOwner && (
+                  <div
+                    ref={devMenuRef}
+                    className="relative flex items-stretch"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setDevMenuOpen((o) => !o)}
+                      className={`relative flex items-center gap-1.5 px-3 h-full text-sm font-medium transition-colors whitespace-nowrap focus-visible:outline-none ${
+                        DEV_TABS.some((t) => t.id === safeTab)
+                          ? "text-foreground"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <Code2 className="h-3.5 w-3.5 shrink-0" />
+                      {DEV_TABS.find((t) => t.id === safeTab)?.label ??
+                        "Dev Tools"}
+                      <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
+                      {DEV_TABS.some((t) => t.id === safeTab) && (
+                        <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-t-full bg-primary" />
+                      )}
+                    </button>
+
+                    {devMenuOpen && (
+                      <div className="absolute top-full left-0 z-30 mt-1 w-44 rounded-md border border-border bg-background shadow-md py-1">
+                        {DEV_TABS.map((tab) => {
+                          const Icon = tab.icon;
+                          const active = safeTab === tab.id;
+                          return (
+                            <button
+                              key={tab.id}
+                              type="button"
+                              onClick={() => {
+                                navigateTab(tab.id);
+                                setDevMenuOpen(false);
+                              }}
+                              className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors ${
+                                active
+                                  ? "text-foreground bg-muted"
+                                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                              }`}
+                            >
+                              <Icon className="h-3.5 w-3.5 shrink-0" />
+                              {tab.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
-            <div
-              className="h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
-              style={{
-                background: "hsl(var(--primary))",
-                color: "hsl(var(--primary-foreground))",
-              }}
-            >
-              {initials}
-            </div>
           </div>
-        </div>
-      </header>
+        }
+      />
 
       {/* Environment banner — shown just below the top bar */}
       {isOwner && (envStatus || envLoading) && (
@@ -2848,36 +2819,43 @@ function CommCheckCard() {
     // Phone: treat "sent" as verified (call placed = success, no reply needed).
     treatSentAsVerified = false,
   ) => (
-    <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-      <div className="flex items-center gap-2">
-        {icon}
-        <span className="text-sm font-medium">{label}</span>
-      </div>
-      <div className="flex items-center gap-2">
-        {statusBadge(status, error, treatSentAsVerified)}
-        {timestampAt && (
-          <span className="text-xs text-muted-foreground">
-            {new Date(timestampAt).toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </span>
-        )}
-        <button
-          type="button"
-          onClick={() => void runChannel(channel)}
-          disabled={anyRunning}
-          title={`Send ${label} check now`}
-          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium text-muted-foreground border border-border hover:bg-muted hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
-          {channelRunning === channel ? (
-            <RefreshCw className="h-3 w-3 animate-spin" />
-          ) : (
-            <Play className="h-3 w-3" />
+    <div className="rounded-md border border-border px-3 py-2">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {icon}
+          <span className="text-sm font-medium">{label}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {statusBadge(status, error, treatSentAsVerified)}
+          {timestampAt && (
+            <span className="text-xs text-muted-foreground">
+              {new Date(timestampAt).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </span>
           )}
-          Send
-        </button>
+          <button
+            type="button"
+            onClick={() => void runChannel(channel)}
+            disabled={anyRunning}
+            title={`Send ${label} check now`}
+            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs font-medium text-muted-foreground border border-border hover:bg-muted hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            {channelRunning === channel ? (
+              <RefreshCw className="h-3 w-3 animate-spin" />
+            ) : (
+              <Play className="h-3 w-3" />
+            )}
+            Send
+          </button>
+        </div>
       </div>
+      {status === "error" && error && (
+        <p className="mt-1.5 text-xs text-red-700 dark:text-red-400 break-words">
+          {error}
+        </p>
+      )}
     </div>
   );
 

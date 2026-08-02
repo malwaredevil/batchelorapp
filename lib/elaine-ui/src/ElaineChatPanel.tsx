@@ -28,6 +28,7 @@ import {
   useGetElaineDailyBrief,
   useDismissElaineDailyBrief,
   useGetElaineCrossChannelContext,
+  useClearElaineCrossChannelContext,
   type CrossChannelEntry,
 } from "@workspace/api-client-react";
 import { crossAppUrl } from "@workspace/web-core/cross-app";
@@ -320,7 +321,11 @@ export function ElaineChatPanel({
     !hideBrief && brief != null && !brief.dismissed && brief.content.length > 0;
 
   // Cross-channel activity — compact summary of recent SMS/email/Slack turns
-  const { data: crossChannel } = useGetElaineCrossChannelContext();
+  const { data: crossChannel, refetch: refetchCrossChannel } =
+    useGetElaineCrossChannelContext();
+  const clearCrossChannel = useClearElaineCrossChannelContext({
+    mutation: { onSuccess: () => void refetchCrossChannel() },
+  });
   const crossChannelEntries: CrossChannelEntry[] = crossChannel?.entries ?? [];
   // Show at most 2 most-recent entries (server already orders by recency)
   const recentEntries = crossChannelEntries.slice(0, 2);
@@ -351,12 +356,21 @@ export function ElaineChatPanel({
                 <Radio className="w-3 h-3" />
                 Recent on other channels
               </div>
-              <a
-                href={crossAppUrl("/elaine/memory")}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors underline-offset-2 hover:underline"
-              >
-                See all
-              </a>
+              <div className="flex items-center gap-2">
+                <a
+                  href={crossAppUrl("/elaine/memory")}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors underline-offset-2 hover:underline"
+                >
+                  See all
+                </a>
+                <button
+                  onClick={() => clearCrossChannel.mutate()}
+                  className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label="Dismiss"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
             <ul className="space-y-1.5">
               {recentEntries.map((entry: CrossChannelEntry, i: number) => (

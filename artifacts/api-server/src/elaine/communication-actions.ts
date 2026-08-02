@@ -9,7 +9,7 @@ import {
 } from "../lib/sms";
 import { initiateOutboundCall } from "../lib/calls";
 import { openDmChannel, postSlackMessage, slackConfigured } from "../lib/slack";
-import { sendAssistantEmail } from "../lib/email";
+import { sendAssistantEmail, resendConfigured } from "../lib/email";
 import { logger } from "../lib/logger";
 
 // ---------------------------------------------------------------------------
@@ -57,6 +57,44 @@ const ContinueInChannelPayload = z.object({
   ),
 });
 
+// broadcast_message: fan out a message to ALL of the requesting user's own
+// connected channels simultaneously (Slack DM, SMS, email — whichever are
+// configured and opted in). Web-only to avoid delivery loops (an SMS-triggered
+// broadcast would re-deliver to the SMS channel it came from).
+const BroadcastMessagePayload = z.object({
+  message: z
+    .string()
+    .min(1)
+    .max(500)
+    .describe("The text to broadcast to all your connected channels."),
+});
+
+// Per-user broadcast rate limit: max 3 per hour (in-process rolling window).
+// Single-process Node.js server — in-memory is fine; restarts reset the
+// counter, which is acceptable for an abuse-prevention guard.
+const _broadcastTimestamps = new Map<number, number[]>();
+const BROADCAST_HOURLY_LIMIT = 3;
+const BROADCAST_WINDOW_MS = 60 * 60 * 1000;
+
+function checkBroadcastRateLimit(userId: number): {
+  allowed: boolean;
+  resetInMinutes: number;
+} {
+  const now = Date.now();
+  const cutoff = now - BROADCAST_WINDOW_MS;
+  const prev = (_broadcastTimestamps.get(userId) ?? []).filter(
+    (ts) => ts > cutoff,
+  );
+  if (prev.length >= BROADCAST_HOURLY_LIMIT) {
+    const oldest = prev[0] ?? now;
+    const resetInMs = oldest + BROADCAST_WINDOW_MS - now;
+    return { allowed: false, resetInMinutes: Math.ceil(resetInMs / 60_000) };
+  }
+  prev.push(now);
+  _broadcastTimestamps.set(userId, prev);
+  return { allowed: true, resetInMinutes: 0 };
+}
+
 // call_me: initiate an outbound voice call to the requesting user's OWN
 // verified phone number. Self-directed — always resolves from userId, never
 // from a contact name. Available on web + SMS (excluded from email).
@@ -92,6 +130,10 @@ export const communicationActionSchemas = [
     type: z.literal("call_me"),
     payload: CallMePayload,
   }),
+  z.object({
+    type: z.literal("broadcast_message"),
+    payload: BroadcastMessagePayload,
+  }),
 ] as const;
 
 export const COMMUNICATION_ACTION_TYPES = [
@@ -100,6 +142,7 @@ export const COMMUNICATION_ACTION_TYPES = [
   "cancel_scheduled_contact",
   "continue_in_channel",
   "call_me",
+  "broadcast_message",
 ] as const;
 
 export type CommunicationActionType =
@@ -612,6 +655,137 @@ export const communicationActionExecutors: Record<
     return { status: 400, body: { error: "Unknown target channel." } };
   }) as ActionExecutor,
 
+  broadcast_message: (async (
+    payload: z.infer<typeof BroadcastMessagePayload>,
+    userId: number,
+  ) => {
+    // Rate-limit check first — before any DB work.
+    const rateCheck = checkBroadcastRateLimit(userId);
+    if (!rateCheck.allowed) {
+      return {
+        status: 429,
+        body: {
+          error: `You've sent 3 broadcasts in the last hour. You can send another in about ${rateCheck.resetInMinutes} minute${rateCheck.resetInMinutes === 1 ? "" : "s"}.`,
+        },
+      };
+    }
+
+    // Look up the user's own contact details.
+    const [user] = await db
+      .select({
+        email: appUsers.email,
+        phoneNumber: appUsers.phoneNumber,
+        phoneVerified: appUsers.phoneVerified,
+        smsConsentAt: appUsers.smsConsentAt,
+        smsOptedOutAt: appUsers.smsOptedOutAt,
+        slackUserId: appUsers.slackUserId,
+        displayName: appUsers.displayName,
+      })
+      .from(appUsers)
+      .where(eq(appUsers.id, userId));
+
+    if (!user) {
+      return { status: 404, body: { error: "User account not found." } };
+    }
+
+    const { message } = payload;
+    const results: string[] = [];
+    const skipped: string[] = [];
+
+    // Fan out concurrently to all configured channels.
+    await Promise.all([
+      // --- Slack ---
+      (async () => {
+        if (!slackConfigured() || !user.slackUserId) {
+          skipped.push("Slack (not connected)");
+          return;
+        }
+        try {
+          const channelId = await openDmChannel(user.slackUserId);
+          await postSlackMessage(channelId, message);
+          results.push("Slack ✓");
+        } catch (err) {
+          logger.warn({ err, userId }, "elaine: broadcast Slack DM failed");
+          results.push("Slack ✗ (failed)");
+        }
+      })(),
+
+      // --- SMS ---
+      (async () => {
+        if (!user.phoneNumber || !user.phoneVerified) {
+          skipped.push("SMS (no verified phone)");
+          return;
+        }
+        if (!user.smsConsentAt || user.smsOptedOutAt) {
+          skipped.push("SMS (opted out)");
+          return;
+        }
+        try {
+          await sendSms(user.phoneNumber, message);
+          results.push("SMS ✓");
+        } catch (err) {
+          if (err instanceof SmsOptedOutError) {
+            skipped.push("SMS (opted out)");
+          } else if (err instanceof SmsRegistrationPendingError) {
+            skipped.push("SMS (carrier registration pending)");
+          } else {
+            logger.warn({ err, userId }, "elaine: broadcast SMS failed");
+            results.push("SMS ✗ (failed)");
+          }
+        }
+      })(),
+
+      // --- Email ---
+      (async () => {
+        if (!resendConfigured()) {
+          skipped.push("Email (not configured)");
+          return;
+        }
+        try {
+          await sendAssistantEmail(
+            user.email,
+            "From Elaine — broadcast message",
+            message,
+          );
+          results.push("Email ✓");
+        } catch (err) {
+          logger.warn({ err, userId }, "elaine: broadcast email failed");
+          results.push("Email ✗ (failed)");
+        }
+      })(),
+    ]);
+
+    logger.info(
+      { userId, results, skipped },
+      "elaine: broadcast_message completed",
+    );
+
+    if (results.length === 0) {
+      const skippedList = skipped.join(", ");
+      return {
+        status: 422,
+        body: {
+          error: `No channels were available to broadcast to (${skippedList}). Connect more channels in your account settings.`,
+        },
+      };
+    }
+
+    const sentSummary = results.join(", ");
+    const skippedNote =
+      skipped.length > 0 ? ` (${skipped.join(", ")} skipped)` : "";
+    return {
+      status: 200,
+      body: {
+        type: "broadcast_message",
+        result: {
+          sent: results,
+          skipped,
+          confirmationMessage: `Sent to ${sentSummary}${skippedNote}.`,
+        },
+      },
+    };
+  }) as ActionExecutor,
+
   call_me: (async (
     payload: z.infer<typeof CallMePayload>,
     userId: number,
@@ -885,6 +1059,9 @@ export async function buildCommunicationActionLabel(action: {
     case "call_me": {
       return "Call me back on my phone";
     }
+    case "broadcast_message": {
+      return "Broadcast message to all my channels";
+    }
   }
 }
 
@@ -1020,6 +1197,31 @@ export const communicationActionTools: OpenAI.Chat.Completions.ChatCompletionToo
             },
           },
           required: ["targetChannel", "message"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "broadcast_message",
+        description:
+          "Send a message to ALL of the requesting user's own connected channels simultaneously " +
+          "(Slack DM, SMS, and/or email — whichever are configured and opted in). " +
+          "Use this when the user says 'send this to all my channels', 'broadcast that', " +
+          "'push this everywhere', 'send it to all of them', or similar. " +
+          "Self-directed only — always goes to THE SAME USER, never to household members. " +
+          "Only available on web. Rate-limited: at most 3 broadcasts per hour. " +
+          "After the action executes, Elaine receives a summary of which channels succeeded and which were skipped.",
+        parameters: {
+          type: "object",
+          properties: {
+            message: {
+              type: "string",
+              description:
+                "The text to broadcast. Keep it concise (max 500 characters) since SMS has length limits.",
+            },
+          },
+          required: ["message"],
         },
       },
     },

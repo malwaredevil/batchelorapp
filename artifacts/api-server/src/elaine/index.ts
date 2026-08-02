@@ -7281,6 +7281,11 @@ const RESTRICTED_EXCLUDED_ACTION_TYPES = new Set<string>([
   // explicitly confirms the action in the UI.
   "call_contact",
   "message_contact",
+  // broadcast_message: fans out to ALL the user's channels simultaneously.
+  // Excluded from inbound restricted channels to prevent delivery loops
+  // (an SMS-triggered broadcast would echo back to the SMS channel it came
+  // from) and to ensure the user consciously triggers it from the web UI.
+  "broadcast_message",
 ]);
 
 // Full parity with the in-app chat widget's action tools, minus the

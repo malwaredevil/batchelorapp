@@ -218,6 +218,17 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
     executorPrefix: "communicationAction",
     channels: ["web", "sms"] as const,
   }),
+  // broadcast_message: fans out a message to ALL of the requesting user's own
+  // connected channels simultaneously. Web-only to prevent delivery loops
+  // (an inbound SMS/Slack/email broadcast would echo back to that same channel)
+  // and because the confirmation UI is needed to make the multi-channel blast
+  // intentional.
+  ...policies(["broadcast_message"], {
+    ...ACTION_DEFAULTS,
+    domain: "office",
+    executorPrefix: "communicationAction",
+    channels: ["web"] as const,
+  }),
   // list_scheduled_contacts: read-only soft tool; web-only (same scope as schedule/cancel).
   ...policies(["list_scheduled_contacts"], {
     domain: "office",

@@ -3,20 +3,47 @@ import { logger } from "./logger";
 
 const connectors = new ReplitConnectors();
 
+interface AgentPhoneNumber {
+  id: string;
+  phoneNumber: string;
+}
+
 interface AgentPhoneAgent {
   id: string;
+  numbers?: AgentPhoneNumber[];
 }
 
 interface AgentPhoneListAgentsResponse {
   data: AgentPhoneAgent[];
 }
 
-let cachedAgentId: string | null = null;
+interface AgentCredentials {
+  agentId: string;
+  /** ID of the phone number currently attached to this agent. Passed as
+   *  `phoneNumberId` on outbound calls so AgentPhone uses the right number
+   *  rather than a stale/deleted one it may have cached internally. */
+  phoneNumberId: string | null;
+}
 
-// Lazily fetches and caches the AgentPhone agent ID for this workspace.
-// Mirrors the same pattern as getFromNumber() in sms.ts.
-async function getAgentId(): Promise<string> {
-  if (cachedAgentId) return cachedAgentId;
+interface CachedCredentials {
+  credentials: AgentCredentials;
+  /** Unix timestamp (ms) after which the cache entry is considered stale. */
+  expiresAt: number;
+}
+
+/** TTL for the agent-credentials cache: 10 minutes. */
+const CREDENTIALS_TTL_MS = 10 * 60 * 1_000;
+
+let cachedCredentials: CachedCredentials | null = null;
+
+// Lazily fetches and caches the AgentPhone agent ID and its current phone
+// number for this workspace. The cache has a 10-minute TTL so that number
+// changes (e.g. after an account upgrade) are picked up automatically without
+// requiring a server restart.
+async function getAgentCredentials(): Promise<AgentCredentials> {
+  if (cachedCredentials && Date.now() < cachedCredentials.expiresAt) {
+    return cachedCredentials.credentials;
+  }
   const response = await connectors.proxy("agentphone", "/v1/agents", {
     method: "GET",
   });
@@ -31,12 +58,28 @@ async function getAgentId(): Promise<string> {
     );
   }
   const data = (await response.json()) as AgentPhoneListAgentsResponse;
-  const agentId = data.data?.[0]?.id;
-  if (!agentId) {
+  const agent = data.data?.[0];
+  if (!agent?.id) {
     throw new Error("AgentPhone: no agent found in account");
   }
-  cachedAgentId = agentId;
-  return agentId;
+  cachedCredentials = {
+    credentials: {
+      agentId: agent.id,
+      phoneNumberId: agent.numbers?.[0]?.id ?? null,
+    },
+    expiresAt: Date.now() + CREDENTIALS_TTL_MS,
+  };
+  return cachedCredentials.credentials;
+}
+
+/**
+ * Clears the cached agent credentials so the next call to
+ * {@link getAgentCredentials} refetches from the AgentPhone API. Call this
+ * when a call outcome suggests the cached number may be stale (e.g. 0-duration
+ * "completed" that was likely screened due to a wrong caller-ID).
+ */
+export function clearAgentCredentialsCache(): void {
+  cachedCredentials = null;
 }
 
 export interface OutboundCallOptions {
@@ -72,9 +115,14 @@ export interface OutboundCallOptions {
 export async function initiateOutboundCall(
   opts: OutboundCallOptions,
 ): Promise<{ callId: string }> {
-  const agentId = await getAgentId();
+  const { agentId, phoneNumberId } = await getAgentCredentials();
 
   const body: Record<string, string> = { agentId, toNumber: opts.toNumber };
+  // Explicitly pin the phoneNumberId so AgentPhone uses the number currently
+  // attached to the agent, not whatever it has cached from a previous
+  // (possibly deleted) number. fromNumber in the response is read-only;
+  // phoneNumberId in the request body is the writable selector.
+  if (phoneNumberId) body.phoneNumberId = phoneNumberId;
   if (opts.initialGreeting) body.initialGreeting = opts.initialGreeting;
   body.callScreeningIdentity = opts.callScreeningIdentity ?? "Elaine";
   if (opts.callScreeningPurpose)
@@ -164,9 +212,24 @@ export async function waitForCallOutcome(
         { method: "GET" },
       );
       if (!response.ok) break; // unexpected error — stop polling
-      const data = (await response.json()) as { status?: string };
+      const data = (await response.json()) as {
+        status?: string;
+        durationSeconds?: number;
+      };
       const status = (data.status ?? "").toLowerCase().replace(/_/g, "-");
-      if (status === "completed") return "answered";
+      const duration = data.durationSeconds ?? 0;
+      // AgentPhone marks immediately-ended calls as "completed" with 0 duration
+      // (e.g. call blocked by screening). Only treat it as answered if the call
+      // actually had voice time. On a 0-duration completion the cached phoneNumberId
+      // may be stale (old number still in cache after a plan upgrade), so
+      // invalidate it so the next call refetches the current number.
+      if (status === "completed") {
+        if (duration === 0) {
+          clearAgentCredentialsCache();
+          return "no-answer";
+        }
+        return "answered";
+      }
       if (status === "no-answer" || status === "busy") return "no-answer";
       if (status === "failed") return "error";
       if (status === "voicemail") return "voicemail";

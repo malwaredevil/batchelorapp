@@ -144,12 +144,84 @@ export function inspectWorkflowDirectory(directory: string): string[] {
     );
 }
 
+/**
+ * Composite actions (.github/actions/<name>/action.yml) don't have `jobs` or
+ * top-level `permissions` — they're a flat list of steps under `runs:`. This
+ * checks the same two step-level rules that matter for security: pinned SHAs
+ * on external actions, and persist-credentials: false on checkout.
+ */
+export function inspectActionFile(source: string, label: string): string[] {
+  const errors: string[] = [];
+  let action: UnknownRecord;
+
+  try {
+    const parsed = YAML.parse(source) as unknown;
+    const record = asRecord(parsed);
+    if (!record) return [`${label}: action root must be a mapping`];
+    action = record;
+  } catch (error) {
+    return [
+      `${label}: invalid YAML: ${error instanceof Error ? error.message : String(error)}`,
+    ];
+  }
+
+  const runs = asRecord(action.runs);
+  const steps = Array.isArray(runs?.steps) ? runs.steps : [];
+
+  for (const [index, stepValue] of steps.entries()) {
+    const step = asRecord(stepValue);
+    if (!step) continue;
+    const location = `${label}: step ${index + 1}`;
+    const uses = typeof step.uses === "string" ? step.uses : "";
+
+    if (uses && !uses.startsWith("./") && !uses.startsWith("docker://")) {
+      const at = uses.lastIndexOf("@");
+      const ref = at >= 0 ? uses.slice(at + 1) : "";
+      if (!FULL_SHA.test(ref)) {
+        errors.push(`${location}: pin ${uses} to a full 40-character SHA`);
+      }
+    }
+
+    if (uses.startsWith("actions/checkout@")) {
+      const withInputs = asRecord(step.with);
+      if (withInputs?.["persist-credentials"] !== false) {
+        errors.push(
+          `${location}: actions/checkout must set persist-credentials: false`,
+        );
+      }
+    }
+  }
+
+  return errors;
+}
+
+export function inspectActionsDirectory(directory: string): string[] {
+  if (!fs.existsSync(directory)) return [];
+  return fs
+    .readdirSync(directory, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .flatMap((entry) => {
+      const actionPath = ["action.yml", "action.yaml"]
+        .map((name) => path.join(directory, entry.name, name))
+        .find((candidate) => fs.existsSync(candidate));
+      if (!actionPath) return [];
+      return inspectActionFile(
+        fs.readFileSync(actionPath, "utf8"),
+        `.github/actions/${entry.name}/${path.basename(actionPath)}`,
+      );
+    });
+}
+
 function main(): void {
   const root = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
     "../..",
   );
-  const errors = inspectWorkflowDirectory(path.join(root, ".github/workflows"));
+  const errors = [
+    ...inspectWorkflowDirectory(path.join(root, ".github/workflows")),
+    ...inspectActionsDirectory(path.join(root, ".github/actions")),
+  ];
   if (errors.length > 0) {
     console.error("Workflow security policy violations:\n");
     for (const error of errors) console.error(`  - ${error}`);

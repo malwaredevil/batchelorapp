@@ -66,6 +66,14 @@ to every file in the repository, including `.github/workflows/` files. There is 
 direct-to-main escape hatch. Branch protection enforces this at the GitHub level
 (`enforce_admins: true`, `strict: true`) — even an admin token cannot bypass it.
 
+🔴 **RED BUTTON (emergency escalation, not a bypass):** if a genuine emergency
+ever makes the normal PR+CI gate itself the obstacle (e.g. a broken workflow
+file is blocking every PR from merging), do not act unilaterally — stop and
+ask the owner directly for one-time explicit permission before touching
+branch protection or pushing outside the PR flow. See
+`.agents/memory/emergency-bypass-protocol.md`. There is no standing bypass
+list; this is a per-incident judgment call made together with the owner.
+
 Branch naming convention:
 
 - `sync/<date>-<slug>` — GitHub sync batches (created automatically by `github-sync.ts`)

@@ -1,10 +1,11 @@
 name: Guardrails
 
+# pull_request only — see ci.yml for why the old "push: branches: [main]"
+# trigger was removed (it never gated anything; the PR-time run already did).
 on:
   pull_request:
     branches: [main]
-  push:
-    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
 
 concurrency:
   group: guardrails-${{ github.ref }}
@@ -19,170 +20,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      # Full history is required so check-guardrails.ts can diff against
+      # origin/main.
+      - uses: ./.github/actions/setup-workspace
         with:
-          fetch-depth: 0
-          persist-credentials: false
+          fetch-depth: "0"
 
-      - name: Resolve changed files
-        id: diff
-        run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            BASE="${{ github.event.before }}"
-          else
-            BASE="origin/main"
-          fi
-          echo "base=$BASE" >> "$GITHUB_OUTPUT"
-          git diff --name-only "$BASE"...HEAD > /tmp/changed_files.txt
-          echo "Changed files:"
-          cat /tmp/changed_files.txt
-
-      - name: "Ban: drizzle-kit push"
-        run: |
-          BASE="${{ steps.diff.outputs.base }}"
-          # Exclude this file itself from the diff so its own error-message text
-          # doesn't trigger the check. Scan only newly-added lines.
-          VIOLATIONS=$(git diff "$BASE"...HEAD \
-            -- ':!.github/workflows/guardrails.yml' ':!*.md' ':!*.txt' \
-            | grep "^+" \
-            | grep -v "^+++" \
-            | grep "drizzle-kit push" || true)
-          if [ -n "$VIOLATIONS" ]; then
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "ERROR: 'drizzle-kit push' detected in newly added lines."
-            echo ""
-            echo "$VIOLATIONS"
-            echo ""
-            echo "This command is permanently banned. It introspects ALL tables"
-            echo "in the shared Supabase database and silently drops any table"
-            echo "not in the current schema — including the other app's tables."
-            echo ""
-            echo "Use lib/db/src/schema-statements.ts with CREATE TABLE IF NOT EXISTS"
-            echo "and run: pnpm --filter @workspace/db run bootstrap"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            exit 1
-          fi
-          echo "✓ No drizzle-kit push usage found in newly added lines"
-
-      - name: "Ban: restricted files in diff"
-        run: |
-          RESTRICTED=$(cat /tmp/changed_files.txt | grep -E "(^|/)\.replit-artifact/|^\.agents/|^\.local/|^threat_model\.md|^\.env$|^\.env\.|^\.replit$|^\.replitignore$|^replit\.nix$|^\.upm/" || true)
-          if [ -n "$RESTRICTED" ]; then
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "ERROR: The following restricted files appear in this diff:"
-            echo "$RESTRICTED"
-            echo ""
-            echo "These files must never be committed or pushed:"
-            echo "  .agents/        — agent memory files (Replit-local)"
-            echo "  .local/         — Replit platform files (Replit-local)"
-            echo "  threat_model.md — security document (keep local only)"
-            echo "  .env / .env.*   — local secrets (NEVER commit secrets)"
-            echo "  .replit         — Replit workspace config (may contain secrets/email)"
-            echo "  .replitignore   — Replit-local ignore rules"
-            echo "  replit.nix      — Replit-local nix config"
-            echo "  .upm/           — Replit package manager cache"
-            echo "  .replit-artifact/ — Replit-local artifact routing config"
-            echo ""
-            echo "Remove them from your branch and add them to .gitignore."
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            exit 1
-          fi
-          echo "✓ No restricted files in diff"
-
-      - name: "Ban: ad-hoc direct OpenAI SDK instantiation in server code"
-        run: |
-          # Check each matching line + its adjacent lines for the exemption comment
-          # (Prettier may reflow an inline comment to the next line, so we allow
-          # the comment on the preceding or following line as well — same 3-line
-          # window pattern used by check-raw-fetch.ts.)
-          #
-          # Scope: artifacts/api-server/src/ only.  Test files and detector scripts
-          # (e.g. scripts/src/check-domain-composition.ts and its test suite) contain
-          # the string "new OpenAI(" as test fixtures or as the literal pattern they
-          # scan for — those are legitimate and must not be flagged here.
-          VIOLATIONS=""
-          while IFS= read -r file; do
-            case "$file" in *.ts|*.tsx) ;; *) continue ;; esac
-            case "$file" in artifacts/api-server/src/*) ;; *) continue ;; esac
-            while IFS= read -r match; do
-              linenum=$(echo "$match" | cut -d: -f1)
-              start=$((linenum - 1)); [ $start -lt 1 ] && start=1
-              end=$((linenum + 1))
-              if ! sed -n "${start},${end}p" "$file" | grep -q "// openai-direct-ok"; then
-                VIOLATIONS="${VIOLATIONS}${file}:${match}"$'\n'
-              fi
-            done < <(grep -n "new OpenAI(" "$file" 2>/dev/null | grep -v "node_modules")
-          done < /tmp/changed_files.txt
-          if [ -n "$VIOLATIONS" ]; then
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "ERROR: Direct OpenAI SDK instantiation found in changed files:"
-            echo "$VIOLATIONS"
-            echo ""
-            echo "Provider calls must go through one of the shared facades:"
-            echo "  artifacts/api-server/src/lib/ai-client.ts"
-            echo "  artifacts/api-server/src/lib/openai-responses.ts"
-            echo ""
-            echo "Jina, Voyage, and the owner AI Lab Images client have dedicated clients."
-            echo "Only a reviewed provider facade may use '// openai-direct-ok'."
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            exit 1
-          fi
-          echo "✓ No ad-hoc direct OpenAI SDK instantiation found"
-
-      - name: "Ban: passOnStoreError: true in rate limiters"
-        run: |
-          VIOLATIONS=$(cat /tmp/changed_files.txt \
-            | grep -E "\.(ts|tsx)$" \
-            | xargs grep -n "passOnStoreError.*true\|passOnStoreError:true" 2>/dev/null \
-            | grep -v "node_modules" || true)
-          if [ -n "$VIOLATIONS" ]; then
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "ERROR: passOnStoreError: true found in changed files:"
-            echo "$VIOLATIONS"
-            echo ""
-            echo "Rate limiters must fail CLOSED (deny requests) when the store"
-            echo "is unavailable, not fail open (allow all through)."
-            echo "Remove passOnStoreError: true or set it to false."
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            exit 1
-          fi
-          echo "✓ No passOnStoreError: true found"
-
-      - name: "Ban: destructive SQL in schema-statements diff"
-        run: |
-          BASE="${{ steps.diff.outputs.base }}"
-          VIOLATIONS=$(git diff "$BASE"...HEAD -- lib/db/src/schema-statements.ts \
-            | grep "^+" \
-            | grep -v "^+++" \
-            | grep -iE "^\+\s*(DROP|TRUNCATE|DELETE FROM|ALTER TABLE.*DROP COLUMN)" \
-            | grep -v "^\+\s*--" \
-            | grep -v "^\+\s*//" || true)
-          if [ -n "$VIOLATIONS" ]; then
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "ERROR: Destructive SQL detected in schema-statements.ts:"
-            echo "$VIOLATIONS"
-            echo ""
-            echo "Only additive statements are permitted in schema-statements.ts:"
-            echo "  CREATE TABLE IF NOT EXISTS ..."
-            echo "  CREATE INDEX IF NOT EXISTS ..."
-            echo "  ALTER TABLE ... ADD COLUMN IF NOT EXISTS ..."
-            echo ""
-            echo "Destructive schema changes require a separate reviewed migration."
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            exit 1
-          fi
-          echo "✓ No destructive SQL in schema-statements diff"
-
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
-        with:
-          version: 10
-
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: 24
-          cache: "pnpm"
-
-      - run: pnpm install --frozen-lockfile
+      - name: "Guardrail checks (single source of truth: scripts/src/check-guardrails.ts)"
+        run: pnpm --filter @workspace/scripts run check-guardrails -- --base origin/main
 
       - name: "Security: GitHub workflow policy"
         run: pnpm --filter @workspace/scripts run check-workflow-security
@@ -192,26 +37,3 @@ jobs:
 
       - name: "Ban: raw fetch('/api/...') in frontend artifacts"
         run: pnpm --filter @workspace/scripts run check-raw-fetch
-
-      - name: "Guard: RESTRICTED_EXCLUDED_ACTION_TYPES must not shrink"
-        run: |
-          BASE="${{ steps.diff.outputs.base }}"
-          CURRENT=$(grep -A 50 "RESTRICTED_EXCLUDED_ACTION_TYPES" \
-            artifacts/api-server/src/elaine/index.ts 2>/dev/null \
-            | grep -cE '^\s*"[a-z][a-z_]+"' || echo "0")
-          BASE_COUNT=$(git show "${BASE}:artifacts/api-server/src/elaine/index.ts" 2>/dev/null \
-            | grep -A 50 "RESTRICTED_EXCLUDED_ACTION_TYPES" \
-            | grep -cE '^\s*"[a-z][a-z_]+"' || echo "0")
-          if [ "$CURRENT" -lt "$BASE_COUNT" ]; then
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "ERROR: RESTRICTED_EXCLUDED_ACTION_TYPES has fewer entries than base."
-            echo "  base:        $BASE_COUNT entries"
-            echo "  this commit: $CURRENT entries"
-            echo ""
-            echo "This set is a deliberate security boundary for AgentPhone SMS/voice"
-            echo "and inbound email channels. It cannot be reduced without a reviewed"
-            echo "security decision documented in the PR body."
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            exit 1
-          fi
-          echo "✓ RESTRICTED_EXCLUDED_ACTION_TYPES has not shrunk (base: $BASE_COUNT, this: $CURRENT)"

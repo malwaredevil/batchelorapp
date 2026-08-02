@@ -5,8 +5,11 @@ import {
   db,
   appUsers,
   elaineBroadcastLog,
+  elaineHistoryConversations,
+  elaineHistoryMessages,
   elaineScheduledActions,
 } from "@workspace/db";
+import { isServiceHealthy } from "../routes/admin/integrations-health";
 import {
   sendSms,
   SmsOptedOutError,
@@ -39,9 +42,22 @@ const CallContactPayload = z.object({
 });
 
 const MessageContactPayload = z.object({
-  contactName: z.string().min(1).max(100),
+  // Accept a single name or a list of names for multi-recipient fanout
+  // ("SMS users B, C, and D and tell them to come home").
+  contactName: z.union([
+    z.string().min(1).max(100),
+    z.array(z.string().min(1).max(100)).min(1).max(20),
+  ]),
   message: z.string().min(1).max(1600),
-  channel: z.enum(["auto", "sms", "slack"]).default("auto"),
+  // "auto"       — Slack DM if available, fall back to SMS
+  // "slack"      — Slack DM only
+  // "sms"        — SMS only
+  // "email"      — send to contact's account email via Resend
+  // "elaine_chat"— write into the contact's Elaine conversation history so
+  //                it appears in their Elaine chat widget / main Elaine page
+  channel: z
+    .enum(["auto", "sms", "slack", "email", "elaine_chat"])
+    .default("auto"),
   scheduleAt: scheduleAtField,
 });
 
@@ -131,6 +147,199 @@ async function checkBroadcastRateLimit(userId: number): Promise<{
   });
 }
 
+// ---------------------------------------------------------------------------
+// Channel health + availability helpers
+// ---------------------------------------------------------------------------
+
+/** Synchronous read of the last-known AgentPhone health from the 30-min cache. */
+function isAgentPhoneHealthy(): boolean {
+  return isServiceHealthy("AgentPhone");
+}
+
+/** Human-readable label for a channel, optionally showing a masked phone/email. */
+function contactChannelLabel(
+  channel: string,
+  contact: ResolvedContact,
+): string {
+  switch (channel) {
+    case "elaine_chat":
+      return "Elaine chat";
+    case "slack":
+      return "Slack DM";
+    case "sms":
+      return contact.phoneNumber
+        ? `SMS (•••-${contact.phoneNumber.slice(-4)})`
+        : "SMS";
+    case "voice":
+      return contact.phoneNumber
+        ? `Phone call (•••-${contact.phoneNumber.slice(-4)})`
+        : "Phone call";
+    case "email":
+      return contact.email ? `Email (${contact.email})` : "Email";
+    default:
+      return channel;
+  }
+}
+
+interface ChannelAvailability {
+  available: string[];
+  unavailable: Array<{ channel: string; reason: string }>;
+}
+
+/**
+ * Returns which channels are available for a given resolved contact right now.
+ * Always includes "elaine_chat" (writing to their Elaine conversation history
+ * never requires an external service). Other channels depend on the contact's
+ * linked accounts and current service health.
+ */
+async function resolveContactChannels(
+  contact: ResolvedContact,
+): Promise<ChannelAvailability> {
+  const available: string[] = ["elaine_chat"];
+  const unavailable: Array<{ channel: string; reason: string }> = [];
+  const name = contact.displayName ?? "They";
+
+  // ── Slack ──────────────────────────────────────────────────────────────────
+  if (contact.slackUserId && slackConfigured()) {
+    available.push("slack");
+  } else if (contact.slackUserId && !slackConfigured()) {
+    unavailable.push({
+      channel: "slack",
+      reason: "Slack is not configured on this server",
+    });
+  } else {
+    unavailable.push({
+      channel: "slack",
+      reason: `${name} hasn't linked a Slack account`,
+    });
+  }
+
+  // ── SMS / Voice ────────────────────────────────────────────────────────────
+  const phoneReady =
+    !!contact.phoneNumber &&
+    contact.phoneVerified &&
+    !!contact.smsConsentAt &&
+    !contact.smsOptedOutAt;
+
+  if (phoneReady) {
+    if (isAgentPhoneHealthy()) {
+      available.push("sms");
+      available.push("voice");
+    } else {
+      unavailable.push({
+        channel: "sms",
+        reason: "AgentPhone is currently unavailable",
+      });
+      unavailable.push({
+        channel: "voice",
+        reason: "AgentPhone is currently unavailable",
+      });
+    }
+  } else if (!contact.phoneNumber || !contact.phoneVerified) {
+    unavailable.push({
+      channel: "sms",
+      reason: `${name} hasn't verified a phone number`,
+    });
+    unavailable.push({
+      channel: "voice",
+      reason: `${name} hasn't verified a phone number`,
+    });
+  } else {
+    unavailable.push({
+      channel: "sms",
+      reason: `${name} has opted out of SMS`,
+    });
+    unavailable.push({
+      channel: "voice",
+      reason: `${name} has opted out of SMS`,
+    });
+  }
+
+  // ── Email ──────────────────────────────────────────────────────────────────
+  if (resendConfigured()) {
+    available.push("email");
+  } else {
+    unavailable.push({
+      channel: "email",
+      reason: "Email delivery is not configured on this server",
+    });
+  }
+
+  return { available, unavailable };
+}
+
+// ---------------------------------------------------------------------------
+// Elaine in-app chat delivery — writes a message directly into the contact's
+// Elaine conversation history so it appears in their chat widget / main page.
+// Finds or creates their widget-default conversation.
+// ---------------------------------------------------------------------------
+
+async function deliverElaineChat(
+  contact: ResolvedContact,
+  message: string,
+): Promise<{ status: number; body: unknown }> {
+  let [conv] = await db
+    .select({ id: elaineHistoryConversations.id })
+    .from(elaineHistoryConversations)
+    .where(
+      and(
+        eq(elaineHistoryConversations.userId, contact.id),
+        eq(elaineHistoryConversations.isWidgetDefault, true),
+      ),
+    )
+    .limit(1);
+
+  if (!conv) {
+    const [inserted] = await db
+      .insert(elaineHistoryConversations)
+      .values({
+        userId: contact.id,
+        isWidgetDefault: true,
+        title: "Elaine",
+      })
+      .returning({ id: elaineHistoryConversations.id });
+    conv = inserted;
+  }
+
+  if (!conv) {
+    logger.error(
+      { contactId: contact.id },
+      "elaine: deliverElaineChat — could not find or create conversation",
+    );
+    return { status: 500, body: { error: "Failed to deliver in-app message." } };
+  }
+
+  await db.insert(elaineHistoryMessages).values({
+    conversationId: conv.id,
+    userId: contact.id,
+    role: "assistant",
+    content: message,
+    channel: "web",
+  });
+
+  // Bump the conversation's updatedAt so it surfaces at the top of the
+  // recipient's conversation list (ordered by userId, updatedAt DESC).
+  await db
+    .update(elaineHistoryConversations)
+    .set({ updatedAt: new Date() })
+    .where(eq(elaineHistoryConversations.id, conv.id));
+
+  logger.info(
+    { contactId: contact.id, conversationId: conv.id },
+    "elaine: delivered elaine_chat message",
+  );
+  return {
+    status: 200,
+    body: {
+      type: "message_contact",
+      result: {
+        channel: "elaine_chat",
+        contactName: contact.displayName ?? "them",
+      },
+    },
+  };
+}
+
 // call_me: initiate an outbound voice call to the requesting user's OWN
 // verified phone number. Self-directed — always resolves from userId, never
 // from a contact name. Available on web + SMS (excluded from email).
@@ -191,6 +400,7 @@ export type CommunicationActionType =
 
 interface ResolvedContact {
   id: number;
+  email: string;
   displayName: string | null;
   phoneNumber: string | null;
   slackUserId: string | null;
@@ -204,6 +414,7 @@ async function resolveContact(name: string): Promise<ResolvedContact | null> {
   const rows = await db
     .select({
       id: appUsers.id,
+      email: appUsers.email,
       displayName: appUsers.displayName,
       phoneNumber: appUsers.phoneNumber,
       slackUserId: appUsers.slackUserId,
@@ -260,6 +471,17 @@ export async function fireCallContact(
       },
     };
   }
+  // Gate on AgentPhone health before attempting the call — consistent with
+  // how fireMessageContactToResolved gates SMS and how resolveContactChannels
+  // reports voice availability.
+  if (!isAgentPhoneHealthy()) {
+    return {
+      status: 503,
+      body: {
+        error: `Calling is temporarily unavailable (AgentPhone service issue). Try messaging ${contact.displayName ?? contactName} via Elaine chat or email instead.`,
+      },
+    };
+  }
   try {
     const { callId } = await initiateOutboundCall({
       toNumber: contact.phoneNumber,
@@ -292,19 +514,86 @@ export async function fireCallContact(
 export async function fireMessageContact(
   contactName: string,
   message: string,
-  channel: "auto" | "sms" | "slack",
+  channel: "auto" | "sms" | "slack" | "email" | "elaine_chat",
 ): Promise<{ status: number; body: unknown }> {
   const contact = await resolveContact(contactName);
   if (!contact) {
     return {
       status: 404,
-      body: {
-        error: `No household member named "${contactName}" found.`,
-      },
+      body: { error: `No household member named "${contactName}" found.` },
     };
   }
+  return fireMessageContactToResolved(contact, message, channel, contactName);
+}
 
-  // Prefer Slack (free, instant) when available and not forced to SMS.
+/**
+ * Deliver a message to an already-resolved contact on the requested channel.
+ * Extracted so the multi-recipient fanout can reuse it without re-resolving.
+ */
+async function fireMessageContactToResolved(
+  contact: ResolvedContact,
+  message: string,
+  channel: "auto" | "sms" | "slack" | "email" | "elaine_chat",
+  originalName: string,
+): Promise<{ status: number; body: unknown }> {
+  const name = contact.displayName ?? originalName;
+
+  // ── elaine_chat: write to the contact's Elaine conversation history ───────
+  if (channel === "elaine_chat") {
+    return deliverElaineChat(contact, message);
+  }
+
+  // ── email: send to the contact's account email address via Resend ─────────
+  if (channel === "email") {
+    if (!resendConfigured()) {
+      return {
+        status: 503,
+        body: { error: "Email delivery is not configured on this server." },
+      };
+    }
+    try {
+      await sendAssistantEmail(
+        contact.email,
+        "Message from Elaine",
+        message,
+      );
+      return {
+        status: 200,
+        body: {
+          type: "message_contact",
+          result: { channel: "email", contactName: name },
+        },
+      };
+    } catch (err) {
+      logger.error({ err, contactId: contact.id }, "elaine: email to contact failed");
+      return { status: 500, body: { error: "Failed to send the email." } };
+    }
+  }
+
+  // ── slack / auto: prefer Slack when available ─────────────────────────────
+  // For an explicit "slack" request, gate early: if the contact has no Slack
+  // account linked or Slack isn't configured, return a clear error immediately
+  // rather than silently falling through to SMS (which would violate the user's
+  // explicit channel selection).
+  if (channel === "slack") {
+    if (!contact.slackUserId) {
+      return {
+        status: 422,
+        body: {
+          error: `${name} hasn't linked a Slack account. They can connect Slack on their profile page, or choose a different channel (sms, email, elaine_chat).`,
+        },
+      };
+    }
+    if (!slackConfigured()) {
+      return {
+        status: 503,
+        body: {
+          error: `Slack is not configured on this server. Use a different channel (sms, email, elaine_chat).`,
+        },
+      };
+    }
+  }
+
   const trySlack =
     channel !== "sms" && !!contact.slackUserId && slackConfigured();
 
@@ -316,31 +605,36 @@ export async function fireMessageContact(
         status: 200,
         body: {
           type: "message_contact",
-          result: {
-            channel: "slack",
-            contactName: contact.displayName ?? contactName,
-          },
+          result: { channel: "slack", contactName: name },
         },
       };
     } catch (err) {
+      if (channel === "slack") {
+        // send failed mid-flight — don't fall back
+        logger.error({ err, contactId: contact.id }, "elaine: explicit slack DM failed");
+        return { status: 500, body: { error: "Failed to send the Slack message. Slack may be temporarily unavailable." } };
+      }
       logger.warn({ err }, "elaine: slack DM failed, falling back to SMS");
-      // fall through to SMS
+      // fall through to SMS for "auto"
     }
   }
 
+  // ── SMS ───────────────────────────────────────────────────────────────────
   if (!contact.phoneNumber) {
+    const channelHint =
+      channel === "slack"
+        ? `${name} has no Slack account linked.`
+        : `${name} has no phone number or Slack account linked.`;
     return {
       status: 422,
-      body: {
-        error: `${contact.displayName ?? contactName} has no phone number or Slack account linked. They can add these on their profile page.`,
-      },
+      body: { error: `${channelHint} They can add these on their profile page.` },
     };
   }
   if (!contact.phoneVerified) {
     return {
       status: 422,
       body: {
-        error: `${contact.displayName ?? contactName}'s phone number hasn't been verified yet. They need to verify it before SMS can be sent.`,
+        error: `${name}'s phone number hasn't been verified yet. They need to verify it before SMS can be sent.`,
       },
     };
   }
@@ -348,7 +642,7 @@ export async function fireMessageContact(
     return {
       status: 422,
       body: {
-        error: `${contact.displayName ?? contactName} hasn't given SMS consent. They can enable SMS notifications on their profile page.`,
+        error: `${name} hasn't given SMS consent. They can enable SMS notifications on their profile page.`,
       },
     };
   }
@@ -356,7 +650,16 @@ export async function fireMessageContact(
     return {
       status: 409,
       body: {
-        error: `${contact.displayName ?? contactName} has opted out of SMS. They can re-subscribe by texting START to the Batchelor App number.`,
+        error: `${name} has opted out of SMS. They can re-subscribe by texting START to the Batchelor App number.`,
+      },
+    };
+  }
+
+  if (!isAgentPhoneHealthy()) {
+    return {
+      status: 503,
+      body: {
+        error: `SMS is temporarily unavailable (AgentPhone service issue). Try Elaine chat or email instead.`,
       },
     };
   }
@@ -367,10 +670,7 @@ export async function fireMessageContact(
       status: 200,
       body: {
         type: "message_contact",
-        result: {
-          channel: "sms",
-          contactName: contact.displayName ?? contactName,
-        },
+        result: { channel: "sms", contactName: name },
       },
     };
   } catch (err) {
@@ -378,7 +678,7 @@ export async function fireMessageContact(
       return {
         status: 409,
         body: {
-          error: `${contact.displayName ?? contactName} has opted out of SMS. They can re-subscribe by texting START to the Batchelor App number.`,
+          error: `${name} has opted out of SMS. They can re-subscribe by texting START to the Batchelor App number.`,
         },
       };
     }
@@ -386,8 +686,7 @@ export async function fireMessageContact(
       return {
         status: 503,
         body: {
-          error:
-            "SMS isn't fully enabled yet — carrier registration is still pending. Try again in a few days.",
+          error: "SMS isn't fully enabled yet — carrier registration is still pending. Try again in a few days.",
         },
       };
     }
@@ -485,52 +784,132 @@ export const communicationActionExecutors: Record<
     payload: z.infer<typeof MessageContactPayload>,
     userId: number,
   ) => {
+    // Normalize contactName to an array so the rest of the executor is uniform.
+    const names = Array.isArray(payload.contactName)
+      ? payload.contactName
+      : [payload.contactName];
+
     if (payload.scheduleAt) {
-      // Deferred — write a row to the scheduler table and return a confirmation.
-      const contact = await resolveContact(payload.contactName);
-      const storedPayload = {
-        contactName: payload.contactName,
-        message: payload.message,
-        channel: payload.channel,
-      };
-      const [row] = await db
-        .insert(elaineScheduledActions)
-        .values({
-          scheduledFor: new Date(payload.scheduleAt),
-          actionType: "message_contact",
-          actionPayload: storedPayload,
-          initiatedByUserId: userId,
-          targetContactId: contact?.id ?? null,
-        })
-        .returning({ id: elaineScheduledActions.id });
+      // Deferred — write one scheduler row per recipient and return a summary.
       const formattedTime = formatScheduledTime(payload.scheduleAt);
-      logger.info(
-        {
-          scheduledActionId: row?.id,
-          scheduledFor: payload.scheduleAt,
-          contactName: payload.contactName,
-        },
-        "elaine: scheduled contact message",
+
+      const rows = await Promise.all(
+        names.map(async (name) => {
+          const contact = await resolveContact(name);
+          const storedPayload = {
+            contactName: name,
+            message: payload.message,
+            channel: payload.channel,
+          };
+          const [row] = await db
+            .insert(elaineScheduledActions)
+            .values({
+              scheduledFor: new Date(payload.scheduleAt!),
+              actionType: "message_contact",
+              actionPayload: storedPayload,
+              initiatedByUserId: userId,
+              targetContactId: contact?.id ?? null,
+            })
+            .returning({ id: elaineScheduledActions.id });
+          logger.info(
+            {
+              scheduledActionId: row?.id,
+              scheduledFor: payload.scheduleAt,
+              contactName: name,
+            },
+            "elaine: scheduled contact message",
+          );
+          return { name: contact?.displayName ?? name, id: row?.id };
+        }),
       );
+
+      const recipientList = rows.map((r) => r.name).join(", ");
       return {
         status: 200,
         body: {
           type: "message_contact",
           result: {
             scheduled: true,
-            scheduledActionId: row?.id,
+            scheduledActionIds: rows.map((r) => r.id),
             scheduledFor: payload.scheduleAt,
-            contactName: contact?.displayName ?? payload.contactName,
-            confirmationMessage: `Got it — I'll message ${contact?.displayName ?? payload.contactName} at ${formattedTime}.`,
+            recipients: rows.map((r) => r.name),
+            confirmationMessage: `Got it — I'll message ${recipientList} at ${formattedTime}.`,
           },
         },
       };
     }
-    return fireMessageContact(
-      payload.contactName,
-      payload.message,
-      payload.channel,
+
+    // Immediate delivery — resolve all contacts concurrently then deliver.
+    if (names.length === 1) {
+      // Single recipient: return errors directly so Elaine can relay them.
+      return fireMessageContact(names[0]!, payload.message, payload.channel);
+    }
+
+    // Multi-recipient: fan out, collect per-recipient results.
+    const recipientResults = await Promise.all(
+      names.map(async (name) => {
+        const contact = await resolveContact(name);
+        if (!contact) {
+          return {
+            name,
+            channel: null as string | null,
+            ok: false,
+            error: `No household member named "${name}" found.`,
+          };
+        }
+        const result = await fireMessageContactToResolved(
+          contact,
+          payload.message,
+          payload.channel,
+          name,
+        );
+        if (result.status >= 400) {
+          const body = result.body as { error?: string } | null;
+          return {
+            name: contact.displayName ?? name,
+            channel: null as string | null,
+            ok: false,
+            error: body?.error ?? "Failed.",
+          };
+        }
+        const body = result.body as {
+          result?: { channel?: string };
+        } | null;
+        return {
+          name: contact.displayName ?? name,
+          channel: body?.result?.channel ?? null,
+          ok: true,
+          error: null as string | null,
+        };
+      }),
     );
+
+    const delivered = recipientResults.filter((r) => r.ok);
+    const failed = recipientResults.filter((r) => !r.ok);
+
+    logger.info(
+      { delivered: delivered.length, failed: failed.length },
+      "elaine: multi-recipient message_contact completed",
+    );
+
+    const summaryLines = recipientResults.map((r) =>
+      r.ok
+        ? `  • ${r.name}: delivered via ${r.channel} ✓`
+        : `  • ${r.name}: ${r.error} ✗`,
+    );
+
+    return {
+      status: delivered.length > 0 ? 207 : 422,
+      body: {
+        type: "message_contact",
+        result: {
+          recipients: recipientResults,
+          confirmationMessage:
+            `Message sent to ${delivered.length}/${recipientResults.length} recipient(s).\n` +
+            summaryLines.join("\n"),
+        },
+      },
+    };
   }) as ActionExecutor,
 
   continue_in_channel: (async (
@@ -1039,6 +1418,70 @@ export async function executeListScheduledContacts(
   return `Pending scheduled contacts (${rows.length}):\n${lines.join("\n")}`;
 }
 
+// ---------------------------------------------------------------------------
+// Soft-tool: list_contact_channels — returns which channels are available for
+// a named household member right now. Used by Elaine to present options when
+// the user doesn't specify a channel, instead of picking silently.
+// ---------------------------------------------------------------------------
+
+export const LIST_CONTACT_CHANNELS_TOOL_NAME = "list_contact_channels";
+
+export async function executeListContactChannels(
+  contactName: string,
+): Promise<string> {
+  const contact = await resolveContact(contactName);
+  if (!contact) {
+    return `No household member named "${contactName}" found. Check the spelling or try a partial name.`;
+  }
+
+  const { available, unavailable } = await resolveContactChannels(contact);
+  const name = contact.displayName ?? contactName;
+  const lines: string[] = [
+    `Available channels for ${name} right now:`,
+    ...available.map((ch) => `  • ${contactChannelLabel(ch, contact)}`),
+  ];
+
+  if (unavailable.length > 0) {
+    lines.push(`Not available:`);
+    for (const { channel, reason } of unavailable) {
+      lines.push(`  • ${channel}: ${reason}`);
+    }
+  }
+
+  lines.push(
+    `\nYou can use these channel names in message_contact or call_contact: ${available.join(", ")}`,
+  );
+
+  return lines.join("\n");
+}
+
+export const listContactChannelsTool: OpenAI.Chat.Completions.ChatCompletionTool =
+  {
+    type: "function",
+    function: {
+      name: LIST_CONTACT_CHANNELS_TOOL_NAME,
+      description:
+        "Look up which communication channels are available for a household member right now. " +
+        "Call this BEFORE message_contact or call_contact whenever the user has NOT specified a channel " +
+        "(e.g. 'tell User B X', 'contact User B about Y'). " +
+        "Returns the available channels (elaine_chat, slack, sms, email, voice) with masked contact details, " +
+        "plus a list of unavailable channels and reasons. " +
+        "After getting this result, ask the user which channel they prefer — list only the available ones. " +
+        "Do NOT call this when the user has explicitly named a channel ('SMS User B', 'email User B', etc.).",
+      parameters: {
+        type: "object",
+        properties: {
+          contactName: {
+            type: "string",
+            description:
+              "First name (or full name) of the household member to look up.",
+          },
+        },
+        required: ["contactName"],
+      },
+    },
+  };
+
 export const listScheduledContactsTool: OpenAI.Chat.Completions.ChatCompletionTool =
   {
     type: "function",
@@ -1075,13 +1518,19 @@ export async function buildCommunicationActionLabel(action: {
     }
     case "message_contact": {
       const payload = MessageContactPayload.parse(action.payload);
+      const names = Array.isArray(payload.contactName)
+        ? payload.contactName
+        : [payload.contactName];
+      const recipientStr =
+        names.length === 1
+          ? names[0]!
+          : names.slice(0, -1).join(", ") + ` and ${names[names.length - 1]}`;
+      const via = payload.channel !== "auto" ? ` via ${payload.channel}` : "";
       if (payload.scheduleAt) {
         const when = formatScheduledTime(payload.scheduleAt);
-        const via = payload.channel !== "auto" ? ` via ${payload.channel}` : "";
-        return `Schedule a message to ${payload.contactName}${via} at ${when}`;
+        return `Schedule a message to ${recipientStr}${via} at ${when}`;
       }
-      const via = payload.channel !== "auto" ? ` via ${payload.channel}` : "";
-      return `Message ${payload.contactName}${via}`;
+      return `Message ${recipientStr}${via}`;
     }
     case "cancel_scheduled_contact": {
       const payload = CancelScheduledContactPayload.parse(action.payload);
@@ -1149,20 +1598,35 @@ export const communicationActionTools: OpenAI.Chat.Completions.ChatCompletionToo
       function: {
         name: "message_contact",
         description:
-          "Propose sending a message to a household member. Uses Slack DM if they have Slack linked, SMS otherwise. " +
+          "Propose sending a message to one or more household members. " +
           "CRITICAL — write `message` in FIRST PERSON as exactly what Elaine sends. Do NOT attribute the message to the requester. " +
           "WRONG: 'Jonathan wants you to know dinner is at 7.' " +
           "RIGHT: 'Dinner is at 7 tonight, don\\'t forget!' " +
-          "Confirm contact and message wording before proposing. " +
+          "Channels available: 'auto' (Slack→SMS fallback), 'slack', 'sms', 'email', 'elaine_chat' (appears in their Elaine chat widget / main Elaine page in the Batchelor app). " +
+          "IMPORTANT: if the user hasn't specified a channel, call list_contact_channels first to see what's available, then ask which they prefer. " +
+          "For multi-recipient ('tell B, C, and D'), pass an array in contactName. " +
+          "Confirm contact(s) and message wording before proposing. " +
           "If the user wants the message at a future time, include `scheduleAt` as an ISO 8601 datetime. " +
           "When scheduling: confirm the time in your visible reply before calling this tool.",
         parameters: {
           type: "object",
           properties: {
             contactName: {
-              type: "string",
+              oneOf: [
+                {
+                  type: "string",
+                  description:
+                    "First name (or full name) of the single household member to message.",
+                },
+                {
+                  type: "array",
+                  items: { type: "string" },
+                  description:
+                    "List of household member names for multi-recipient fanout (e.g. ['Alice', 'Bob', 'Carol']).",
+                },
+              ],
               description:
-                "First name (or full name) of the household member to message.",
+                "Recipient name(s). Use an array for multiple recipients.",
             },
             message: {
               type: "string",
@@ -1171,9 +1635,9 @@ export const communicationActionTools: OpenAI.Chat.Completions.ChatCompletionToo
             },
             channel: {
               type: "string",
-              enum: ["auto", "sms", "slack"],
+              enum: ["auto", "sms", "slack", "email", "elaine_chat"],
               description:
-                "'auto' (default) uses Slack if available, falls back to SMS. Only specify when the user explicitly requests a channel.",
+                "'auto' uses Slack if available, then SMS. 'elaine_chat' writes to their Elaine chat widget. Only specify when the user explicitly requests a channel; otherwise call list_contact_channels first.",
             },
             scheduleAt: {
               type: "string",

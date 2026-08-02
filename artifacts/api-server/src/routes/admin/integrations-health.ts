@@ -535,4 +535,21 @@ export function _setTestCache(
   _cache = entry;
 }
 
+/**
+ * Synchronous read of the last-known health status for a named service.
+ * Uses the in-process cache — no HTTP call is made. Returns `true` when no
+ * cached data is available (fail-open: attempt the channel and handle errors
+ * naturally rather than refusing before we have any evidence of failure).
+ *
+ * serviceName must match the `service` field returned by the check function
+ * for that service (e.g. "AgentPhone", "Resend", "Slack").
+ */
+export function isServiceHealthy(serviceName: string): boolean {
+  if (!_cache) return true; // no data yet — assume healthy (fail-open)
+  const now = Date.now();
+  if (_cache.expiresAt <= now) return true; // cache expired — assume healthy
+  const check = _cache.data.checks.find((c) => c.service === serviceName);
+  return !check || check.status === "ok";
+}
+
 export default router;

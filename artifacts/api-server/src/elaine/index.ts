@@ -170,7 +170,10 @@ import {
   buildCommunicationActionLabel,
   communicationActionExecutors,
   communicationActionSchemas,
+  executeListContactChannels,
   executeListScheduledContacts,
+  listContactChannelsTool,
+  LIST_CONTACT_CHANNELS_TOOL_NAME,
   LIST_SCHEDULED_CONTACTS_TOOL_NAME,
   type CommunicationActionType,
 } from "./communication-actions";
@@ -5808,6 +5811,15 @@ router.post("/chat", async (req, res) => {
               "Unsupported app data tool.";
           } else if (call.name === LIST_SCHEDULED_CONTACTS_TOOL_NAME) {
             resultText = await executeListScheduledContacts(userId);
+          } else if (call.name === LIST_CONTACT_CHANNELS_TOOL_NAME) {
+            const parsed = JSON.parse(call.args ?? "{}") as {
+              contactName?: unknown;
+            };
+            const contactName =
+              typeof parsed.contactName === "string" ? parsed.contactName : "";
+            resultText = contactName
+              ? await executeListContactChannels(contactName)
+              : "Please provide a contact name.";
           } else if (call.name === CHECK_INTEGRATIONS_HEALTH_TOOL_NAME) {
             const [me] = await db
               .select({ isOwner: appUsers.isOwner })
@@ -7274,13 +7286,6 @@ const RESTRICTED_EXCLUDED_ACTION_TYPES = new Set<string>([
   // Admin-only action — requires the owner to be looking at the Control Panel
   // with config keys visible on screen; not meaningful over SMS/voice/email.
   "update_app_config",
-  // Outbound-contact actions: sending real calls/SMS to another household
-  // member must never be auto-triggered by an inbound SMS/voice identity —
-  // that would let any caller direct outbound communications to any member.
-  // Restricted to web channel where the requesting user is authenticated and
-  // explicitly confirms the action in the UI.
-  "call_contact",
-  "message_contact",
   // broadcast_message: fans out to ALL the user's channels simultaneously.
   // Excluded from inbound restricted channels to prevent delivery loops
   // (an SMS-triggered broadcast would echo back to the SMS channel it came
@@ -7337,6 +7342,7 @@ const RESTRICTED_SOFT_TOOL_NAMES = new Set<string>([
   SHOW_DATA_CARD_TOOL_NAME,
   LOOKUP_BARCODE_TOOL_NAME,
   LIST_SCHEDULED_CONTACTS_TOOL_NAME,
+  LIST_CONTACT_CHANNELS_TOOL_NAME,
 ]);
 
 const RESTRICTED_SOFT_TOOLS = [...SOFT_TOOLS, ...SOFT_TOOLS_EXTRA].filter(
@@ -7445,6 +7451,11 @@ const EMAIL_SAFE_TOOL_NAMES = new Set<string>([
   SEARCH_HALLMARK_TOOL_NAME,
   LOOKUP_BARCODE_TOOL_NAME,
   CALCULATE_YARDAGE_TOOL_NAME,
+  // list_contact_channels excluded from email: the outbound-contact actions it
+  // unlocks (call_contact/message_contact) are themselves excluded from email
+  // because inbound email From headers are spoofable and do not constitute strong
+  // sender authentication. Offering the lookup tool without the actions it leads
+  // to creates a confusing dead end — omit it entirely on this channel.
 ]);
 
 const EMAIL_SAFE_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
@@ -7455,6 +7466,12 @@ const EMAIL_SAFE_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   // email channel: the executor resolves the target from userId (the verified
   // DB record), never from the inbound From address. See capability-registry.ts
   // for the full security reasoning.
+  // call_contact and message_contact are intentionally excluded: the inbound
+  // email From header is spoofable and does not constitute strong sender
+  // authentication. Outbound-contact actions over email would allow any sender
+  // who knows a valid account email address to trigger real calls and messages
+  // to household members. These actions require SMS/voice (E.164 verified) or
+  // the web app (session cookie + explicit confirmation UI).
   ...AGENTPHONE_ACTION_TOOLS.filter(
     (t) =>
       t.type === "function" && t.function.name === "continue_in_channel",
@@ -7920,6 +7937,14 @@ async function executeRestrictedSoftTool(
       return "Use the app to view your scheduled contacts: /elaine/";
     }
 
+    if (name === LIST_CONTACT_CHANNELS_TOOL_NAME) {
+      const parsed = JSON.parse(args) as { contactName?: unknown };
+      const contactName =
+        typeof parsed.contactName === "string" ? parsed.contactName : "";
+      if (!contactName) return "Please provide a contact name.";
+      return await executeListContactChannels(contactName);
+    }
+
     return "Unsupported tool.";
   } catch (err) {
     logger.error(
@@ -7936,7 +7961,7 @@ export interface AgentphoneChatMessage {
 }
 
 const AGENTPHONE_CHANNEL_ADDENDUM =
-  "CHANNEL: You are replying over SMS or a phone call. Keep replies short — one to three sentences, plain text only, no markdown, no emojis, no bullet points, since this may be read aloud or sent as a text message. Use share_app_link to give the user a direct URL whenever a request needs an actual screen (e.g. connecting a calendar, uploading a photo). Actions run immediately — always briefly confirm what you did (or that it failed). CALLBACK CALLS: You have the call_me tool — use it when the user says 'call me back', 'give me a call', 'I'd rather talk', 'I'm driving — call me', or any similar request. This calls THE SAME USER who is texting you on their own verified phone number (not a household member). If they have no verified phone, relay the error and suggest they add one in settings. OUTBOUND CALLS & MESSAGES TO OTHERS: The call_contact and message_contact tools (calling or messaging other household members) are only available in the web interface, not over SMS/voice. If asked to call or message someone else from SMS/voice, say you can do it from the web app and use share_app_link to send a direct link. CHANNEL SWITCHING: You also have the continue_in_channel tool, which sends a message to THE SAME USER (not a household member) on their Slack, SMS, or email. Use it when they say 'text me that', 'send this to my Slack', 'email me a summary', or 'let's continue on [channel]'. After calling it, confirm in your reply which channel you forwarded to.";
+  "CHANNEL: You are replying over SMS or a phone call. Keep replies short — one to three sentences, plain text only, no markdown, no emojis, no bullet points, since this may be read aloud or sent as a text message. Use share_app_link to give the user a direct URL whenever a request needs an actual screen (e.g. connecting a calendar, uploading a photo). Actions run immediately — always briefly confirm what you did (or that it failed). CALLBACK CALLS: You have the call_me tool — use it when the user says 'call me back', 'give me a call', 'I'd rather talk', 'I'm driving — call me', or any similar request. This calls THE SAME USER who is texting you on their own verified phone number (not a household member). If they have no verified phone, relay the error and suggest they add one in settings. OUTBOUND CALLS & MESSAGES TO OTHERS: You CAN call and message other household members directly from SMS/voice. Use call_contact to dial them and message_contact to send them a message. Available message channels: sms, slack, email, elaine_chat (writes to their Elaine chat widget in the app). If the user hasn't specified a channel, call list_contact_channels first to see what's reachable, then ask which they prefer in one short sentence. If AgentPhone is unavailable, say so and suggest elaine_chat or email instead. CHANNEL SWITCHING: You also have the continue_in_channel tool, which sends a message to THE SAME USER (not a household member) on their Slack, SMS, or email. Use it when they say 'text me that', 'send this to my Slack', 'email me a summary', or 'let's continue on [channel]'. After calling it, confirm in your reply which channel you forwarded to.";
 
 // Builds a compact text snapshot of trips/reminders/packing lists standing
 // in for the on-screen state the web widget's tools normally rely on to
@@ -8515,7 +8540,7 @@ export interface ElaineEmailChatMessage {
 }
 
 const ELAINE_EMAIL_CHANNEL_ADDENDUM =
-  "CHANNEL: You are replying by email. You can look up household data, check the weather, search for flights, and answer factual questions. You CANNOT create, edit, or delete any records over email — if someone asks you to make a change, politely explain they need to do that in the app and give them a link with share_app_link. Use share_app_link whenever a request needs an actual screen. Sign off naturally as Elaine; do not repeat a greeting like 'Hi' if the message is a quick reply. CHANNEL SWITCHING: You have the continue_in_channel tool, which sends a message to THE SAME USER (not a household member) on their SMS or Slack. Use it when they say 'text me that', 'send this to my Slack', or 'let's continue on [channel]'. After calling it, confirm in your reply which channel you forwarded to. OUTBOUND CALLS & MESSAGES: You do have the ability to initiate phone calls and send cross-channel messages (Slack DM or SMS) to household members — these are real capabilities. However, the call_contact and message_contact tools are only available in the web interface, not over email, because they require authenticated confirmation. If asked to call or message someone from email, say you can do it but it must be requested from the web app chat, then use share_app_link to give them a direct link.";
+  "CHANNEL: You are replying by email. You can look up household data, check the weather, search for flights, and answer factual questions. You CANNOT create, edit, or delete household records over email — if someone asks you to make changes to trips, pottery, quilting, or similar data, explain they need to do that in the app and give them a link with share_app_link. Use share_app_link whenever a request needs an actual screen. Sign off naturally as Elaine; do not repeat a greeting like 'Hi' if the message is a quick reply. CHANNEL SWITCHING: You have the continue_in_channel tool, which sends a message to THE SAME USER (not a household member) on their SMS or Slack. Use it when they say 'text me that', 'send this to my Slack', or 'let's continue on [channel]'. After calling it, confirm in your reply which channel you forwarded to. OUTBOUND CALLS & MESSAGES TO OTHERS: Calling or messaging other household members (call_contact, message_contact) is not available over email — email sender identity cannot be reliably verified. If asked to call or message someone else, explain you can do it from the web app or by sending you an SMS, then use share_app_link to give them a direct link.";
 
 // Runs one restricted, non-streaming Elaine turn for an inbound email from a
 // known household member. Mirrors runAgentphoneTurn's shape/behavior exactly
@@ -8612,7 +8637,7 @@ export interface ElaineSlackChatMessage {
 }
 
 const ELAINE_SLACK_CHANNEL_ADDENDUM =
-  "CHANNEL: You are replying via Slack DM. Use share_app_link to give the user a direct URL whenever a request needs an actual screen (e.g. connecting a calendar, uploading a photo). Actions run immediately — always briefly confirm what you did (or that it failed). Slack supports basic markdown (*bold*, _italic_) — use it lightly. OUTBOUND CALLS & MESSAGES: You do have the ability to initiate phone calls and send messages to household members via phone or SMS — these are real capabilities. However, the call_contact and message_contact tools are only available in the web interface, not over Slack, because they require authenticated confirmation. If asked to call or message you from Slack, say you can do it but it must be requested from the web app chat, then use share_app_link to send a direct link to the chat. CHANNEL SWITCHING: You also have the continue_in_channel tool, which sends a message to THE SAME USER (not a household member) on their SMS, email, or another channel. Use it when they say 'text me that', 'email me a summary', or 'let's continue on [channel]'. After calling it, confirm in your reply which channel you forwarded to.";
+  "CHANNEL: You are replying via Slack DM. Use share_app_link to give the user a direct URL whenever a request needs an actual screen (e.g. connecting a calendar, uploading a photo). Actions run immediately — always briefly confirm what you did (or that it failed). Slack supports basic markdown (*bold*, _italic_) — use it lightly. OUTBOUND CALLS & MESSAGES: You CAN call and message other household members directly from Slack. Use call_contact to place an outbound call to them and message_contact to send them a message (channels: sms, slack, email, elaine_chat — elaine_chat writes to their Elaine chat widget in the app). If the user hasn't specified a channel, call list_contact_channels first to see what's reachable, then ask which they prefer in one short line. CHANNEL SWITCHING: You also have the continue_in_channel tool, which sends a message to THE SAME USER (not a household member) on their SMS, email, or another channel. Use it when they say 'text me that', 'email me a summary', or 'let's continue on [channel]'. After calling it, confirm in your reply which channel you forwarded to.";
 
 export async function runElaineSlackTurn(params: {
   userId: number;

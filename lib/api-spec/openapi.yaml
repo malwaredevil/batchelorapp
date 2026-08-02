@@ -6299,7 +6299,7 @@ components:
         timezone:
           type: string
           nullable: true
-          description: IANA timezone name (e.g. "America/Denver").
+          description: IANA timezone name (e.g. "America/Denver"). Used to render dates/times and to schedule the daily comms check for the owner account.
     AuthProviders:
       type: object
       required:

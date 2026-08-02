@@ -122,7 +122,13 @@ function classifyFallback(
  * getConfig()'s overload signatures require for the fallback argument.
  */
 function expectedFallbackKind(
-  declaredType: "string" | "integer" | "float" | "boolean" | "time" | "day-list",
+  declaredType:
+    | "string"
+    | "integer"
+    | "float"
+    | "boolean"
+    | "time"
+    | "day-list",
 ): "number" | "boolean" | "string" {
   if (declaredType === "integer" || declaredType === "float") return "number";
   if (declaredType === "time" || declaredType === "day-list") return "string";

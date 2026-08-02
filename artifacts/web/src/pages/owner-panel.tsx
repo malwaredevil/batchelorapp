@@ -38,7 +38,10 @@ import {
   Zap,
 } from "lucide-react";
 import { GlobalConfigCard } from "@workspace/elaine-ui";
-import { appendScreenshotToken } from "@workspace/api-client-react";
+import {
+  appendScreenshotToken,
+  useUpdateAppConfigValue,
+} from "@workspace/api-client-react";
 import {
   ReminderEmailCard,
   TimezoneCard,
@@ -307,10 +310,7 @@ export default function OwnerPanel() {
 
                 {/* Dev Tools dropdown — collapses the 5 dev/debug tabs */}
                 {isOwner && (
-                  <div
-                    ref={devMenuRef}
-                    className="relative flex items-stretch"
-                  >
+                  <div ref={devMenuRef} className="relative flex items-stretch">
                     <button
                       type="button"
                       onClick={() => setDevMenuOpen((o) => !o)}
@@ -3063,13 +3063,12 @@ interface CommCheckScheduleState {
 }
 
 function CommCheckScheduleCard() {
-  const [schedule, setSchedule] = useState<CommCheckScheduleState | null>(
-    null,
-  );
+  const [schedule, setSchedule] = useState<CommCheckScheduleState | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [timezone, setTimezone] = useState<string | null>(null);
   const { toast } = useToast();
+  const updateConfigValue = useUpdateAppConfigValue();
 
   const load = useCallback(() => {
     setLoading(true);
@@ -3119,15 +3118,11 @@ function CommCheckScheduleCard() {
       setSchedule((s) => (s ? { ...s, [key]: value } : s));
       setSaving(key);
       try {
-        const r = await fetch(`/api/config/comm_check/${key}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ value }),
+        await updateConfigValue.mutateAsync({
+          module: "comm_check",
+          key,
+          data: { value },
         });
-        if (!r.ok) {
-          const d = (await r.json().catch(() => ({}))) as { error?: string };
-          throw new Error(d.error ?? "Save failed");
-        }
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Network error.";
         toast({
@@ -3140,13 +3135,10 @@ function CommCheckScheduleCard() {
         setSaving(null);
       }
     },
-    [toast, load],
+    [toast, load, updateConfigValue],
   );
 
-  const toggleDay = (
-    daysKey: "daily_days" | "phone_days",
-    code: string,
-  ) => {
+  const toggleDay = (daysKey: "daily_days" | "phone_days", code: string) => {
     if (!schedule) return;
     const current = new Set(schedule[daysKey].split(",").filter(Boolean));
     if (current.has(code)) {
@@ -3256,10 +3248,8 @@ function CommCheckScheduleCard() {
 
       <p className="text-xs text-muted-foreground border-t border-border pt-2">
         Times run in{" "}
-        <span className="font-medium text-foreground">
-          {timezone ?? "…"}
-        </span>{" "}
-        — the owner account's timezone, editable from the{" "}
+        <span className="font-medium text-foreground">{timezone ?? "…"}</span> —
+        the owner account's timezone, editable from the{" "}
         <Link
           href="/owner-panel?tab=users"
           className="underline hover:text-foreground"

@@ -3,20 +3,34 @@ import { logger } from "./logger";
 
 const connectors = new ReplitConnectors();
 
+interface AgentPhoneNumber {
+  id: string;
+  phoneNumber: string;
+}
+
 interface AgentPhoneAgent {
   id: string;
+  numbers?: AgentPhoneNumber[];
 }
 
 interface AgentPhoneListAgentsResponse {
   data: AgentPhoneAgent[];
 }
 
-let cachedAgentId: string | null = null;
+interface AgentCredentials {
+  agentId: string;
+  /** E.164 number currently attached to this agent (used as fromNumber on
+   *  outbound calls so AgentPhone doesn't fall back to a stale/old number). */
+  fromNumber: string | null;
+}
 
-// Lazily fetches and caches the AgentPhone agent ID for this workspace.
-// Mirrors the same pattern as getFromNumber() in sms.ts.
-async function getAgentId(): Promise<string> {
-  if (cachedAgentId) return cachedAgentId;
+let cachedCredentials: AgentCredentials | null = null;
+
+// Lazily fetches and caches the AgentPhone agent ID and its current phone
+// number for this workspace. Caches both together so outbound calls always
+// use the number that is actually attached to the agent right now.
+async function getAgentCredentials(): Promise<AgentCredentials> {
+  if (cachedCredentials) return cachedCredentials;
   const response = await connectors.proxy("agentphone", "/v1/agents", {
     method: "GET",
   });
@@ -31,12 +45,15 @@ async function getAgentId(): Promise<string> {
     );
   }
   const data = (await response.json()) as AgentPhoneListAgentsResponse;
-  const agentId = data.data?.[0]?.id;
-  if (!agentId) {
+  const agent = data.data?.[0];
+  if (!agent?.id) {
     throw new Error("AgentPhone: no agent found in account");
   }
-  cachedAgentId = agentId;
-  return agentId;
+  cachedCredentials = {
+    agentId: agent.id,
+    fromNumber: agent.numbers?.[0]?.phoneNumber ?? null,
+  };
+  return cachedCredentials;
 }
 
 export interface OutboundCallOptions {
@@ -72,9 +89,13 @@ export interface OutboundCallOptions {
 export async function initiateOutboundCall(
   opts: OutboundCallOptions,
 ): Promise<{ callId: string }> {
-  const agentId = await getAgentId();
+  const { agentId, fromNumber } = await getAgentCredentials();
 
   const body: Record<string, string> = { agentId, toNumber: opts.toNumber };
+  // Explicitly pin the fromNumber so AgentPhone uses the number that is
+  // currently attached to the agent, not whatever it has cached from a
+  // previous (possibly deleted) number.
+  if (fromNumber) body.fromNumber = fromNumber;
   if (opts.initialGreeting) body.initialGreeting = opts.initialGreeting;
   body.callScreeningIdentity = opts.callScreeningIdentity ?? "Elaine";
   if (opts.callScreeningPurpose)

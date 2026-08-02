@@ -121,7 +121,13 @@ router.put("/:module/:key", async (req, res) => {
   }
 
   const typeError = validateConfigValue(
-    existing.type as "string" | "integer" | "float" | "boolean",
+    existing.type as
+      | "string"
+      | "integer"
+      | "float"
+      | "boolean"
+      | "time"
+      | "day-list",
     value,
   );
   if (typeError) {

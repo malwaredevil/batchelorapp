@@ -13,20 +13,21 @@
  *   4. The bypassOptOutCheck option skips the opt-out check (STOP/HELP
  *      compliance replies must still go out regardless of opt-out state).
  *
- * Uses vi.mock for the DB and connector to avoid real network calls.
+ * Uses vi.mock for the DB and global fetch to avoid real network calls.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// ── Connector mock ───────────────────────────────────────────────────────────
+// ── env mock ─────────────────────────────────────────────────────────────────
 
-const mockProxy = vi.fn();
-
-vi.mock("@replit/connectors-sdk", () => ({
-  ReplitConnectors: vi.fn(() => ({
-    proxy: mockProxy,
-  })),
+vi.mock("./env", () => ({
+  env: { agentphoneApiKey: "test-agentphone-key" },
 }));
+
+// ── fetch mock (agentphoneRequest calls the AgentPhone API directly) ────────
+
+const mockFetch = vi.fn();
+vi.stubGlobal("fetch", mockFetch);
 
 // ── DB mock ──────────────────────────────────────────────────────────────────
 
@@ -91,7 +92,7 @@ describe("sendSms() — opt-out enforcement", () => {
     selectQueue.length = 0;
     vi.clearAllMocks();
     // Mock the number-list call used by getFromNumber() on first send.
-    mockProxy.mockResolvedValue(
+    mockFetch.mockResolvedValue(
       makeOkResponse({ data: [{ phoneNumber: "+15550001111" }] }),
     );
   });
@@ -117,11 +118,10 @@ describe("sendSms() — opt-out enforcement", () => {
     const { sendSms } = await import("./sms");
 
     await expect(sendSms("+15559990000", "Hello")).rejects.toThrow();
-    // proxy should only be called once (the number-list prefetch for getFromNumber
-    // is NOT reached because we throw before sending).
-    expect(mockProxy).not.toHaveBeenCalledWith(
-      "agentphone",
-      "/v1/messages",
+    // fetch should never be called with the messages endpoint (we throw
+    // before sending).
+    expect(mockFetch).not.toHaveBeenCalledWith(
+      expect.stringContaining("/v1/messages"),
       expect.anything(),
     );
   });
@@ -132,7 +132,7 @@ describe("sendSms() — opt-out enforcement", () => {
       { smsOptedOutAt: null, smsFirstOutboundSentAt: new Date() },
     ]);
     // getFromNumber() call — return a number list.
-    mockProxy
+    mockFetch
       .mockResolvedValueOnce(
         makeOkResponse({ data: [{ phoneNumber: "+15550001111" }] }),
       )
@@ -145,7 +145,7 @@ describe("sendSms() — opt-out enforcement", () => {
   it("skips the opt-out check when bypassOptOutCheck is true", async () => {
     // No DB row needed — bypass skips the select entirely.
     // getFromNumber + message send:
-    mockProxy
+    mockFetch
       .mockResolvedValueOnce(
         makeOkResponse({ data: [{ phoneNumber: "+15550001111" }] }),
       )

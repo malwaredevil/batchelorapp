@@ -48,6 +48,7 @@ import {
 } from "../lib/sms";
 import { runReminderAlerts } from "../lib/reminder-scheduler";
 import { THIRTY_DAYS_MS } from "../lib/session";
+import { isValidIanaTimeZone } from "../lib/timezone";
 
 const LOGIN_PATH = "/login";
 
@@ -187,6 +188,7 @@ router.get("/auth/me", requireAuth, async (req, res) => {
       phoneVerified: user.phoneVerified ?? false,
       birthday: user.birthday ?? null,
       slackUserId: user.slackUserId ?? null,
+      timezone: user.timezone ?? null,
     }),
   );
 });
@@ -195,6 +197,9 @@ const VALID_THEMES = new Set(["light", "dark"]);
 // MM-DD format, e.g. "01-15" for January 15th.
 const BIRTHDAY_RE = /^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 
+// Validates an IANA timezone name (e.g. "America/Denver") by attempting to
+// construct an Intl.DateTimeFormat with it — throws RangeError for anything
+// invalid without needing a hardcoded list of zone names.
 router.patch("/auth/me", requireAuth, async (req, res) => {
   const parsed = UpdateCurrentUserBody.safeParse(req.body);
   if (!parsed.success) {
@@ -207,6 +212,7 @@ router.patch("/auth/me", requireAuth, async (req, res) => {
     themePreference: string | null;
     birthday: string | null;
     slackUserId: string | null;
+    timezone: string | null;
   }> = {};
 
   if (parsed.data.displayName !== undefined) {
@@ -267,6 +273,17 @@ router.patch("/auth/me", requireAuth, async (req, res) => {
       updates.slackUserId = trimmed;
     }
   }
+  if (parsed.data.timezone !== undefined) {
+    const tz = parsed.data.timezone;
+    if (tz === null || tz === "") {
+      updates.timezone = null;
+    } else if (isValidIanaTimeZone(tz)) {
+      updates.timezone = tz;
+    } else {
+      res.status(400).json({ error: "Unrecognized timezone." });
+      return;
+    }
+  }
 
   let user;
   if (Object.keys(updates).length > 0) {
@@ -298,6 +315,7 @@ router.patch("/auth/me", requireAuth, async (req, res) => {
       phoneVerified: user.phoneVerified ?? false,
       birthday: user.birthday ?? null,
       slackUserId: user.slackUserId ?? null,
+      timezone: user.timezone ?? null,
     }),
   );
 });

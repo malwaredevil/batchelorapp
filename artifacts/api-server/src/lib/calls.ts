@@ -164,9 +164,17 @@ export async function waitForCallOutcome(
         { method: "GET" },
       );
       if (!response.ok) break; // unexpected error — stop polling
-      const data = (await response.json()) as { status?: string };
+      const data = (await response.json()) as {
+        status?: string;
+        durationSeconds?: number;
+      };
       const status = (data.status ?? "").toLowerCase().replace(/_/g, "-");
-      if (status === "completed") return "answered";
+      const duration = data.durationSeconds ?? 0;
+      // AgentPhone marks immediately-ended calls as "completed" with 0 duration
+      // (e.g. call blocked by screening). Only treat it as answered if the call
+      // actually had voice time.
+      if (status === "completed")
+        return duration > 0 ? "answered" : "no-answer";
       if (status === "no-answer" || status === "busy") return "no-answer";
       if (status === "failed") return "error";
       if (status === "voicemail") return "voicemail";

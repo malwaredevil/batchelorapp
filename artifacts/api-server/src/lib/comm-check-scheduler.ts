@@ -5,7 +5,11 @@ import { sendSms } from "./sms";
 import { openDmChannel, postSlackMessage, slackConfigured } from "./slack";
 import { logger } from "./logger";
 import { getConfig } from "./app-config";
-import { initiateOutboundCall, callsConfigured } from "./calls";
+import {
+  initiateOutboundCall,
+  callsConfigured,
+  waitForCallOutcome,
+} from "./calls";
 
 // ---------------------------------------------------------------------------
 // Daily comms check scheduler.
@@ -149,16 +153,16 @@ async function sendCommCheckSlack(
   );
 }
 
-// Phone comms check — just places the call; call going through = success.
-// No verbal reply required; answering-machine pickup counts.
+// Phone comms check — places the call and returns the AgentPhone call ID so
+// callers can verify the call actually connected (duration > 0).
 async function sendCommCheckPhone(
   toNumber: string,
   date: string,
-): Promise<void> {
+): Promise<{ callId: string }> {
   if (!callsConfigured()) {
     throw new Error("AgentPhone connector not configured");
   }
-  await initiateOutboundCall({
+  return initiateOutboundCall({
     toNumber,
     initialGreeting: `Hi! This is your daily Batchelor App communications check for ${date}. The phone lane is working correctly. Have a great evening!`,
     callScreeningIdentity: "Elaine from Batchelor App",
@@ -360,7 +364,17 @@ export async function runPhoneCommCheck(): Promise<PhoneCheckResult> {
   }
 
   try {
-    await sendCommCheckPhone(owner.phoneNumber, today);
+    const { callId } = await sendCommCheckPhone(owner.phoneNumber, today);
+    // Confirm the call actually connected (AgentPhone marks blocked/screened
+    // calls as "completed" with durationSeconds: 0). If no-answer, roll the
+    // status back to error so the scheduler catches it on the next daily run.
+    const outcome = await waitForCallOutcome(callId, 30_000);
+    if (outcome === "no-answer") {
+      throw new Error(
+        "Call placed but not answered (0 s — likely blocked by call screening). " +
+          "Add Elaine's number to your contacts to allow it through.",
+      );
+    }
     logger.info({ date: today }, "comm-check: phone call placed");
     return { alreadySent: false, date: today, phone: "sent" };
   } catch (err) {
@@ -424,7 +438,19 @@ export async function runChannelCheck(
       // phone
       if (!owner.phoneNumber)
         throw new Error("No phone number on owner account");
-      await sendCommCheckPhone(owner.phoneNumber, today);
+      const { callId } = await sendCommCheckPhone(owner.phoneNumber, today);
+      // Wait up to 30 s to confirm the call actually connected (duration > 0).
+      // A 0-second "completed" call means it was silently blocked — likely call
+      // screening or a carrier STIR/SHAKEN rejection. Report it as an error so
+      // the owner knows the channel isn't working, rather than silently marking
+      // it verified.
+      const outcome = await waitForCallOutcome(callId, 30_000);
+      if (outcome === "no-answer") {
+        throw new Error(
+          "Call placed but not answered (0 s — likely blocked by call screening). " +
+            "Add Elaine's number to your contacts to allow it through.",
+        );
+      }
     }
 
     const statusCol = `${channel}_status`;

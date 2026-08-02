@@ -1385,6 +1385,68 @@ export function useRegenerateElaineDailyBrief(options?: {
   return useMutation({ mutationFn, ...options?.mutation });
 }
 
+// ---------------------------------------------------------------------------
+// Cross-channel context
+// ---------------------------------------------------------------------------
+
+export interface CrossChannelEntry {
+  channel: string;
+  gist: string;
+  ts: string;
+}
+
+export interface CrossChannelContext {
+  entries: CrossChannelEntry[];
+  updatedAt: string | null;
+}
+
+export const getGetElaineCrossChannelContextQueryKey = () =>
+  [`/api/elaine/cross-channel-context`] as const;
+
+const getElaineCrossChannelContextFn = (
+  options?: RequestInit,
+): Promise<CrossChannelContext> =>
+  customFetch<CrossChannelContext>("/api/elaine/cross-channel-context", {
+    ...options,
+    method: "GET",
+  });
+
+export function useGetElaineCrossChannelContext<
+  TData = CrossChannelContext,
+  TError = unknown,
+>(options?: {
+  query?: UseQueryOptions<CrossChannelContext, TError, TData>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey =
+    queryOptions?.queryKey ?? getGetElaineCrossChannelContextQueryKey();
+  const queryFn: QueryFunction<CrossChannelContext> = ({ signal }) =>
+    getElaineCrossChannelContextFn({ signal });
+  const queryOpts = {
+    queryKey,
+    queryFn,
+    staleTime: 30 * 1000,
+    ...queryOptions,
+  } as UseQueryOptions<CrossChannelContext, TError, TData> & {
+    queryKey: QueryKey;
+  };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+const clearElaineCrossChannelContextFn = (): Promise<void> =>
+  customFetch<void>("/api/elaine/cross-channel-context", { method: "DELETE" });
+
+export function useClearElaineCrossChannelContext(options?: {
+  mutation?: UseMutationOptions<void, unknown, void>;
+}): UseMutationResult<void, unknown, void> {
+  const mutationFn: MutationFunction<void, void> = () =>
+    clearElaineCrossChannelContextFn();
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
 export function useListElaineAdminModels<
   TData = OpenRouterModelSummary[],
   TError = unknown,

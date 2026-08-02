@@ -49,6 +49,7 @@ import {
   finishedQuilts,
   ornamentsItems,
   phoneVerificationCodes,
+  elaineCrossChannelContext,
 } from "@workspace/db";
 import { requireAuth } from "../middleware/auth";
 import { phoneVerifyLimiter, aiLimiter } from "../middleware/rateLimit";
@@ -7116,6 +7117,41 @@ router.delete("/memory/:id", async (req, res) => {
   }
   await forgetElaineMemory({ userId, memoryId: id });
   res.status(204).end();
+});
+
+// ---------------------------------------------------------------------------
+// Cross-channel context — read and clear
+// ---------------------------------------------------------------------------
+
+router.get("/cross-channel-context", async (req, res) => {
+  const userId = req.session.userId as number;
+  try {
+    const [row] = await db
+      .select({ entries: elaineCrossChannelContext.entries, updatedAt: elaineCrossChannelContext.updatedAt })
+      .from(elaineCrossChannelContext)
+      .where(eq(elaineCrossChannelContext.userId, userId));
+    res.json({
+      entries: (row?.entries ?? []) as Array<{ channel: string; gist: string; ts: string }>,
+      updatedAt: row?.updatedAt ?? null,
+    });
+  } catch (err) {
+    logger.warn({ err, userId }, "cross-channel: GET context failed");
+    res.status(500).json({ error: "Failed to load cross-channel context" });
+  }
+});
+
+router.delete("/cross-channel-context", async (req, res) => {
+  const userId = req.session.userId as number;
+  try {
+    await db
+      .update(elaineCrossChannelContext)
+      .set({ entries: [], updatedAt: new Date() })
+      .where(eq(elaineCrossChannelContext.userId, userId));
+    res.status(204).end();
+  } catch (err) {
+    logger.warn({ err, userId }, "cross-channel: DELETE context failed");
+    res.status(500).json({ error: "Failed to clear cross-channel context" });
+  }
 });
 
 // ---------------------------------------------------------------------------

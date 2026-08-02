@@ -17,6 +17,11 @@ import {
   Search,
   ScrollText,
   RefreshCw,
+  Radio,
+  Smartphone,
+  Mail,
+  MessageSquare,
+  Monitor,
 } from "lucide-react";
 import {
   useListElaineMemory,
@@ -24,10 +29,14 @@ import {
   useCreateElaineMemory,
   useUpdateElaineMemory,
   useDeleteElaineMemoryItem,
+  useGetElaineCrossChannelContext,
+  useClearElaineCrossChannelContext,
+  getGetElaineCrossChannelContextQueryKey,
   type HouseholdMemoryItem,
   type MemoryScope,
   type MemoryCategory,
   type MemorySensitivity,
+  type CrossChannelEntry,
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -433,9 +442,37 @@ const CATEGORY_FILTER_OPTIONS = [
   { value: "collection", label: "Collection" },
 ] as const;
 
+const CHANNEL_ICONS: Record<string, typeof Radio> = {
+  web: Monitor,
+  slack: MessageSquare,
+  sms: Smartphone,
+  "sms/voice": Smartphone,
+  voice: Smartphone,
+  email: Mail,
+};
+
+function channelIcon(channel: string): typeof Radio {
+  const key = channel.toLowerCase();
+  return CHANNEL_ICONS[key] ?? Radio;
+}
+
+function channelLabel(channel: string): string {
+  if (channel.toLowerCase() === "sms/voice") return "SMS/Voice";
+  return channel.charAt(0).toUpperCase() + channel.slice(1);
+}
+
+function gistParts(gist: string): { topic: string; reply: string } | null {
+  const m = gist.match(/^topic:\s*(.*?)\s*\|\s*reply:\s*(.*)/s);
+  if (!m) return null;
+  return { topic: m[1]!.trim(), reply: m[2]!.trim() };
+}
+
 export default function Memory() {
   const qc = useQueryClient();
   const { data: memory = [], isLoading } = useListElaineMemory();
+  const { data: crossChannelData, isLoading: ccLoading } =
+    useGetElaineCrossChannelContext();
+  const clearCrossChannel = useClearElaineCrossChannelContext();
   const [search, setSearch] = useState("");
   const [scopeFilter, setScopeFilter] = useState<"all" | MemoryScope>("all");
   const [categoryFilter, setCategoryFilter] = useState<"all" | MemoryCategory>(
@@ -475,6 +512,20 @@ export default function Memory() {
       onError: () => {
         toast.error("Failed to clear summary");
         setClearingSum(false);
+      },
+    });
+  }
+
+  function handleClearCrossChannel() {
+    clearCrossChannel.mutate(undefined, {
+      onSuccess: () => {
+        toast.success("Cross-channel activity cleared");
+        void qc.invalidateQueries({
+          queryKey: getGetElaineCrossChannelContextQueryKey(),
+        });
+      },
+      onError: () => {
+        toast.error("Failed to clear activity");
       },
     });
   }
@@ -552,6 +603,94 @@ export default function Memory() {
                   No summary yet — it builds up automatically as you chat with{" "}
                   <ElaineName />.
                 </span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Cross-channel Activity ── */}
+      {!ccLoading && (
+        <div className="rounded-xl border border-card-border bg-card overflow-hidden">
+          <div className="flex items-center gap-2.5 px-4 pt-4 pb-3 border-b border-card-border">
+            <Radio className="h-4 w-4 text-primary shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-foreground">
+                Recent activity across channels
+              </p>
+              <p className="text-xs text-muted-foreground">
+                What <ElaineName /> has discussed with you on web, Slack, SMS,
+                and email
+              </p>
+            </div>
+            {(crossChannelData?.entries ?? []).length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-muted-foreground hover:text-destructive gap-1 shrink-0"
+                onClick={handleClearCrossChannel}
+                disabled={clearCrossChannel.isPending}
+                title="Clear cross-channel activity log"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Clear
+              </Button>
+            )}
+          </div>
+          <div className="px-4 py-3">
+            {(crossChannelData?.entries ?? []).length === 0 ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground py-1">
+                <Clock className="h-4 w-4 shrink-0" />
+                <span>
+                  No activity yet — each conversation on any channel will appear
+                  here.
+                </span>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {(crossChannelData?.entries ?? []).map(
+                  (entry: CrossChannelEntry, i: number) => {
+                    const ChanIcon = channelIcon(entry.channel);
+                    const parts = gistParts(entry.gist);
+                    return (
+                      <div key={i} className="flex gap-3 items-start">
+                        <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-muted">
+                          <ChanIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs font-medium text-foreground">
+                              {channelLabel(entry.channel)}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              · {entry.ts}
+                            </span>
+                          </div>
+                          {parts ? (
+                            <div className="mt-0.5 space-y-0.5">
+                              <p className="text-xs text-foreground/80 leading-relaxed truncate">
+                                <span className="text-muted-foreground">
+                                  You:{" "}
+                                </span>
+                                {parts.topic}
+                              </p>
+                              <p className="text-xs text-foreground/80 leading-relaxed truncate">
+                                <span className="text-muted-foreground">
+                                  Elaine:{" "}
+                                </span>
+                                {parts.reply}
+                              </p>
+                            </div>
+                          ) : (
+                            <p className="mt-0.5 text-xs text-foreground/80 leading-relaxed truncate">
+                              {entry.gist}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  },
+                )}
               </div>
             )}
           </div>

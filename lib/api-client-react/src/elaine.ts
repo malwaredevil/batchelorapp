@@ -168,6 +168,9 @@ export interface ElaineRuntimeEventEnvelope {
 }
 
 export interface AssistantMessage {
+  /** Present on messages loaded from history; absent on the optimistic
+   *  user-message entry inserted client-side while a turn is streaming. */
+  id?: number;
   role: "user" | "assistant";
   content: string;
   /** Signed Supabase Storage URLs (+ type/filename) for images/PDFs the user
@@ -402,6 +405,12 @@ export interface AssistantChatResponse {
   actionConfirmationMode: ActionConfirmationMode;
   messages: AssistantMessage[];
   widgets?: ChatWidget[];
+  /** Real, persisted elaineHistoryMessages ids for this turn's user/assistant
+   *  rows. Null only if the session's history conversation couldn't be
+   *  resolved. Use these (not array position) to reconcile the optimistic
+   *  message and to keep "load older" pagination cursors correct. */
+  userMessageId?: number | null;
+  assistantMessageId?: number | null;
   /** ID of the named conversation this turn was saved to. */
   conversationId?: number;
   runtimeTrace?: ElaineRuntimeTrace;
@@ -496,30 +505,41 @@ export interface ElaineTask {
   completedAt: string | null;
 }
 
+export interface ConversationLoadResult {
+  messages: AssistantMessage[];
+  /** ID of the resolved widget-default conversation (null only when the
+   *  session's user row could not be resolved). Pin subsequent sends and
+   *  "load older" requests to this ID. */
+  conversationId: number | null;
+  /** True when older messages exist beyond this page — call
+   *  useGetElaineConversationMessages(conversationId, { before: oldestId })
+   *  to fetch them. */
+  hasMore: boolean;
+}
+
 export const getGetElaineConversationQueryKey = () =>
   [`/api/elaine/conversation`] as const;
 
 const getElaineConversationFn = (
   options?: RequestInit,
-): Promise<{ messages: AssistantMessage[] }> =>
-  customFetch<{ messages: AssistantMessage[] }>("/api/elaine/conversation", {
+): Promise<ConversationLoadResult> =>
+  customFetch<ConversationLoadResult>("/api/elaine/conversation", {
     ...options,
     method: "GET",
   });
 
 export function useGetElaineConversation<
-  TData = { messages: AssistantMessage[] },
+  TData = ConversationLoadResult,
   TError = unknown,
 >(options?: {
-  query?: UseQueryOptions<{ messages: AssistantMessage[] }, TError, TData>;
+  query?: UseQueryOptions<ConversationLoadResult, TError, TData>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const { query: queryOptions } = options ?? {};
   const queryKey = queryOptions?.queryKey ?? getGetElaineConversationQueryKey();
-  const queryFn: QueryFunction<{ messages: AssistantMessage[] }> = ({
-    signal,
-  }) => getElaineConversationFn({ signal });
+  const queryFn: QueryFunction<ConversationLoadResult> = ({ signal }) =>
+    getElaineConversationFn({ signal });
   const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    { messages: AssistantMessage[] },
+    ConversationLoadResult,
     TError,
     TData
   > & { queryKey: QueryKey };
@@ -1096,41 +1116,60 @@ export function useDeleteElaineConversation(options?: {
   return useMutation({ mutationFn, ...options?.mutation });
 }
 
-export const getGetElaineConversationMessagesQueryKey = (id: number) =>
-  [`/api/elaine/conversations`, id, `messages`] as const;
+export interface ConversationMessagesPage {
+  messages: ConversationMessage[];
+  /** True when older messages exist beyond this page — pass the oldest
+   *  returned message's `id` as `before` to fetch the next page back. */
+  hasMore: boolean;
+}
+
+export const getGetElaineConversationMessagesQueryKey = (
+  id: number,
+  params?: { before?: number; limit?: number },
+) =>
+  params?.before !== undefined
+    ? ([`/api/elaine/conversations`, id, `messages`, params] as const)
+    : ([`/api/elaine/conversations`, id, `messages`] as const);
 
 export const getElaineConversationMessagesFn = (
   id: number,
+  params?: { before?: number; limit?: number },
   options?: RequestInit,
-): Promise<ConversationMessage[]> =>
-  customFetch<ConversationMessage[]>(
-    `/api/elaine/conversations/${id}/messages`,
+): Promise<ConversationMessagesPage> => {
+  const search = new URLSearchParams();
+  if (params?.before !== undefined) search.set("before", String(params.before));
+  if (params?.limit !== undefined) search.set("limit", String(params.limit));
+  const qs = search.toString();
+  return customFetch<ConversationMessagesPage>(
+    `/api/elaine/conversations/${id}/messages${qs ? `?${qs}` : ""}`,
     { ...options, method: "GET" },
   );
+};
 
 export function useGetElaineConversationMessages<
-  TData = ConversationMessage[],
+  TData = ConversationMessagesPage,
   TError = unknown,
 >(
   id: number | null,
   options?: {
-    query?: UseQueryOptions<ConversationMessage[], TError, TData>;
+    params?: { before?: number; limit?: number };
+    query?: UseQueryOptions<ConversationMessagesPage, TError, TData>;
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const { query: queryOptions } = options ?? {};
+  const { params, query: queryOptions } = options ?? {};
   const queryKey =
     queryOptions?.queryKey ??
     (id !== null
-      ? getGetElaineConversationMessagesQueryKey(id)
+      ? getGetElaineConversationMessagesQueryKey(id, params)
       : (["disabled"] as const));
-  const queryFn: QueryFunction<ConversationMessage[]> = ({ signal }) =>
-    getElaineConversationMessagesFn(id!, { signal });
+  const queryFn: QueryFunction<ConversationMessagesPage> = ({ signal }) =>
+    getElaineConversationMessagesFn(id!, params, { signal });
   const queryOpts = {
     queryKey,
     queryFn,
     enabled: id !== null,
     ...queryOptions,
-  } as UseQueryOptions<ConversationMessage[], TError, TData> & {
+  } as UseQueryOptions<ConversationMessagesPage, TError, TData> & {
     queryKey: QueryKey;
   };
   const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & {

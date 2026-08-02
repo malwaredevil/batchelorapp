@@ -198,8 +198,8 @@ export default function Chat() {
       if (loadingConvId === id) return;
       setLoadingConvId(id);
       try {
-        const msgs = await getElaineConversationMessagesFn(id);
-        chat.handleLoadConversation(id, msgs);
+        const page = await getElaineConversationMessagesFn(id);
+        chat.handleLoadConversation(id, page.messages, page.hasMore);
       } catch {
         // If load fails, just clear to a new conversation
         chat.handleNewConversation();

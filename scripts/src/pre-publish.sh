@@ -103,6 +103,13 @@ run_bg pgsingleton pnpm --filter @workspace/scripts run check-pg-singleton
 # local pre-publish gate must catch Replit-only drift before it is synced.
 run_bg composition pnpm --filter @workspace/scripts run check-domain-composition
 
+# Diff-based guardrail bans (drizzle-kit push, restricted files, ad-hoc OpenAI
+# instantiation, passOnStoreError: true, destructive schema SQL, exclusion-set
+# shrink). Same script CI's Guardrails workflow calls — see
+# scripts/src/check-guardrails.ts — so a violation is caught here first
+# instead of only surfacing after a PR is opened.
+run_bg guardrails pnpm --filter @workspace/scripts run check-guardrails -- --base origin/main
+
 # Secrets-registry drift guard: checks that every env var in env.ts has a
 # matching entry in the sync-github-secrets.ts SECRETS registry.
 run_bg secretsregistry pnpm --filter @workspace/scripts run check-secrets-registry
@@ -123,12 +130,13 @@ declare -A LABELS=(
   [uploadlimit]="Upload-limit guard"
   [pgsingleton]="pg singleton guard"
   [composition]="Composition and configuration"
+  [guardrails]="Guardrail bans (drizzle-kit push, restricted files, etc.)"
   [secretsregistry]="Secrets registry drift"
   [cistatus]="GitHub CI status"
 )
 
 FAILED=()
-for key in appconfig forbidden secretsscan uploadlimit pgsingleton composition secretsregistry cistatus; do
+for key in appconfig forbidden secretsscan uploadlimit pgsingleton composition guardrails secretsregistry cistatus; do
   code=$(cat "$LOGDIR/$key.exit" 2>/dev/null || echo 1)
   if [[ "$code" -eq 0 ]]; then
     echo -e "${GREEN}✓${RESET} ${LABELS[$key]}"
@@ -149,6 +157,15 @@ fi
 
 echo -e "\n${GREEN}✓ All pre-publish checks passed.${RESET}"
 echo "  CI covers: typecheck, lint, codegen drift, PII scan."
+echo ""
+echo "  ┌─ 🔴 RED BUTTON — emergency bypass (read once, keep in mind) ────────────────┐"
+echo "  │ There is no standing way to skip the PR+CI gate or push straight to main.   │"
+echo "  │ If a genuine emergency ever needs that (e.g. a workflow file itself is      │"
+echo "  │ broken and blocking every PR from landing), do NOT act unilaterally:        │"
+echo "  │ stop and ask the owner directly for one-time explicit permission before     │"
+echo "  │ touching branch protection or pushing outside the normal PR flow.           │"
+echo "  │ See .agents/memory/emergency-bypass-protocol.md for the full policy.        │"
+echo "  └────────────────────────────────────────────────────────────────────────────┘"
 echo ""
 echo "  ┌─ MANUAL STEPS (in order) ──────────────────────────────────────────────────┐"
 echo "  │ Stage 1a  — Visual verification (NON-SKIPPABLE):                           │"

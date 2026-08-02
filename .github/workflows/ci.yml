@@ -1,10 +1,19 @@
 name: CI
 
+# Runs on the pull_request event only. Direct pushes to main are already
+# impossible (branch protection: enforce_admins + no push access outside a
+# merge), so a merge commit landing on main was never actually gated by
+# anything — the checks that mattered already ran against the PR's head
+# commit. A duplicate "push: branches: [main]" run added nothing but wait
+# time. See .agents/memory/ci-pr-only-validation.md for the full reasoning.
+#
+# "ready_for_review" is included so jobs gated on `draft == false` (the
+# heavier/slower suite below) fire the moment a PR leaves Draft, without
+# needing a separate synchronize push.
 on:
   pull_request:
     branches: [main]
-  push:
-    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -22,14 +31,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
-        with:
-          version: 10
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: 24
-          cache: "pnpm"
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-workspace
       - run: pnpm run typecheck
 
   build-api:
@@ -43,14 +45,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
-        with:
-          version: 10
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: 24
-          cache: "pnpm"
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-workspace
       - run: pnpm --filter @workspace/api-server run build
 
   build-modules:
@@ -66,14 +61,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
-        with:
-          version: 10
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: 24
-          cache: "pnpm"
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-workspace
       - run: pnpm --filter @workspace/modules run build
 
   build-web:
@@ -89,14 +77,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
-        with:
-          version: 10
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: 24
-          cache: "pnpm"
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-workspace
       - run: pnpm --filter @workspace/web run build
 
   build-elaine:
@@ -112,14 +93,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
-        with:
-          version: 10
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: 24
-          cache: "pnpm"
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-workspace
       - run: pnpm --filter @workspace/elaine run build
 
   lint:
@@ -130,14 +104,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
-        with:
-          version: 10
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: 24
-          cache: "pnpm"
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-workspace
       - run: pnpm run lint
 
   app-config-drift:
@@ -148,14 +115,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
-        with:
-          version: 10
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: 24
-          cache: "pnpm"
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-workspace
       - run: pnpm --filter @workspace/api-server run lint:config
 
   workflow-security:
@@ -166,36 +126,22 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
-        with:
-          version: 10
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: 24
-          cache: "pnpm"
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-workspace
       - run: pnpm --filter @workspace/scripts run check-workflow-security
 
   composition-guard:
     name: Composition guard
-    # Runs on every PR and every push to main.  This job is intentionally
-    # separate from the "Lint" job (which also runs the check via pnpm run lint)
-    # so that a composition violation surfaces as a clearly labelled failed job
-    # in the GitHub UI rather than being buried inside lint output.
+    # Runs on every PR. This job is intentionally separate from the "Lint"
+    # job (which also runs the check via pnpm run lint) so that a composition
+    # violation surfaces as a clearly labelled failed job in the GitHub UI
+    # rather than being buried inside lint output.
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
-        with:
-          version: 10
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: 24
-          cache: "pnpm"
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-workspace
       - name: Run composition and configuration guard
         run: pnpm --filter @workspace/scripts run check-domain-composition
 
@@ -203,18 +149,15 @@ jobs:
     name: Elaine capability parity
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Heavier check — only worth running once a PR is out of Draft. GitHub
+    # treats a skipped job as satisfying a required status check, so a Draft
+    # PR is not blocked by this while it is still being worked on.
+    if: github.event.pull_request.draft == false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
-        with:
-          version: 10
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: 24
-          cache: "pnpm"
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-workspace
       - run: pnpm --filter @workspace/scripts run elaine:capability-parity
       - run: pnpm --filter @workspace/scripts run elaine:operation-catalog
 
@@ -226,14 +169,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
-        with:
-          version: 10
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: 24
-          cache: "pnpm"
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-workspace
       - run: pnpm --filter @workspace/api-server run test
 
   test-api-client:
@@ -244,14 +180,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
-        with:
-          version: 10
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: 24
-          cache: "pnpm"
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-workspace
       - run: pnpm --filter @workspace/api-client-react run test
 
   test-app-shell:
@@ -262,14 +191,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
-        with:
-          version: 10
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: 24
-          cache: "pnpm"
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-workspace
       - run: pnpm --filter @workspace/app-shell run test
       - run: pnpm --filter @workspace/scripts run check-app-shell
 
@@ -281,14 +203,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
-        with:
-          version: 10
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: 24
-          cache: "pnpm"
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-workspace
       - name: Scan all public files for credentials and secret patterns
         run: pnpm --filter @workspace/scripts run check-public-file-secrets
 
@@ -300,14 +215,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
-        with:
-          version: 10
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: 24
-          cache: "pnpm"
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-workspace
       - name: Check for forbidden provisioning-script filenames
         run: |
           # Block one-off provisioning scripts (add-users, seed-users, create-accounts,
@@ -339,18 +247,14 @@ jobs:
     name: Codegen drift
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Heavier check — deferred to the ready-for-review stage, see
+    # elaine-capability-parity above for why this is safe.
+    if: github.event.pull_request.draft == false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
-        with:
-          version: 10
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: 24
-          cache: "pnpm"
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-workspace
       - run: pnpm --filter @workspace/api-spec run codegen
       - name: Fail if codegen produced a diff
         run: |
@@ -365,6 +269,7 @@ jobs:
     needs: [typecheck]
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    if: github.event.pull_request.draft == false
     env:
       PORT: "4173"
       BASE_PATH: "/"
@@ -373,14 +278,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
-        with:
-          version: 10
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: 24
-          cache: "pnpm"
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-workspace
       - name: Install Playwright Chromium
         run: pnpm --filter @workspace/e2e exec playwright install chromium --with-deps
       - name: Build web artifact
@@ -426,6 +324,7 @@ jobs:
     needs: [typecheck]
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    if: github.event.pull_request.draft == false
     env:
       PORT: "4174"
       BASE_PATH: "/modules/"
@@ -434,14 +333,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
-        with:
-          version: 10
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: 24
-          cache: "pnpm"
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-workspace
       - name: Install Playwright Chromium
         run: pnpm --filter @workspace/e2e exec playwright install chromium --with-deps
       - name: Build modules artifact
@@ -460,6 +352,7 @@ jobs:
     needs: [typecheck]
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    if: github.event.pull_request.draft == false
     env:
       PORT: "4175"
       BASE_PATH: "/elaine/"
@@ -468,14 +361,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6
-        with:
-          version: 10
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
-        with:
-          node-version: 24
-          cache: "pnpm"
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup-workspace
       - name: Install Playwright Chromium
         run: pnpm --filter @workspace/e2e exec playwright install chromium --with-deps
       - name: Build Elaine artifact

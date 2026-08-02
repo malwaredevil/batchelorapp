@@ -7790,7 +7790,7 @@ export interface AgentphoneChatMessage {
 }
 
 const AGENTPHONE_CHANNEL_ADDENDUM =
-  "CHANNEL: You are replying over SMS or a phone call. Keep replies short — one to three sentences, plain text only, no markdown, no emojis, no bullet points, since this may be read aloud or sent as a text message. Use share_app_link to give the user a direct URL whenever a request needs an actual screen (e.g. connecting a calendar, uploading a photo). Actions run immediately — always briefly confirm what you did (or that it failed).";
+  "CHANNEL: You are replying over SMS or a phone call. Keep replies short — one to three sentences, plain text only, no markdown, no emojis, no bullet points, since this may be read aloud or sent as a text message. Use share_app_link to give the user a direct URL whenever a request needs an actual screen (e.g. connecting a calendar, uploading a photo). Actions run immediately — always briefly confirm what you did (or that it failed). OUTBOUND CALLS & MESSAGES: You do have the ability to initiate phone calls and send cross-channel messages (Slack DM or SMS) to household members — these are real capabilities. However, the call_contact and message_contact tools are only available in the web interface, not over SMS/voice, because they require authenticated confirmation. If asked to call or message someone from SMS/voice, say you can do it but it must be requested from the web app, then use share_app_link to give them a direct link to the chat.";
 
 // Builds a compact text snapshot of trips/reminders/packing lists standing
 // in for the on-screen state the web widget's tools normally rely on to
@@ -8361,7 +8361,7 @@ export interface ElaineEmailChatMessage {
 }
 
 const ELAINE_EMAIL_CHANNEL_ADDENDUM =
-  "CHANNEL: You are replying by email. You can look up household data, check the weather, search for flights, and answer factual questions. You CANNOT create, edit, or delete any records over email — if someone asks you to make a change, politely explain they need to do that in the app and give them a link with share_app_link. Use share_app_link whenever a request needs an actual screen. Sign off naturally as Elaine; do not repeat a greeting like 'Hi' if the message is a quick reply.";
+  "CHANNEL: You are replying by email. You can look up household data, check the weather, search for flights, and answer factual questions. You CANNOT create, edit, or delete any records over email — if someone asks you to make a change, politely explain they need to do that in the app and give them a link with share_app_link. Use share_app_link whenever a request needs an actual screen. Sign off naturally as Elaine; do not repeat a greeting like 'Hi' if the message is a quick reply. OUTBOUND CALLS & MESSAGES: You do have the ability to initiate phone calls and send cross-channel messages (Slack DM or SMS) to household members — these are real capabilities. However, the call_contact and message_contact tools are only available in the web interface, not over email, because they require authenticated confirmation. If asked to call or message someone from email, say you can do it but it must be requested from the web app chat, then use share_app_link to give them a direct link.";
 
 // Runs one restricted, non-streaming Elaine turn for an inbound email from a
 // known household member. Mirrors runAgentphoneTurn's shape/behavior exactly
@@ -8458,7 +8458,7 @@ export interface ElaineSlackChatMessage {
 }
 
 const ELAINE_SLACK_CHANNEL_ADDENDUM =
-  "CHANNEL: You are replying via Slack DM. Use share_app_link to give the user a direct URL whenever a request needs an actual screen (e.g. connecting a calendar, uploading a photo). Actions run immediately — always briefly confirm what you did (or that it failed). Slack supports basic markdown (*bold*, _italic_) — use it lightly.";
+  "CHANNEL: You are replying via Slack DM. Use share_app_link to give the user a direct URL whenever a request needs an actual screen (e.g. connecting a calendar, uploading a photo). Actions run immediately — always briefly confirm what you did (or that it failed). Slack supports basic markdown (*bold*, _italic_) — use it lightly. OUTBOUND CALLS & MESSAGES: You do have the ability to initiate phone calls and send messages to household members via phone or SMS — these are real capabilities. However, the call_contact and message_contact tools are only available in the web interface, not over Slack, because they require authenticated confirmation. If asked to call or message you from Slack, say you can do it but it must be requested from the web app chat, then use share_app_link to send a direct link to the chat.";
 
 export async function runElaineSlackTurn(params: {
   userId: number;

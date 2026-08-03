@@ -60,30 +60,25 @@ beforeEach(() => {
 describe("getElaineGlobalConfig", () => {
   it("falls back to hardcoded defaults only when no row exists", async () => {
     selectQueue.push([]);
-    const { getElaineGlobalConfig, ELAINE_CONFIG_DEFAULTS } = await import(
-      "./elaine-config"
-    );
+    const { getElaineGlobalConfig, ELAINE_CONFIG_DEFAULTS } =
+      await import("./elaine-config");
     const config = await getElaineGlobalConfig();
     expect(config).toEqual(ELAINE_CONFIG_DEFAULTS);
   });
 
   it("reads the live value from the stored DB row, not the hardcoded default", async () => {
     selectQueue.push([dbRow({ chatModel: "custom/model-from-db" })]);
-    const { getElaineGlobalConfig, ELAINE_CONFIG_DEFAULTS } = await import(
-      "./elaine-config"
-    );
+    const { getElaineGlobalConfig, ELAINE_CONFIG_DEFAULTS } =
+      await import("./elaine-config");
     const config = await getElaineGlobalConfig();
     expect(config.chatModel).toBe("custom/model-from-db");
     expect(config.chatModel).not.toBe(ELAINE_CONFIG_DEFAULTS.chatModel);
   });
 
   it("merges stored jsonb overrides on top of defaults for nested config", async () => {
-    selectQueue.push([
-      dbRow({ features: { enableAdvisor: false } }),
-    ]);
-    const { getElaineGlobalConfig, ELAINE_CONFIG_DEFAULTS } = await import(
-      "./elaine-config"
-    );
+    selectQueue.push([dbRow({ features: { enableAdvisor: false } })]);
+    const { getElaineGlobalConfig, ELAINE_CONFIG_DEFAULTS } =
+      await import("./elaine-config");
     const config = await getElaineGlobalConfig();
     expect(config.features.enableAdvisor).toBe(false);
     expect(ELAINE_CONFIG_DEFAULTS.features.enableAdvisor).not.toBe(false);
@@ -120,9 +115,8 @@ describe("getElaineGlobalConfig", () => {
     dbMock.select.mockImplementationOnce(() => {
       throw new Error("connection refused");
     });
-    const { getElaineGlobalConfig, ELAINE_CONFIG_DEFAULTS } = await import(
-      "./elaine-config"
-    );
+    const { getElaineGlobalConfig, ELAINE_CONFIG_DEFAULTS } =
+      await import("./elaine-config");
     const config = await getElaineGlobalConfig();
     expect(config).toEqual(ELAINE_CONFIG_DEFAULTS);
   });

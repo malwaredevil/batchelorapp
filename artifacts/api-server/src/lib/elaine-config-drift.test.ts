@@ -49,7 +49,9 @@ function extractInterfaceBlock(source: string, interfaceName: string): string {
   // object types (e.g. openAIStoreScopeOverrides: { ... };, indented) don't
   // prematurely terminate the match — their closing "};" is indented, the
   // interface's own closing "}" is not.
-  const re = new RegExp(`export interface ${interfaceName} \\{([\\s\\S]*?)\\n\\}`);
+  const re = new RegExp(
+    `export interface ${interfaceName} \\{([\\s\\S]*?)\\n\\}`,
+  );
   const match = source.match(re);
   if (!match) {
     throw new Error(

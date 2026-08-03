@@ -120,9 +120,8 @@ describe("resetElaineGlobalConfigToDefaults", () => {
       }),
     ]);
 
-    const { resetElaineGlobalConfigToDefaults } = await import(
-      "./admin-config"
-    );
+    const { resetElaineGlobalConfigToDefaults } =
+      await import("./admin-config");
     const { ELAINE_CONFIG_DEFAULTS } = await import("../lib/elaine-config");
 
     const result = await resetElaineGlobalConfigToDefaults(7);
@@ -172,8 +171,6 @@ describe("round trip: patch changes a value, patching back restores the original
       99,
     );
     expect(restored.chatModel).toBe(before.chatModel);
-    expect(upsertSets[upsertSets.length - 1]?.chatModel).toBe(
-      "original/model",
-    );
+    expect(upsertSets[upsertSets.length - 1]?.chatModel).toBe("original/model");
   });
 });

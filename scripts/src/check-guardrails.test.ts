@@ -56,9 +56,7 @@ assert.deepEqual(
   "nested .replit-artifact/artifact.toml must be allowed",
 );
 assert.deepEqual(
-  checkRestrictedFilesFromList([
-    "artifacts/web/.replit-artifact/other.json",
-  ]),
+  checkRestrictedFilesFromList(["artifacts/web/.replit-artifact/other.json"]),
   ["artifacts/web/.replit-artifact/other.json"],
   "nested .replit-artifact/ non-toml files must be flagged",
 );

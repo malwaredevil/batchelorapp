@@ -3055,7 +3055,11 @@ export default function TripDetail({ id }: { id: number }) {
   const [compactDocs, setCompactDocs] = useState<boolean>(() => {
     try {
       return localStorage.getItem("travels-compact-docs") === "1";
-    } catch {
+    } catch (err) {
+      console.warn(
+        "travels-trip-detail: failed to read compact-docs preference",
+        err,
+      );
       return false;
     }
   });
@@ -3064,7 +3068,12 @@ export default function TripDetail({ id }: { id: number }) {
       const next = !v;
       try {
         localStorage.setItem("travels-compact-docs", next ? "1" : "0");
-      } catch {}
+      } catch (err) {
+        console.warn(
+          "travels-trip-detail: failed to persist compact-docs preference",
+          err,
+        );
+      }
       return next;
     });
   };

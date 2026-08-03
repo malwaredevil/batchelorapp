@@ -53,8 +53,13 @@ export const DRIZZLE_KIT_PUSH_HELP = [
 // Check 2: Replit-local / secret-bearing files must never enter a diff meant
 // for the public repo.
 // ---------------------------------------------------------------------------
+// .replit-artifact/artifact.toml is deliberately exempted (negative lookahead):
+// it contains no secrets — the artifact config the platform's artifact-registry
+// scan needs to see the app's artifacts (registry-empty support ticket #486854,
+// 2026-08-03). Real Replit secrets/config live in .replit, which stays fully
+// restricted below. Everything else under .replit-artifact/ remains restricted.
 const RESTRICTED_FILE_RE =
-  /(^|\/)\.replit-artifact\/|^\.agents\/|^\.local\/|^threat_model\.md|^\.env$|^\.env\.|^\.replit$|^\.replitignore$|^replit\.nix$|^\.upm\//;
+  /(^|\/)\.replit-artifact\/(?!artifact\.toml$)|^\.agents\/|^\.local\/|^threat_model\.md|^\.env$|^\.env\.|^\.replit$|^\.replitignore$|^replit\.nix$|^\.upm\//;
 
 export function checkRestrictedFilesFromList(files: string[]): string[] {
   return files.filter((f) => RESTRICTED_FILE_RE.test(f));
@@ -71,6 +76,8 @@ export const RESTRICTED_FILES_HELP = [
   "  replit.nix      — Replit-local nix config",
   "  .upm/           — Replit package manager cache",
   "  .replit-artifact/ — Replit-local artifact routing config",
+  "    (artifact.toml itself is exempt — no secrets, needed for the",
+  "     platform artifact registry scan)",
   "",
   "Remove them from your branch and add them to .gitignore.",
 ].join("\n");

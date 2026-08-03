@@ -27,10 +27,12 @@ import { crossAppUrl } from "@workspace/web-core/cross-app";
 import {
   getElaineConversationMessagesFn,
   getElaineDailyBriefQueryKey,
+  getInfiniteElaineConversationsQueryKey,
   getListElaineConversationsQueryKey,
   useDeleteElaineConversation,
   useDismissElaineDailyBrief,
   useGetElaineDailyBrief,
+  useInfiniteElaineConversations,
   useListElaineConversations,
   useRegenerateElaineDailyBrief,
   useRenameElaineConversation,
@@ -120,14 +122,32 @@ export default function Chat() {
   const [editingConvId, setEditingConvId] = useState<number | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
-  const { data: conversations = [] } = useListElaineConversations({
+  // Paginated list (no search) — cursor-based infinite scroll.
+  const {
+    data: infiniteData,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteElaineConversations({
+    query: { enabled: !deferredSearch, refetchOnWindowFocus: false },
+  });
+
+  // Search results — returned all-at-once when a query is active.
+  const { data: searchResults = [] } = useListElaineConversations({
     q: deferredSearch,
     query: {
       queryKey: getListElaineConversationsQueryKey(deferredSearch),
+      enabled: !!deferredSearch,
       refetchOnWindowFocus: false,
     },
   });
+
+  const conversations = deferredSearch
+    ? searchResults
+    : (infiniteData?.pages.flatMap((p) => p.conversations) ?? []);
+
   const deleteConversation = useDeleteElaineConversation({
     mutation: {
       onSuccess: () => {
@@ -135,9 +155,27 @@ export default function Chat() {
         void qc.invalidateQueries({
           queryKey: getListElaineConversationsQueryKey(),
         });
+        void qc.invalidateQueries({
+          queryKey: getInfiniteElaineConversationsQueryKey(),
+        });
       },
     },
   });
+
+  // Intersection-observer sentinel for infinite scroll in the sidebar.
+  useEffect(() => {
+    if (!sentinelRef.current) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && hasNextPage && !isFetchingNextPage) {
+          void fetchNextPage();
+        }
+      },
+      { threshold: 0.1 },
+    );
+    observer.observe(sentinelRef.current);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
   const renameConversation = useRenameElaineConversation({
     mutation: {
       onSuccess: () => {
@@ -198,8 +236,8 @@ export default function Chat() {
       if (loadingConvId === id) return;
       setLoadingConvId(id);
       try {
-        const msgs = await getElaineConversationMessagesFn(id);
-        chat.handleLoadConversation(id, msgs);
+        const page = await getElaineConversationMessagesFn(id);
+        chat.handleLoadConversation(id, page.messages, page.hasMore);
       } catch {
         // If load fails, just clear to a new conversation
         chat.handleNewConversation();
@@ -389,6 +427,16 @@ export default function Chat() {
                     </div>
                   );
                 })}
+
+                {/* Sentinel for infinite scroll — triggers load-more when visible */}
+                {!deferredSearch && (
+                  <div ref={sentinelRef} className="h-1" aria-hidden="true" />
+                )}
+                {isFetchingNextPage && (
+                  <p className="py-2 text-center text-[10px] text-muted-foreground">
+                    Loading more…
+                  </p>
+                )}
               </div>
             </>
           ) : (

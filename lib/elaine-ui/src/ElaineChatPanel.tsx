@@ -2,6 +2,7 @@ import {
   useRef,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useState,
   type ReactNode,
 } from "react";
@@ -406,6 +407,9 @@ export function ElaineChatPanel({
     runtimeTrace,
     endRef,
     executeAction,
+    hasOlderMessages,
+    isLoadingOlder,
+    loadOlderMessages,
     pendingAttachments,
     handleAddAttachment,
     handleRemoveAttachment,
@@ -419,6 +423,50 @@ export function ElaineChatPanel({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
+  // ── Infinite scroll-up (load older messages) ──────────────────────────────
+  // Scrolling near the top of the message list fetches the previous page and
+  // prepends it. Prepending grows the scrollable content above the viewport,
+  // so without correction the browser would visually jump; we record the
+  // scroll height right before the fetch and restore the same visual
+  // position afterward once the new content has been laid out.
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const pendingScrollAdjustRef = useRef<number | null>(null);
+  const SCROLL_TOP_LOAD_THRESHOLD = 80;
+
+  const handleMessagesScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el || isLoadingOlder || !hasOlderMessages) return;
+    if (el.scrollTop < SCROLL_TOP_LOAD_THRESHOLD) {
+      pendingScrollAdjustRef.current = el.scrollHeight;
+      void loadOlderMessages();
+    }
+  }, [isLoadingOlder, hasOlderMessages, loadOlderMessages]);
+
+  useLayoutEffect(() => {
+    const el = scrollContainerRef.current;
+    const prevHeight = pendingScrollAdjustRef.current;
+    if (el && prevHeight !== null) {
+      el.scrollTop += el.scrollHeight - prevHeight;
+      pendingScrollAdjustRef.current = null;
+    }
+  }, [messages]);
+
+  // ── Fill-the-viewport backstop ────────────────────────────────────────────
+  // Scroll-up-to-load only fires once the container is actually scrollable.
+  // If a page of history (e.g. the initial 30, or a short subsequent page)
+  // doesn't produce enough content to overflow the panel, the user can never
+  // generate the scroll event that would load more — older history would be
+  // silently stranded even though `hasOlderMessages` is true. Keep loading
+  // more pages after every render until either the content overflows (normal
+  // scroll-up takes over from here) or history is exhausted.
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (!el || isLoadingOlder || !hasOlderMessages) return;
+    if (el.scrollHeight <= el.clientHeight) {
+      void loadOlderMessages();
+    }
+  }, [messages, isLoadingOlder, hasOlderMessages, loadOlderMessages]);
 
   const hasUploadingAttachments = pendingAttachments.some((a) => a.uploading);
 
@@ -515,7 +563,17 @@ export function ElaineChatPanel({
 
   return (
     <>
-      <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+      <div
+        ref={scrollContainerRef}
+        onScroll={handleMessagesScroll}
+        className="flex-1 space-y-3 overflow-y-auto px-4 py-4"
+      >
+        {isLoadingOlder && (
+          <div className="flex items-center justify-center gap-2 py-2 text-xs text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Loading earlier messages…
+          </div>
+        )}
         {showBrief && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 px-3.5 py-3 text-sm text-foreground leading-relaxed relative">
             <div className="flex items-start gap-2">
@@ -677,7 +735,12 @@ export function ElaineChatPanel({
           }
           const { text, citations } = parseMessageCitations(msg.content);
           const firstAssistantUrl = extractFirstUrl(text);
-          const widgets = messageWidgets.get(i);
+          // Keyed by the message's own (stable) id, not its array position:
+          // loadOlderMessages() prepends pages above the currently-rendered
+          // messages, which would otherwise invalidate any index captured
+          // when the widgets were originally attached.
+          const widgets =
+            msg.id !== undefined ? messageWidgets.get(msg.id) : undefined;
           return (
             <div key={i} className="flex gap-2.5 justify-start">
               <ElaineAvatar

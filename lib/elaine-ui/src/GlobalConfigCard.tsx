@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import {
   useGetElaineAdminConfig,
   useUpdateElaineAdminConfig,
+  useResetElaineAdminConfig,
   getGetElaineAdminConfigQueryKey,
   useListElaineAdminModels,
   getListElaineAdminModelsQueryKey,
@@ -163,6 +164,8 @@ export function GlobalConfigCard() {
       },
     });
   const updateConfig = useUpdateElaineAdminConfig();
+  const resetConfig = useResetElaineAdminConfig();
+  const [confirmingReset, setConfirmingReset] = useState(false);
 
   const [chatModel, setChatModel] = useState("");
   const [subagentModel, setSubagentModel] = useState("");
@@ -220,6 +223,28 @@ export function GlobalConfigCard() {
         onError: () => toast.error("Failed to update global configuration"),
       },
     );
+  }
+
+  function handleResetConfirm() {
+    resetConfig.mutate(undefined, {
+      onSuccess: (result) => {
+        qc.setQueryData(getGetElaineAdminConfigQueryKey(), result);
+        setChatModel(result.chatModel);
+        setSubagentModel(result.subagentModel);
+        setRequestTimeoutMs(result.requestTimeoutMs);
+        setMaxResponseTokens(result.maxResponseTokens);
+        setModels(result.models);
+        setTimeouts(result.timeouts);
+        setFeatures(result.features);
+        setThresholds(result.thresholds);
+        setConfirmingReset(false);
+        toast.success("Global configuration reset to defaults");
+      },
+      onError: () => {
+        setConfirmingReset(false);
+        toast.error("Failed to reset global configuration");
+      },
+    });
   }
 
   const fusionModelsText = models.fusionModels.join(", ");
@@ -741,13 +766,49 @@ export function GlobalConfigCard() {
         </div>
       </Section>
 
-      <div className="flex items-center gap-3 border-t border-card-border pt-5">
+      <div className="flex flex-wrap items-center gap-3 border-t border-card-border pt-5">
         <Button
           onClick={handleSave}
           disabled={updateConfig.isPending || modelsLoading}
         >
           {updateConfig.isPending ? "Saving…" : "Save global configuration"}
         </Button>
+
+        {confirmingReset ? (
+          <div className="flex items-center gap-2">
+            <p className="text-xs text-muted-foreground">
+              Discard every customization and restore defaults?
+            </p>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={handleResetConfirm}
+              disabled={resetConfig.isPending}
+            >
+              {resetConfig.isPending ? "Resetting…" : "Confirm reset"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setConfirmingReset(false)}
+              disabled={resetConfig.isPending}
+            >
+              Cancel
+            </Button>
+          </div>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setConfirmingReset(true)}
+            disabled={updateConfig.isPending || resetConfig.isPending}
+          >
+            Reset to defaults
+          </Button>
+        )}
+
         {config?.updatedAt && (
           <p className="text-xs text-muted-foreground">
             Last updated {new Date(config.updatedAt).toLocaleString()}

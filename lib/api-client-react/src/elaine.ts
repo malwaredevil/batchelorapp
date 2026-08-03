@@ -1427,6 +1427,18 @@ export function useUpdateElaineAdminConfig(options?: {
   return useMutation({ mutationFn, ...options?.mutation });
 }
 
+const resetElaineAdminConfigFn = (): Promise<ElaineGlobalConfig> =>
+  customFetch<ElaineGlobalConfig>("/api/elaine/admin/config/reset", {
+    method: "POST",
+  });
+
+export function useResetElaineAdminConfig(options?: {
+  mutation?: UseMutationOptions<ElaineGlobalConfig, unknown, void>;
+}) {
+  const mutationFn = () => resetElaineAdminConfigFn();
+  return useMutation({ mutationFn, ...options?.mutation });
+}
+
 export interface OpenRouterModelSummary {
   id: string;
   name: string;

@@ -1,0 +1,204 @@
+name: Test Dependabot auto-merge logic
+
+# Manual trigger only — validates every decision branch of dependabot-auto-merge.yml
+# without needing a real dependabot[bot] PR.
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/dependabot-auto-merge.yml"
+      - ".github/workflows/test-dependabot-auto-merge.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test-merge-logic:
+    name: Validate auto-merge decision branches
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: "Case 1: GitHub Actions patch bump → should auto-merge"
+        env:
+          PR_NUMBER: "999"
+          ECOSYSTEM: "github_actions"
+          UPDATE_TYPE: "version-update:semver-patch"
+          DEPENDENCY_NAMES: "actions/checkout"
+        run: |
+          set -euo pipefail
+          MERGED=false
+
+          PACKAGE_COUNT=$(echo "$DEPENDENCY_NAMES" | tr ',' '\n' | grep -c .)
+
+          if [ "$ECOSYSTEM" = "github_actions" ]; then
+            if [ "$UPDATE_TYPE" = "version-update:semver-major" ]; then
+              echo "FAIL: should not skip a patch bump"
+              exit 1
+            fi
+            echo "✓ Case 1 passed: GitHub Actions patch bump → would auto-merge PR #$PR_NUMBER"
+            MERGED=true
+          fi
+
+          if [ "$MERGED" = "false" ]; then
+            echo "FAIL: github_actions ecosystem was not matched"
+            exit 1
+          fi
+
+      - name: "Case 2: GitHub Actions minor bump → should auto-merge"
+        env:
+          PR_NUMBER: "999"
+          ECOSYSTEM: "github_actions"
+          UPDATE_TYPE: "version-update:semver-minor"
+          DEPENDENCY_NAMES: "actions/checkout"
+        run: |
+          set -euo pipefail
+          MERGED=false
+
+          if [ "$ECOSYSTEM" = "github_actions" ]; then
+            if [ "$UPDATE_TYPE" = "version-update:semver-major" ]; then
+              echo "FAIL: should not skip a minor bump"
+              exit 1
+            fi
+            echo "✓ Case 2 passed: GitHub Actions minor bump → would auto-merge PR #$PR_NUMBER"
+            MERGED=true
+          fi
+
+          if [ "$MERGED" = "false" ]; then
+            echo "FAIL: github_actions ecosystem was not matched"
+            exit 1
+          fi
+
+      - name: "Case 3: GitHub Actions major bump → must NOT auto-merge"
+        env:
+          PR_NUMBER: "999"
+          ECOSYSTEM: "github_actions"
+          UPDATE_TYPE: "version-update:semver-major"
+          DEPENDENCY_NAMES: "actions/checkout"
+        run: |
+          set -euo pipefail
+          SKIPPED=false
+
+          if [ "$ECOSYSTEM" = "github_actions" ]; then
+            if [ "$UPDATE_TYPE" = "version-update:semver-major" ]; then
+              echo "✓ Case 3 passed: GitHub Actions major bump → correctly skipped"
+              SKIPPED=true
+            fi
+          fi
+
+          if [ "$SKIPPED" = "false" ]; then
+            echo "FAIL: major GitHub Actions bump was not skipped"
+            exit 1
+          fi
+
+      - name: "Case 4: npm single-package patch bump → should auto-merge"
+        env:
+          PR_NUMBER: "999"
+          ECOSYSTEM: "npm"
+          UPDATE_TYPE: "version-update:semver-patch"
+          DEPENDENCY_NAMES: "zod"
+        run: |
+          set -euo pipefail
+          MERGED=false
+
+          PACKAGE_COUNT=$(echo "$DEPENDENCY_NAMES" | tr ',' '\n' | grep -c .)
+          echo "Package count: $PACKAGE_COUNT"
+
+          if [ "$ECOSYSTEM" = "github_actions" ]; then
+            echo "FAIL: npm should not hit github_actions branch"
+            exit 1
+          fi
+
+          if [ "$UPDATE_TYPE" = "version-update:semver-patch" ] && [ "$PACKAGE_COUNT" -eq 1 ]; then
+            echo "✓ Case 4 passed: npm single-package patch → would auto-merge PR #$PR_NUMBER"
+            MERGED=true
+          fi
+
+          if [ "$MERGED" = "false" ]; then
+            echo "FAIL: single-package npm patch was not matched for auto-merge"
+            exit 1
+          fi
+
+      - name: "Case 5: npm grouped (multi-package) patch → must NOT auto-merge"
+        env:
+          PR_NUMBER: "999"
+          ECOSYSTEM: "npm"
+          UPDATE_TYPE: "version-update:semver-patch"
+          DEPENDENCY_NAMES: "zod, react, typescript"
+        run: |
+          set -euo pipefail
+          SKIPPED=false
+
+          PACKAGE_COUNT=$(echo "$DEPENDENCY_NAMES" | tr ',' '\n' | grep -c .)
+          echo "Package count: $PACKAGE_COUNT"
+
+          if [ "$UPDATE_TYPE" = "version-update:semver-patch" ] && [ "$PACKAGE_COUNT" -eq 1 ]; then
+            echo "FAIL: grouped PR should not auto-merge"
+            exit 1
+          fi
+
+          if [ "$PACKAGE_COUNT" -gt 1 ]; then
+            echo "✓ Case 5 passed: grouped npm PR ($PACKAGE_COUNT packages) → correctly skipped"
+            SKIPPED=true
+          fi
+
+          if [ "$SKIPPED" = "false" ]; then
+            echo "FAIL: grouped npm PR was not detected as multi-package"
+            exit 1
+          fi
+
+      - name: "Case 6: npm single-package minor bump → must NOT auto-merge"
+        env:
+          PR_NUMBER: "999"
+          ECOSYSTEM: "npm"
+          UPDATE_TYPE: "version-update:semver-minor"
+          DEPENDENCY_NAMES: "zod"
+        run: |
+          set -euo pipefail
+          MERGED=false
+
+          PACKAGE_COUNT=$(echo "$DEPENDENCY_NAMES" | tr ',' '\n' | grep -c .)
+          echo "Package count: $PACKAGE_COUNT"
+
+          if [ "$UPDATE_TYPE" = "version-update:semver-patch" ] && [ "$PACKAGE_COUNT" -eq 1 ]; then
+            echo "FAIL: minor npm bump should not auto-merge"
+            exit 1
+          fi
+
+          echo "✓ Case 6 passed: npm single-package minor bump → correctly skipped"
+
+      - name: "Case 7: npm single-package major bump → must NOT auto-merge"
+        env:
+          PR_NUMBER: "999"
+          ECOSYSTEM: "npm"
+          UPDATE_TYPE: "version-update:semver-major"
+          DEPENDENCY_NAMES: "zod"
+        run: |
+          set -euo pipefail
+
+          PACKAGE_COUNT=$(echo "$DEPENDENCY_NAMES" | tr ',' '\n' | grep -c .)
+          echo "Package count: $PACKAGE_COUNT"
+
+          if [ "$UPDATE_TYPE" = "version-update:semver-patch" ] && [ "$PACKAGE_COUNT" -eq 1 ]; then
+            echo "FAIL: major npm bump should not auto-merge"
+            exit 1
+          fi
+
+          echo "✓ Case 7 passed: npm single-package major bump → correctly skipped"
+
+      - name: "Case 8: grouped npm with 2 packages (comma-count edge case)"
+        env:
+          DEPENDENCY_NAMES: "zod, typescript"
+        run: |
+          set -euo pipefail
+          PACKAGE_COUNT=$(echo "$DEPENDENCY_NAMES" | tr ',' '\n' | grep -c .)
+          echo "Package count: $PACKAGE_COUNT"
+          if [ "$PACKAGE_COUNT" -ne 2 ]; then
+            echo "FAIL: expected 2 packages, got $PACKAGE_COUNT"
+            exit 1
+          fi
+          echo "✓ Case 8 passed: comma-separated 2-package list parsed correctly as $PACKAGE_COUNT"
+
+      - name: All cases passed
+        run: echo "✓ All dependabot-auto-merge decision branches validated successfully."

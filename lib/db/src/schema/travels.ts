@@ -323,6 +323,11 @@ export const travelsGoogleCalendarConnections = pgTable(
     // chosen to mean "Travel". Only meaningful on the row currently marked
     // isHouseholdShared.
     travelColorId: text("travel_color_id"),
+    // Set to true when a refresh-token exchange fails with invalid_grant
+    // (token revoked or expired). The status endpoint returns tokenExpired:true
+    // so the UI can show a "Reconnect" prompt immediately. Cleared on a
+    // successful OAuth reconnect.
+    needsReauth: boolean("needs_reauth").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

@@ -1473,6 +1473,10 @@ export const relinkGmailMessagesAfterUndo = (
 export interface CalendarStatus {
   connected: boolean;
   googleEmail: string | null;
+  /** True when the refresh token has been revoked or expired (invalid_grant).
+   *  The UI should show a "Reconnect Google Calendar" prompt and stop polling
+   *  event endpoints until the user reconnects. */
+  tokenExpired?: boolean;
 }
 
 export interface CalendarListItem {

@@ -30,6 +30,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
+  useGetCalendarStatus,
   useGetTravelCalendarStatus,
   useListTravelCalendarEvents,
   useCreateTravelCalendarEvent,
@@ -46,6 +47,7 @@ import {
   getListTravelCalendarEventsQueryKey,
   getListCalendarTripSuggestionsQueryKey,
   getListGoogleEventColorsQueryKey,
+  getGetCalendarStatusQueryKey,
   type TravelCalendarEvent,
   type TravelCalendarEventInput,
   type CalendarTripSuggestion,
@@ -194,12 +196,15 @@ function OverlayCalendarEvents({
   calendar,
   start,
   end,
+  enabled,
   onEvents,
   onError,
 }: {
   calendar: ConnectedCalendar;
   start: string;
   end: string;
+  /** Pass false to pause polling (e.g. when the token is known to be expired). */
+  enabled?: boolean;
   onEvents: (calendarId: number, events: TravelCalendarEvent[]) => void;
   onError: (calendarId: number, hasError: boolean) => void;
 }) {
@@ -209,7 +214,7 @@ function OverlayCalendarEvents({
     end,
     {
       query: {
-        enabled: Boolean(start && end),
+        enabled: Boolean(start && end) && enabled !== false,
         queryKey: getListConnectedCalendarEventsQueryKey(
           calendar.id,
           start,
@@ -235,6 +240,16 @@ export default function TravelCalendar() {
   const qc = useQueryClient();
   const { data: status, isLoading: statusLoading } =
     useGetTravelCalendarStatus();
+
+  // Separate check for the current user's own Google connection — used to
+  // detect invalid_grant so we can stop overlay polling and show a reconnect
+  // prompt without waiting for an event request to fail first.
+  const { data: calendarStatus } = useGetCalendarStatus({
+    query: { queryKey: getGetCalendarStatusQueryKey() },
+  });
+  const overlayTokenExpired = Boolean(
+    calendarStatus?.connected && calendarStatus.tokenExpired,
+  );
 
   // Mirror CalendarCore's internal view/cursor so we can derive API query keys
   // and the assistant page context outside the children render prop.
@@ -705,17 +720,19 @@ export default function TravelCalendar() {
           calendar={cal}
           start={startISO}
           end={endISO}
+          enabled={!overlayTokenExpired}
           onEvents={handleOverlayEvents}
           onError={handleOverlayError}
         />
       ))}
 
-      {hasTokenError && (
+      {(overlayTokenExpired || hasTokenError) && (
         <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900 dark:bg-amber-950/20">
           <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
           <p className="text-sm text-amber-800 dark:text-amber-300">
-            One or more connected calendars couldn&apos;t load — your Google
-            Calendar connection may have expired.{" "}
+            {overlayTokenExpired
+              ? "Your Google Calendar authorization has expired or been revoked. "
+              : "One or more connected calendars couldn\u2019t load — your Google Calendar connection may have expired. "}
             <a
               href="/api/travels/google-calendar/connect?returnTo=/modules/travels/travel-calendar"
               className="font-medium underline"

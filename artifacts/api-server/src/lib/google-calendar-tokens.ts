@@ -171,16 +171,45 @@ export async function getValidAccessToken(
       .set({
         accessToken: encryptToken(refreshed.accessToken),
         accessTokenExpiresAt: refreshed.expiresAt,
+        needsReauth: false,
         updatedAt: new Date(),
       })
       .where(eq(travelsGoogleCalendarConnections.userId, userId));
 
     return refreshed.accessToken;
   } catch (err) {
+    const errMessage = err instanceof Error ? err.message : String(err);
+    const isInvalidGrant =
+      errMessage.includes("invalid_grant") ||
+      (err instanceof Error &&
+        "response" in err &&
+        typeof (err as { response?: { data?: { error?: string } } }).response
+          ?.data?.error === "string" &&
+        (
+          err as { response: { data: { error: string } } }
+        ).response.data.error.includes("invalid_grant"));
+
     logger.warn(
-      { errMessage: err instanceof Error ? err.message : String(err), userId },
+      { errMessage, userId },
       "google-calendar: refresh token failed (revoked or expired)",
     );
+
+    if (isInvalidGrant) {
+      // Mark the connection as needing reauth so the status endpoint can
+      // tell the UI immediately — before any event endpoint is called.
+      try {
+        await db
+          .update(travelsGoogleCalendarConnections)
+          .set({ needsReauth: true, updatedAt: new Date() })
+          .where(eq(travelsGoogleCalendarConnections.userId, userId));
+      } catch (dbErr) {
+        logger.warn(
+          { dbErr, userId },
+          "google-calendar: failed to mark connection as needsReauth",
+        );
+      }
+    }
+
     return null;
   }
 }

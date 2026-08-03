@@ -14,6 +14,7 @@ import {
   isRecoverableOpenAIStateError,
   messagesToResponseInput,
   resolveOpenAIResponsesModel,
+  resolveOpenAIResponsesStore,
 } from "./openai-responses";
 import type { ResponseFunctionWebSearch } from "openai/resources/responses/responses";
 import type { ElaineGlobalConfig } from "./elaine-config";
@@ -55,6 +56,9 @@ const config: ElaineGlobalConfig = {
     enableOpenAIResponsesFallback: true,
     enableBuiltinWebSearch: true,
     showReasoningSummary: true,
+    openAIStoreEnabledDefault: false,
+    openAIStoreScopeOverrides: {},
+    openAIStoreRoleOverrides: {},
   },
   thresholds: {
     potterySimilarityYes: 0.9,
@@ -82,6 +86,35 @@ describe("OpenAI Responses provider helpers", () => {
       "gpt-5.6-terra",
     );
     expect(resolveOpenAIResponsesModel(config, "fast")).toBe("gpt-5.6-luna");
+  });
+
+  it("resolves response storage policy from role, scope, then default", () => {
+    expect(resolveOpenAIResponsesStore(config, "reasoning", "elaine")).toBe(
+      false,
+    );
+
+    const withScopeOverride: ElaineGlobalConfig = {
+      ...config,
+      features: {
+        ...config.features,
+        openAIStoreScopeOverrides: { elaine: true },
+      },
+    };
+    expect(
+      resolveOpenAIResponsesStore(withScopeOverride, "balanced", "elaine"),
+    ).toBe(true);
+
+    const withRoleOverride: ElaineGlobalConfig = {
+      ...config,
+      features: {
+        ...config.features,
+        openAIStoreScopeOverrides: { elaine: false },
+        openAIStoreRoleOverrides: { balanced: true },
+      },
+    };
+    expect(
+      resolveOpenAIResponsesStore(withRoleOverride, "balanced", "elaine"),
+    ).toBe(true);
   });
 
   it("hashes safety and cache identifiers without exposing raw IDs", () => {

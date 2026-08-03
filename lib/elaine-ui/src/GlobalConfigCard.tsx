@@ -401,6 +401,84 @@ export function GlobalConfigCard() {
               setFeatures({ ...features, showReasoningSummary: v })
             }
           />
+          <ToggleField
+            label="Store Responses by default"
+            hint="Global default for OpenAI Responses `store` retention."
+            checked={features.openAIStoreEnabledDefault}
+            onChange={(v) =>
+              setFeatures({ ...features, openAIStoreEnabledDefault: v })
+            }
+          />
+          <ToggleField
+            label="Store Elaine chat responses"
+            hint="Scope override for the interactive Elaine channel."
+            checked={Boolean(features.openAIStoreScopeOverrides?.elaine)}
+            onChange={(v) =>
+              setFeatures({
+                ...features,
+                openAIStoreScopeOverrides: {
+                  ...features.openAIStoreScopeOverrides,
+                  elaine: v,
+                },
+              })
+            }
+          />
+          <ToggleField
+            label="Store app workflow responses"
+            hint="Scope override for non-chat OpenAI workflow calls."
+            checked={Boolean(features.openAIStoreScopeOverrides?.app)}
+            onChange={(v) =>
+              setFeatures({
+                ...features,
+                openAIStoreScopeOverrides: {
+                  ...features.openAIStoreScopeOverrides,
+                  app: v,
+                },
+              })
+            }
+          />
+          <ToggleField
+            label="Force-store reasoning role"
+            hint="Role override for the highest-capability OpenAI model tier."
+            checked={Boolean(features.openAIStoreRoleOverrides?.reasoning)}
+            onChange={(v) =>
+              setFeatures({
+                ...features,
+                openAIStoreRoleOverrides: {
+                  ...features.openAIStoreRoleOverrides,
+                  reasoning: v,
+                },
+              })
+            }
+          />
+          <ToggleField
+            label="Force-store balanced role"
+            hint="Role override for balanced OpenAI model tier."
+            checked={Boolean(features.openAIStoreRoleOverrides?.balanced)}
+            onChange={(v) =>
+              setFeatures({
+                ...features,
+                openAIStoreRoleOverrides: {
+                  ...features.openAIStoreRoleOverrides,
+                  balanced: v,
+                },
+              })
+            }
+          />
+          <ToggleField
+            label="Force-store fast role"
+            hint="Role override for fast OpenAI model tier."
+            checked={Boolean(features.openAIStoreRoleOverrides?.fast)}
+            onChange={(v) =>
+              setFeatures({
+                ...features,
+                openAIStoreRoleOverrides: {
+                  ...features.openAIStoreRoleOverrides,
+                  fast: v,
+                },
+              })
+            }
+          />
         </div>
       </Section>
 

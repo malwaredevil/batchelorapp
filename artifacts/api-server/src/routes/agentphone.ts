@@ -11,6 +11,11 @@ import {
 import { env } from "../lib/env";
 import { logger } from "../lib/logger";
 import { sendSms, SmsOptedOutError } from "../lib/sms";
+import {
+  claimWebhookSideEffect,
+  markWebhookSideEffectCompleted,
+  markWebhookSideEffectFailed,
+} from "../lib/webhook-side-effect-idempotency";
 import { runAgentphoneTurn, type AgentphoneChatMessage } from "../elaine";
 import { markCommCheckVerified } from "../lib/comm-check-scheduler";
 
@@ -197,7 +202,11 @@ async function runRestrictedTurnAndPersist(
   );
 }
 
-async function handleSms(req: Request, res: Response): Promise<void> {
+async function handleSms(
+  req: Request,
+  res: Response,
+  deliveryKey: string,
+): Promise<void> {
   const data = (req.body?.data ?? {}) as {
     from?: unknown;
     message?: unknown;
@@ -231,25 +240,61 @@ async function handleSms(req: Request, res: Response): Promise<void> {
         .set({ smsOptedOutAt: new Date() })
         .where(eq(appUsers.id, user.id));
     }
-    await sendSms(
-      from,
-      "You've been unsubscribed from Batchelor App texts and won't receive any more messages. Reply START to resubscribe.",
-      { bypassOptOutCheck: true },
-    ).catch((err) =>
-      logger.error({ err }, "agentphone: STOP confirmation send failed"),
-    );
+    const stopSideEffectKey = `agentphone:sms:${deliveryKey}:stop-confirmation`;
+    const shouldSendStop = await claimWebhookSideEffect({
+      effectKey: stopSideEffectKey,
+      provider: "agentphone",
+      channel: "sms",
+    });
+    if (!shouldSendStop) {
+      logger.warn(
+        { stopSideEffectKey },
+        "agentphone: duplicate STOP confirmation suppressed",
+      );
+    } else {
+      await sendSms(
+        from,
+        "You've been unsubscribed from Batchelor App texts and won't receive any more messages. Reply START to resubscribe.",
+        { bypassOptOutCheck: true },
+      )
+        .then(async () => {
+          await markWebhookSideEffectCompleted(stopSideEffectKey);
+        })
+        .catch(async (err) => {
+          await markWebhookSideEffectFailed(stopSideEffectKey, err);
+          logger.error({ err }, "agentphone: STOP confirmation send failed");
+        });
+    }
     res.status(200).json({ ok: true });
     return;
   }
 
   if (HELP_WORDS.has(keyword)) {
-    await sendSms(
-      from,
-      "Batchelor App: household trip reminder texts. Msg & data rates may apply. Reply STOP to unsubscribe. Questions? Use the app.",
-      { bypassOptOutCheck: true },
-    ).catch((err) =>
-      logger.error({ err }, "agentphone: HELP reply send failed"),
-    );
+    const helpSideEffectKey = `agentphone:sms:${deliveryKey}:help-reply`;
+    const shouldSendHelp = await claimWebhookSideEffect({
+      effectKey: helpSideEffectKey,
+      provider: "agentphone",
+      channel: "sms",
+    });
+    if (!shouldSendHelp) {
+      logger.warn(
+        { helpSideEffectKey },
+        "agentphone: duplicate HELP reply suppressed",
+      );
+    } else {
+      await sendSms(
+        from,
+        "Batchelor App: household trip reminder texts. Msg & data rates may apply. Reply STOP to unsubscribe. Questions? Use the app.",
+        { bypassOptOutCheck: true },
+      )
+        .then(async () => {
+          await markWebhookSideEffectCompleted(helpSideEffectKey);
+        })
+        .catch(async (err) => {
+          await markWebhookSideEffectFailed(helpSideEffectKey, err);
+          logger.error({ err }, "agentphone: HELP reply send failed");
+        });
+    }
     res.status(200).json({ ok: true });
     return;
   }
@@ -261,13 +306,31 @@ async function handleSms(req: Request, res: Response): Promise<void> {
         .set({ smsOptedOutAt: null })
         .where(eq(appUsers.id, user.id));
     }
-    await sendSms(
-      from,
-      "You're resubscribed to Batchelor App texts. Reply STOP at any time to opt out.",
-      { bypassOptOutCheck: true },
-    ).catch((err) =>
-      logger.error({ err }, "agentphone: START confirmation send failed"),
-    );
+    const startSideEffectKey = `agentphone:sms:${deliveryKey}:start-confirmation`;
+    const shouldSendStart = await claimWebhookSideEffect({
+      effectKey: startSideEffectKey,
+      provider: "agentphone",
+      channel: "sms",
+    });
+    if (!shouldSendStart) {
+      logger.warn(
+        { startSideEffectKey },
+        "agentphone: duplicate START confirmation suppressed",
+      );
+    } else {
+      await sendSms(
+        from,
+        "You're resubscribed to Batchelor App texts. Reply STOP at any time to opt out.",
+        { bypassOptOutCheck: true },
+      )
+        .then(async () => {
+          await markWebhookSideEffectCompleted(startSideEffectKey);
+        })
+        .catch(async (err) => {
+          await markWebhookSideEffectFailed(startSideEffectKey, err);
+          logger.error({ err }, "agentphone: START confirmation send failed");
+        });
+    }
     res.status(200).json({ ok: true });
     return;
   }
@@ -298,11 +361,30 @@ async function handleSms(req: Request, res: Response): Promise<void> {
     messageText,
   );
 
+  const replySideEffectKey = `agentphone:sms:${deliveryKey}:assistant-reply`;
+  const shouldSendReply = await claimWebhookSideEffect({
+    effectKey: replySideEffectKey,
+    provider: "agentphone",
+    channel: "sms",
+  });
+  if (!shouldSendReply) {
+    logger.warn(
+      { replySideEffectKey },
+      "agentphone: duplicate assistant reply suppressed",
+    );
+    res.status(200).json({ ok: true });
+    return;
+  }
+
   try {
     await sendSms(from, replyText);
+    await markWebhookSideEffectCompleted(replySideEffectKey);
   } catch (err) {
     if (!(err instanceof SmsOptedOutError)) {
+      await markWebhookSideEffectFailed(replySideEffectKey, err);
       logger.error({ err }, "agentphone: reply send failed");
+    } else {
+      await markWebhookSideEffectCompleted(replySideEffectKey);
     }
   }
 
@@ -441,7 +523,7 @@ router.post("/webhook", webhookLimiter, async (req: Request, res: Response) => {
 
   try {
     if (channel === "sms") {
-      await handleSms(req, res);
+      await handleSms(req, res, contentHash);
       void markDeliveryProcessed(contentHash);
       return;
     }

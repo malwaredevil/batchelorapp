@@ -12,6 +12,11 @@ import { Resend } from "resend";
 import { env } from "../lib/env";
 import { logger } from "../lib/logger";
 import { sendElaineEmailReply } from "../lib/email";
+import {
+  claimWebhookSideEffect,
+  markWebhookSideEffectCompleted,
+  markWebhookSideEffectFailed,
+} from "../lib/webhook-side-effect-idempotency";
 import { runElaineEmailTurn, type ElaineEmailChatMessage } from "../elaine";
 import { markCommCheckVerified } from "../lib/comm-check-scheduler";
 import {
@@ -439,14 +444,29 @@ router.post(
     }
 
     let sentMessageId: string | undefined;
+    const replySideEffectKey = `resend:email:${deliveryId}:assistant-reply`;
     try {
-      sentMessageId = await sendElaineEmailReply(
-        user.email,
-        subject,
-        replyText,
-        inboundMessageId,
-      );
+      const shouldSendReply = await claimWebhookSideEffect({
+        effectKey: replySideEffectKey,
+        provider: "resend",
+        channel: "email",
+      });
+      if (!shouldSendReply) {
+        logger.warn(
+          { replySideEffectKey },
+          "elaine-email: duplicate outbound reply suppressed",
+        );
+      } else {
+        sentMessageId = await sendElaineEmailReply(
+          user.email,
+          subject,
+          replyText,
+          inboundMessageId,
+        );
+        await markWebhookSideEffectCompleted(replySideEffectKey);
+      }
     } catch (err) {
+      await markWebhookSideEffectFailed(replySideEffectKey, err);
       logger.error({ err }, "elaine-email: reply send failed");
     }
 

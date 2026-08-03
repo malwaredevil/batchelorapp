@@ -27,7 +27,6 @@ import {
   elaineSettings,
   elaineMemory,
   messengerMessages,
-  elaineGlobalConfig,
   elaineHistoryConversations,
   elaineHistoryMessages,
   elaineDailyBriefs,
@@ -56,10 +55,8 @@ import { phoneVerifyLimiter, aiLimiter } from "../middleware/rateLimit";
 import { logger } from "../lib/logger";
 import { callModel, callModelWithSubagent } from "../lib/ai-client";
 import { embedText } from "../lib/openai";
-import {
-  getElaineGlobalConfig,
-  invalidateElaineGlobalConfigCache,
-} from "../lib/elaine-config";
+import { getElaineGlobalConfig } from "../lib/elaine-config";
+import { AdminConfigBody, applyAdminConfigPatch } from "./admin-config";
 import {
   createOpenAIStableIdentifier,
   generateOpenAIResponseText,
@@ -6867,137 +6864,11 @@ router.get("/admin/config", async (req, res) => {
   res.json(config);
 });
 
-const AdminConfigBody = z.object({
-  chatModel: z.string().min(1).max(200).optional(),
-  subagentModel: z.string().min(1).max(200).optional(),
-  requestTimeoutMs: z.number().int().min(2000).max(30000).optional(),
-  maxResponseTokens: z.number().int().min(50).max(4000).optional(),
-  models: z
-    .object({
-      fastVision: z.string().min(1).max(200).optional(),
-      smartVision: z.string().min(1).max(200).optional(),
-      advisor: z.string().min(1).max(200).optional(),
-      research: z.string().min(1).max(200).optional(),
-      expertPanelAlt: z.string().min(1).max(200).optional(),
-      embedding: z.string().min(1).max(200).optional(),
-      openAIReasoning: z.string().min(1).max(200).optional(),
-      openAIBalanced: z.string().min(1).max(200).optional(),
-      openAIFast: z.string().min(1).max(200).optional(),
-      rerank: z.string().min(1).max(200).optional(),
-      visualEmbed: z.string().min(1).max(200).optional(),
-      fusionModels: z
-        .array(z.string().min(1).max(200))
-        .min(1)
-        .max(6)
-        .optional(),
-      fusionJudge: z.string().min(1).max(200).optional(),
-    })
-    .partial()
-    .optional(),
-  timeouts: z
-    .object({
-      expertConsultMs: z.number().int().min(1000).max(60000).optional(),
-      rerankerMs: z.number().int().min(1000).max(60000).optional(),
-      geocodingMs: z.number().int().min(1000).max(30000).optional(),
-      fusionMs: z.number().int().min(1000).max(120000).optional(),
-      openAIResponsesMs: z.number().int().min(5000).max(180000).optional(),
-    })
-    .partial()
-    .optional(),
-  features: z
-    .object({
-      enableAdvisor: z.boolean().optional(),
-      enableSubagent: z.boolean().optional(),
-      enableFusionPotteryExpert: z.boolean().optional(),
-      enableFusionTravelDocFallback: z.boolean().optional(),
-      enableOpenAIResponses: z.boolean().optional(),
-      enableOpenAIAppWorkflows: z.boolean().optional(),
-      enableOpenAIResponsesFallback: z.boolean().optional(),
-      enableBuiltinWebSearch: z.boolean().optional(),
-      showReasoningSummary: z.boolean().optional(),
-    })
-    .partial()
-    .optional(),
-  thresholds: z
-    .object({
-      potterySimilarityYes: z.number().min(0).max(1).optional(),
-      potterySimilarityMaybe: z.number().min(0).max(1).optional(),
-      potterySimilarityNo: z.number().min(0).max(1).optional(),
-      visualEmbedCropTop: z.number().min(0).max(1).optional(),
-      visualEmbedCropHeight: z.number().min(0).max(1).optional(),
-      aiJpegQuality: z.number().int().min(1).max(100).optional(),
-      potteryZoneAnalysisMaxTokens: z
-        .number()
-        .int()
-        .min(50)
-        .max(4000)
-        .optional(),
-      potteryBackstampMaxTokens: z.number().int().min(50).max(4000).optional(),
-      travelDocExtractionMaxTokens: z
-        .number()
-        .int()
-        .min(50)
-        .max(4000)
-        .optional(),
-      openAIResponsesMaxOutputTokens: z
-        .number()
-        .int()
-        .min(1000)
-        .max(30000)
-        .optional(),
-      openAICompactionThresholdTokens: z
-        .number()
-        .int()
-        .min(10000)
-        .max(900000)
-        .optional(),
-      openAIStateMaxAgeDays: z.number().int().min(1).max(29).optional(),
-    })
-    .partial()
-    .optional(),
-});
-
 router.put("/admin/config", async (req, res) => {
   if (!(await requireOwner(req, res))) return;
   const userId = req.session.userId!;
   const patch = AdminConfigBody.parse(req.body);
-  const current = await getElaineGlobalConfig();
-  const nextTop = {
-    chatModel: patch.chatModel ?? current.chatModel,
-    subagentModel: patch.subagentModel ?? current.subagentModel,
-    requestTimeoutMs: patch.requestTimeoutMs ?? current.requestTimeoutMs,
-    maxResponseTokens: patch.maxResponseTokens ?? current.maxResponseTokens,
-  };
-  const nextModels = { ...current.models, ...patch.models };
-  const nextTimeouts = { ...current.timeouts, ...patch.timeouts };
-  const nextFeatures = { ...current.features, ...patch.features };
-  const nextThresholds = { ...current.thresholds, ...patch.thresholds };
-  await db
-    .insert(elaineGlobalConfig)
-    .values({
-      id: 1,
-      ...nextTop,
-      extraModels: nextModels,
-      timeouts: nextTimeouts,
-      features: nextFeatures,
-      thresholds: nextThresholds,
-      updatedByUserId: userId,
-      updatedAt: new Date(),
-    })
-    .onConflictDoUpdate({
-      target: elaineGlobalConfig.id,
-      set: {
-        ...nextTop,
-        extraModels: nextModels,
-        timeouts: nextTimeouts,
-        features: nextFeatures,
-        thresholds: nextThresholds,
-        updatedByUserId: userId,
-        updatedAt: new Date(),
-      },
-    });
-  invalidateElaineGlobalConfigCache();
-  const updated = await getElaineGlobalConfig();
+  const updated = await applyAdminConfigPatch(patch, userId);
   res.json(updated);
 });
 

@@ -1,6 +1,7 @@
 import { db, elaineGlobalConfig } from "@workspace/db";
 import { z } from "zod/v4";
 import {
+  ELAINE_CONFIG_DEFAULTS,
   getElaineGlobalConfig,
   invalidateElaineGlobalConfigCache,
 } from "../lib/elaine-config";
@@ -147,6 +148,50 @@ export async function applyAdminConfigPatch(
         timeouts: nextTimeouts,
         features: nextFeatures,
         thresholds: nextThresholds,
+        updatedByUserId: userId,
+        updatedAt: new Date(),
+      },
+    });
+
+  invalidateElaineGlobalConfigCache();
+  return getElaineGlobalConfig();
+}
+
+/**
+ * Overwrite the single elaine_global_config row with ELAINE_CONFIG_DEFAULTS
+ * exactly — unlike applyAdminConfigPatch (which merges a partial patch over
+ * the *current* value), this discards every customization in one step so the
+ * owner panel's "Reset to defaults" button has a true one-click reset.
+ */
+export async function resetElaineGlobalConfigToDefaults(userId: number) {
+  const defaults = ELAINE_CONFIG_DEFAULTS;
+
+  await db
+    .insert(elaineGlobalConfig)
+    .values({
+      id: 1,
+      chatModel: defaults.chatModel,
+      subagentModel: defaults.subagentModel,
+      requestTimeoutMs: defaults.requestTimeoutMs,
+      maxResponseTokens: defaults.maxResponseTokens,
+      extraModels: defaults.models,
+      timeouts: defaults.timeouts,
+      features: defaults.features,
+      thresholds: defaults.thresholds,
+      updatedByUserId: userId,
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: elaineGlobalConfig.id,
+      set: {
+        chatModel: defaults.chatModel,
+        subagentModel: defaults.subagentModel,
+        requestTimeoutMs: defaults.requestTimeoutMs,
+        maxResponseTokens: defaults.maxResponseTokens,
+        extraModels: defaults.models,
+        timeouts: defaults.timeouts,
+        features: defaults.features,
+        thresholds: defaults.thresholds,
         updatedByUserId: userId,
         updatedAt: new Date(),
       },

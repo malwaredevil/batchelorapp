@@ -56,7 +56,11 @@ import { logger } from "../lib/logger";
 import { callModel, callModelWithSubagent } from "../lib/ai-client";
 import { embedText } from "../lib/openai";
 import { getElaineGlobalConfig } from "../lib/elaine-config";
-import { AdminConfigBody, applyAdminConfigPatch } from "./admin-config";
+import {
+  AdminConfigBody,
+  applyAdminConfigPatch,
+  resetElaineGlobalConfigToDefaults,
+} from "./admin-config";
 import {
   createOpenAIStableIdentifier,
   generateOpenAIResponseText,
@@ -6870,6 +6874,15 @@ router.put("/admin/config", async (req, res) => {
   const patch = AdminConfigBody.parse(req.body);
   const updated = await applyAdminConfigPatch(patch, userId);
   res.json(updated);
+});
+
+// One-click "Reset to defaults" — discards every customization in the single
+// elaine_global_config row, unlike PUT above which merges a partial patch.
+router.post("/admin/config/reset", async (req, res) => {
+  if (!(await requireOwner(req, res))) return;
+  const userId = req.session.userId!;
+  const reset = await resetElaineGlobalConfigToDefaults(userId);
+  res.json(reset);
 });
 
 router.get("/admin/models", async (req, res) => {

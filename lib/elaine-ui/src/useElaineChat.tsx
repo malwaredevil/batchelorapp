@@ -13,8 +13,10 @@ import {
   getGetElaineConversationQueryKey,
   getGetElaineSettingsQueryKey,
   getGetElaineNudgesUnseenCountQueryKey,
+  getInfiniteElaineConversationsQueryKey,
   getListElaineConversationsQueryKey,
   getUploadErrorMessage,
+  getElaineConversationMessagesFn,
   type AssistantMessage,
   type AssistantAction,
   type ExecutedAssistantAction,
@@ -89,6 +91,35 @@ export function useElaineChat({
 
   // Active named conversation ID (null = use the rolling single-thread history)
   const [conversationId, setConversationId] = useState<number | null>(null);
+
+  // Pagination for "load older messages" (infinite-scroll-up). The initial
+  // page comes from GET /conversation (or from picking a conversation in the
+  // history panel); older pages are fetched on demand via
+  // GET /conversations/:id/messages?before=<oldestId>.
+  const [hasOlderMessages, setHasOlderMessages] = useState(false);
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
+
+  // Tracks whether we've already done the "jump straight to the bottom" scroll
+  // for the current activation, so we can distinguish it from later smooth
+  // scrolls as new content streams in. Reset whenever the surface goes
+  // inactive (widget closed) so the next activation gets a fresh instant jump.
+  // Deliberately NOT keyed off the `active` transition alone: the full-page
+  // surface is active from mount, before history has loaded, so the *first*
+  // populated render (not the first active render) is what must jump instantly.
+  const didInitialScrollRef = useRef(false);
+  // Monotonic source for optimistic-message temp ids (see handleSend).
+  const tempIdCounterRef = useRef(0);
+  // Synchronous in-flight guard for loadOlderMessages. `isLoadingOlder` state
+  // is not enough on its own: React can batch/delay the re-render that would
+  // make `isLoadingOlder` true, so two scroll events (or a scroll event plus
+  // the viewport-underflow backstop in ElaineChatPanel) firing back-to-back
+  // can both read the same stale `false` and both fetch the same cursor,
+  // duplicating a page of history. This ref is set/cleared synchronously.
+  const isLoadingOlderRef = useRef(false);
+  // Set right before an older-messages page is prepended so the scroll-to-
+  // bottom effect below (which also fires on any messages-array change)
+  // skips that update instead of yanking the view back down.
+  const suppressAutoScrollRef = useRef(false);
 
   // Files queued for attachment to the next message
   const [pendingAttachments, setPendingAttachments] = useState<
@@ -202,12 +233,90 @@ export function useElaineChat({
   useEffect(() => {
     if (conversation && !initialized) {
       setMessages(conversation.messages);
+      setConversationId(conversation.conversationId);
+      setHasOlderMessages(conversation.hasMore);
       setInitialized(true);
       qc.invalidateQueries({
         queryKey: getGetElaineNudgesUnseenCountQueryKey(),
       });
     }
   }, [conversation, initialized, qc]);
+
+  // Scroll to the latest message whenever the panel opens or new content
+  // arrives — but not when older history was just prepended by
+  // loadOlderMessages (that update wants the scroll position preserved, not
+  // yanked back to the bottom; ElaineChatPanel handles that separately).
+  useEffect(() => {
+    if (!active) {
+      // Reset so the next activation (widget reopened) jumps straight to the
+      // bottom again instead of smooth-scrolling through history.
+      didInitialScrollRef.current = false;
+      return;
+    }
+    if (suppressAutoScrollRef.current) {
+      suppressAutoScrollRef.current = false;
+      return;
+    }
+    // Wait for the first page of history to actually load — on the full-page
+    // surface `active` is true from mount, before `messages` is populated, so
+    // scrolling here would be a no-op anyway and would (wrongly) consume the
+    // "first scroll" slot before there's anything to jump to.
+    if (!initialized) return;
+
+    const isFirstScrollThisActivation = !didInitialScrollRef.current;
+    didInitialScrollRef.current = true;
+    endRef.current?.scrollIntoView({
+      behavior: isFirstScrollThisActivation ? "instant" : "smooth",
+      block: "nearest",
+      inline: "nearest",
+    });
+  }, [messages, active, initialized, isStreaming, streamingContent]);
+
+  /** Fetches and prepends the previous page of older messages for the active
+   *  conversation, for infinite-scroll-up in the message list. No-op if
+   *  there's no known conversation, no older page, or a fetch is in flight. */
+  const loadOlderMessages = useCallback(async () => {
+    if (
+      isLoadingOlderRef.current ||
+      !hasOlderMessages ||
+      conversationId === null
+    )
+      return;
+    const oldestId = messages[0]?.id;
+    if (oldestId === undefined) return;
+
+    isLoadingOlderRef.current = true;
+    setIsLoadingOlder(true);
+    try {
+      const page = await getElaineConversationMessagesFn(conversationId, {
+        before: oldestId,
+      });
+      const older: AssistantMessage[] = page.messages.map((m) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        attachmentUrls:
+          m.attachmentUrls.length > 0 ? m.attachmentUrls : undefined,
+        ...(m.runtimeTrace ? { runtimeTrace: m.runtimeTrace } : {}),
+        ...(m.reasoningSummary ? { reasoningSummary: m.reasoningSummary } : {}),
+        createdAt: m.createdAt,
+      }));
+      if (older.length > 0) {
+        suppressAutoScrollRef.current = true;
+        // No widget-map reshuffling needed here: messageWidgets is keyed by
+        // each message's own persisted id, not its array position, so
+        // prepending older messages above the existing ones never
+        // invalidates an existing entry.
+        setMessages((prev) => [...older, ...prev]);
+      }
+      setHasOlderMessages(page.hasMore);
+    } catch {
+      toast.error("Couldn't load earlier messages. Please try again.");
+    } finally {
+      isLoadingOlderRef.current = false;
+      setIsLoadingOlder(false);
+    }
+  }, [hasOlderMessages, conversationId, messages]);
 
   function handleNewConversation() {
     // Clear the UI immediately — don't wait for the server round-trip.
@@ -219,6 +328,7 @@ export function useElaineChat({
     setMessageWidgets(new Map());
     setPendingAttachments([]);
     setRuntimeTrace(null);
+    setHasOlderMessages(false);
 
     newConversation.mutate(undefined, {
       onSuccess: (result) => {
@@ -228,16 +338,27 @@ export function useElaineChat({
         setConversationId(result.conversationId ?? null);
         qc.setQueryData(getGetElaineConversationQueryKey(), {
           messages: [] as AssistantMessage[],
+          conversationId: result.conversationId ?? null,
+          hasMore: false,
         });
         qc.invalidateQueries({
           queryKey: getListElaineConversationsQueryKey(),
+        });
+        qc.invalidateQueries({
+          queryKey: getInfiniteElaineConversationsQueryKey(),
         });
       },
     });
   }
 
-  /** Load a specific named conversation into the chat panel. */
-  function handleLoadConversation(id: number, msgs: ConversationMessage[]) {
+  /** Load a specific named conversation into the chat panel. `msgs` is the
+   *  most recent page (oldest-first); `hasMore` indicates whether older
+   *  messages exist beyond it for loadOlderMessages to fetch. */
+  function handleLoadConversation(
+    id: number,
+    msgs: ConversationMessage[],
+    hasMore = false,
+  ) {
     setConversationId(id);
     setPendingAttachments([]);
     setPendingNavigate(null);
@@ -246,8 +367,10 @@ export function useElaineChat({
     setActionDone(false);
     setMessageWidgets(new Map());
     setRuntimeTrace(null);
+    setHasOlderMessages(hasMore);
     setMessages(
       msgs.map((m) => ({
+        id: m.id,
         role: m.role as "user" | "assistant",
         content: m.content,
         attachmentUrls:
@@ -384,9 +507,16 @@ export function useElaineChat({
         name: a.fileName,
       })),
     ];
+    // Tag the optimistic message with a negative temp id (real message ids
+    // from the server are always positive serials) so the completion handler
+    // below can find and replace *this specific* message wherever it ends up
+    // in the array — a concurrent loadOlderMessages() prepend can land while
+    // this send is in flight, so it is not safe to assume it stays last.
+    const tempId = -++tempIdCounterRef.current;
     setMessages((prev) => [
       ...prev,
       {
+        id: tempId,
         role: "user",
         content: trimmed,
         ...(hasAttachments ? { attachmentUrls: optimisticAttachmentRefs } : {}),
@@ -430,13 +560,57 @@ export function useElaineChat({
           onWidget: (widget) => pendingWidgets.push(widget as ChatWidget),
           onRuntime: ({ trace }) => setRuntimeTrace(trace),
           onDone: (res) => {
-            setMessages(res.messages);
-            // attach widgets to the last assistant message index
-            if (pendingWidgets.length > 0) {
-              const lastIdx = res.messages.length - 1;
+            // `res.messages` is always an empty array (the legacy rolling
+            // window backed by elaineConversations has been retired). Use
+            // `res.userMessageId` / `res.assistantMessageId` — real
+            // elaineHistoryMessages row ids — to reconcile the optimistic
+            // message and keep "load older" cursors correct.
+            const assistantMsg: AssistantMessage = {
+              id: res.assistantMessageId ?? undefined,
+              role: "assistant",
+              content: res.content,
+              runtimeTrace: res.runtimeTrace,
+              ...(res.reasoningSummary
+                ? { reasoningSummary: res.reasoningSummary }
+                : {}),
+            };
+            setMessages((prev) => {
+              const optimisticIdx = prev.findIndex((m) => m.id === tempId);
+              if (optimisticIdx >= 0) {
+                // Find by `tempId` rather than assuming the optimistic message
+                // is still last: a concurrent loadOlderMessages() prepend can
+                // land while this send is in flight, and it never touches the
+                // tail, so the optimistic message's *identity* (tempId) is the
+                // only safe anchor — its array index is not.
+                const optimisticUser = prev[optimisticIdx];
+                const replacement: AssistantMessage = {
+                  ...optimisticUser,
+                  id: res.userMessageId ?? undefined,
+                };
+                const merged = [
+                  ...prev.slice(0, optimisticIdx),
+                  replacement,
+                  assistantMsg,
+                  ...prev.slice(optimisticIdx + 1),
+                ];
+                return merged;
+              }
+              // Optimistic message was somehow already removed (e.g. an
+              // error-path reset raced this completion) — fall back to
+              // appending the assistant reply so it isn't lost.
+              return [...prev, assistantMsg];
+            });
+            // Keyed by the assistant message's own persisted id, not its
+            // array position: a concurrent loadOlderMessages() prepend can
+            // land between the setMessages call above and this one (or even
+            // between this update and the next render), which would silently
+            // invalidate any numeric index captured here. The id is stable
+            // regardless of how many older pages get prepended above it.
+            if (pendingWidgets.length > 0 && assistantMsg.id !== undefined) {
+              const widgetKey = assistantMsg.id;
               setMessageWidgets((prev) => {
                 const next = new Map(prev);
-                next.set(lastIdx, pendingWidgets);
+                next.set(widgetKey, pendingWidgets);
                 return next;
               });
             }
@@ -460,6 +634,9 @@ export function useElaineChat({
               qc.invalidateQueries({
                 queryKey: getListElaineConversationsQueryKey(),
               });
+              qc.invalidateQueries({
+                queryKey: getInfiniteElaineConversationsQueryKey(),
+              });
             }
             setRuntimeTrace(null);
           },
@@ -472,7 +649,10 @@ export function useElaineChat({
           <ElaineName /> couldn't respond just now. Please try again.
         </>,
       );
-      setMessages((prev) => prev.slice(0, -1));
+      // Remove by tempId, not position — a concurrent loadOlderMessages()
+      // prepend can land while this send is in flight, so the optimistic
+      // message is not guaranteed to still be last.
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
       setPendingActions([]);
       setRuntimeTrace(null);
     } finally {
@@ -613,6 +793,9 @@ export function useElaineChat({
     executeAction,
     conversationId,
     setConversationId,
+    hasOlderMessages,
+    isLoadingOlder,
+    loadOlderMessages,
     pendingAttachments,
     handleAddAttachment,
     handleRemoveAttachment,

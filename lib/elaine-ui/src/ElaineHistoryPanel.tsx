@@ -1,9 +1,11 @@
-import { useState, useDeferredValue } from "react";
+import { useCallback, useEffect, useRef, useState, useDeferredValue } from "react";
 import { MessageSquare, Plus, Search, Trash2, X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  getInfiniteElaineConversationsQueryKey,
   getListElaineConversationsQueryKey,
   useDeleteElaineConversation,
+  useInfiniteElaineConversations,
   useListElaineConversations,
 } from "@workspace/api-client-react";
 import { Button } from "@workspace/ui";
@@ -39,6 +41,10 @@ interface ElaineHistoryPanelProps {
  * (`artifacts/elaine/src/pages/Chat.tsx`). Renders in place of
  * `ElaineChatPanel` inside the widget's fixed-size window when the user
  * taps the history button.
+ *
+ * When no search query is active the list uses cursor-based infinite scroll
+ * (load more as the user scrolls to the bottom). Search mode returns all
+ * matching conversations at once.
  */
 export function ElaineHistoryPanel({
   activeConversationId,
@@ -51,20 +57,65 @@ export function ElaineHistoryPanel({
   const deferredSearch = useDeferredValue(searchQuery.trim() || undefined);
   const [loadingConvId, setLoadingConvId] = useState<number | null>(null);
 
-  const { data: conversationsRaw, isLoading } = useListElaineConversations({
-    q: deferredSearch,
-    query: {
-      queryKey: getListElaineConversationsQueryKey(deferredSearch),
-      refetchOnWindowFocus: false,
-    },
+  // ── Paginated list (no search) ──────────────────────────────────────────
+  const {
+    data: infiniteData,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteElaineConversations({
+    query: { enabled: !deferredSearch, refetchOnWindowFocus: false },
   });
-  // Defensive: guard against non-array (e.g. HTML SPA fallback mis-routed by dev proxy).
-  const conversations = Array.isArray(conversationsRaw) ? conversationsRaw : [];
+
+  // ── Search (any query present) ──────────────────────────────────────────
+  const { data: searchRaw, isLoading: searchLoading } =
+    useListElaineConversations({
+      q: deferredSearch,
+      query: {
+        queryKey: getListElaineConversationsQueryKey(deferredSearch),
+        enabled: !!deferredSearch,
+        refetchOnWindowFocus: false,
+      },
+    });
+
+  // Flatten whichever source is active into a single array.
+  const conversations = deferredSearch
+    ? Array.isArray(searchRaw)
+      ? searchRaw
+      : []
+    : (infiniteData?.pages.flatMap((p) => p.conversations) ?? []);
+
+  const isLoading = deferredSearch ? searchLoading : false;
+
+  // ── Intersection observer sentinel for load-more ────────────────────────
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const fetchNextPageStable = useCallback(() => {
+    void fetchNextPage();
+  }, [fetchNextPage]);
+
+  useEffect(() => {
+    if (!sentinelRef.current) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPageStable();
+        }
+      },
+      { threshold: 0.1 },
+    );
+    observer.observe(sentinelRef.current);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPageStable]);
+
+  // ── Delete ──────────────────────────────────────────────────────────────
   const deleteConversation = useDeleteElaineConversation({
     mutation: {
       onSuccess: () => {
         void qc.invalidateQueries({
           queryKey: getListElaineConversationsQueryKey(),
+        });
+        void qc.invalidateQueries({
+          queryKey: getInfiniteElaineConversationsQueryKey(),
         });
       },
     },
@@ -172,6 +223,17 @@ export function ElaineHistoryPanel({
             </div>
           );
         })}
+
+        {/* Sentinel for infinite scroll — triggers load-more when visible */}
+        {!deferredSearch && (
+          <div ref={sentinelRef} className="h-1" aria-hidden="true" />
+        )}
+
+        {isFetchingNextPage && (
+          <p className="py-2 text-center text-[10px] text-muted-foreground">
+            Loading more…
+          </p>
+        )}
       </div>
     </div>
   );

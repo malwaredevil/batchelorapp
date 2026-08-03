@@ -1,9 +1,13 @@
 import {
+  useInfiniteQuery,
   useMutation,
   useQuery,
+  type InfiniteData,
   type MutationFunction,
   type QueryFunction,
   type QueryKey,
+  type UseInfiniteQueryOptions,
+  type UseInfiniteQueryResult,
   type UseMutationOptions,
   type UseMutationResult,
   type UseQueryOptions,
@@ -1027,17 +1031,25 @@ export const getListElaineConversationsQueryKey = (q?: string) =>
   q ? [`/api/elaine/conversations`, { q }] as const
     : [`/api/elaine/conversations`] as const;
 
-const listElaineConversationsFn = (
+/** Shape returned by GET /api/elaine/conversations */
+export interface ConversationSummaryPage {
+  conversations: ConversationSummary[];
+  /** True when more conversations exist before the oldest one returned. */
+  hasMore: boolean;
+}
+
+const listElaineConversationsFn = async (
   q?: string,
   options?: RequestInit,
 ): Promise<ConversationSummary[]> => {
   const url = q
     ? `/api/elaine/conversations?q=${encodeURIComponent(q)}`
     : "/api/elaine/conversations";
-  return customFetch<ConversationSummary[]>(url, {
+  const page = await customFetch<ConversationSummaryPage>(url, {
     ...options,
     method: "GET",
   });
+  return page.conversations;
 };
 
 export function useListElaineConversations<
@@ -1061,6 +1073,52 @@ export function useListElaineConversations<
     queryKey: QueryKey;
   };
   return { ...query, queryKey: queryOpts.queryKey };
+}
+
+// ---------------------------------------------------------------------------
+// Infinite (paginated) conversations list — used by the history panel for
+// scroll-based load-more. The cursor is the `updatedAt` ISO string of the
+// last conversation in the previous page.
+// ---------------------------------------------------------------------------
+
+export const getInfiniteElaineConversationsQueryKey = () =>
+  [`/api/elaine/conversations`, "infinite"] as const;
+
+const fetchElaineConversationsPage = (
+  before: string | undefined,
+  options?: RequestInit,
+): Promise<ConversationSummaryPage> => {
+  const search = new URLSearchParams();
+  if (before) search.set("before", before);
+  const qs = search.toString();
+  return customFetch<ConversationSummaryPage>(
+    `/api/elaine/conversations${qs ? `?${qs}` : ""}`,
+    { ...options, method: "GET" },
+  );
+};
+
+export function useInfiniteElaineConversations(options?: {
+  query?: Pick<
+    UseInfiniteQueryOptions,
+    "enabled" | "refetchOnWindowFocus" | "staleTime" | "gcTime"
+  >;
+}): UseInfiniteQueryResult<InfiniteData<ConversationSummaryPage>, unknown> {
+  const queryKey = getInfiniteElaineConversationsQueryKey();
+  return useInfiniteQuery({
+    queryKey,
+    queryFn: ({ pageParam, signal }: { pageParam: unknown; signal: AbortSignal }) =>
+      fetchElaineConversationsPage(
+        typeof pageParam === "string" ? pageParam : undefined,
+        { signal },
+      ),
+    getNextPageParam: (lastPage: ConversationSummaryPage) => {
+      if (!lastPage.hasMore) return undefined;
+      const last = lastPage.conversations[lastPage.conversations.length - 1];
+      return last?.updatedAt;
+    },
+    initialPageParam: undefined as string | undefined,
+    ...options?.query,
+  }) as UseInfiniteQueryResult<InfiniteData<ConversationSummaryPage>, unknown>;
 }
 
 const createElaineConversationFn = (): Promise<ConversationSummary> =>

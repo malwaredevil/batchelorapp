@@ -3062,11 +3062,27 @@ router.post(
 // ---------------------------------------------------------------------------
 
 // GET /conversations — list this user's named conversations, newest first.
-// Supports ?q= for server-side search across conversation title and all message content.
-// Each row includes a `preview` snippet (≤80 chars from the first user message).
+// Supports ?q= for server-side search across conversation title and all message
+// content (search returns all matches, no cursor pagination).
+// Supports ?before=<ISO updatedAt>&limit=<n> for cursor-based pagination of the
+// unfiltered list (load more on scroll). Each row includes a `preview` snippet
+// (≤80 chars from the first user message). Response shape: { conversations, hasMore }.
 router.get("/conversations", async (req, res) => {
   const userId = req.session.userId!;
   const searchQuery = String(req.query["q"] ?? "").trim();
+
+  // Cursor/limit only apply when NOT searching — search always returns all matches.
+  const limitParam = parseInt(String(req.query["limit"] ?? ""), 10);
+  const limit = !searchQuery && Number.isFinite(limitParam) && limitParam > 0
+    ? Math.min(limitParam, CONVERSATION_PAGE_SIZE_MAX)
+    : CONVERSATION_PAGE_SIZE_DEFAULT;
+  const beforeParam = String(req.query["before"] ?? "").trim();
+  const beforeDate =
+    !searchQuery && beforeParam ? new Date(beforeParam) : undefined;
+  const cursorCondition =
+    beforeDate && !isNaN(beforeDate.getTime())
+      ? lt(elaineHistoryConversations.updatedAt, beforeDate)
+      : undefined;
 
   // When a search query is provided, first find matching conversation IDs via
   // a DB-level ILIKE across both the conversation title and all message content.
@@ -3108,18 +3124,25 @@ router.get("/conversations", async (req, res) => {
     ]);
     // Short-circuit: no matches at all
     if (matchingConvIds.size === 0) {
-      res.json([]);
+      res.json({ conversations: [], hasMore: false });
       return;
     }
   }
 
-  // Fetch all (or matching) conversations with message counts.
+  // Fetch conversations with message counts. For paginated (non-search) queries
+  // we fetch limit+1 rows and trim back to detect hasMore.
   const baseWhere = matchingConvIds
     ? and(
         eq(elaineHistoryConversations.userId, userId),
         inArray(elaineHistoryConversations.id, Array.from(matchingConvIds)),
+        cursorCondition,
       )
-    : eq(elaineHistoryConversations.userId, userId);
+    : and(
+        eq(elaineHistoryConversations.userId, userId),
+        cursorCondition,
+      );
+
+  const fetchLimit = searchQuery ? 500 : limit + 1;
 
   const rows = await db
     .select({
@@ -3136,10 +3159,14 @@ router.get("/conversations", async (req, res) => {
     )
     .where(baseWhere)
     .groupBy(elaineHistoryConversations.id)
-    .orderBy(desc(elaineHistoryConversations.updatedAt));
+    .orderBy(desc(elaineHistoryConversations.updatedAt))
+    .limit(fetchLimit);
+
+  const hasMore = !searchQuery && rows.length > limit;
+  const pagedRows = hasMore ? rows.slice(0, limit) : rows;
 
   // Resolve preview snippets (first user message ≤80 chars) for each conversation.
-  const convIds = rows.map((r) => r.id);
+  const convIds = pagedRows.map((r) => r.id);
   const previewMap = new Map<number, string | null>();
   if (convIds.length > 0) {
     const firstMsgs = await db
@@ -3164,8 +3191,8 @@ router.get("/conversations", async (req, res) => {
     }
   }
 
-  res.json(
-    rows.map((r) => ({
+  res.json({
+    conversations: pagedRows.map((r) => ({
       id: r.id,
       title: r.title,
       createdAt: r.createdAt.toISOString(),
@@ -3173,7 +3200,8 @@ router.get("/conversations", async (req, res) => {
       messageCount: Number(r.messageCount),
       preview: previewMap.get(r.id) ?? null,
     })),
-  );
+    hasMore,
+  });
 });
 
 // POST /conversations — create a new named conversation.

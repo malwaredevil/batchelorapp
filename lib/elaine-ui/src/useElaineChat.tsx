@@ -13,6 +13,7 @@ import {
   getGetElaineConversationQueryKey,
   getGetElaineSettingsQueryKey,
   getGetElaineNudgesUnseenCountQueryKey,
+  getInfiniteElaineConversationsQueryKey,
   getListElaineConversationsQueryKey,
   getUploadErrorMessage,
   getElaineConversationMessagesFn,
@@ -343,6 +344,9 @@ export function useElaineChat({
         qc.invalidateQueries({
           queryKey: getListElaineConversationsQueryKey(),
         });
+        qc.invalidateQueries({
+          queryKey: getInfiniteElaineConversationsQueryKey(),
+        });
       },
     });
   }
@@ -629,6 +633,9 @@ export function useElaineChat({
               setConversationId(res.conversationId);
               qc.invalidateQueries({
                 queryKey: getListElaineConversationsQueryKey(),
+              });
+              qc.invalidateQueries({
+                queryKey: getInfiniteElaineConversationsQueryKey(),
               });
             }
             setRuntimeTrace(null);

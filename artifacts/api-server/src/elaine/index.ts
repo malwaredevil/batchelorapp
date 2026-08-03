@@ -23,7 +23,6 @@ import {
   db,
   pool,
   appUsers,
-  elaineConversations,
   elaineNudges,
   elaineSettings,
   elaineMemory,
@@ -2747,28 +2746,6 @@ ${trace.plan.completionCriteria.map((criterion) => `- ${criterion}`).join("\n")}
 Follow dependency order. Do not invent ids, dates, locations, or consent. If an observation invalidates the plan, choose a grounded alternative; the server will verify completion. This is a concise execution plan, not permission to reveal hidden reasoning.`;
 }
 
-async function getOrCreateConversation(userId: number) {
-  const [existing] = await db
-    .select()
-    .from(elaineConversations)
-    .where(eq(elaineConversations.userId, userId));
-  if (existing) return existing;
-
-  const [created] = await db
-    .insert(elaineConversations)
-    .values({ userId, messages: [] })
-    .onConflictDoNothing()
-    .returning();
-  if (created) return created;
-
-  // Lost a race with another request — read the row that won.
-  const [row] = await db
-    .select()
-    .from(elaineConversations)
-    .where(eq(elaineConversations.userId, userId));
-  return row;
-}
-
 // Resolves (creating if necessary) the shared "household" widget-default
 // conversation row for a user — the elaineHistoryConversations row with
 // isWidgetDefault=true that backs the floating widget and full-page chat
@@ -2908,9 +2885,9 @@ async function tryBuildAction(
 // marks them seen so they're never surfaced twice. Called from
 // GET /conversation, which is what the widget fetches the moment it's
 // opened — this is how an unprompted nudge actually becomes a chat bubble
-// the user sees. Writes to both the real per-message table
-// (elaineHistoryMessages, what paginated reads use) and the legacy rolling
-// JSONB blob (elaineConversations, kept only for backward compat).
+// the user sees. Writes only to elaineHistoryMessages (the real per-row
+// source of truth); the legacy elaineConversations JSONB blob is no longer
+// written since GET /conversation reads from elaineHistoryMessages directly.
 async function applyUnseenNudges(
   userId: number,
   histConvId: number,
@@ -2927,21 +2904,6 @@ async function applyUnseenNudges(
   if (unseen.length === 0) return;
 
   const nudgeTimestamp = new Date();
-  const conversation = await getOrCreateConversation(userId);
-  const history = (conversation?.messages as ChatMessage[] | null) ?? [];
-  const updatedHistory: ChatMessage[] = [
-    ...history,
-    ...unseen.map((n) => ({
-      role: "assistant" as const,
-      content: n.message,
-      createdAt: nudgeTimestamp.toISOString(),
-    })),
-  ].slice(-50);
-
-  await db
-    .update(elaineConversations)
-    .set({ messages: updatedHistory, updatedAt: nudgeTimestamp })
-    .where(eq(elaineConversations.userId, userId));
 
   await db.insert(elaineHistoryMessages).values(
     unseen.map((n) => ({
@@ -3390,13 +3352,6 @@ router.delete("/conversation", async (req, res) => {
     .insert(elaineHistoryConversations)
     .values({ userId, title: "Household", isWidgetDefault: true })
     .returning({ id: elaineHistoryConversations.id });
-
-  // Also clear the legacy rolling thread (pre-history-system storage).
-  await getOrCreateConversation(userId);
-  await db
-    .update(elaineConversations)
-    .set({ messages: [], updatedAt: new Date() })
-    .where(eq(elaineConversations.userId, userId));
 
   res.json({ messages: [], conversationId: newConv?.id ?? null });
 });
@@ -3902,8 +3857,8 @@ router.post("/chat", async (req, res) => {
       }));
     }
   } else {
-    const conversation = await getOrCreateConversation(userId);
-    history = (conversation?.messages as ChatMessage[] | null) ?? [];
+    // histConvId couldn't be resolved — start with empty history for this turn.
+    history = [];
   }
 
   // ── Load scoped, relevant memory evidence + personal summary + cross-channel context ──
@@ -6067,30 +6022,6 @@ router.post("/chat", async (req, res) => {
     allCitations.length > 0 ? `\x1f${JSON.stringify(allCitations)}` : "";
   const content = rawContent.trim() + citationSuffix;
 
-  const turnTimestamp = new Date().toISOString();
-  const updatedHistory: ChatMessage[] = (
-    [
-      ...history,
-      {
-        role: "user" as const,
-        content: message,
-        createdAt: turnTimestamp,
-        ...(allAttachmentUrls.length > 0
-          ? { attachmentUrls: allAttachmentUrls }
-          : {}),
-      },
-      {
-        role: "assistant" as const,
-        content,
-        createdAt: turnTimestamp,
-        runtimeTrace: finalTrace,
-        ...(finalReasoningSummary
-          ? { reasoningSummary: finalReasoningSummary }
-          : {}),
-      },
-    ] satisfies ChatMessage[]
-  ).slice(-50);
-
   // Save turn to the named history conversation.
   let assistantMessageId: number | null = null;
   let userMessageId: number | null = null;
@@ -6175,13 +6106,6 @@ router.post("/chat", async (req, res) => {
     }
   }
 
-  // Also keep the rolling elaineConversations row current for backward compat
-  // (GET /conversation and the floating widget's initial load still use it).
-  await db
-    .update(elaineConversations)
-    .set({ messages: updatedHistory, updatedAt: new Date() })
-    .where(eq(elaineConversations.userId, userId));
-
   sendEvent("done", {
     role: "assistant",
     content,
@@ -6190,7 +6114,9 @@ router.post("/chat", async (req, res) => {
     executedActions,
     actionConfirmationMode:
       updatedActionConfirmationMode ?? actionConfirmationMode,
-    messages: updatedHistory,
+    // Legacy field — no longer backed by the rolling JSONB blob; clients must
+    // use `userMessageId`/`assistantMessageId` to reconcile history state.
+    messages: [] as ChatMessage[],
     // Real, persisted ids for this turn's two rows in elaineHistoryMessages
     // (null only in the rare case histConvId couldn't be resolved). Clients
     // must use these — not an array position — to reconcile the optimistic

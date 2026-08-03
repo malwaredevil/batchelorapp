@@ -556,15 +556,11 @@ export function useElaineChat({
           onWidget: (widget) => pendingWidgets.push(widget as ChatWidget),
           onRuntime: ({ trace }) => setRuntimeTrace(trace),
           onDone: (res) => {
-            // `res.messages` is the server's legacy rolling window (capped to
-            // the last 50 turns, kept only to back the elaineConversations
-            // backward-compat blob) — it carries no real ids, so it must never
-            // be used to build the messages that live in client state or a
-            // "load older" cursor built from it would produce duplicates once
-            // this turn ages out of the initial page. The authoritative ids
-            // for this turn are `res.userMessageId` / `res.assistantMessageId`
-            // (real elaineHistoryMessages rows), used to build both messages
-            // below.
+            // `res.messages` is always an empty array (the legacy rolling
+            // window backed by elaineConversations has been retired). Use
+            // `res.userMessageId` / `res.assistantMessageId` — real
+            // elaineHistoryMessages row ids — to reconcile the optimistic
+            // message and keep "load older" cursors correct.
             const assistantMsg: AssistantMessage = {
               id: res.assistantMessageId ?? undefined,
               role: "assistant",

@@ -117,6 +117,12 @@ run_bg secretsregistry pnpm --filter @workspace/scripts run check-secrets-regist
 # GitHub CI status (network-bound — runs in parallel with the local guards)
 run_bg cistatus pnpm --filter @workspace/scripts run check-ci-status
 
+# GitHub drift check — detects .github/workflows/ files that GitHub main has
+# at a different SHA than local.  Catches Dependabot auto-merges that landed
+# on GitHub without a Replit task/Apply-Merge step; running github-sync before
+# pulling these back would silently revert the bump.
+run_bg githubdrift pnpm --filter @workspace/scripts run check-github-drift
+
 wait
 
 # ---------------------------------------------------------------------------
@@ -133,10 +139,11 @@ declare -A LABELS=(
   [guardrails]="Guardrail bans (drizzle-kit push, restricted files, etc.)"
   [secretsregistry]="Secrets registry drift"
   [cistatus]="GitHub CI status"
+  [githubdrift]="GitHub workflow drift (Dependabot auto-merge guard)"
 )
 
 FAILED=()
-for key in appconfig forbidden secretsscan uploadlimit pgsingleton composition guardrails secretsregistry cistatus; do
+for key in appconfig forbidden secretsscan uploadlimit pgsingleton composition guardrails secretsregistry cistatus githubdrift; do
   code=$(cat "$LOGDIR/$key.exit" 2>/dev/null || echo 1)
   if [[ "$code" -eq 0 ]]; then
     echo -e "${GREEN}✓${RESET} ${LABELS[$key]}"
@@ -197,6 +204,12 @@ echo "  │   Confirm only 'main' branch remains after handling all PRs:        
 echo "  │     GET /repos/malwaredevil/batchelorapp/branches?per_page=100             │"
 echo "  │   Delete any stale branch:                                                  │"
 echo "  │     DELETE /repos/malwaredevil/batchelorapp/git/refs/heads/{name}          │"
+echo "  │ Stage 3b.5 — pull GitHub-only changes back to local (REQUIRED before sync):│"
+echo "  │   Dependabot auto-merges land on GitHub without a Replit task merge.       │"
+echo "  │   Always pull before github-sync to avoid silently reverting them:         │"
+echo "  │     pnpm --filter @workspace/scripts run pull-from-github                  │"
+echo "  │   Review any files written, include them in your sync commit message.      │"
+echo "  │   (If no drift: '✓ No drift detected' — safe to proceed immediately.)     │"
 echo "  │ Stage 3c  — GitHub sync (all files go through a PR — no exceptions):       │"
 echo "  │              github-sync \"msg\"                  creates a sync branch + PR  │"
 echo "  │              github-sync \"msg\" --confirm-deletions  include local deletions │"

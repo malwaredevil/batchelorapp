@@ -618,6 +618,11 @@ export const STATEMENTS: string[] = [
   // meaningful on the connection row currently marked is_household_shared.
   `ALTER TABLE travels_google_calendar_connections ADD COLUMN IF NOT EXISTS travel_color_id TEXT`,
 
+  // needs_reauth: set true when a refresh-token use fails (revoked/expired
+  // grant) so the UI can prompt the connection owner to reconnect instead of
+  // silently retrying a dead token every sync cycle.
+  `ALTER TABLE travels_google_calendar_connections ADD COLUMN IF NOT EXISTS needs_reauth BOOLEAN NOT NULL DEFAULT false`,
+
   // travels_trip_calendar_events: maps a trip's itinerary content to the
   // Google Calendar event(s) synced for it — one row for the trip-level
   // event plus one per itinerary activity. Keyed by a content-derived

@@ -1,7 +1,14 @@
 name: Test Dependabot auto-merge logic
 
-# Manual trigger only — validates every decision branch of dependabot-auto-merge.yml
-# without needing a real dependabot[bot] PR.
+# Runs whenever dependabot-auto-merge.yml itself changes so any edit to the
+# inline policy is automatically re-validated.  Can also be triggered manually.
+#
+# DESIGN NOTE: dependabot-auto-merge.yml uses pull_request_target, which the
+# repository security policy forbids from checking out code.  All decision
+# logic therefore lives inline in that workflow's "Decide and auto-merge" step.
+# This test workflow checks out the repo (safe on a normal pull_request),
+# extracts that exact inline run: block via YAML parsing, and executes it with
+# a mock `gh` binary — so every case exercises the production code directly.
 on:
   workflow_dispatch:
   pull_request:
@@ -17,188 +24,147 @@ jobs:
   test-merge-logic:
     name: Validate auto-merge decision branches
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     steps:
-      - name: "Case 1: GitHub Actions patch bump → should auto-merge"
-        env:
-          PR_NUMBER: "999"
-          ECOSYSTEM: "github_actions"
-          UPDATE_TYPE: "version-update:semver-patch"
-          DEPENDENCY_NAMES: "actions/checkout"
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          persist-credentials: false
+
+      # Extract the inline run: script from the "Decide and auto-merge" step
+      # of dependabot-auto-merge.yml into /tmp/production-decision.sh.
+      # If the step is renamed or removed this extraction step fails loudly.
+      - name: Extract production decision script
         run: |
-          set -euo pipefail
-          MERGED=false
+          python3 - << 'EOF'
+          import yaml, sys, os
 
-          PACKAGE_COUNT=$(echo "$DEPENDENCY_NAMES" | tr ',' '\n' | grep -c .)
+          with open('.github/workflows/dependabot-auto-merge.yml') as f:
+              wf = yaml.safe_load(f)
 
-          if [ "$ECOSYSTEM" = "github_actions" ]; then
-            if [ "$UPDATE_TYPE" = "version-update:semver-major" ]; then
-              echo "FAIL: should not skip a patch bump"
+          jobs = wf.get('jobs', {})
+          for job in jobs.values():
+              for step in job.get('steps', []):
+                  name = step.get('name', '')
+                  if 'Decide and auto-merge' in name:
+                      script = step.get('run', '')
+                      with open('/tmp/production-decision.sh', 'w') as out:
+                          out.write(script)
+                      print(f"Extracted {len(script)} bytes from '{name}'")
+                      sys.exit(0)
+
+          print("FAIL: 'Decide and auto-merge' step not found in dependabot-auto-merge.yml",
+                file=sys.stderr)
+          sys.exit(1)
+          EOF
+
+      # Build a mock `gh` binary placed ahead of the real one in PATH.
+      # - `gh api .../advisories/...`: returns the value of MOCK_GHSA_SEVERITY
+      #   (default "low"), simulating the advisory severity lookup.
+      # - `gh pr merge ...`: records the call to /tmp/gh-calls.log so tests can
+      #   assert whether auto-merge was triggered or not.
+      - name: Install mock gh binary
+        run: |
+          mkdir -p /tmp/mock-bin
+          cat > /tmp/mock-bin/gh << 'GH_EOF'
+          #!/usr/bin/env bash
+          if [[ "$*" == *"api"*"advisories"* ]]; then
+            echo "${MOCK_GHSA_SEVERITY:-low}"
+            exit 0
+          fi
+          echo "GH_CALLED: $*" >> /tmp/gh-calls.log
+          GH_EOF
+          chmod +x /tmp/mock-bin/gh
+
+      # Helper: run one test case and assert the expected outcome.
+      #   EXPECT_MERGE=true  → gh pr merge must have been called
+      #   EXPECT_MERGE=false → gh pr merge must NOT have been called
+      - name: Define run_case helper and run all cases
+        run: |
+          export PATH="/tmp/mock-bin:$PATH"
+
+          run_case() {
+            local label="$1"
+            local expect_merge="$2"
+            rm -f /tmp/gh-calls.log
+
+            # Run the production script; GH_TOKEN and PR_NUMBER are mocked.
+            GH_TOKEN="mock" PR_NUMBER="999" bash /tmp/production-decision.sh
+
+            if grep -q "pr merge" /tmp/gh-calls.log 2>/dev/null; then
+              MERGED=true
+            else
+              MERGED=false
+            fi
+
+            if [ "$MERGED" = "$expect_merge" ]; then
+              echo "✓ $label"
+            else
+              echo "✗ $label — expected merge=$expect_merge, got merge=$MERGED"
               exit 1
             fi
-            echo "✓ Case 1 passed: GitHub Actions patch bump → would auto-merge PR #$PR_NUMBER"
-            MERGED=true
-          fi
+          }
 
-          if [ "$MERGED" = "false" ]; then
-            echo "FAIL: github_actions ecosystem was not matched"
-            exit 1
-          fi
+          # ------------------------------------------------------------------
+          # GitHub Actions ecosystem
+          # ------------------------------------------------------------------
 
-      - name: "Case 2: GitHub Actions minor bump → should auto-merge"
-        env:
-          PR_NUMBER: "999"
-          ECOSYSTEM: "github_actions"
-          UPDATE_TYPE: "version-update:semver-minor"
-          DEPENDENCY_NAMES: "actions/checkout"
-        run: |
-          set -euo pipefail
-          MERGED=false
+          export ECOSYSTEM="github_actions" DEPENDENCY_NAMES="actions/checkout" GHSA_IDS=""
 
-          if [ "$ECOSYSTEM" = "github_actions" ]; then
-            if [ "$UPDATE_TYPE" = "version-update:semver-major" ]; then
-              echo "FAIL: should not skip a minor bump"
-              exit 1
-            fi
-            echo "✓ Case 2 passed: GitHub Actions minor bump → would auto-merge PR #$PR_NUMBER"
-            MERGED=true
-          fi
+          export UPDATE_TYPE="version-update:semver-patch"
+          run_case "GH Actions patch → auto-merges" true
 
-          if [ "$MERGED" = "false" ]; then
-            echo "FAIL: github_actions ecosystem was not matched"
-            exit 1
-          fi
+          export UPDATE_TYPE="version-update:semver-minor"
+          run_case "GH Actions minor → auto-merges" true
 
-      - name: "Case 3: GitHub Actions major bump → must NOT auto-merge"
-        env:
-          PR_NUMBER: "999"
-          ECOSYSTEM: "github_actions"
-          UPDATE_TYPE: "version-update:semver-major"
-          DEPENDENCY_NAMES: "actions/checkout"
-        run: |
-          set -euo pipefail
-          SKIPPED=false
+          export UPDATE_TYPE="version-update:semver-major"
+          run_case "GH Actions major → skipped (manual review)" false
 
-          if [ "$ECOSYSTEM" = "github_actions" ]; then
-            if [ "$UPDATE_TYPE" = "version-update:semver-major" ]; then
-              echo "✓ Case 3 passed: GitHub Actions major bump → correctly skipped"
-              SKIPPED=true
-            fi
-          fi
+          # ------------------------------------------------------------------
+          # npm / other ecosystems
+          # ------------------------------------------------------------------
 
-          if [ "$SKIPPED" = "false" ]; then
-            echo "FAIL: major GitHub Actions bump was not skipped"
-            exit 1
-          fi
+          export ECOSYSTEM="npm" GHSA_IDS=""
 
-      - name: "Case 4: npm single-package patch bump → should auto-merge"
-        env:
-          PR_NUMBER: "999"
-          ECOSYSTEM: "npm"
-          UPDATE_TYPE: "version-update:semver-patch"
-          DEPENDENCY_NAMES: "zod"
-        run: |
-          set -euo pipefail
-          MERGED=false
+          export UPDATE_TYPE="version-update:semver-patch" DEPENDENCY_NAMES="zod"
+          run_case "npm single-package patch → auto-merges" true
 
-          PACKAGE_COUNT=$(echo "$DEPENDENCY_NAMES" | tr ',' '\n' | grep -c .)
-          echo "Package count: $PACKAGE_COUNT"
+          export UPDATE_TYPE="version-update:semver-patch" DEPENDENCY_NAMES="zod, typescript"
+          run_case "npm grouped 2-package patch → skipped" false
 
-          if [ "$ECOSYSTEM" = "github_actions" ]; then
-            echo "FAIL: npm should not hit github_actions branch"
-            exit 1
-          fi
+          export UPDATE_TYPE="version-update:semver-patch" DEPENDENCY_NAMES="zod, react, typescript"
+          run_case "npm grouped 3-package patch → skipped" false
 
-          if [ "$UPDATE_TYPE" = "version-update:semver-patch" ] && [ "$PACKAGE_COUNT" -eq 1 ]; then
-            echo "✓ Case 4 passed: npm single-package patch → would auto-merge PR #$PR_NUMBER"
-            MERGED=true
-          fi
+          export UPDATE_TYPE="version-update:semver-minor" DEPENDENCY_NAMES="zod"
+          run_case "npm single-package minor → skipped" false
 
-          if [ "$MERGED" = "false" ]; then
-            echo "FAIL: single-package npm patch was not matched for auto-merge"
-            exit 1
-          fi
+          export UPDATE_TYPE="version-update:semver-major" DEPENDENCY_NAMES="zod"
+          run_case "npm single-package major → skipped" false
 
-      - name: "Case 5: npm grouped (multi-package) patch → must NOT auto-merge"
-        env:
-          PR_NUMBER: "999"
-          ECOSYSTEM: "npm"
-          UPDATE_TYPE: "version-update:semver-patch"
-          DEPENDENCY_NAMES: "zod, react, typescript"
-        run: |
-          set -euo pipefail
-          SKIPPED=false
+          # ------------------------------------------------------------------
+          # GHSA security advisory path
+          # (MOCK_GHSA_SEVERITY overrides the gh api advisory lookup)
+          # ------------------------------------------------------------------
 
-          PACKAGE_COUNT=$(echo "$DEPENDENCY_NAMES" | tr ',' '\n' | grep -c .)
-          echo "Package count: $PACKAGE_COUNT"
+          export ECOSYSTEM="npm" UPDATE_TYPE="version-update:semver-minor" \
+                 DEPENDENCY_NAMES="lodash" GHSA_IDS="GHSA-1234-abcd-5678"
 
-          if [ "$UPDATE_TYPE" = "version-update:semver-patch" ] && [ "$PACKAGE_COUNT" -eq 1 ]; then
-            echo "FAIL: grouped PR should not auto-merge"
-            exit 1
-          fi
+          MOCK_GHSA_SEVERITY=critical run_case "GHSA critical → auto-merges" true
+          MOCK_GHSA_SEVERITY=high     run_case "GHSA high → auto-merges"     true
+          MOCK_GHSA_SEVERITY=medium   run_case "GHSA medium → skipped"       false
+          MOCK_GHSA_SEVERITY=low      run_case "GHSA low → skipped"          false
 
-          if [ "$PACKAGE_COUNT" -gt 1 ]; then
-            echo "✓ Case 5 passed: grouped npm PR ($PACKAGE_COUNT packages) → correctly skipped"
-            SKIPPED=true
-          fi
+          # Malformed GHSA ID — the validation regex should reject it and skip
+          export GHSA_IDS="NOT-A-VALID-ID"
+          MOCK_GHSA_SEVERITY=critical run_case "Malformed GHSA → skipped" false
 
-          if [ "$SKIPPED" = "false" ]; then
-            echo "FAIL: grouped npm PR was not detected as multi-package"
-            exit 1
-          fi
+          # ------------------------------------------------------------------
+          # Edge case: empty GHSA_IDS falls through to low-risk path
+          # ------------------------------------------------------------------
 
-      - name: "Case 6: npm single-package minor bump → must NOT auto-merge"
-        env:
-          PR_NUMBER: "999"
-          ECOSYSTEM: "npm"
-          UPDATE_TYPE: "version-update:semver-minor"
-          DEPENDENCY_NAMES: "zod"
-        run: |
-          set -euo pipefail
-          MERGED=false
+          export ECOSYSTEM="github_actions" UPDATE_TYPE="version-update:semver-patch" \
+                 DEPENDENCY_NAMES="actions/setup-node" GHSA_IDS=""
+          run_case "Empty GHSA_IDS → falls through to low-risk path → merges" true
 
-          PACKAGE_COUNT=$(echo "$DEPENDENCY_NAMES" | tr ',' '\n' | grep -c .)
-          echo "Package count: $PACKAGE_COUNT"
-
-          if [ "$UPDATE_TYPE" = "version-update:semver-patch" ] && [ "$PACKAGE_COUNT" -eq 1 ]; then
-            echo "FAIL: minor npm bump should not auto-merge"
-            exit 1
-          fi
-
-          echo "✓ Case 6 passed: npm single-package minor bump → correctly skipped"
-
-      - name: "Case 7: npm single-package major bump → must NOT auto-merge"
-        env:
-          PR_NUMBER: "999"
-          ECOSYSTEM: "npm"
-          UPDATE_TYPE: "version-update:semver-major"
-          DEPENDENCY_NAMES: "zod"
-        run: |
-          set -euo pipefail
-
-          PACKAGE_COUNT=$(echo "$DEPENDENCY_NAMES" | tr ',' '\n' | grep -c .)
-          echo "Package count: $PACKAGE_COUNT"
-
-          if [ "$UPDATE_TYPE" = "version-update:semver-patch" ] && [ "$PACKAGE_COUNT" -eq 1 ]; then
-            echo "FAIL: major npm bump should not auto-merge"
-            exit 1
-          fi
-
-          echo "✓ Case 7 passed: npm single-package major bump → correctly skipped"
-
-      - name: "Case 8: grouped npm with 2 packages (comma-count edge case)"
-        env:
-          DEPENDENCY_NAMES: "zod, typescript"
-        run: |
-          set -euo pipefail
-          PACKAGE_COUNT=$(echo "$DEPENDENCY_NAMES" | tr ',' '\n' | grep -c .)
-          echo "Package count: $PACKAGE_COUNT"
-          if [ "$PACKAGE_COUNT" -ne 2 ]; then
-            echo "FAIL: expected 2 packages, got $PACKAGE_COUNT"
-            exit 1
-          fi
-          echo "✓ Case 8 passed: comma-separated 2-package list parsed correctly as $PACKAGE_COUNT"
-
-      - name: All cases passed
-        run: echo "✓ All dependabot-auto-merge decision branches validated successfully."
+          echo ""
+          echo "All cases passed."

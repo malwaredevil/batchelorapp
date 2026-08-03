@@ -305,9 +305,6 @@ export default function OwnerPanel() {
               >
                 <ArrowLeft className="h-4 w-4" />
               </a>
-              <span className="font-semibold text-sm tracking-tight whitespace-nowrap">
-                Owner Panel
-              </span>
             </div>
 
             {/* Center: tab navigation — grouped into dropdown menus so every

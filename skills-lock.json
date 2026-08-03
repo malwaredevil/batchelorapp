@@ -7,6 +7,12 @@
       "skillPath": "tools/agent-tools/SKILL.md",
       "computedHash": "1bd2651c254de3e37e6e5e7adac763f00fb431d61362356902ba8c2d4af81901"
     },
+    "app-store-screenshots": {
+      "source": "skill-zero/s",
+      "sourceType": "github",
+      "skillPath": "guides/design/app-store-screenshots/SKILL.md",
+      "computedHash": "528a965bb79118a30c52f82c781cc45b4c27b7cfb9e37fa300c1a4f086cfcd1c"
+    },
     "audit-website": {
       "source": "squirrelscan/skills",
       "sourceType": "github",
@@ -90,6 +96,12 @@
       "sourceType": "github",
       "skillPath": "skills/pdf/SKILL.md",
       "computedHash": "cfbc539377088ca7e44a813b30c306327385bbd973cd7a721e1743f60837dd62"
+    },
+    "playwright-skill": {
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "skillPath": "skills/playwright-skill/SKILL.md",
+      "computedHash": "fa3e63eb24838ede1dc5be45fa161b159e66c176cac31310737dc2e0b292f465"
     },
     "pnpm": {
       "source": "antfu/skills",

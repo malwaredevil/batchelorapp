@@ -173,7 +173,9 @@ export const DEFAULT_THRESHOLDS: ThresholdsConfig = {
   openAIStateMaxAgeDays: 29,
 };
 
-const DEFAULTS: ElaineGlobalConfig = {
+// Exported (not just module-local) so the admin "reset to defaults" route and
+// tests can reuse this single source of truth instead of hand-duplicating it.
+export const ELAINE_CONFIG_DEFAULTS: ElaineGlobalConfig = {
   chatModel: "google/gemini-2.5-flash",
   subagentModel: "z-ai/glm-5.2",
   requestTimeoutMs: 12_000,
@@ -228,7 +230,7 @@ export async function getElaineGlobalConfig(): Promise<ElaineGlobalConfig> {
   if (cached && cached.expiresAt > Date.now()) {
     return cached.value;
   }
-  let value: ElaineGlobalConfig = DEFAULTS;
+  let value: ElaineGlobalConfig = ELAINE_CONFIG_DEFAULTS;
   try {
     const [row] = await db.select().from(elaineGlobalConfig).limit(1);
     if (row) {
@@ -249,7 +251,7 @@ export async function getElaineGlobalConfig(): Promise<ElaineGlobalConfig> {
       { err },
       "Failed to load elaine_global_config, falling back to defaults",
     );
-    value = DEFAULTS;
+    value = ELAINE_CONFIG_DEFAULTS;
   }
   cached = { value, expiresAt: Date.now() + CACHE_TTL_MS };
   return value;

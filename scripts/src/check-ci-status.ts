@@ -127,14 +127,10 @@ async function fetchCiForSha(sha: string): Promise<{
  *
  * Returns the PR if found, or null if none is associated.
  */
-async function findMergedPrForCommit(
-  sha: string,
-): Promise<PullRequest | null> {
+async function findMergedPrForCommit(sha: string): Promise<PullRequest | null> {
   let prs: PullRequest[];
   try {
-    prs = await githubGet<PullRequest[]>(
-      `/repos/${REPO}/commits/${sha}/pulls`,
-    );
+    prs = await githubGet<PullRequest[]>(`/repos/${REPO}/commits/${sha}/pulls`);
   } catch {
     // Non-fatal — if the endpoint fails we just can't fall back.
     return null;
@@ -173,7 +169,11 @@ export type CheckRunVerdict =
 export function evaluateCheckRuns(runs: CheckRun[]): CheckRunVerdict {
   const incomplete = runs.filter((r) => r.status !== "completed");
   if (incomplete.length > 0) {
-    return { ok: false, reason: "incomplete", names: incomplete.map((r) => r.name) };
+    return {
+      ok: false,
+      reason: "incomplete",
+      names: incomplete.map((r) => r.name),
+    };
   }
 
   const failed = runs.filter(
@@ -184,7 +184,11 @@ export function evaluateCheckRuns(runs: CheckRun[]): CheckRunVerdict {
       r.conclusion !== "skipped",
   );
   if (failed.length > 0) {
-    return { ok: false, reason: "failed", names: failed.map((r) => `${r.name} (${r.conclusion})`) };
+    return {
+      ok: false,
+      reason: "failed",
+      names: failed.map((r) => `${r.name} (${r.conclusion})`),
+    };
   }
 
   const successRuns = runs.filter(

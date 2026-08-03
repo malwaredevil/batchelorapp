@@ -77,23 +77,17 @@ const bumpedContent = Buffer.from(
 const bumpedSha = gitBlobSha(bumpedContent);
 
 test("no drift when local matches GitHub SHA", () => {
-  const ghShaMap = new Map([
-    [".github/workflows/ci.yml", workflowSha],
-  ]);
+  const ghShaMap = new Map([[".github/workflows/ci.yml", workflowSha]]);
   // readLocal returns the same content → same SHA
-  const drifted = findDriftedPaths(
-    ghShaMap,
-    () => workflowContent,
-    [".github/workflows/ci.yml"],
-  );
+  const drifted = findDriftedPaths(ghShaMap, () => workflowContent, [
+    ".github/workflows/ci.yml",
+  ]);
   assert.deepEqual(drifted, []);
 });
 
 test("detects GitHub-ahead change (Dependabot bumped the file on GitHub)", () => {
   // GitHub has bumpedContent; local still has workflowContent (stale)
-  const ghShaMap = new Map([
-    [".github/workflows/ci.yml", bumpedSha],
-  ]);
+  const ghShaMap = new Map([[".github/workflows/ci.yml", bumpedSha]]);
   const drifted = findDriftedPaths(
     ghShaMap,
     () => workflowContent, // local is stale
@@ -106,9 +100,7 @@ test("detects intentional local edit that diverges from GitHub (local is ahead)"
   // Local has bumpedContent; GitHub still has workflowContent.
   // The guard flags any divergence regardless of direction — the caller
   // decides whether to push (--skip-drift-check) or pull.
-  const ghShaMap = new Map([
-    [".github/workflows/ci.yml", workflowSha],
-  ]);
+  const ghShaMap = new Map([[".github/workflows/ci.yml", workflowSha]]);
   const drifted = findDriftedPaths(
     ghShaMap,
     () => bumpedContent, // local is ahead
@@ -118,15 +110,11 @@ test("detects intentional local edit that diverges from GitHub (local is ahead)"
 });
 
 test("detects file missing locally but present on GitHub", () => {
-  const ghShaMap = new Map([
-    [".github/workflows/new-action.yml", workflowSha],
-  ]);
+  const ghShaMap = new Map([[".github/workflows/new-action.yml", workflowSha]]);
   // readLocal returns null → file absent locally
-  const drifted = findDriftedPaths(
-    ghShaMap,
-    () => null,
-    [".github/workflows/new-action.yml"],
-  );
+  const drifted = findDriftedPaths(ghShaMap, () => null, [
+    ".github/workflows/new-action.yml",
+  ]);
   assert.deepEqual(drifted, [".github/workflows/new-action.yml"]);
 });
 
@@ -139,11 +127,12 @@ test("reports multiple drifted files", () => {
     [".github/workflows/deploy.yml", gitBlobSha(Buffer.from("deploy-v1"))],
   ]);
   const localContents = new Map([
-    [".github/workflows/ci.yml", Buffer.from("ci-v1")],       // stale
+    [".github/workflows/ci.yml", Buffer.from("ci-v1")], // stale
     [".github/workflows/stale.yml", Buffer.from("stale-v10")], // stale
     [".github/workflows/deploy.yml", Buffer.from("deploy-v1")], // matches
   ]);
-  void ciSha; void staleSha; // referenced above for clarity
+  void ciSha;
+  void staleSha; // referenced above for clarity
   const drifted = findDriftedPaths(
     ghShaMap,
     (p) => localContents.get(p) ?? null,
@@ -157,15 +146,13 @@ test("reports multiple drifted files", () => {
 
 test("only checks candidatePaths — ignores other entries in ghShaMap", () => {
   const ghShaMap = new Map([
-    [".github/workflows/ci.yml", bumpedSha],   // drifted
+    [".github/workflows/ci.yml", bumpedSha], // drifted
     [".github/workflows/stale.yml", workflowSha], // would be clean
   ]);
   // Only pass one path as candidate
-  const drifted = findDriftedPaths(
-    ghShaMap,
-    () => workflowContent,
-    [".github/workflows/stale.yml"],
-  );
+  const drifted = findDriftedPaths(ghShaMap, () => workflowContent, [
+    ".github/workflows/stale.yml",
+  ]);
   // ci.yml was not in candidatePaths so it must not appear
   assert.deepEqual(drifted, []);
 });

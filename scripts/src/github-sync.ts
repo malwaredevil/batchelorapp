@@ -366,9 +366,7 @@ async function main() {
   // -------------------------------------------------------------------------
   if (!skipDriftCheck) {
     const workflowDrift = changedFiles.filter(
-      (f) =>
-        f.startsWith(".github/workflows/") &&
-        ghShaMap.has(f), // file existed on GitHub — this is a modification, not a new file
+      (f) => f.startsWith(".github/workflows/") && ghShaMap.has(f), // file existed on GitHub — this is a modification, not a new file
     );
     if (workflowDrift.length > 0) {
       console.error(

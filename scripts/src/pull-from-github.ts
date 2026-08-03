@@ -119,6 +119,24 @@ type GHBlobResponse = {
   encoding: string;
 };
 
+/**
+ * Resolve a GitHub tree path to a local filesystem path, asserting the
+ * result stays inside `root`. GitHub tree paths are normally safe (they
+ * come from this repo's own git history), but this guards against writing
+ * outside the repo if a tree entry ever contained `../` segments — e.g. via
+ * a compromised token or a malicious upstream tree.
+ */
+function resolveSafeLocalPath(root: string, ghPath: string): string {
+  const resolvedRoot = path.resolve(root) + path.sep;
+  const localPath = path.resolve(root, ghPath);
+  if (!localPath.startsWith(resolvedRoot)) {
+    throw new Error(
+      `Refusing to write outside repo root: ${ghPath} resolved to ${localPath}`,
+    );
+  }
+  return localPath;
+}
+
 async function main() {
   const root = path.resolve(import.meta.dirname, "../..");
 
@@ -171,14 +189,18 @@ async function main() {
     process.exit(0);
   }
 
-  // Find files where GitHub differs from local
+  // Find files where GitHub differs from local. Existence is recorded here
+  // (not re-checked immediately before the write below) so the write loop
+  // has no check-then-act gap on the same path.
   const driftedPaths: string[] = [];
+  const existedPaths = new Set<string>();
   for (const ghPath of candidatePaths) {
     const localPath = path.join(root, ghPath);
     const ghSha = ghShaMap.get(ghPath)!;
 
     let localSha: string | null = null;
     if (fs.existsSync(localPath)) {
+      existedPaths.add(ghPath);
       const localContent = fs.readFileSync(localPath);
       localSha = localBlobSha(localContent);
     }
@@ -220,8 +242,8 @@ async function main() {
       content = Buffer.from(blob.content, "utf8");
     }
 
-    const localPath = path.join(root, ghPath);
-    const existed = fs.existsSync(localPath);
+    const localPath = resolveSafeLocalPath(root, ghPath);
+    const existed = existedPaths.has(ghPath);
     fs.mkdirSync(path.dirname(localPath), { recursive: true });
     fs.writeFileSync(localPath, content);
 

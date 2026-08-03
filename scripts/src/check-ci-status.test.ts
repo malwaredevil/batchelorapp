@@ -20,7 +20,12 @@ function makeRun(
   status: "completed" | "in_progress" | "queued",
   conclusion: string | null,
 ) {
-  return { name, status, conclusion, html_url: `https://github.com/checks/${name}` };
+  return {
+    name,
+    status,
+    conclusion,
+    html_url: `https://github.com/checks/${name}`,
+  };
 }
 
 // ── Scenario 1: All runs skipped ─────────────────────────────────────────────
@@ -34,12 +39,18 @@ const allSkipped = [
 {
   const verdict = evaluateCheckRuns(allSkipped);
   assert.equal(verdict.ok, false, "all-skipped: should not be ok");
-  assert.ok(!verdict.ok && verdict.reason === "all-skipped",
-    `all-skipped: expected reason 'all-skipped', got '${(verdict as CheckRunVerdict & { ok: false }).reason}'`);
-  assert.ok(!verdict.ok && verdict.names.length === 3,
-    "all-skipped: should report all three run names");
-  assert.ok(!verdict.ok && verdict.names.some((n) => n.includes("build")),
-    "all-skipped: names should include 'build'");
+  assert.ok(
+    !verdict.ok && verdict.reason === "all-skipped",
+    `all-skipped: expected reason 'all-skipped', got '${(verdict as CheckRunVerdict & { ok: false }).reason}'`,
+  );
+  assert.ok(
+    !verdict.ok && verdict.names.length === 3,
+    "all-skipped: should report all three run names",
+  );
+  assert.ok(
+    !verdict.ok && verdict.names.some((n) => n.includes("build")),
+    "all-skipped: names should include 'build'",
+  );
   console.log("✓ All runs skipped → fails with reason all-skipped");
 }
 
@@ -53,10 +64,14 @@ const allNeutral = [
 {
   const verdict = evaluateCheckRuns(allNeutral);
   assert.equal(verdict.ok, false, "all-neutral: should not be ok");
-  assert.ok(!verdict.ok && verdict.reason === "all-skipped",
-    `all-neutral: expected reason 'all-skipped', got '${(verdict as CheckRunVerdict & { ok: false }).reason}'`);
-  assert.ok(!verdict.ok && verdict.names.length === 2,
-    "all-neutral: should report both run names");
+  assert.ok(
+    !verdict.ok && verdict.reason === "all-skipped",
+    `all-neutral: expected reason 'all-skipped', got '${(verdict as CheckRunVerdict & { ok: false }).reason}'`,
+  );
+  assert.ok(
+    !verdict.ok && verdict.names.length === 2,
+    "all-neutral: should report both run names",
+  );
   console.log("✓ All runs neutral → fails with reason all-skipped");
 }
 
@@ -70,8 +85,11 @@ const mixedSuccessAndSkipped = [
 
 {
   const verdict = evaluateCheckRuns(mixedSuccessAndSkipped);
-  assert.equal(verdict.ok, true,
-    "mixed-success+skipped: should be ok when at least one success exists");
+  assert.equal(
+    verdict.ok,
+    true,
+    "mixed-success+skipped: should be ok when at least one success exists",
+  );
   console.log("✓ Mixed (one success + skipped/neutral) → passes");
 }
 
@@ -99,10 +117,14 @@ const withIncomplete = [
 {
   const verdict = evaluateCheckRuns(withIncomplete);
   assert.equal(verdict.ok, false, "incomplete: should not be ok");
-  assert.ok(!verdict.ok && verdict.reason === "incomplete",
-    `incomplete: expected reason 'incomplete', got '${(verdict as CheckRunVerdict & { ok: false }).reason}'`);
-  assert.ok(!verdict.ok && verdict.names.includes("lint"),
-    "incomplete: should name the pending run");
+  assert.ok(
+    !verdict.ok && verdict.reason === "incomplete",
+    `incomplete: expected reason 'incomplete', got '${(verdict as CheckRunVerdict & { ok: false }).reason}'`,
+  );
+  assert.ok(
+    !verdict.ok && verdict.names.includes("lint"),
+    "incomplete: should name the pending run",
+  );
   console.log("✓ Incomplete runs → fails with reason incomplete");
 }
 
@@ -116,10 +138,14 @@ const withFailed = [
 {
   const verdict = evaluateCheckRuns(withFailed);
   assert.equal(verdict.ok, false, "failed: should not be ok");
-  assert.ok(!verdict.ok && verdict.reason === "failed",
-    `failed: expected reason 'failed', got '${(verdict as CheckRunVerdict & { ok: false }).reason}'`);
-  assert.ok(!verdict.ok && verdict.names.some((n) => n.includes("lint")),
-    "failed: should name the failed run");
+  assert.ok(
+    !verdict.ok && verdict.reason === "failed",
+    `failed: expected reason 'failed', got '${(verdict as CheckRunVerdict & { ok: false }).reason}'`,
+  );
+  assert.ok(
+    !verdict.ok && verdict.names.some((n) => n.includes("lint")),
+    "failed: should name the failed run",
+  );
   console.log("✓ Failed conclusion → fails with reason failed");
 }
 
@@ -128,7 +154,11 @@ const withFailed = [
 
 {
   const verdict = evaluateCheckRuns([]);
-  assert.equal(verdict.ok, true, "empty: zero runs should be ok from evaluateCheckRuns perspective");
+  assert.equal(
+    verdict.ok,
+    true,
+    "empty: zero runs should be ok from evaluateCheckRuns perspective",
+  );
   console.log("✓ Empty run list → ok (zero-runs guard handled by caller)");
 }
 
@@ -143,9 +173,13 @@ const skippedAndNeutral = [
 {
   const verdict = evaluateCheckRuns(skippedAndNeutral);
   assert.equal(verdict.ok, false, "skipped+neutral: should not be ok");
-  assert.ok(!verdict.ok && verdict.reason === "all-skipped",
-    `skipped+neutral: expected reason 'all-skipped', got '${(verdict as CheckRunVerdict & { ok: false }).reason}'`);
-  console.log("✓ Mix of skipped and neutral (no success) → fails with reason all-skipped");
+  assert.ok(
+    !verdict.ok && verdict.reason === "all-skipped",
+    `skipped+neutral: expected reason 'all-skipped', got '${(verdict as CheckRunVerdict & { ok: false }).reason}'`,
+  );
+  console.log(
+    "✓ Mix of skipped and neutral (no success) → fails with reason all-skipped",
+  );
 }
 
 console.log("\n✅ All check-ci-status tests passed.\n");

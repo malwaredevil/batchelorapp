@@ -18,8 +18,9 @@ export async function claimWebhookSideEffect(
       SET status = 'processing',
           updated_at = NOW(),
           last_error = NULL
-      WHERE app_webhook_side_effects.status = 'processing'
-        AND app_webhook_side_effects.updated_at < NOW() - INTERVAL '5 minutes'
+      WHERE app_webhook_side_effects.status = 'failed'
+        OR (app_webhook_side_effects.status = 'processing'
+            AND app_webhook_side_effects.updated_at < NOW() - INTERVAL '5 minutes')
     RETURNING effect_key
   `);
   return result.rows.length > 0;

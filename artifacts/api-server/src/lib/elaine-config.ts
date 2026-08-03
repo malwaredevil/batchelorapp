@@ -153,7 +153,7 @@ export const DEFAULT_FEATURES: FeaturesConfig = {
   enableOpenAIResponsesFallback: true,
   enableBuiltinWebSearch: true,
   showReasoningSummary: true,
-  openAIStoreEnabledDefault: false,
+  openAIStoreEnabledDefault: true,
   openAIStoreScopeOverrides: {},
   openAIStoreRoleOverrides: {},
 };

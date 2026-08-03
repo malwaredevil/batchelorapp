@@ -54,7 +54,7 @@ export function ElaineWidget({
   }, []);
 
   const chat = useElaineChat({ appId, active: open });
-  const { settings, messages, isStreaming, streamingContent } = chat;
+  const { settings } = chat;
 
   // Resize state — null means use defaults from settings.chatWindowSize
   const [customSize, setCustomSize] = useState<{ w: number; h: number } | null>(
@@ -223,20 +223,9 @@ export function ElaineWidget({
     },
   });
 
-  // Track whether the widget was already open on the previous render so we
-  // can jump instantly on first open instead of smooth-scrolling from the top.
-  const prevOpenRef = useRef(false);
-  useEffect(() => {
-    if (open) {
-      const justOpened = !prevOpenRef.current;
-      chat.endRef.current?.scrollIntoView({
-        behavior: justOpened ? "instant" : "smooth",
-        block: "nearest",
-        inline: "nearest",
-      });
-    }
-    prevOpenRef.current = open;
-  }, [messages, open, isStreaming, streamingContent, chat.endRef]);
+  // Scroll-to-latest-message-on-open is handled inside useElaineChat itself
+  // (keyed off `active`), so it applies uniformly to this widget and the
+  // full-page chat surface without duplicating the effect here.
 
   // Close the history panel whenever the widget itself closes, so reopening
   // always lands back on the active chat rather than the history list.
@@ -249,8 +238,11 @@ export function ElaineWidget({
       try {
         const res = await fetch(`/api/elaine/conversations/${id}/messages`);
         if (!res.ok) throw new Error("Failed to load conversation");
-        const msgs = (await res.json()) as ConversationMessage[];
-        chat.handleLoadConversation(id, msgs);
+        const page = (await res.json()) as {
+          messages: ConversationMessage[];
+          hasMore: boolean;
+        };
+        chat.handleLoadConversation(id, page.messages, page.hasMore);
       } finally {
         setShowHistory(false);
       }

@@ -52,7 +52,8 @@ Thumbs.db
 attached_assets/
 .canvas/
 .replit
-**/.replit-artifact/
+**/.replit-artifact/*
+!**/.replit-artifact/artifact.toml
 .replitignore
 replit.nix
 

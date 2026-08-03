@@ -14,11 +14,14 @@
  * This script:
  *   1. Fetches the latest commit on `main` from the GitHub REST API.
  *   2. Fetches the combined status + check-runs for that commit's SHA.
- *   3. Prints a clear PASS / WARN / FAIL verdict.
+ *   3. If the tip commit has no check-runs (squash-merge scenario — GitHub
+ *      attaches check-runs to the PR's head SHA, not the merge commit), looks
+ *      up the PR that produced the tip commit and checks its head SHA instead.
+ *   4. Prints a clear PASS / WARN / FAIL verdict.
  *
  * Exit codes:
  *   0 — CI is green (all check runs / statuses succeeded) for the latest
- *       commit on main.
+ *       commit on main (or the PR that produced it, in the squash-merge case).
  *   1 — CI is missing, pending, or failing for the latest commit on main, or
  *       the check could not be completed (network/auth error, no PAT, etc).
  *       This is a WARNING signal for the human/agent driving publish — it
@@ -68,6 +71,15 @@ interface CheckRunsResponse {
   check_runs: CheckRun[];
 }
 
+interface PullRequest {
+  number: number;
+  state: "open" | "closed";
+  merged_at: string | null;
+  head: { sha: string };
+  html_url: string;
+  title: string;
+}
+
 async function githubGet<T>(path: string): Promise<T> {
   const res = await fetch(`https://api.github.com${path}`, {
     headers: {
@@ -93,6 +105,53 @@ function fail(message: string): never {
   warn(message);
   process.exitCode = 1;
   throw new Error(message);
+}
+
+/**
+ * Fetches the check-runs and combined status for a given SHA.
+ */
+async function fetchCiForSha(sha: string): Promise<{
+  combined: CombinedStatus;
+  checkRuns: CheckRunsResponse;
+}> {
+  const [combined, checkRuns] = await Promise.all([
+    githubGet<CombinedStatus>(`/repos/${REPO}/commits/${sha}/status`),
+    githubGet<CheckRunsResponse>(`/repos/${REPO}/commits/${sha}/check-runs`),
+  ]);
+  return { combined, checkRuns };
+}
+
+/**
+ * For squash-merges, GitHub attaches check-runs to the PR's head SHA rather
+ * than to the resulting merge commit on main. This function looks up the most
+ * recently merged PR associated with the given merge-commit SHA using the
+ * "list pull requests associated with a commit" endpoint.
+ *
+ * Returns the PR if found, or null if none is associated.
+ */
+async function findMergedPrForCommit(
+  sha: string,
+): Promise<PullRequest | null> {
+  let prs: PullRequest[];
+  try {
+    prs = await githubGet<PullRequest[]>(
+      `/repos/${REPO}/commits/${sha}/pulls`,
+    );
+  } catch {
+    // Non-fatal — if the endpoint fails we just can't fall back.
+    return null;
+  }
+
+  // Filter to PRs that were actually merged (closed + merged_at set).
+  const merged = prs.filter((pr) => pr.state === "closed" && pr.merged_at);
+  if (!merged.length) return null;
+
+  // Most recently merged first.
+  merged.sort(
+    (a, b) =>
+      new Date(b.merged_at!).getTime() - new Date(a.merged_at!).getTime(),
+  );
+  return merged[0]!;
 }
 
 async function main(): Promise<void> {
@@ -127,22 +186,22 @@ async function main(): Promise<void> {
     return;
   }
 
-  const sha = latestCommit.sha;
+  const tipSha = latestCommit.sha;
   console.log(
-    `Latest commit on ${BRANCH}: ${sha.slice(0, 10)} — ${latestCommit.commit.message.split("\n")[0]}`,
+    `Latest commit on ${BRANCH}: ${tipSha.slice(0, 10)} — ${latestCommit.commit.message.split("\n")[0]}`,
   );
   console.log(latestCommit.html_url);
 
-  let combined: CombinedStatus | null = null;
-  let checkRuns: CheckRunsResponse | null = null;
+  let combined: CombinedStatus;
+  let checkRuns: CheckRunsResponse;
+  let ciSha = tipSha; // the SHA we ultimately report CI results for
+  let ciUrl = latestCommit.html_url;
+
   try {
-    [combined, checkRuns] = await Promise.all([
-      githubGet<CombinedStatus>(`/repos/${REPO}/commits/${sha}/status`),
-      githubGet<CheckRunsResponse>(`/repos/${REPO}/commits/${sha}/check-runs`),
-    ]);
+    ({ combined, checkRuns } = await fetchCiForSha(tipSha));
   } catch (err) {
     warn(
-      `Could not fetch CI status for commit ${sha.slice(0, 10)}: ${
+      `Could not fetch CI status for commit ${tipSha.slice(0, 10)}: ${
         err instanceof Error ? err.message : String(err)
       }. Publishing now means GitHub CI status is UNKNOWN for this commit.`,
     );
@@ -150,14 +209,57 @@ async function main(): Promise<void> {
     return;
   }
 
-  const runs = checkRuns?.check_runs ?? [];
+  const tipRuns = checkRuns.check_runs ?? [];
 
-  if (runs.length === 0 && (!combined || combined.total_count === 0)) {
+  // ── Squash-merge fallback ────────────────────────────────────────────────
+  // When a PR is squash-merged, GitHub attaches all check-runs to the PR's
+  // head SHA, not to the resulting squash commit on main. If the tip commit
+  // has no check-runs, look up the associated PR and check its head SHA
+  // instead.
+  if (tipRuns.length === 0 && combined.total_count === 0) {
+    console.log(
+      `\nℹ️  No check-runs found on tip commit ${tipSha.slice(0, 10)}. ` +
+        `This is expected for squash-merged PRs — looking up the associated PR…`,
+    );
+
+    const pr = await findMergedPrForCommit(tipSha);
+
+    if (pr) {
+      console.log(
+        `   Found PR #${pr.number}: "${pr.title}" (head SHA ${pr.head.sha.slice(0, 10)})`,
+      );
+      console.log(`   ${pr.html_url}\n`);
+
+      try {
+        ({ combined, checkRuns } = await fetchCiForSha(pr.head.sha));
+        ciSha = pr.head.sha;
+        ciUrl = pr.html_url;
+      } catch (err) {
+        warn(
+          `Could not fetch CI status for PR #${pr.number} head SHA ${pr.head.sha.slice(0, 10)}: ${
+            err instanceof Error ? err.message : String(err)
+          }. Verify CI manually at ${pr.html_url}/checks before publishing.`,
+        );
+        process.exitCode = 1;
+        return;
+      }
+    } else {
+      // No associated PR found — fall through to the "no check-runs" warning.
+      console.log(
+        `   No merged PR found for commit ${tipSha.slice(0, 10)} — ` +
+          `cannot fall back to PR head SHA.\n`,
+      );
+    }
+  }
+
+  const runs = checkRuns.check_runs ?? [];
+
+  if (runs.length === 0 && combined.total_count === 0) {
     warn(
       `GitHub Actions has not reported any check runs or statuses for commit ` +
-        `${sha.slice(0, 10)} on ${BRANCH}. This usually means the commit hasn't been ` +
-        `pushed to GitHub yet, or CI hasn't started. Do NOT treat this commit as CI-clean — ` +
-        `verify manually at ${latestCommit.html_url}/checks before publishing.`,
+        `${ciSha.slice(0, 10)}${ciSha !== tipSha ? ` (PR head, tip is ${tipSha.slice(0, 10)})` : ` on ${BRANCH}`}. ` +
+        `This usually means the commit hasn't been pushed to GitHub yet, or CI hasn't started. ` +
+        `Do NOT treat this commit as CI-clean — verify manually at ${ciUrl}/checks before publishing.`,
     );
     process.exitCode = 1;
     return;
@@ -174,9 +276,9 @@ async function main(): Promise<void> {
 
   if (incomplete.length > 0) {
     warn(
-      `GitHub Actions CI is still PENDING for commit ${sha.slice(0, 10)} on ${BRANCH}: ` +
+      `GitHub Actions CI is still PENDING for ${ciSha !== tipSha ? `PR head ${ciSha.slice(0, 10)}` : `commit ${ciSha.slice(0, 10)} on ${BRANCH}`}: ` +
         `${incomplete.map((r) => r.name).join(", ")}. Wait for CI to finish before publishing, ` +
-        `or verify manually at ${latestCommit.html_url}/checks.`,
+        `or verify manually at ${ciUrl}/checks.`,
     );
     process.exitCode = 1;
     return;
@@ -184,16 +286,21 @@ async function main(): Promise<void> {
 
   if (failed.length > 0) {
     warn(
-      `GitHub Actions CI is FAILING for commit ${sha.slice(0, 10)} on ${BRANCH}: ` +
+      `GitHub Actions CI is FAILING for ${ciSha !== tipSha ? `PR head ${ciSha.slice(0, 10)}` : `commit ${ciSha.slice(0, 10)} on ${BRANCH}`}: ` +
         `${failed.map((r) => `${r.name} (${r.conclusion})`).join(", ")}. ` +
-        `Do not publish until this is fixed — see ${latestCommit.html_url}/checks.`,
+        `Do not publish until this is fixed — see ${ciUrl}/checks.`,
     );
     process.exitCode = 1;
     return;
   }
 
+  const shaLabel =
+    ciSha !== tipSha
+      ? `PR head SHA ${ciSha.slice(0, 10)} (tip commit ${tipSha.slice(0, 10)} on ${BRANCH})`
+      : `commit ${ciSha.slice(0, 10)} on ${BRANCH}`;
+
   console.log(
-    `\n✅ GitHub Actions CI is green for commit ${sha.slice(0, 10)} on ${BRANCH} ` +
+    `\n✅ GitHub Actions CI is green for ${shaLabel} ` +
       `(${runs.map((r) => r.name).join(", ") || "no named check runs, but combined status is success"}).\n`,
   );
 }

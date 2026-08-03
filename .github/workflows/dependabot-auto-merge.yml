@@ -21,52 +21,60 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Auto-merge high/critical security patches
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GHSA_IDS: ${{ steps.metadata.outputs.ghsa-ids }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          if [ -z "$GHSA_IDS" ]; then
-            echo "No GHSA IDs found — skipping security auto-merge"
-            exit 0
-          fi
-          for GHSA in $(echo "$GHSA_IDS" | tr ',' '\n'); do
-            # Validate GHSA ID format before using in a shell command.
-            # GHSA IDs are always GHSA-xxxx-xxxx-xxxx (alphanumeric segments).
-            # An invalid-format ID is a signal of unexpected input; skip it.
-            if [[ ! "$GHSA" =~ ^GHSA-[0-9a-zA-Z]{4}-[0-9a-zA-Z]{4}-[0-9a-zA-Z]{4}$ ]]; then
-              echo "Skipping malformed GHSA ID: $GHSA"
-              continue
-            fi
-            SEVERITY=$(gh api "/advisories/$GHSA" --jq '.severity' 2>/dev/null || echo "unknown")
-            echo "Advisory $GHSA severity: $SEVERITY"
-            if [ "$SEVERITY" = "high" ] || [ "$SEVERITY" = "critical" ]; then
-              echo "Auto-merging PR #$PR_NUMBER for $SEVERITY advisory $GHSA"
-              gh pr merge --auto --squash "$PR_NUMBER"
-              exit 0
-            fi
-          done
-          echo "No high/critical advisories — skipping security auto-merge"
-
-      - name: Auto-merge low-risk Dependabot bumps
+      # NOTE: This workflow uses pull_request_target and therefore MUST NOT
+      # check out repository code (the security policy enforces this).  All
+      # decision logic lives inline below so it can be extracted and tested
+      # by .github/workflows/test-dependabot-auto-merge.yml without checkout.
+      - name: Decide and auto-merge
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           ECOSYSTEM: ${{ steps.metadata.outputs.package-ecosystem }}
           UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
           DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
+          GHSA_IDS: ${{ steps.metadata.outputs.ghsa-ids }}
         run: |
-          echo "Ecosystem: $ECOSYSTEM"
-          echo "Update type: $UPDATE_TYPE"
+          set -euo pipefail
+          echo "Ecosystem:    $ECOSYSTEM"
+          echo "Update type:  $UPDATE_TYPE"
           echo "Dependencies: $DEPENDENCY_NAMES"
+          echo "GHSA IDs:     ${GHSA_IDS:-<none>}"
 
-          # Count how many packages are in this PR (dependency-names is comma-separated).
+          # ------------------------------------------------------------------
+          # 1. High/critical security advisory → auto-merge regardless of type
+          # ------------------------------------------------------------------
+          if [ -n "${GHSA_IDS:-}" ]; then
+            FOUND_VALID=false
+            for GHSA in $(echo "$GHSA_IDS" | tr ',' '\n' | xargs); do
+              # Validate GHSA ID format: GHSA-xxxx-xxxx-xxxx (alphanumeric only).
+              if [[ ! "$GHSA" =~ ^GHSA-[0-9a-zA-Z]{4}-[0-9a-zA-Z]{4}-[0-9a-zA-Z]{4}$ ]]; then
+                echo "Skipping malformed GHSA ID: $GHSA"
+                continue
+              fi
+              FOUND_VALID=true
+              SEVERITY=$(gh api "/advisories/$GHSA" --jq '.severity' 2>/dev/null || echo "unknown")
+              echo "Advisory $GHSA severity: $SEVERITY"
+              if [ "$SEVERITY" = "high" ] || [ "$SEVERITY" = "critical" ]; then
+                echo "Auto-merging PR #$PR_NUMBER for $SEVERITY advisory $GHSA"
+                gh pr merge --auto --squash "$PR_NUMBER"
+                exit 0
+              fi
+            done
+            if [ "$FOUND_VALID" = "true" ]; then
+              echo "No high/critical advisories — skipping security auto-merge"
+            else
+              echo "All GHSA IDs were malformed — skipping security auto-merge"
+            fi
+          fi
+
+          # ------------------------------------------------------------------
+          # 2. Low-risk bump path
+          # ------------------------------------------------------------------
           PACKAGE_COUNT=$(echo "$DEPENDENCY_NAMES" | tr ',' '\n' | grep -c .)
           echo "Package count: $PACKAGE_COUNT"
 
-          # GitHub Actions bumps carry zero app-code risk — auto-merge minor and patch,
-          # but never major (could change action interface).
+          # GitHub Actions bumps carry zero app-code risk — auto-merge minor
+          # and patch, but never major (could change the action interface).
           if [ "$ECOSYSTEM" = "github_actions" ]; then
             if [ "$UPDATE_TYPE" = "version-update:semver-major" ]; then
               echo "Skipping major GitHub Actions bump — requires manual review"
@@ -77,8 +85,9 @@ jobs:
             exit 0
           fi
 
-          # For all other ecosystems (npm, pip, etc.) auto-merge single-package patch bumps.
-          # Grouped PRs (multiple packages) are skipped to avoid silent breaking changes.
+          # For all other ecosystems auto-merge only single-package patch bumps.
+          # Grouped PRs (multiple packages) are skipped to avoid silent breaking
+          # changes.
           if [ "$UPDATE_TYPE" = "version-update:semver-patch" ] && [ "$PACKAGE_COUNT" -eq 1 ]; then
             echo "Auto-merging single-package patch bump for PR #$PR_NUMBER"
             gh pr merge --auto --squash "$PR_NUMBER"

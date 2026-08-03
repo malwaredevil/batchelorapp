@@ -186,13 +186,22 @@ const ALLOWED_DOT_NAMES = new Set([
   ".generated", // Vite plugin generated stubs (e.g. mockup-sandbox component map)
 ]);
 // Dotfile directories that are Replit-internal and must never appear on GitHub.
-// These are skipped by collectFiles (dotfile guard) so they never appear in
-// localFiles, but they CAN appear in ghShaMap if previously pushed by another
-// tool. Marking them here prevents the deletion logic from queuing them as
-// "legitimate deletions" (they're not managed by this script at all).
-const EXCLUDED_DOT_DIRS = new Set([
-  ".replit-artifact", // Replit proxy routing config — Replit-internal
+// Everything under these dirs is skipped by collectFiles (dotfile guard) so
+// it never appears in localFiles, and is also protected from the deletion
+// logic below (never queued as a "legitimate deletion" — not managed by this
+// script at all).
+const EXCLUDED_DOT_DIRS = new Set<string>([
+  // (none currently — .replit-artifact/ has a narrow carve-out below)
 ]);
+// Within .replit-artifact/, only artifact.toml is allowed through (mirrors
+// the workspace .gitignore's `**/.replit-artifact/*` + `!**/.replit-artifact/artifact.toml`
+// negation). artifact.toml itself contains no secrets — real Replit secrets
+// live in .replit (already excluded via EXCLUDED_EXACT), never in artifact.toml.
+// Tracking these files on GitHub prevents the artifact registry from losing
+// them across publish/pull cycles (support ticket #486854, 2026-08-03).
+// Everything else under .replit-artifact/ (if anything is ever added) stays excluded.
+const REPLIT_ARTIFACT_DIR = ".replit-artifact";
+const REPLIT_ARTIFACT_ALLOWED_FILE = "artifact.toml";
 // Binary/media files — large and not meaningful to diff
 const EXCLUDED_EXTENSIONS = new Set([
   ".jpg",
@@ -226,6 +235,14 @@ function isExcluded(filePath: string): boolean {
   // "deleted locally" (they were never managed by this script to begin with).
   const segments = filePath.split("/");
   if (segments.some((seg) => EXCLUDED_DOT_DIRS.has(seg))) return true;
+  // .replit-artifact/ narrow carve-out: everything in the dir is excluded
+  // EXCEPT artifact.toml (see REPLIT_ARTIFACT_ALLOWED_FILE comment above).
+  if (
+    segments.includes(REPLIT_ARTIFACT_DIR) &&
+    path.basename(filePath) !== REPLIT_ARTIFACT_ALLOWED_FILE
+  ) {
+    return true;
+  }
   // Exclude any file whose basename starts with "RUNBOOK" (case-sensitive).
   // The canonical location .local/ops-runbook.md is already blocked by the
   // .local/ prefix, but this covers variants at any depth (RUNBOOK-v2.md,
@@ -247,7 +264,13 @@ function collectFiles(dir: string, root: string): string[] {
     // Dotfile/dotdir guard: skip by default, only allow explicit allowlist.
     // This replaces the old blanket `entry.name.startsWith(".")` which
     // accidentally blocked .github/ (CI workflows never reached GitHub).
-    if (entry.name.startsWith(".") && !ALLOWED_DOT_NAMES.has(entry.name)) {
+    // .replit-artifact/ gets a narrow exception so we can recurse in and let
+    // isExcluded() filter down to just artifact.toml (see carve-out above).
+    if (
+      entry.name.startsWith(".") &&
+      !ALLOWED_DOT_NAMES.has(entry.name) &&
+      entry.name !== REPLIT_ARTIFACT_DIR
+    ) {
       continue;
     }
     if (entry.isDirectory()) {

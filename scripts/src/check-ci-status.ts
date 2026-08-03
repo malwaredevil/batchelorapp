@@ -37,8 +37,6 @@
  *   GITHUB_REPO  — optional, defaults to "malwaredevil/batchelorapp".
  */
 
-export {};
-
 const REPO = process.env["GITHUB_REPO"] || "malwaredevil/batchelorapp";
 const BRANCH = process.env["GITHUB_BRANCH"] || "main";
 const PAT = process.env["GH_PAT"];
@@ -154,6 +152,55 @@ async function findMergedPrForCommit(
   return merged[0]!;
 }
 
+// ── Exported for unit-testing ─────────────────────────────────────────────
+
+export type CheckRunVerdict =
+  | { ok: true }
+  | { ok: false; reason: "incomplete"; names: string[] }
+  | { ok: false; reason: "failed"; names: string[] }
+  | { ok: false; reason: "all-skipped"; names: string[] };
+
+/**
+ * Pure function: given a list of completed check-runs, returns a verdict
+ * without making any network calls or touching process.exitCode.
+ *
+ * Rules (mirroring the main() logic):
+ *   1. Any run that is not "completed" → reason: "incomplete"
+ *   2. Any completed run whose conclusion is not success/neutral/skipped → reason: "failed"
+ *   3. All runs completed but none with conclusion "success" → reason: "all-skipped"
+ *   4. Otherwise → ok: true
+ */
+export function evaluateCheckRuns(runs: CheckRun[]): CheckRunVerdict {
+  const incomplete = runs.filter((r) => r.status !== "completed");
+  if (incomplete.length > 0) {
+    return { ok: false, reason: "incomplete", names: incomplete.map((r) => r.name) };
+  }
+
+  const failed = runs.filter(
+    (r) =>
+      r.status === "completed" &&
+      r.conclusion !== "success" &&
+      r.conclusion !== "neutral" &&
+      r.conclusion !== "skipped",
+  );
+  if (failed.length > 0) {
+    return { ok: false, reason: "failed", names: failed.map((r) => `${r.name} (${r.conclusion})`) };
+  }
+
+  const successRuns = runs.filter(
+    (r) => r.status === "completed" && r.conclusion === "success",
+  );
+  if (successRuns.length === 0 && runs.length > 0) {
+    return {
+      ok: false,
+      reason: "all-skipped",
+      names: runs.map((r) => `${r.name} (${r.conclusion ?? "unknown"})`),
+    };
+  }
+
+  return { ok: true };
+}
+
 async function main(): Promise<void> {
   console.log(`Checking GitHub Actions CI status for ${REPO}@${BRANCH}...\n`);
 
@@ -265,53 +312,37 @@ async function main(): Promise<void> {
     return;
   }
 
-  const incomplete = runs.filter((r) => r.status !== "completed");
-  const failed = runs.filter(
-    (r) =>
-      r.status === "completed" &&
-      r.conclusion !== "success" &&
-      r.conclusion !== "neutral" &&
-      r.conclusion !== "skipped",
-  );
+  // ── Delegate to the exported pure verdict function ───────────────────────
+  const shaRef =
+    ciSha !== tipSha
+      ? `PR head ${ciSha.slice(0, 10)}`
+      : `commit ${ciSha.slice(0, 10)} on ${BRANCH}`;
 
-  if (incomplete.length > 0) {
-    warn(
-      `GitHub Actions CI is still PENDING for ${ciSha !== tipSha ? `PR head ${ciSha.slice(0, 10)}` : `commit ${ciSha.slice(0, 10)} on ${BRANCH}`}: ` +
-        `${incomplete.map((r) => r.name).join(", ")}. Wait for CI to finish before publishing, ` +
-        `or verify manually at ${ciUrl}/checks.`,
-    );
-    process.exitCode = 1;
-    return;
-  }
+  const verdict = evaluateCheckRuns(runs);
 
-  if (failed.length > 0) {
-    warn(
-      `GitHub Actions CI is FAILING for ${ciSha !== tipSha ? `PR head ${ciSha.slice(0, 10)}` : `commit ${ciSha.slice(0, 10)} on ${BRANCH}`}: ` +
-        `${failed.map((r) => `${r.name} (${r.conclusion})`).join(", ")}. ` +
-        `Do not publish until this is fixed — see ${ciUrl}/checks.`,
-    );
-    process.exitCode = 1;
-    return;
-  }
-
-  // ── All-skipped / all-neutral guard ─────────────────────────────────────
-  // A PR where every check-run was skipped or neutral is NOT CI-clean.
-  // This can happen when branch-protection rules change, a backdoor merge
-  // path is used, or path filters cause GitHub to skip every job silently.
-  // Require at least one genuinely-passed (conclusion === "success") run.
-  const successRuns = runs.filter(
-    (r) => r.status === "completed" && r.conclusion === "success",
-  );
-
-  if (successRuns.length === 0 && runs.length > 0) {
-    warn(
-      `GitHub Actions CI has NO genuinely-passed check-runs for ` +
-        `${ciSha !== tipSha ? `PR head ${ciSha.slice(0, 10)}` : `commit ${ciSha.slice(0, 10)} on ${BRANCH}`}. ` +
-        `All ${runs.length} run(s) are skipped or neutral: ` +
-        `${runs.map((r) => `${r.name} (${r.conclusion ?? "unknown"})`).join(", ")}. ` +
-        `A commit where every required check was skipped is NOT CI-clean. ` +
-        `Verify manually at ${ciUrl}/checks before publishing.`,
-    );
+  if (!verdict.ok) {
+    if (verdict.reason === "incomplete") {
+      warn(
+        `GitHub Actions CI is still PENDING for ${shaRef}: ` +
+          `${verdict.names.join(", ")}. Wait for CI to finish before publishing, ` +
+          `or verify manually at ${ciUrl}/checks.`,
+      );
+    } else if (verdict.reason === "failed") {
+      warn(
+        `GitHub Actions CI is FAILING for ${shaRef}: ` +
+          `${verdict.names.join(", ")}. ` +
+          `Do not publish until this is fixed — see ${ciUrl}/checks.`,
+      );
+    } else {
+      // all-skipped / all-neutral
+      warn(
+        `GitHub Actions CI has NO genuinely-passed check-runs for ${shaRef}. ` +
+          `All ${runs.length} run(s) are skipped or neutral: ` +
+          `${verdict.names.join(", ")}. ` +
+          `A commit where every required check was skipped is NOT CI-clean. ` +
+          `Verify manually at ${ciUrl}/checks before publishing.`,
+      );
+    }
     process.exitCode = 1;
     return;
   }
@@ -327,9 +358,14 @@ async function main(): Promise<void> {
   );
 }
 
-main().catch((err) => {
-  if (!process.exitCode) {
-    process.exitCode = 1;
-  }
-  console.error(err instanceof Error ? err.message : err);
-});
+// Only invoke main() when this file is run directly (not imported by tests).
+// ESM equivalent of CommonJS `if (require.main === module)`.
+import { fileURLToPath } from "node:url";
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch((err) => {
+    if (!process.exitCode) {
+      process.exitCode = 1;
+    }
+    console.error(err instanceof Error ? err.message : err);
+  });
+}

@@ -224,7 +224,11 @@ async function main() {
   process.exit(1);
 }
 
-main().catch((e) => {
-  console.error("ERROR:", e.message);
-  process.exit(1);
-});
+// Only invoke main() when this file is run directly (not imported by tests).
+import { fileURLToPath } from "node:url";
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch((e) => {
+    console.error("ERROR:", e.message);
+    process.exit(1);
+  });
+}

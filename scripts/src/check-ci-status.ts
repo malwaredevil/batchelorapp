@@ -294,6 +294,28 @@ async function main(): Promise<void> {
     return;
   }
 
+  // ── All-skipped / all-neutral guard ─────────────────────────────────────
+  // A PR where every check-run was skipped or neutral is NOT CI-clean.
+  // This can happen when branch-protection rules change, a backdoor merge
+  // path is used, or path filters cause GitHub to skip every job silently.
+  // Require at least one genuinely-passed (conclusion === "success") run.
+  const successRuns = runs.filter(
+    (r) => r.status === "completed" && r.conclusion === "success",
+  );
+
+  if (successRuns.length === 0 && runs.length > 0) {
+    warn(
+      `GitHub Actions CI has NO genuinely-passed check-runs for ` +
+        `${ciSha !== tipSha ? `PR head ${ciSha.slice(0, 10)}` : `commit ${ciSha.slice(0, 10)} on ${BRANCH}`}. ` +
+        `All ${runs.length} run(s) are skipped or neutral: ` +
+        `${runs.map((r) => `${r.name} (${r.conclusion ?? "unknown"})`).join(", ")}. ` +
+        `A commit where every required check was skipped is NOT CI-clean. ` +
+        `Verify manually at ${ciUrl}/checks before publishing.`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+
   const shaLabel =
     ciSha !== tipSha
       ? `PR head SHA ${ciSha.slice(0, 10)} (tip commit ${tipSha.slice(0, 10)} on ${BRANCH})`

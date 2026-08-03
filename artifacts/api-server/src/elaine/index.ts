@@ -3073,9 +3073,10 @@ router.get("/conversations", async (req, res) => {
 
   // Cursor/limit only apply when NOT searching — search always returns all matches.
   const limitParam = parseInt(String(req.query["limit"] ?? ""), 10);
-  const limit = !searchQuery && Number.isFinite(limitParam) && limitParam > 0
-    ? Math.min(limitParam, CONVERSATION_PAGE_SIZE_MAX)
-    : CONVERSATION_PAGE_SIZE_DEFAULT;
+  const limit =
+    !searchQuery && Number.isFinite(limitParam) && limitParam > 0
+      ? Math.min(limitParam, CONVERSATION_PAGE_SIZE_MAX)
+      : CONVERSATION_PAGE_SIZE_DEFAULT;
   const beforeParam = String(req.query["before"] ?? "").trim();
   const beforeIdParam = parseInt(String(req.query["beforeId"] ?? ""), 10);
   const beforeDate =
@@ -3156,10 +3157,7 @@ router.get("/conversations", async (req, res) => {
         inArray(elaineHistoryConversations.id, Array.from(matchingConvIds)),
         cursorCondition,
       )
-    : and(
-        eq(elaineHistoryConversations.userId, userId),
-        cursorCondition,
-      );
+    : and(eq(elaineHistoryConversations.userId, userId), cursorCondition);
 
   const fetchLimit = searchQuery ? 500 : limit + 1;
 
@@ -3178,7 +3176,10 @@ router.get("/conversations", async (req, res) => {
     )
     .where(baseWhere)
     .groupBy(elaineHistoryConversations.id)
-    .orderBy(desc(elaineHistoryConversations.updatedAt), desc(elaineHistoryConversations.id))
+    .orderBy(
+      desc(elaineHistoryConversations.updatedAt),
+      desc(elaineHistoryConversations.id),
+    )
     .limit(fetchLimit);
 
   const hasMore = !searchQuery && rows.length > limit;
@@ -3269,13 +3270,13 @@ router.get("/conversations/:id/messages", async (req, res) => {
   }
 
   const limitParam = parseInt(String(req.query["limit"] ?? ""), 10);
-  const limit = Number.isFinite(limitParam) && limitParam > 0
-    ? Math.min(limitParam, CONVERSATION_PAGE_SIZE_MAX)
-    : CONVERSATION_PAGE_SIZE_DEFAULT;
+  const limit =
+    Number.isFinite(limitParam) && limitParam > 0
+      ? Math.min(limitParam, CONVERSATION_PAGE_SIZE_MAX)
+      : CONVERSATION_PAGE_SIZE_DEFAULT;
   const beforeParam = parseInt(String(req.query["before"] ?? ""), 10);
-  const beforeId = Number.isFinite(beforeParam) && beforeParam > 0
-    ? beforeParam
-    : undefined;
+  const beforeId =
+    Number.isFinite(beforeParam) && beforeParam > 0 ? beforeParam : undefined;
 
   const { messages, hasMore } = await fetchConversationMessagePage(
     userId,
@@ -3352,9 +3353,10 @@ router.get("/conversation", async (req, res) => {
   await applyUnseenNudges(userId, histConvId);
 
   const limitParam = parseInt(String(req.query["limit"] ?? ""), 10);
-  const limit = Number.isFinite(limitParam) && limitParam > 0
-    ? Math.min(limitParam, CONVERSATION_PAGE_SIZE_MAX)
-    : CONVERSATION_PAGE_SIZE_DEFAULT;
+  const limit =
+    Number.isFinite(limitParam) && limitParam > 0
+      ? Math.min(limitParam, CONVERSATION_PAGE_SIZE_MAX)
+      : CONVERSATION_PAGE_SIZE_DEFAULT;
 
   const { messages, hasMore } = await fetchConversationMessagePage(
     userId,
@@ -6102,8 +6104,7 @@ router.post("/chat", async (req, res) => {
       insertedMessages.find((inserted) => inserted.role === "assistant")?.id ??
       null;
     userMessageId =
-      insertedMessages.find((inserted) => inserted.role === "user")?.id ??
-      null;
+      insertedMessages.find((inserted) => inserted.role === "user")?.id ?? null;
 
     const stateUpdatedAt = new Date();
     const responseStateUpdate =

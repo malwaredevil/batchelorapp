@@ -339,7 +339,6 @@ export default function Chat() {
                   </p>
                 )}
                 {conversations.map((conv) => {
-
                   const isActive = chat.conversationId === conv.id;
                   const isLoading = loadingConvId === conv.id;
                   const isEditing = editingConvId === conv.id;

@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState, useDeferredValue } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useDeferredValue,
+} from "react";
 import { MessageSquare, Plus, Search, Trash2, X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import {

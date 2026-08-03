@@ -739,7 +739,8 @@ export function ElaineChatPanel({
           // loadOlderMessages() prepends pages above the currently-rendered
           // messages, which would otherwise invalidate any index captured
           // when the widgets were originally attached.
-          const widgets = msg.id !== undefined ? messageWidgets.get(msg.id) : undefined;
+          const widgets =
+            msg.id !== undefined ? messageWidgets.get(msg.id) : undefined;
           return (
             <div key={i} className="flex gap-2.5 justify-start">
               <ElaineAvatar

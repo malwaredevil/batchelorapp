@@ -512,7 +512,7 @@ export function useElaineChat({
     // below can find and replace *this specific* message wherever it ends up
     // in the array — a concurrent loadOlderMessages() prepend can land while
     // this send is in flight, so it is not safe to assume it stays last.
-    const tempId = -(++tempIdCounterRef.current);
+    const tempId = -++tempIdCounterRef.current;
     setMessages((prev) => [
       ...prev,
       {

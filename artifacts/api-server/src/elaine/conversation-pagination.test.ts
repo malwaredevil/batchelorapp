@@ -102,7 +102,9 @@ const dbMock = {
 vi.mock("@sentry/node", () => ({
   init: vi.fn(),
   captureException: vi.fn(),
-  withScope: vi.fn((_cb: (s: unknown) => void) => _cb({ setTag: vi.fn(), setExtra: vi.fn() })),
+  withScope: vi.fn((_cb: (s: unknown) => void) =>
+    _cb({ setTag: vi.fn(), setExtra: vi.fn() }),
+  ),
   startSpan: vi.fn((_opts: unknown, cb: () => unknown) => cb()),
   setUser: vi.fn(),
 }));
@@ -148,7 +150,9 @@ vi.mock("../middleware/auth", async (importOriginal) => {
   return {
     ...actual,
     requireAuth: (req: Request, res: Response, next: NextFunction): void => {
-      if (!(req as Request & { session?: { userId?: number } }).session?.userId) {
+      if (
+        !(req as Request & { session?: { userId?: number } }).session?.userId
+      ) {
         res.status(401).json({ error: "Not authenticated" });
         return;
       }
@@ -398,10 +402,15 @@ vi.mock("./runtime", () => ({
   // The key mock for pagination tests: never throws, returns an empty Map
   // so mapHistoryMessageRows completes without touching real Sentry or DB.
   loadElaineTurnTracesForMessages: vi.fn().mockResolvedValue(new Map()),
-  mapWithConcurrency: vi.fn().mockImplementation(
-    async <T>(items: T[], _concurrency: number, fn: (item: T) => Promise<unknown>) =>
-      Promise.all(items.map(fn)),
-  ),
+  mapWithConcurrency: vi
+    .fn()
+    .mockImplementation(
+      async <T>(
+        items: T[],
+        _concurrency: number,
+        fn: (item: T) => Promise<unknown>,
+      ) => Promise.all(items.map(fn)),
+    ),
   MODEL_VISIBLE_HARD_TOOL_NAMES: new Set<string>(),
   MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS: new Map<string, string>(),
   persistElaineTraceBestEffort: vi.fn(),
@@ -482,8 +491,13 @@ vi.mock("@supabase/supabase-js", () => ({
     storage: {
       from: vi.fn().mockReturnValue({
         upload: vi.fn().mockResolvedValue({ data: null, error: null }),
-        getPublicUrl: vi.fn().mockReturnValue({ data: { publicUrl: "https://mock.example.com/file.jpg" } }),
-        createSignedUrl: vi.fn().mockResolvedValue({ data: { signedUrl: "https://signed.example.com/file.jpg" }, error: null }),
+        getPublicUrl: vi.fn().mockReturnValue({
+          data: { publicUrl: "https://mock.example.com/file.jpg" },
+        }),
+        createSignedUrl: vi.fn().mockResolvedValue({
+          data: { signedUrl: "https://signed.example.com/file.jpg" },
+          error: null,
+        }),
       }),
     },
   }),
@@ -562,7 +576,9 @@ beforeEach(() => {
   selectQueue.length = 0;
   vi.clearAllMocks();
   dbMock.select.mockImplementation(() => makeQueuedSelectBuilder(selectQueue));
-  dbMock.insert.mockImplementation(() => makeInsertReturningBuilder([{ id: 7 }]));
+  dbMock.insert.mockImplementation(() =>
+    makeInsertReturningBuilder([{ id: 7 }]),
+  );
   dbMock.update.mockImplementation(() => makeUpdateBuilder());
 });
 
@@ -601,7 +617,11 @@ describe("GET /api/elaine/conversation", () => {
     // fetchConversationMessagePage: DB query uses ORDER BY id DESC so we push
     // rows newest-first; the route handler then reverses them to oldest-first
     // before returning.  hasMore = (rows.length > limit) = (3 > 30) = false.
-    const rows = [makeMessageRow(3, "assistant"), makeMessageRow(2), makeMessageRow(1)];
+    const rows = [
+      makeMessageRow(3, "assistant"),
+      makeMessageRow(2),
+      makeMessageRow(1),
+    ];
     selectQueue.push(rows);
 
     const app = buildApp({ userId: 1 });
@@ -656,7 +676,9 @@ describe("GET /api/elaine/conversation", () => {
 describe("GET /api/elaine/conversations/:id/messages", () => {
   it("returns 400 for a non-numeric conversation ID", async () => {
     const app = buildApp({ userId: 1 });
-    const res = await request(app).get("/api/elaine/conversations/abc/messages");
+    const res = await request(app).get(
+      "/api/elaine/conversations/abc/messages",
+    );
     expect(res.status).toBe(400);
     expect(res.body.error).toBe("Invalid conversation ID");
   });
@@ -691,7 +713,11 @@ describe("GET /api/elaine/conversations/:id/messages", () => {
     expect(res.status).toBe(200);
     expect(res.body.hasMore).toBe(false);
     expect(res.body.messages).toHaveLength(2);
-    expect(res.body.messages[0]).toMatchObject({ id: 10, role: "user", content: "Message 10" });
+    expect(res.body.messages[0]).toMatchObject({
+      id: 10,
+      role: "user",
+      content: "Message 10",
+    });
     expect(res.body.messages[1]).toMatchObject({ id: 11, role: "assistant" });
   });
 
@@ -710,8 +736,12 @@ describe("GET /api/elaine/conversations/:id/messages", () => {
     expect(res.body.messages).toHaveLength(30);
     // Rows are DESC-sorted: [130,129,...,100]. The 31st (probe) row is id=100
     // and must be dropped; the 30-item response covers ids 101..130.
-    expect(res.body.messages.find((m: { id: number }) => m.id === 100)).toBeUndefined();
-    expect(res.body.messages.find((m: { id: number }) => m.id === 130)).toBeDefined();
+    expect(
+      res.body.messages.find((m: { id: number }) => m.id === 100),
+    ).toBeUndefined();
+    expect(
+      res.body.messages.find((m: { id: number }) => m.id === 130),
+    ).toBeDefined();
   });
 
   it("returns the preceding page when a 'before' cursor is supplied", async () => {
@@ -720,7 +750,11 @@ describe("GET /api/elaine/conversations/:id/messages", () => {
     // Simulates: oldest visible message has id=50; loading the page before it.
     // DB returns ids < 50 in newest-first (DESC) order; handler reverses to
     // oldest-first before returning.
-    const olderRows = [makeMessageRow(49), makeMessageRow(48), makeMessageRow(47)];
+    const olderRows = [
+      makeMessageRow(49),
+      makeMessageRow(48),
+      makeMessageRow(47),
+    ];
     selectQueue.push(olderRows);
 
     const app = buildApp({ userId: 1 });
@@ -741,7 +775,9 @@ describe("GET /api/elaine/conversations/:id/messages", () => {
 
     // With default limit=30, returning 31 rows before=50 means there are
     // even older messages → hasMore=true, response contains 30.
-    const olderRows = Array.from({ length: 31 }, (_, i) => makeMessageRow(49 - i));
+    const olderRows = Array.from({ length: 31 }, (_, i) =>
+      makeMessageRow(49 - i),
+    );
     selectQueue.push(olderRows);
 
     const app = buildApp({ userId: 1 });
@@ -788,9 +824,15 @@ function makePreviewRow(conversationId: number, content = "Hello") {
 describe("GET /api/elaine/conversations", () => {
   it("returns first page of conversations with hasMore: false when ≤ limit rows exist", async () => {
     // Main list query (terminates at .limit())
-    selectQueue.push([makeConvRow(1, "Paris trip"), makeConvRow(2, "Packing list")]);
+    selectQueue.push([
+      makeConvRow(1, "Paris trip"),
+      makeConvRow(2, "Packing list"),
+    ]);
     // Preview snippets query (terminates at .orderBy() thenable)
-    selectQueue.push([makePreviewRow(1, "Help me plan Paris"), makePreviewRow(2, "What should I pack?")]);
+    selectQueue.push([
+      makePreviewRow(1, "Help me plan Paris"),
+      makePreviewRow(2, "What should I pack?"),
+    ]);
 
     const app = buildApp({ userId: 1 });
     const res = await request(app).get("/api/elaine/conversations");
@@ -838,7 +880,10 @@ describe("GET /api/elaine/conversations", () => {
     // ?before=<ISO> filters to updatedAt < that date (applied by the mock via
     // whatever rows we push — the mock doesn't enforce the filter, but the
     // route correctly sets up the cursorCondition and passes it to the DB).
-    selectQueue.push([makeConvRow(5, "Older trip"), makeConvRow(6, "Even older")]);
+    selectQueue.push([
+      makeConvRow(5, "Older trip"),
+      makeConvRow(6, "Even older"),
+    ]);
     selectQueue.push([]); // no previews for these
 
     const app = buildApp({ userId: 1 });
@@ -859,7 +904,10 @@ describe("GET /api/elaine/conversations", () => {
     // Content matches (none extra beyond title)
     selectQueue.push([]);
     // Main query (fetches matching IDs with limit=500)
-    selectQueue.push([makeConvRow(3, "Paris planning"), makeConvRow(7, "Tokyo ideas")]);
+    selectQueue.push([
+      makeConvRow(3, "Paris planning"),
+      makeConvRow(7, "Tokyo ideas"),
+    ]);
     // Preview snippets
     selectQueue.push([
       makePreviewRow(3, "Let's plan Paris"),
@@ -873,7 +921,10 @@ describe("GET /api/elaine/conversations", () => {
     // Search never paginates — hasMore is always false
     expect(res.body.hasMore).toBe(false);
     expect(res.body.conversations).toHaveLength(2);
-    expect(res.body.conversations[0]).toMatchObject({ id: 3, title: "Paris planning" });
+    expect(res.body.conversations[0]).toMatchObject({
+      id: 3,
+      title: "Paris planning",
+    });
   });
 
   it("search with no matches returns empty conversations immediately", async () => {
@@ -884,7 +935,9 @@ describe("GET /api/elaine/conversations", () => {
     // Route short-circuits: no main query or preview query fired
 
     const app = buildApp({ userId: 1 });
-    const res = await request(app).get("/api/elaine/conversations?q=xyznonexistent");
+    const res = await request(app).get(
+      "/api/elaine/conversations?q=xyznonexistent",
+    );
 
     expect(res.status).toBe(200);
     expect(res.body.conversations).toEqual([]);

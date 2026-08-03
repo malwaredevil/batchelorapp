@@ -19,7 +19,11 @@ import { describe, it, expect } from "vitest";
 // ---------------------------------------------------------------------------
 
 type ChatWidget = { kind: string; data: unknown };
-type AssistantMessage = { id: number; role: "user" | "assistant"; content: string };
+type AssistantMessage = {
+  id: number;
+  role: "user" | "assistant";
+  content: string;
+};
 
 // ---------------------------------------------------------------------------
 // Core invariant helper (mirrors the logic inside loadOlderMessages)
@@ -91,7 +95,10 @@ describe("messageWidgets key invariant — prepend does not invalidate Map entri
       { id: 300, role: "assistant", content: "C" },
     ];
 
-    const widgetB: ChatWidget = { kind: "fabric_swatch", data: { fabricId: 1 } };
+    const widgetB: ChatWidget = {
+      kind: "fabric_swatch",
+      data: { fabricId: 1 },
+    };
     const widgetC: ChatWidget[] = [
       { kind: "pottery_item", data: { itemId: 5 } },
       { kind: "trip_card", data: { tripId: 7 } },

@@ -31,6 +31,42 @@ assert.deepEqual(
 );
 assert.deepEqual(checkRestrictedFilesFromList(["src/index.ts"]), []);
 
+// .replit-artifact/ carve-out: artifact.toml is allowed through, everything else is restricted.
+assert.deepEqual(
+  checkRestrictedFilesFromList([".replit-artifact/artifact.toml"]),
+  [],
+  ".replit-artifact/artifact.toml must be allowed (no secrets, needed for registry)",
+);
+assert.deepEqual(
+  checkRestrictedFilesFromList([".replit-artifact/other-file.txt"]),
+  [".replit-artifact/other-file.txt"],
+  "other files under .replit-artifact/ must still be flagged",
+);
+assert.deepEqual(
+  checkRestrictedFilesFromList([".replit-artifact/secrets.env"]),
+  [".replit-artifact/secrets.env"],
+  "secret-like files under .replit-artifact/ must be flagged",
+);
+// Nested paths (artifact inside a subdir) follow the same rule.
+assert.deepEqual(
+  checkRestrictedFilesFromList([
+    "artifacts/web/.replit-artifact/artifact.toml",
+  ]),
+  [],
+  "nested .replit-artifact/artifact.toml must be allowed",
+);
+assert.deepEqual(
+  checkRestrictedFilesFromList(["artifacts/web/.replit-artifact/other.json"]),
+  ["artifacts/web/.replit-artifact/other.json"],
+  "nested .replit-artifact/ non-toml files must be flagged",
+);
+// .replit itself stays fully restricted.
+assert.deepEqual(
+  checkRestrictedFilesFromList([".replit"]),
+  [".replit"],
+  ".replit must always be flagged",
+);
+
 // --- ad-hoc OpenAI ---
 const filesWithViolation = ["artifacts/api-server/src/lib/foo.ts"];
 const contentWithViolation = "const x = 1;\nconst client = new OpenAI();\n";

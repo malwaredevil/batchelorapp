@@ -33,40 +33,9 @@ const TOKEN = process.env.GH_PAT;
 const REPO = "malwaredevil/batchelorapp";
 const BRANCH = "main";
 
-if (!TOKEN) {
-  console.error("GH_PAT env var not set.");
-  process.exit(1);
-}
-
-const rawArgs = process.argv.slice(2);
-const confirmDeletions = rawArgs.includes("--confirm-deletions");
-// --skip-drift-check bypasses the GitHub-drift guard (use only when you
-// deliberately want to overwrite GitHub's version with local content).
-const skipDriftCheck = rawArgs.includes("--skip-drift-check");
-
-// --direct-to-main is permanently removed. Every change — including
-// .github/workflows/ files — goes through a branch + PR.
-if (rawArgs.includes("--direct-to-main")) {
-  console.error(
-    `\n🚫  --direct-to-main is no longer supported.\n` +
-      `All changes, including .github/workflows/ files, must go through a PR.\n` +
-      `Run: pnpm --filter @workspace/scripts run github-sync "commit message"\n` +
-      `Branch protection (enforce_admins: true) enforces this at the GitHub level too.`,
-  );
-  process.exit(1);
-}
-
-const commitMessage = rawArgs
-  .filter((a) => a !== "--confirm-deletions" && a !== "--skip-drift-check")
-  .join(" ")
-  .trim();
-if (!commitMessage) {
-  console.error(
-    'Usage: pnpm --filter @workspace/scripts run github-sync "commit message" [--confirm-deletions]\n' +
-      "  --confirm-deletions  Required to actually remove files from GitHub that are missing locally.",
-  );
-  process.exit(1);
-}
+// Argument parsing and early-exit guards live in main() so that importing
+// this module for unit tests (isExcluded, collectFiles) does not call
+// process.exit(). The TOKEN constant must stay top-level because gh() uses it.
 
 /**
  * Convert a free-form string to a URL-safe branch-name slug.
@@ -224,7 +193,7 @@ const EXCLUDED_EXTENSIONS = new Set([
   ".tsbuildinfo",
 ]);
 
-function isExcluded(filePath: string): boolean {
+export function isExcluded(filePath: string): boolean {
   if (EXCLUDED_EXACT.includes(filePath)) return true;
   if (EXCLUDED_PREFIXES.some((p) => filePath.startsWith(p))) return true;
   // Also exclude nested node_modules/ and dist/ directories (e.g. lib/ui/node_modules/, artifacts/api-server/dist/)
@@ -306,6 +275,41 @@ type GHTreeEntry = {
 };
 
 async function main() {
+  if (!TOKEN) {
+    console.error("GH_PAT env var not set.");
+    process.exit(1);
+  }
+
+  const rawArgs = process.argv.slice(2);
+  const confirmDeletions = rawArgs.includes("--confirm-deletions");
+  // --skip-drift-check bypasses the GitHub-drift guard (use only when you
+  // deliberately want to overwrite GitHub's version with local content).
+  const skipDriftCheck = rawArgs.includes("--skip-drift-check");
+
+  // --direct-to-main is permanently removed. Every change — including
+  // .github/workflows/ files — goes through a branch + PR.
+  if (rawArgs.includes("--direct-to-main")) {
+    console.error(
+      `\n🚫  --direct-to-main is no longer supported.\n` +
+        `All changes, including .github/workflows/ files, must go through a PR.\n` +
+        `Run: pnpm --filter @workspace/scripts run github-sync "commit message"\n` +
+        `Branch protection (enforce_admins: true) enforces this at the GitHub level too.`,
+    );
+    process.exit(1);
+  }
+
+  const commitMessage = rawArgs
+    .filter((a) => a !== "--confirm-deletions" && a !== "--skip-drift-check")
+    .join(" ")
+    .trim();
+  if (!commitMessage) {
+    console.error(
+      'Usage: pnpm --filter @workspace/scripts run github-sync "commit message" [--confirm-deletions]\n' +
+        "  --confirm-deletions  Required to actually remove files from GitHub that are missing locally.",
+    );
+    process.exit(1);
+  }
+
   const root = path.resolve(import.meta.dirname, "../..");
 
   // Get current HEAD tree from GitHub
@@ -638,7 +642,13 @@ async function main() {
   await openSyncPR(newCommitSha, changedFiles.length, deletedFiles.length);
 }
 
-main().catch((e) => {
-  console.error("ERROR:", e.message);
-  process.exit(1);
-});
+if (
+  process.argv[1] &&
+  (process.argv[1].endsWith("github-sync.ts") ||
+    process.argv[1].endsWith("github-sync.js"))
+) {
+  main().catch((e) => {
+    console.error("ERROR:", e.message);
+    process.exit(1);
+  });
+}

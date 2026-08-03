@@ -11,6 +11,7 @@ import {
   sql,
   ilike,
   or,
+  lt,
 } from "drizzle-orm";
 import type OpenAI from "openai";
 import type {
@@ -22,7 +23,6 @@ import {
   db,
   pool,
   appUsers,
-  elaineConversations,
   elaineNudges,
   elaineSettings,
   elaineMemory,
@@ -2746,26 +2746,107 @@ ${trace.plan.completionCriteria.map((criterion) => `- ${criterion}`).join("\n")}
 Follow dependency order. Do not invent ids, dates, locations, or consent. If an observation invalidates the plan, choose a grounded alternative; the server will verify completion. This is a concise execution plan, not permission to reveal hidden reasoning.`;
 }
 
-async function getOrCreateConversation(userId: number) {
+// Resolves (creating if necessary) the shared "household" widget-default
+// conversation row for a user — the elaineHistoryConversations row with
+// isWidgetDefault=true that backs the floating widget and full-page chat
+// when no explicit conversationId is sent. Extracted so GET /conversation,
+// the chat-send handler, and nudge-folding all agree on the same thread.
+async function resolveWidgetDefaultConversationId(
+  userId: number,
+): Promise<number | null> {
   const [existing] = await db
-    .select()
-    .from(elaineConversations)
-    .where(eq(elaineConversations.userId, userId));
-  if (existing) return existing;
+    .select({ id: elaineHistoryConversations.id })
+    .from(elaineHistoryConversations)
+    .where(
+      and(
+        eq(elaineHistoryConversations.userId, userId),
+        eq(elaineHistoryConversations.isWidgetDefault, true),
+      ),
+    )
+    .limit(1);
+  if (existing) return existing.id;
 
-  const [created] = await db
-    .insert(elaineConversations)
-    .values({ userId, messages: [] })
-    .onConflictDoNothing()
-    .returning();
-  if (created) return created;
+  const [newConv] = await db
+    .insert(elaineHistoryConversations)
+    .values({ userId, title: "Household", isWidgetDefault: true })
+    .returning({ id: elaineHistoryConversations.id });
+  return newConv?.id ?? null;
+}
 
-  // Lost a race with another request — read the row that won.
-  const [row] = await db
-    .select()
-    .from(elaineConversations)
-    .where(eq(elaineConversations.userId, userId));
-  return row;
+// Shared row → wire-shape mapper for elaineHistoryMessages, used by both the
+// widget-default conversation fetch (GET /conversation) and the named
+// conversation fetch (GET /conversations/:id/messages) so the two paginated
+// endpoints return identical message shapes.
+async function mapHistoryMessageRows(
+  userId: number,
+  rows: {
+    id: number;
+    role: string;
+    content: string;
+    attachmentUrls: unknown;
+    reasoningSummary: string | null;
+    createdAt: Date;
+  }[],
+) {
+  let tracesByMessage = new Map<number, ElaineRuntimeTrace>();
+  try {
+    tracesByMessage = await loadElaineTurnTracesForMessages(
+      userId,
+      rows.filter((message) => message.role === "assistant").map((m) => m.id),
+    );
+  } catch {
+    // Trace storage is diagnostic and intentionally non-fatal.
+  }
+  return rows.map((m) => ({
+    id: m.id,
+    role: m.role,
+    content: m.content,
+    attachmentUrls: normalizeAttachmentRefs(m.attachmentUrls),
+    ...(tracesByMessage.has(m.id)
+      ? { runtimeTrace: tracesByMessage.get(m.id) }
+      : {}),
+    ...(m.reasoningSummary ? { reasoningSummary: m.reasoningSummary } : {}),
+    createdAt: m.createdAt.toISOString(),
+  }));
+}
+
+// Fetches one page of a conversation's messages from elaineHistoryMessages,
+// newest-first internally then reversed to ascending (oldest-first) for
+// display — the shape the chat panel renders top-to-bottom. Pass `beforeId`
+// (the id of the oldest message currently shown) to fetch the page just
+// before it, for "load older messages" infinite-scroll-up.
+const CONVERSATION_PAGE_SIZE_DEFAULT = 30;
+const CONVERSATION_PAGE_SIZE_MAX = 100;
+async function fetchConversationMessagePage(
+  userId: number,
+  conversationId: number,
+  { limit, beforeId }: { limit: number; beforeId?: number },
+) {
+  const rows = await db
+    .select({
+      id: elaineHistoryMessages.id,
+      role: elaineHistoryMessages.role,
+      content: elaineHistoryMessages.content,
+      attachmentUrls: elaineHistoryMessages.attachmentUrls,
+      reasoningSummary: elaineHistoryMessages.reasoningSummary,
+      createdAt: elaineHistoryMessages.createdAt,
+    })
+    .from(elaineHistoryMessages)
+    .where(
+      beforeId !== undefined
+        ? and(
+            eq(elaineHistoryMessages.conversationId, conversationId),
+            lt(elaineHistoryMessages.id, beforeId),
+          )
+        : eq(elaineHistoryMessages.conversationId, conversationId),
+    )
+    .orderBy(desc(elaineHistoryMessages.id))
+    .limit(limit + 1);
+
+  const hasMore = rows.length > limit;
+  const page = (hasMore ? rows.slice(0, limit) : rows).reverse();
+  const messages = await mapHistoryMessageRows(userId, page);
+  return { messages, hasMore };
 }
 
 type ProposedAction = { type: string; label: string; payload: unknown };
@@ -2801,14 +2882,16 @@ async function tryBuildAction(
 
 // Folds any unseen proactive nudges (see lib/travels-nudges.ts) into the
 // user's persisted conversation history as ordinary assistant messages, and
-// marks them seen so they're never surfaced twice. Returns the (possibly
-// updated) message history. Called from GET /assistant/conversation, which
-// is what the widget fetches the moment it's opened — this is how an
-// unprompted nudge actually becomes a chat bubble the user sees.
-async function applyUnseenNudges(userId: number): Promise<ChatMessage[]> {
-  const conversation = await getOrCreateConversation(userId);
-  const history = (conversation?.messages as ChatMessage[] | null) ?? [];
-
+// marks them seen so they're never surfaced twice. Called from
+// GET /conversation, which is what the widget fetches the moment it's
+// opened — this is how an unprompted nudge actually becomes a chat bubble
+// the user sees. Writes only to elaineHistoryMessages (the real per-row
+// source of truth); the legacy elaineConversations JSONB blob is no longer
+// written since GET /conversation reads from elaineHistoryMessages directly.
+async function applyUnseenNudges(
+  userId: number,
+  histConvId: number,
+): Promise<void> {
   const unseen = await db
     .select({
       id: elaineNudges.id,
@@ -2818,29 +2901,28 @@ async function applyUnseenNudges(userId: number): Promise<ChatMessage[]> {
     .where(and(eq(elaineNudges.userId, userId), isNull(elaineNudges.seenAt)))
     .orderBy(elaineNudges.createdAt);
 
-  if (unseen.length === 0) return history;
+  if (unseen.length === 0) return;
 
-  const nudgeTimestamp = new Date().toISOString();
-  const updatedHistory: ChatMessage[] = [
-    ...history,
-    ...unseen.map((n) => ({
+  const nudgeTimestamp = new Date();
+
+  await db.insert(elaineHistoryMessages).values(
+    unseen.map((n) => ({
+      conversationId: histConvId,
+      userId,
       role: "assistant" as const,
       content: n.message,
-      createdAt: nudgeTimestamp,
+      channel: "web",
     })),
-  ].slice(-50);
-
+  );
   await db
-    .update(elaineConversations)
-    .set({ messages: updatedHistory, updatedAt: new Date() })
-    .where(eq(elaineConversations.userId, userId));
+    .update(elaineHistoryConversations)
+    .set({ updatedAt: nudgeTimestamp })
+    .where(eq(elaineHistoryConversations.id, histConvId));
 
   await db
     .update(elaineNudges)
-    .set({ seenAt: new Date() })
+    .set({ seenAt: nudgeTimestamp })
     .where(and(eq(elaineNudges.userId, userId), isNull(elaineNudges.seenAt)));
-
-  return updatedHistory;
 }
 
 // ---------------------------------------------------------------------------
@@ -2980,11 +3062,47 @@ router.post(
 // ---------------------------------------------------------------------------
 
 // GET /conversations — list this user's named conversations, newest first.
-// Supports ?q= for server-side search across conversation title and all message content.
-// Each row includes a `preview` snippet (≤80 chars from the first user message).
+// Supports ?q= for server-side search across conversation title and all message
+// content (search returns all matches, no cursor pagination).
+// Supports ?before=<ISO updatedAt>&limit=<n> for cursor-based pagination of the
+// unfiltered list (load more on scroll). Each row includes a `preview` snippet
+// (≤80 chars from the first user message). Response shape: { conversations, hasMore }.
 router.get("/conversations", async (req, res) => {
   const userId = req.session.userId!;
   const searchQuery = String(req.query["q"] ?? "").trim();
+
+  // Cursor/limit only apply when NOT searching — search always returns all matches.
+  const limitParam = parseInt(String(req.query["limit"] ?? ""), 10);
+  const limit =
+    !searchQuery && Number.isFinite(limitParam) && limitParam > 0
+      ? Math.min(limitParam, CONVERSATION_PAGE_SIZE_MAX)
+      : CONVERSATION_PAGE_SIZE_DEFAULT;
+  const beforeParam = String(req.query["before"] ?? "").trim();
+  const beforeIdParam = parseInt(String(req.query["beforeId"] ?? ""), 10);
+  const beforeDate =
+    !searchQuery && beforeParam ? new Date(beforeParam) : undefined;
+  const beforeId =
+    !searchQuery && Number.isFinite(beforeIdParam) && beforeIdParam > 0
+      ? beforeIdParam
+      : undefined;
+  // Composite cursor: (updatedAt, id) DESC.  Using only updatedAt is unstable
+  // when multiple conversations share the same timestamp — rows at the page
+  // boundary would be skipped or duplicated non-deterministically.  The full
+  // predicate is: (updatedAt < before) OR (updatedAt = before AND id < beforeId).
+  // We accept a timestamp-only cursor for backwards compatibility (older clients
+  // that haven't sent beforeId yet), but composite is always preferred.
+  const cursorCondition =
+    beforeDate && !isNaN(beforeDate.getTime())
+      ? beforeId !== undefined
+        ? or(
+            lt(elaineHistoryConversations.updatedAt, beforeDate),
+            and(
+              eq(elaineHistoryConversations.updatedAt, beforeDate),
+              lt(elaineHistoryConversations.id, beforeId),
+            ),
+          )
+        : lt(elaineHistoryConversations.updatedAt, beforeDate)
+      : undefined;
 
   // When a search query is provided, first find matching conversation IDs via
   // a DB-level ILIKE across both the conversation title and all message content.
@@ -3026,18 +3144,22 @@ router.get("/conversations", async (req, res) => {
     ]);
     // Short-circuit: no matches at all
     if (matchingConvIds.size === 0) {
-      res.json([]);
+      res.json({ conversations: [], hasMore: false });
       return;
     }
   }
 
-  // Fetch all (or matching) conversations with message counts.
+  // Fetch conversations with message counts. For paginated (non-search) queries
+  // we fetch limit+1 rows and trim back to detect hasMore.
   const baseWhere = matchingConvIds
     ? and(
         eq(elaineHistoryConversations.userId, userId),
         inArray(elaineHistoryConversations.id, Array.from(matchingConvIds)),
+        cursorCondition,
       )
-    : eq(elaineHistoryConversations.userId, userId);
+    : and(eq(elaineHistoryConversations.userId, userId), cursorCondition);
+
+  const fetchLimit = searchQuery ? 500 : limit + 1;
 
   const rows = await db
     .select({
@@ -3054,10 +3176,17 @@ router.get("/conversations", async (req, res) => {
     )
     .where(baseWhere)
     .groupBy(elaineHistoryConversations.id)
-    .orderBy(desc(elaineHistoryConversations.updatedAt));
+    .orderBy(
+      desc(elaineHistoryConversations.updatedAt),
+      desc(elaineHistoryConversations.id),
+    )
+    .limit(fetchLimit);
+
+  const hasMore = !searchQuery && rows.length > limit;
+  const pagedRows = hasMore ? rows.slice(0, limit) : rows;
 
   // Resolve preview snippets (first user message ≤80 chars) for each conversation.
-  const convIds = rows.map((r) => r.id);
+  const convIds = pagedRows.map((r) => r.id);
   const previewMap = new Map<number, string | null>();
   if (convIds.length > 0) {
     const firstMsgs = await db
@@ -3082,8 +3211,8 @@ router.get("/conversations", async (req, res) => {
     }
   }
 
-  res.json(
-    rows.map((r) => ({
+  res.json({
+    conversations: pagedRows.map((r) => ({
       id: r.id,
       title: r.title,
       createdAt: r.createdAt.toISOString(),
@@ -3091,7 +3220,8 @@ router.get("/conversations", async (req, res) => {
       messageCount: Number(r.messageCount),
       preview: previewMap.get(r.id) ?? null,
     })),
-  );
+    hasMore,
+  });
 });
 
 // POST /conversations — create a new named conversation.
@@ -3115,7 +3245,9 @@ router.post("/conversations", async (req, res) => {
   });
 });
 
-// GET /conversations/:id/messages — load messages for a named conversation.
+// GET /conversations/:id/messages — load a page of messages for a named
+// conversation, newest page by default. Pass ?before=<messageId> to load the
+// page immediately preceding that message (infinite-scroll-up "load older").
 router.get("/conversations/:id/messages", async (req, res) => {
   const userId = req.session.userId!;
   const convId = parseInt(String(req.params["id"] ?? "0"), 10);
@@ -3136,36 +3268,22 @@ router.get("/conversations/:id/messages", async (req, res) => {
     res.status(404).json({ error: "Conversation not found" });
     return;
   }
-  const msgs = await db
-    .select()
-    .from(elaineHistoryMessages)
-    .where(eq(elaineHistoryMessages.conversationId, convId))
-    .orderBy(elaineHistoryMessages.createdAt);
-  let tracesByMessage = new Map<number, ElaineRuntimeTrace>();
-  try {
-    tracesByMessage = await loadElaineTurnTracesForMessages(
-      userId,
-      msgs.filter((message) => message.role === "assistant").map((m) => m.id),
-    );
-  } catch (err) {
-    // Trace storage is diagnostic and intentionally non-fatal. This also keeps
-    // history readable during a rolling deployment if the additive trace table
-    // has not been applied yet.
-    req.log.warn({ err }, "elaine trace history unavailable");
-  }
-  res.json(
-    msgs.map((m) => ({
-      id: m.id,
-      role: m.role,
-      content: m.content,
-      attachmentUrls: normalizeAttachmentRefs(m.attachmentUrls),
-      ...(tracesByMessage.has(m.id)
-        ? { runtimeTrace: tracesByMessage.get(m.id) }
-        : {}),
-      ...(m.reasoningSummary ? { reasoningSummary: m.reasoningSummary } : {}),
-      createdAt: m.createdAt.toISOString(),
-    })),
+
+  const limitParam = parseInt(String(req.query["limit"] ?? ""), 10);
+  const limit =
+    Number.isFinite(limitParam) && limitParam > 0
+      ? Math.min(limitParam, CONVERSATION_PAGE_SIZE_MAX)
+      : CONVERSATION_PAGE_SIZE_DEFAULT;
+  const beforeParam = parseInt(String(req.query["before"] ?? ""), 10);
+  const beforeId =
+    Number.isFinite(beforeParam) && beforeParam > 0 ? beforeParam : undefined;
+
+  const { messages, hasMore } = await fetchConversationMessagePage(
+    userId,
+    convId,
+    { limit, beforeId },
   );
+  res.json({ messages, hasMore });
 });
 
 // PATCH /conversations/:id — rename a named conversation.
@@ -3227,8 +3345,25 @@ router.delete("/conversations/:id", async (req, res) => {
 
 router.get("/conversation", async (req, res) => {
   const userId = req.session.userId!;
-  const messages = await applyUnseenNudges(userId);
-  res.json({ messages });
+  const histConvId = await resolveWidgetDefaultConversationId(userId);
+  if (histConvId === null) {
+    res.json({ messages: [], conversationId: null, hasMore: false });
+    return;
+  }
+  await applyUnseenNudges(userId, histConvId);
+
+  const limitParam = parseInt(String(req.query["limit"] ?? ""), 10);
+  const limit =
+    Number.isFinite(limitParam) && limitParam > 0
+      ? Math.min(limitParam, CONVERSATION_PAGE_SIZE_MAX)
+      : CONVERSATION_PAGE_SIZE_DEFAULT;
+
+  const { messages, hasMore } = await fetchConversationMessagePage(
+    userId,
+    histConvId,
+    { limit },
+  );
+  res.json({ messages, conversationId: histConvId, hasMore });
 });
 
 // Lightweight polling endpoint for the floating-button badge — deliberately
@@ -3266,13 +3401,6 @@ router.delete("/conversation", async (req, res) => {
     .insert(elaineHistoryConversations)
     .values({ userId, title: "Household", isWidgetDefault: true })
     .returning({ id: elaineHistoryConversations.id });
-
-  // Also clear the legacy rolling thread (pre-history-system storage).
-  await getOrCreateConversation(userId);
-  await db
-    .update(elaineConversations)
-    .set({ messages: [], updatedAt: new Date() })
-    .where(eq(elaineConversations.userId, userId));
 
   res.json({ messages: [], conversationId: newConv?.id ?? null });
 });
@@ -3652,28 +3780,9 @@ router.post("/chat", async (req, res) => {
   // unaffected.
   let histConvId: number | null = conversationId ?? null;
   if (histConvId === null) {
-    // Look up the existing widget thread for this user.
-    const [existing] = await db
-      .select({ id: elaineHistoryConversations.id })
-      .from(elaineHistoryConversations)
-      .where(
-        and(
-          eq(elaineHistoryConversations.userId, userId),
-          eq(elaineHistoryConversations.isWidgetDefault, true),
-        ),
-      )
-      .limit(1);
-
-    if (existing) {
-      histConvId = existing.id;
-    } else {
-      // First widget message — create the shared household thread.
-      const [newConv] = await db
-        .insert(elaineHistoryConversations)
-        .values({ userId, title: "Household", isWidgetDefault: true })
-        .returning({ id: elaineHistoryConversations.id });
-      histConvId = newConv?.id ?? null;
-    }
+    // First widget message (or every widget message thereafter) — resolve or
+    // create the shared household thread.
+    histConvId = await resolveWidgetDefaultConversationId(userId);
   } else {
     // Verify the named conversation belongs to this user before loading it.
     const [conv] = await db
@@ -3797,8 +3906,8 @@ router.post("/chat", async (req, res) => {
       }));
     }
   } else {
-    const conversation = await getOrCreateConversation(userId);
-    history = (conversation?.messages as ChatMessage[] | null) ?? [];
+    // histConvId couldn't be resolved — start with empty history for this turn.
+    history = [];
   }
 
   // ── Load scoped, relevant memory evidence + personal summary + cross-channel context ──
@@ -5962,32 +6071,9 @@ router.post("/chat", async (req, res) => {
     allCitations.length > 0 ? `\x1f${JSON.stringify(allCitations)}` : "";
   const content = rawContent.trim() + citationSuffix;
 
-  const turnTimestamp = new Date().toISOString();
-  const updatedHistory: ChatMessage[] = (
-    [
-      ...history,
-      {
-        role: "user" as const,
-        content: message,
-        createdAt: turnTimestamp,
-        ...(allAttachmentUrls.length > 0
-          ? { attachmentUrls: allAttachmentUrls }
-          : {}),
-      },
-      {
-        role: "assistant" as const,
-        content,
-        createdAt: turnTimestamp,
-        runtimeTrace: finalTrace,
-        ...(finalReasoningSummary
-          ? { reasoningSummary: finalReasoningSummary }
-          : {}),
-      },
-    ] satisfies ChatMessage[]
-  ).slice(-50);
-
   // Save turn to the named history conversation.
   let assistantMessageId: number | null = null;
+  let userMessageId: number | null = null;
   if (histConvId !== null) {
     const insertedMessages = await db
       .insert(elaineHistoryMessages)
@@ -6017,6 +6103,8 @@ router.post("/chat", async (req, res) => {
     assistantMessageId =
       insertedMessages.find((inserted) => inserted.role === "assistant")?.id ??
       null;
+    userMessageId =
+      insertedMessages.find((inserted) => inserted.role === "user")?.id ?? null;
 
     const stateUpdatedAt = new Date();
     const responseStateUpdate =
@@ -6066,13 +6154,6 @@ router.post("/chat", async (req, res) => {
     }
   }
 
-  // Also keep the rolling elaineConversations row current for backward compat
-  // (GET /conversation and the floating widget's initial load still use it).
-  await db
-    .update(elaineConversations)
-    .set({ messages: updatedHistory, updatedAt: new Date() })
-    .where(eq(elaineConversations.userId, userId));
-
   sendEvent("done", {
     role: "assistant",
     content,
@@ -6081,7 +6162,15 @@ router.post("/chat", async (req, res) => {
     executedActions,
     actionConfirmationMode:
       updatedActionConfirmationMode ?? actionConfirmationMode,
-    messages: updatedHistory,
+    // Legacy field — no longer backed by the rolling JSONB blob; clients must
+    // use `userMessageId`/`assistantMessageId` to reconcile history state.
+    messages: [] as ChatMessage[],
+    // Real, persisted ids for this turn's two rows in elaineHistoryMessages
+    // (null only in the rare case histConvId couldn't be resolved). Clients
+    // must use these — not an array position — to reconcile the optimistic
+    // message and to keep "load older" pagination cursors correct.
+    userMessageId,
+    assistantMessageId,
     conversationId: histConvId,
     runtimeTrace: finalTrace,
     reasoningSummary: finalReasoningSummary ?? null,

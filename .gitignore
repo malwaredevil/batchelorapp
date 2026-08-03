@@ -52,9 +52,9 @@ Thumbs.db
 attached_assets/
 .canvas/
 .replit
+**/.replit-artifact/
 .replitignore
 replit.nix
-**/.replit-artifact/
 
 # Husky generated hooks (not the actual hook scripts)
 .husky/_/

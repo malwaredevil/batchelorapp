@@ -28,7 +28,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           if [ -z "$GHSA_IDS" ]; then
-            echo "No GHSA IDs found — skipping auto-merge"
+            echo "No GHSA IDs found — skipping security auto-merge"
             exit 0
           fi
           for GHSA in $(echo "$GHSA_IDS" | tr ',' '\n'); do
@@ -47,4 +47,46 @@ jobs:
               exit 0
             fi
           done
-          echo "No high/critical advisories — skipping auto-merge"
+          echo "No high/critical advisories — skipping security auto-merge"
+
+      - name: Auto-merge low-risk Dependabot bumps
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          ECOSYSTEM: ${{ steps.metadata.outputs.package-ecosystem }}
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+          DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
+        run: |
+          echo "Ecosystem: $ECOSYSTEM"
+          echo "Update type: $UPDATE_TYPE"
+          echo "Dependencies: $DEPENDENCY_NAMES"
+
+          # Count how many packages are in this PR (dependency-names is comma-separated).
+          PACKAGE_COUNT=$(echo "$DEPENDENCY_NAMES" | tr ',' '\n' | grep -c .)
+          echo "Package count: $PACKAGE_COUNT"
+
+          # GitHub Actions bumps carry zero app-code risk — auto-merge minor and patch,
+          # but never major (could change action interface).
+          if [ "$ECOSYSTEM" = "github_actions" ]; then
+            if [ "$UPDATE_TYPE" = "version-update:semver-major" ]; then
+              echo "Skipping major GitHub Actions bump — requires manual review"
+              exit 0
+            fi
+            echo "Auto-merging GitHub Actions $UPDATE_TYPE bump for PR #$PR_NUMBER"
+            gh pr merge --auto --squash "$PR_NUMBER"
+            exit 0
+          fi
+
+          # For all other ecosystems (npm, pip, etc.) auto-merge single-package patch bumps.
+          # Grouped PRs (multiple packages) are skipped to avoid silent breaking changes.
+          if [ "$UPDATE_TYPE" = "version-update:semver-patch" ] && [ "$PACKAGE_COUNT" -eq 1 ]; then
+            echo "Auto-merging single-package patch bump for PR #$PR_NUMBER"
+            gh pr merge --auto --squash "$PR_NUMBER"
+            exit 0
+          fi
+
+          if [ "$PACKAGE_COUNT" -gt 1 ]; then
+            echo "Skipping grouped PR ($PACKAGE_COUNT packages) — requires manual review"
+          else
+            echo "Skipping $UPDATE_TYPE bump for $ECOSYSTEM — requires manual review"
+          fi

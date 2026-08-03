@@ -1323,6 +1323,16 @@ export interface ElaineFeaturesConfig {
   enableOpenAIResponsesFallback: boolean;
   enableBuiltinWebSearch: boolean;
   showReasoningSummary: boolean;
+  openAIStoreEnabledDefault: boolean;
+  openAIStoreScopeOverrides?: {
+    elaine?: boolean;
+    app?: boolean;
+  };
+  openAIStoreRoleOverrides?: {
+    reasoning?: boolean;
+    balanced?: boolean;
+    fast?: boolean;
+  };
 }
 
 export interface ElaineThresholdsConfig {

@@ -69,6 +69,10 @@ const DEFAULTS: Pick<
   cornerstoneColor: "#8b6f5e",
 };
 
+let hasWarnedLegacyReadFailure = false;
+let hasWarnedDesignLoadFailure = false;
+let hasWarnedLegacyCleanupFailure = false;
+
 function seamLineFromKey(key: string): SeamLine | null {
   const parts = key.split(":");
   if (parts.length !== 3 || (parts[0] !== "h" && parts[0] !== "v")) return null;
@@ -128,7 +132,14 @@ function readLegacySingle(): SavedDesign | null {
       };
     }
     return null;
-  } catch {
+  } catch (err) {
+    if (!hasWarnedLegacyReadFailure) {
+      hasWarnedLegacyReadFailure = true;
+      console.warn(
+        "whole-quilt-storage: failed to read legacy design from localStorage",
+        err,
+      );
+    }
     return null;
   }
 }
@@ -137,7 +148,15 @@ export function loadAllDesigns(): WholequiltDesign[] {
   try {
     const raw = localStorage.getItem(DESIGNS_KEY);
     if (raw) return JSON.parse(raw) as WholequiltDesign[];
-  } catch {}
+  } catch (err) {
+    if (!hasWarnedDesignLoadFailure) {
+      hasWarnedDesignLoadFailure = true;
+      console.warn(
+        "whole-quilt-storage: failed to load saved designs from localStorage",
+        err,
+      );
+    }
+  }
   return [];
 }
 
@@ -181,7 +200,15 @@ export function migrateFromLegacy(): boolean {
   [LEGACY_KEY_V1, LEGACY_KEY_V2, LEGACY_KEY_V3, LEGACY_KEY_V4].forEach((k) => {
     try {
       localStorage.removeItem(k);
-    } catch {}
+    } catch (err) {
+      if (!hasWarnedLegacyCleanupFailure) {
+        hasWarnedLegacyCleanupFailure = true;
+        console.warn(
+          "whole-quilt-storage: failed to remove legacy localStorage keys",
+          err,
+        );
+      }
+    }
   });
   return true;
 }

@@ -119,6 +119,11 @@ function wishlistPopupHtml(item: WishlistItem): string {
     </div>`;
 }
 
+// Logged once per page session: if the geocoding endpoint stays down for a
+// whole session (bad network, CORS block, provider outage), every pin
+// re-render would otherwise repeat this warning indefinitely.
+let hasWarnedGeocodeFailure = false;
+
 async function geocodeDestination(
   destination: string,
 ): Promise<{ lat: number; lng: number } | null> {
@@ -130,7 +135,15 @@ async function geocodeDestination(
     const data = (await res.json()) as Array<{ lat: string; lon: string }>;
     if (data[0])
       return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
-  } catch {}
+  } catch (err) {
+    if (!hasWarnedGeocodeFailure) {
+      hasWarnedGeocodeFailure = true;
+      console.warn(
+        "travels-world-map: geocoding failed, using map pin without coordinates",
+        err,
+      );
+    }
+  }
   return null;
 }
 

@@ -43,6 +43,18 @@ export const travelsTrips = pgTable(
     todoList: jsonb("todo_list"),
     iconPhotoId: integer("icon_photo_id"),
     shareToken: text("share_token"),
+    shareTokenCreatedAt: timestamp("share_token_created_at", {
+      withTimezone: true,
+    }),
+    shareTokenExpiresAt: timestamp("share_token_expires_at", {
+      withTimezone: true,
+    }),
+    shareTokenLastAccessedAt: timestamp("share_token_last_accessed_at", {
+      withTimezone: true,
+    }),
+    shareTokenAccessCount: integer("share_token_access_count")
+      .notNull()
+      .default(0),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()

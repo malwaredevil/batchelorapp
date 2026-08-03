@@ -87,6 +87,7 @@ Combined pnpm monorepo serving both the Pottery and Quilting collection apps und
 - When requesting missing secrets, prompt for them ONE at a time (name + short description of what it's for), never as a single bulk multi-field form.
 
 - Replit is primary source of truth; GitHub (`malwaredevil/batchelorapp`) is backup + issue tracker
+- **"Repo" ambiguity safeguard:** if the user says "repo" (or "the repository") without specifying which one, ask for clarification before acting — do not assume it means the Replit workspace or the GitHub repo (`malwaredevil/batchelorapp`). These are two distinct things with their own git history, and background task agents plus GitHub-side automation (e.g. Dependabot auto-merge) can each move independently, so guessing wrong risks pushing/reverting changes in the wrong place.
 - Never run `drizzle-kit push --force` — ever
 - Always run backup before any schema change or publish
 - DATABASE_URL must point to the live Supabase (not the Replit built-in helium DB)

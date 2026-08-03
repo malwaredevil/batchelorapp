@@ -32,6 +32,7 @@ vi.mock("@workspace/db", async (importOriginal) => {
 
 import {
   claimWebhookSideEffect,
+  cleanupOldWebhookSideEffects,
   markWebhookSideEffectCompleted,
   markWebhookSideEffectFailed,
 } from "./webhook-side-effect-idempotency";
@@ -130,5 +131,39 @@ describe("markWebhookSideEffectCompleted / markWebhookSideEffectFailed", () => {
     expect(set).toHaveBeenCalledWith(
       expect.objectContaining({ status: "failed", lastError: "send failed" }),
     );
+  });
+});
+
+describe("cleanupOldWebhookSideEffects", () => {
+  beforeEach(() => {
+    execute.mockReset();
+  });
+
+  it("returns the number of rows the DELETE removed", async () => {
+    execute.mockResolvedValue({
+      rows: [{ effect_key: "old1" }, { effect_key: "old2" }],
+    });
+    await expect(cleanupOldWebhookSideEffects()).resolves.toBe(2);
+  });
+
+  it("returns 0 when nothing is old enough to delete", async () => {
+    execute.mockResolvedValue({ rows: [] });
+    await expect(cleanupOldWebhookSideEffects()).resolves.toBe(0);
+  });
+
+  it("deletes by age regardless of status, so permanently-stuck rows can't accumulate forever", () => {
+    // Static guard: the retention query must not filter on `status`, or a
+    // row stuck in one particular state (e.g. never-retried 'processing')
+    // could silently outlive every other row and defeat the cleanup.
+    const sourcePath = fileURLToPath(
+      new URL("./webhook-side-effect-idempotency.ts", import.meta.url),
+    );
+    const source = readFileSync(sourcePath, "utf-8");
+    const fnBody = source.slice(
+      source.indexOf("export async function cleanupOldWebhookSideEffects"),
+      source.indexOf("export function startWebhookSideEffectCleanupScheduler"),
+    );
+    expect(fnBody).toMatch(/DELETE FROM app_webhook_side_effects/);
+    expect(fnBody).not.toMatch(/status/);
   });
 });

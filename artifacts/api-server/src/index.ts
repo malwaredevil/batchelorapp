@@ -11,6 +11,7 @@ import { startErrorRateSummary } from "./lib/error-tracker";
 import { startBirthdayScheduler } from "./lib/birthday-scheduler";
 import { startMonitoringScheduler } from "./lib/monitoring-scheduler";
 import { startCommCheckScheduler } from "./lib/comm-check-scheduler";
+import { startWebhookSideEffectCleanupScheduler } from "./lib/webhook-side-effect-idempotency";
 import { startScheduledActionsRunner } from "./lib/elaine-scheduled-actions-runner";
 import { startJobWorker, stopAllJobWorkers } from "./lib/jobs/worker";
 import {
@@ -78,6 +79,7 @@ async function initializeRuntime(): Promise<void> {
     startBirthdayScheduler(),
     startMonitoringScheduler(),
     startCommCheckScheduler(),
+    startWebhookSideEffectCleanupScheduler(),
     startScheduledActionsRunner(),
     startIntegrationsHealthNudgeScheduler(),
   );

@@ -1,0 +1,125 @@
+name: CodeQL
+
+# Runs on every PR so that the "Analyze (actions)" and
+# "Analyze (javascript-typescript)" required status checks always post a
+# result — either a full scan or a "skipped" result. GitHub treats a skipped
+# job as satisfying a required status check, so workflow-only Dependabot PRs
+# are no longer permanently blocked.
+#
+# Without this file the two check names above were orphaned required checks
+# that never posted, permanently blocking any PR that touched only
+# .github/workflows/ files (no JS/TS code changed → CodeQL default setup
+# never triggered the javascript-typescript scan, so the check never posted).
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Step 1: detect which broad categories of files changed ──────────────
+  # Outputs two booleans consumed by the Analyze jobs below. Keeping this as
+  # a separate job avoids the need for a third-party paths-filter action.
+  changes:
+    name: Detect changed file categories
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      actions: ${{ steps.detect.outputs.actions }}
+      code: ${{ steps.detect.outputs.code }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Detect changed paths
+        id: detect
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          CHANGED=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          echo "Changed files:"
+          echo "$CHANGED"
+
+          # Did any GitHub Actions workflow files change?
+          if echo "$CHANGED" | grep -q "^\.github/workflows/"; then
+            echo "actions=true"  >> "$GITHUB_OUTPUT"
+          else
+            echo "actions=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Did any non-workflow files change?
+          NON_WORKFLOW=$(echo "$CHANGED" | grep -v "^\.github/workflows/" || true)
+          if [ -n "$NON_WORKFLOW" ]; then
+            echo "code=true"  >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ── Step 2a: scan GitHub Actions workflow files ──────────────────────────
+  # Job name MUST stay "Analyze (actions)" — it is a required status check.
+  # When no workflow files changed the job is skipped; GitHub counts a skipped
+  # required check as satisfied, unblocking workflow-only Dependabot PRs.
+  analyze-actions:
+    name: Analyze (actions)
+    needs: changes
+    if: needs.changes.outputs.actions == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@a2983b8bed1923f44751c5c43237f479442827b3 # v3.37.4
+        with:
+          languages: actions
+          queries: security-and-quality
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@a2983b8bed1923f44751c5c43237f479442827b3 # v3.37.4
+        with:
+          category: /language:actions
+
+  # ── Step 2b: scan JavaScript / TypeScript source code ───────────────────
+  # Job name MUST stay "Analyze (javascript-typescript)" — required check.
+  # Skipped (satisfying the required check) when only workflow files changed
+  # — the common case for GitHub-Actions-only Dependabot PRs.
+  analyze-js-ts:
+    name: Analyze (javascript-typescript)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@a2983b8bed1923f44751c5c43237f479442827b3 # v3.37.4
+        with:
+          languages: javascript-typescript
+          queries: security-and-quality
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@a2983b8bed1923f44751c5c43237f479442827b3 # v3.37.4
+        with:
+          category: /language:javascript-typescript

@@ -102,7 +102,10 @@ router.get("/trips/:id/share", async (req, res) => {
     res.status(404).json({ error: "Not found" });
     return;
   }
-  if (trip.shareTokenExpiresAt && trip.shareTokenExpiresAt.getTime() <= Date.now()) {
+  if (
+    trip.shareTokenExpiresAt &&
+    trip.shareTokenExpiresAt.getTime() <= Date.now()
+  ) {
     res.status(410).json({ error: "Share link expired" });
     return;
   }
@@ -182,7 +185,8 @@ router.post("/trips/:id/share", requireAuth, async (req, res) => {
     if (!trip.shareTokenExpiresAt || !trip.shareTokenCreatedAt) {
       const refreshedCreatedAt = trip.shareTokenCreatedAt ?? new Date();
       const refreshedExpiresAt = new Date(
-        refreshedCreatedAt.getTime() + SHARE_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000,
+        refreshedCreatedAt.getTime() +
+          SHARE_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000,
       );
       await db
         .update(travelsTrips)

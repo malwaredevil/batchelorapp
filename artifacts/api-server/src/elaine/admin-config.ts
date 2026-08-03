@@ -23,7 +23,11 @@ export const AdminConfigBody = z.object({
       openAIFast: z.string().min(1).max(200).optional(),
       rerank: z.string().min(1).max(200).optional(),
       visualEmbed: z.string().min(1).max(200).optional(),
-      fusionModels: z.array(z.string().min(1).max(200)).min(1).max(6).optional(),
+      fusionModels: z
+        .array(z.string().min(1).max(200))
+        .min(1)
+        .max(6)
+        .optional(),
       fusionJudge: z.string().min(1).max(200).optional(),
     })
     .partial()
@@ -74,9 +78,19 @@ export const AdminConfigBody = z.object({
       visualEmbedCropTop: z.number().min(0).max(1).optional(),
       visualEmbedCropHeight: z.number().min(0).max(1).optional(),
       aiJpegQuality: z.number().int().min(1).max(100).optional(),
-      potteryZoneAnalysisMaxTokens: z.number().int().min(50).max(4000).optional(),
+      potteryZoneAnalysisMaxTokens: z
+        .number()
+        .int()
+        .min(50)
+        .max(4000)
+        .optional(),
       potteryBackstampMaxTokens: z.number().int().min(50).max(4000).optional(),
-      travelDocExtractionMaxTokens: z.number().int().min(50).max(4000).optional(),
+      travelDocExtractionMaxTokens: z
+        .number()
+        .int()
+        .min(50)
+        .max(4000)
+        .optional(),
       openAIResponsesMaxOutputTokens: z
         .number()
         .int()

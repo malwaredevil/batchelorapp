@@ -29,7 +29,6 @@ const REPO = "batchelorapp";
 // required: false → sync if present; skip silently with a notice if not set
 //
 // Excluded (intentionally not backed up to GitHub):
-//   DEV_SCREENSHOT_TOKEN  — plain env var (not a Replit secret), Replit-dev-only
 //   AGENT_LOGIN_EMAIL     — dev-only test credential
 //   AGENT_LOGIN_PASSWORD  — dev-only test credential
 //   PGHOST/PGPORT/PGUSER/PGPASSWORD/PGDATABASE — Replit built-in DB, auto-provisioned per workspace
@@ -256,6 +255,17 @@ const SECRETS: Array<{ name: string; purpose: string; required: boolean }> = [
     name: "MICROLINK_API_KEY",
     purpose:
       "Microlink.io paid-tier API key (free tier works without this; upgrades rate limits)",
+    required: false,
+  },
+  {
+    name: "DEV_SCREENSHOT_TOKEN",
+    // Migrated from a plain .replit env var to a real Replit Secret on
+    // 2026-08-03. Not currently referenced by any GitHub Actions workflow —
+    // e2e smoke tests (artifacts/e2e/tests/smoke.global-setup.ts) run
+    // unauthenticated and skip gracefully when this is unset — so syncing it
+    // is a nice-to-have for future CI use, not a hard requirement.
+    purpose:
+      "Dev-only screenshot auth bypass token (/api/dev/screenshot-login)",
     required: false,
   },
 ];

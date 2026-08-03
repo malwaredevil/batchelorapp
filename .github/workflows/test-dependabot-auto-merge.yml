@@ -1,7 +1,8 @@
 name: Test Dependabot auto-merge logic
 
-# Manual trigger only — validates every decision branch of dependabot-auto-merge.yml
-# without needing a real dependabot[bot] PR.
+# Runs on pull_request when either workflow file or the decision script
+# changes, so any edit to the policy is automatically re-validated.
+# Can also be triggered manually via workflow_dispatch.
 on:
   workflow_dispatch:
   pull_request:
@@ -9,6 +10,7 @@ on:
     paths:
       - ".github/workflows/dependabot-auto-merge.yml"
       - ".github/workflows/test-dependabot-auto-merge.yml"
+      - ".github/scripts/dependabot-merge-decision.sh"
 
 permissions:
   contents: read
@@ -20,185 +22,185 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      - name: "Case 1: GitHub Actions patch bump → should auto-merge"
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - name: Make decision script executable
+        run: chmod +x .github/scripts/dependabot-merge-decision.sh
+
+      # ------------------------------------------------------------------
+      # GitHub Actions ecosystem
+      # ------------------------------------------------------------------
+
+      - name: "GH Actions patch → merge-actions"
         env:
-          PR_NUMBER: "999"
           ECOSYSTEM: "github_actions"
           UPDATE_TYPE: "version-update:semver-patch"
           DEPENDENCY_NAMES: "actions/checkout"
+          GHSA_IDS: ""
         run: |
-          set -euo pipefail
-          MERGED=false
+          DECISION=$(bash .github/scripts/dependabot-merge-decision.sh)
+          echo "Decision: $DECISION"
+          [ "$DECISION" = "merge-actions" ] || (echo "FAIL: expected merge-actions, got $DECISION" && exit 1)
 
-          PACKAGE_COUNT=$(echo "$DEPENDENCY_NAMES" | tr ',' '\n' | grep -c .)
-
-          if [ "$ECOSYSTEM" = "github_actions" ]; then
-            if [ "$UPDATE_TYPE" = "version-update:semver-major" ]; then
-              echo "FAIL: should not skip a patch bump"
-              exit 1
-            fi
-            echo "✓ Case 1 passed: GitHub Actions patch bump → would auto-merge PR #$PR_NUMBER"
-            MERGED=true
-          fi
-
-          if [ "$MERGED" = "false" ]; then
-            echo "FAIL: github_actions ecosystem was not matched"
-            exit 1
-          fi
-
-      - name: "Case 2: GitHub Actions minor bump → should auto-merge"
+      - name: "GH Actions minor → merge-actions"
         env:
-          PR_NUMBER: "999"
           ECOSYSTEM: "github_actions"
           UPDATE_TYPE: "version-update:semver-minor"
           DEPENDENCY_NAMES: "actions/checkout"
+          GHSA_IDS: ""
         run: |
-          set -euo pipefail
-          MERGED=false
+          DECISION=$(bash .github/scripts/dependabot-merge-decision.sh)
+          echo "Decision: $DECISION"
+          [ "$DECISION" = "merge-actions" ] || (echo "FAIL: expected merge-actions, got $DECISION" && exit 1)
 
-          if [ "$ECOSYSTEM" = "github_actions" ]; then
-            if [ "$UPDATE_TYPE" = "version-update:semver-major" ]; then
-              echo "FAIL: should not skip a minor bump"
-              exit 1
-            fi
-            echo "✓ Case 2 passed: GitHub Actions minor bump → would auto-merge PR #$PR_NUMBER"
-            MERGED=true
-          fi
-
-          if [ "$MERGED" = "false" ]; then
-            echo "FAIL: github_actions ecosystem was not matched"
-            exit 1
-          fi
-
-      - name: "Case 3: GitHub Actions major bump → must NOT auto-merge"
+      - name: "GH Actions major → skip-major-actions"
         env:
-          PR_NUMBER: "999"
           ECOSYSTEM: "github_actions"
           UPDATE_TYPE: "version-update:semver-major"
           DEPENDENCY_NAMES: "actions/checkout"
+          GHSA_IDS: ""
         run: |
-          set -euo pipefail
-          SKIPPED=false
+          DECISION=$(bash .github/scripts/dependabot-merge-decision.sh)
+          echo "Decision: $DECISION"
+          [ "$DECISION" = "skip-major-actions" ] || (echo "FAIL: expected skip-major-actions, got $DECISION" && exit 1)
 
-          if [ "$ECOSYSTEM" = "github_actions" ]; then
-            if [ "$UPDATE_TYPE" = "version-update:semver-major" ]; then
-              echo "✓ Case 3 passed: GitHub Actions major bump → correctly skipped"
-              SKIPPED=true
-            fi
-          fi
+      # ------------------------------------------------------------------
+      # npm ecosystem
+      # ------------------------------------------------------------------
 
-          if [ "$SKIPPED" = "false" ]; then
-            echo "FAIL: major GitHub Actions bump was not skipped"
-            exit 1
-          fi
-
-      - name: "Case 4: npm single-package patch bump → should auto-merge"
+      - name: "npm single-package patch → merge-npm-patch"
         env:
-          PR_NUMBER: "999"
           ECOSYSTEM: "npm"
           UPDATE_TYPE: "version-update:semver-patch"
           DEPENDENCY_NAMES: "zod"
+          GHSA_IDS: ""
         run: |
-          set -euo pipefail
-          MERGED=false
+          DECISION=$(bash .github/scripts/dependabot-merge-decision.sh)
+          echo "Decision: $DECISION"
+          [ "$DECISION" = "merge-npm-patch" ] || (echo "FAIL: expected merge-npm-patch, got $DECISION" && exit 1)
 
-          PACKAGE_COUNT=$(echo "$DEPENDENCY_NAMES" | tr ',' '\n' | grep -c .)
-          echo "Package count: $PACKAGE_COUNT"
-
-          if [ "$ECOSYSTEM" = "github_actions" ]; then
-            echo "FAIL: npm should not hit github_actions branch"
-            exit 1
-          fi
-
-          if [ "$UPDATE_TYPE" = "version-update:semver-patch" ] && [ "$PACKAGE_COUNT" -eq 1 ]; then
-            echo "✓ Case 4 passed: npm single-package patch → would auto-merge PR #$PR_NUMBER"
-            MERGED=true
-          fi
-
-          if [ "$MERGED" = "false" ]; then
-            echo "FAIL: single-package npm patch was not matched for auto-merge"
-            exit 1
-          fi
-
-      - name: "Case 5: npm grouped (multi-package) patch → must NOT auto-merge"
+      - name: "npm grouped 3 packages patch → skip-grouped-3"
         env:
-          PR_NUMBER: "999"
           ECOSYSTEM: "npm"
           UPDATE_TYPE: "version-update:semver-patch"
           DEPENDENCY_NAMES: "zod, react, typescript"
+          GHSA_IDS: ""
         run: |
-          set -euo pipefail
-          SKIPPED=false
+          DECISION=$(bash .github/scripts/dependabot-merge-decision.sh)
+          echo "Decision: $DECISION"
+          [ "$DECISION" = "skip-grouped-3" ] || (echo "FAIL: expected skip-grouped-3, got $DECISION" && exit 1)
 
-          PACKAGE_COUNT=$(echo "$DEPENDENCY_NAMES" | tr ',' '\n' | grep -c .)
-          echo "Package count: $PACKAGE_COUNT"
-
-          if [ "$UPDATE_TYPE" = "version-update:semver-patch" ] && [ "$PACKAGE_COUNT" -eq 1 ]; then
-            echo "FAIL: grouped PR should not auto-merge"
-            exit 1
-          fi
-
-          if [ "$PACKAGE_COUNT" -gt 1 ]; then
-            echo "✓ Case 5 passed: grouped npm PR ($PACKAGE_COUNT packages) → correctly skipped"
-            SKIPPED=true
-          fi
-
-          if [ "$SKIPPED" = "false" ]; then
-            echo "FAIL: grouped npm PR was not detected as multi-package"
-            exit 1
-          fi
-
-      - name: "Case 6: npm single-package minor bump → must NOT auto-merge"
+      - name: "npm grouped 2 packages patch → skip-grouped-2"
         env:
-          PR_NUMBER: "999"
+          ECOSYSTEM: "npm"
+          UPDATE_TYPE: "version-update:semver-patch"
+          DEPENDENCY_NAMES: "zod, typescript"
+          GHSA_IDS: ""
+        run: |
+          DECISION=$(bash .github/scripts/dependabot-merge-decision.sh)
+          echo "Decision: $DECISION"
+          [ "$DECISION" = "skip-grouped-2" ] || (echo "FAIL: expected skip-grouped-2, got $DECISION" && exit 1)
+
+      - name: "npm single-package minor → skip-update-type"
+        env:
           ECOSYSTEM: "npm"
           UPDATE_TYPE: "version-update:semver-minor"
           DEPENDENCY_NAMES: "zod"
+          GHSA_IDS: ""
         run: |
-          set -euo pipefail
-          MERGED=false
+          DECISION=$(bash .github/scripts/dependabot-merge-decision.sh)
+          echo "Decision: $DECISION"
+          [[ "$DECISION" == skip-update-type-* ]] || (echo "FAIL: expected skip-update-type-*, got $DECISION" && exit 1)
 
-          PACKAGE_COUNT=$(echo "$DEPENDENCY_NAMES" | tr ',' '\n' | grep -c .)
-          echo "Package count: $PACKAGE_COUNT"
-
-          if [ "$UPDATE_TYPE" = "version-update:semver-patch" ] && [ "$PACKAGE_COUNT" -eq 1 ]; then
-            echo "FAIL: minor npm bump should not auto-merge"
-            exit 1
-          fi
-
-          echo "✓ Case 6 passed: npm single-package minor bump → correctly skipped"
-
-      - name: "Case 7: npm single-package major bump → must NOT auto-merge"
+      - name: "npm single-package major → skip-update-type"
         env:
-          PR_NUMBER: "999"
           ECOSYSTEM: "npm"
           UPDATE_TYPE: "version-update:semver-major"
           DEPENDENCY_NAMES: "zod"
+          GHSA_IDS: ""
         run: |
-          set -euo pipefail
+          DECISION=$(bash .github/scripts/dependabot-merge-decision.sh)
+          echo "Decision: $DECISION"
+          [[ "$DECISION" == skip-update-type-* ]] || (echo "FAIL: expected skip-update-type-*, got $DECISION" && exit 1)
 
-          PACKAGE_COUNT=$(echo "$DEPENDENCY_NAMES" | tr ',' '\n' | grep -c .)
-          echo "Package count: $PACKAGE_COUNT"
+      # ------------------------------------------------------------------
+      # GHSA security advisory path (SEVERITY_OVERRIDE mocks gh api call)
+      # ------------------------------------------------------------------
 
-          if [ "$UPDATE_TYPE" = "version-update:semver-patch" ] && [ "$PACKAGE_COUNT" -eq 1 ]; then
-            echo "FAIL: major npm bump should not auto-merge"
-            exit 1
-          fi
-
-          echo "✓ Case 7 passed: npm single-package major bump → correctly skipped"
-
-      - name: "Case 8: grouped npm with 2 packages (comma-count edge case)"
+      - name: "GHSA critical → merge-security-<GHSA>"
         env:
-          DEPENDENCY_NAMES: "zod, typescript"
+          ECOSYSTEM: "npm"
+          UPDATE_TYPE: "version-update:semver-minor"
+          DEPENDENCY_NAMES: "lodash"
+          GHSA_IDS: "GHSA-1234-abcd-5678"
+          SEVERITY_OVERRIDE: "critical"
         run: |
-          set -euo pipefail
-          PACKAGE_COUNT=$(echo "$DEPENDENCY_NAMES" | tr ',' '\n' | grep -c .)
-          echo "Package count: $PACKAGE_COUNT"
-          if [ "$PACKAGE_COUNT" -ne 2 ]; then
-            echo "FAIL: expected 2 packages, got $PACKAGE_COUNT"
-            exit 1
-          fi
-          echo "✓ Case 8 passed: comma-separated 2-package list parsed correctly as $PACKAGE_COUNT"
+          DECISION=$(bash .github/scripts/dependabot-merge-decision.sh)
+          echo "Decision: $DECISION"
+          [[ "$DECISION" == merge-security-* ]] || (echo "FAIL: expected merge-security-*, got $DECISION" && exit 1)
+
+      - name: "GHSA high → merge-security-<GHSA>"
+        env:
+          ECOSYSTEM: "npm"
+          UPDATE_TYPE: "version-update:semver-patch"
+          DEPENDENCY_NAMES: "lodash"
+          GHSA_IDS: "GHSA-abcd-1234-ef56"
+          SEVERITY_OVERRIDE: "high"
+        run: |
+          DECISION=$(bash .github/scripts/dependabot-merge-decision.sh)
+          echo "Decision: $DECISION"
+          [[ "$DECISION" == merge-security-* ]] || (echo "FAIL: expected merge-security-*, got $DECISION" && exit 1)
+
+      - name: "GHSA medium → skip-ghsa-low-medium (not auto-merged)"
+        env:
+          ECOSYSTEM: "npm"
+          UPDATE_TYPE: "version-update:semver-patch"
+          DEPENDENCY_NAMES: "lodash"
+          GHSA_IDS: "GHSA-abcd-1234-ef56"
+          SEVERITY_OVERRIDE: "medium"
+        run: |
+          DECISION=$(bash .github/scripts/dependabot-merge-decision.sh)
+          echo "Decision: $DECISION"
+          [ "$DECISION" = "skip-ghsa-low-medium" ] || (echo "FAIL: expected skip-ghsa-low-medium, got $DECISION" && exit 1)
+
+      - name: "GHSA low → skip-ghsa-low-medium (not auto-merged)"
+        env:
+          ECOSYSTEM: "npm"
+          UPDATE_TYPE: "version-update:semver-patch"
+          DEPENDENCY_NAMES: "lodash"
+          GHSA_IDS: "GHSA-abcd-1234-ef56"
+          SEVERITY_OVERRIDE: "low"
+        run: |
+          DECISION=$(bash .github/scripts/dependabot-merge-decision.sh)
+          echo "Decision: $DECISION"
+          [ "$DECISION" = "skip-ghsa-low-medium" ] || (echo "FAIL: expected skip-ghsa-low-medium, got $DECISION" && exit 1)
+
+      - name: "GHSA malformed ID → skip-ghsa-malformed"
+        env:
+          ECOSYSTEM: "npm"
+          UPDATE_TYPE: "version-update:semver-patch"
+          DEPENDENCY_NAMES: "lodash"
+          GHSA_IDS: "NOT-A-VALID-ID"
+          SEVERITY_OVERRIDE: "critical"
+        run: |
+          DECISION=$(bash .github/scripts/dependabot-merge-decision.sh)
+          echo "Decision: $DECISION"
+          [ "$DECISION" = "skip-ghsa-malformed" ] || (echo "FAIL: expected skip-ghsa-malformed, got $DECISION" && exit 1)
+
+      # ------------------------------------------------------------------
+      # Edge cases
+      # ------------------------------------------------------------------
+
+      - name: "Empty GHSA_IDS → falls through to low-risk path"
+        env:
+          ECOSYSTEM: "github_actions"
+          UPDATE_TYPE: "version-update:semver-patch"
+          DEPENDENCY_NAMES: "actions/setup-node"
+          GHSA_IDS: ""
+        run: |
+          DECISION=$(bash .github/scripts/dependabot-merge-decision.sh)
+          echo "Decision: $DECISION"
+          [ "$DECISION" = "merge-actions" ] || (echo "FAIL: expected merge-actions, got $DECISION" && exit 1)
 
       - name: All cases passed
-        run: echo "✓ All dependabot-auto-merge decision branches validated successfully."
+        run: echo "All dependabot-merge-decision.sh branches validated."

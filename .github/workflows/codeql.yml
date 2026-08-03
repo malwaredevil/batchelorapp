@@ -29,6 +29,7 @@ jobs:
   changes:
     name: Detect changed file categories
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       actions: ${{ steps.detect.outputs.actions }}
       code: ${{ steps.detect.outputs.code }}
@@ -72,6 +73,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.actions == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       security-events: write
       contents: read
@@ -101,6 +103,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       security-events: write
       contents: read

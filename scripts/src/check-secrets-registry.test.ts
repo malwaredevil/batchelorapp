@@ -228,12 +228,14 @@ test("flags optional key absent from SECRETS", () => {
 });
 
 test("does NOT flag keys in INTENTIONALLY_EXCLUDED", () => {
-  // Pick a key we know is excluded
+  // Pick a key we know is excluded (DEV_SCREENSHOT_TOKEN was migrated to a
+  // real Replit Secret 2026-08-03 and is no longer in this set — see
+  // check-secrets-registry.ts)
   assert.ok(
-    INTENTIONALLY_EXCLUDED.has("DEV_SCREENSHOT_TOKEN"),
-    "test precondition: DEV_SCREENSHOT_TOKEN must be excluded",
+    INTENTIONALLY_EXCLUDED.has("AGENT_LOGIN_EMAIL"),
+    "test precondition: AGENT_LOGIN_EMAIL must be excluded",
   );
-  const envSrc = `export const env = { s: optional("DEV_SCREENSHOT_TOKEN") };`;
+  const envSrc = `export const env = { s: optional("AGENT_LOGIN_EMAIL") };`;
   const { missingRequired, missingOptional } = checkDrift(
     envSrc,
     SYNC_WITH_BOTH,

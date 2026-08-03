@@ -47,7 +47,8 @@ export const SYNC_TS_PATH = path.join(
 // ---------------------------------------------------------------------------
 export const INTENTIONALLY_EXCLUDED = new Set<string>([
   // Plain env vars (not Replit secrets) used for dev automation only
-  "DEV_SCREENSHOT_TOKEN",
+  // (DEV_SCREENSHOT_TOKEN migrated to a real Replit Secret 2026-08-03 — it's
+  // now tracked in the SECRETS registry below, not excluded here.)
   "AGENT_LOGIN_EMAIL",
   "AGENT_LOGIN_PASSWORD",
   // Replit built-in / platform-injected — not Replit Secrets

@@ -5,13 +5,22 @@ describe("database migration manifest", () => {
   it("appends reasoning_summary as forward migration version 7", () => {
     const migrations = getMigrations();
     expect(migrations.map(({ version }) => version)).toEqual([
-      1, 2, 3, 4, 5, 6, 7,
+      1, 2, 3, 4, 5, 6, 7, 8,
     ]);
     expect(migrations.at(-1)).toMatchObject({
-      version: 7,
-      name: "reasoning summary",
+      version: 8,
+      name: "google calendar needs reauth",
     });
     expect(migrations[0]?.checksumSha256).toHaveLength(64);
+  });
+
+  it("keeps the Google Calendar needs_reauth migration additive, nullable-safe, and idempotent", () => {
+    const migration = getMigrations().find(({ version }) => version === 8)!;
+    const sql = migration.statements.join("\n").toLowerCase();
+    expect(sql).not.toMatch(/\b(drop|truncate)\b/);
+    expect(sql).toContain("if not exists");
+    expect(sql).toContain("needs_reauth");
+    expect(sql).toContain("travels_google_calendar_connections");
   });
 
   it("keeps reasoning_summary migration additive, nullable, and idempotent", () => {

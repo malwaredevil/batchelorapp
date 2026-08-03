@@ -59,10 +59,12 @@ import {
   useGetUnreadCount,
   useGetOrnamentStats,
   useListNotes,
+  useGetCalendarStatus,
   useListConnectedCalendars,
   useListConnectedCalendarEvents,
   getListConnectedCalendarEventsQueryKey,
   useListAllConnectedCalendarEvents,
+  getListAllConnectedCalendarEventsQueryKey,
   useGetElaineNudgesUnseenCount,
   useListElaineMemory,
 } from "@workspace/api-client-react";
@@ -742,6 +744,13 @@ export function AppLauncher() {
   const { data: elaineNudgesData } = useGetElaineNudgesUnseenCount();
   const { data: elaineMemoryData } = useListElaineMemory();
 
+  // Don't poll all-events when the token is known to be expired — the endpoint
+  // will just return 502 on every poll until the user reconnects.
+  const { data: calendarStatus } = useGetCalendarStatus();
+  const calendarTokenExpired = Boolean(
+    calendarStatus?.connected && calendarStatus.tokenExpired,
+  );
+
   const upcomingEventsRangeStart = useMemo(() => new Date().toISOString(), []);
   const upcomingEventsRangeEnd = useMemo(
     () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
@@ -750,6 +759,15 @@ export function AppLauncher() {
   const { data: allCalendarEventsData } = useListAllConnectedCalendarEvents(
     upcomingEventsRangeStart,
     upcomingEventsRangeEnd,
+    {
+      query: {
+        enabled: !calendarTokenExpired,
+        queryKey: getListAllConnectedCalendarEventsQueryKey(
+          upcomingEventsRangeStart,
+          upcomingEventsRangeEnd,
+        ),
+      },
+    },
   );
   const upcomingEventsTotal =
     Array.isArray(connectedCalendarsData) && connectedCalendarsData.length > 0

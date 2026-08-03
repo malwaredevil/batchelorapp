@@ -39,9 +39,26 @@ router.get("/google-calendar/status", requireAuth, async (req, res) => {
     .from(travelsGoogleCalendarConnections)
     .where(eq(travelsGoogleCalendarConnections.userId, userId))
     .limit(1);
+
+  if (!connection) {
+    res.json({ connected: false, googleEmail: null });
+    return;
+  }
+
+  // Proactively attempt a token refresh so the UI learns about invalid_grant
+  // immediately (before the first event request) — mirrors the Gmail pattern.
+  // getValidAccessToken will set needsReauth:true on the connection row if the
+  // refresh fails with invalid_grant, so we re-read needsReauth after the call.
+  const accessToken = await getValidAccessToken(userId);
+  const tokenExpired = !accessToken;
+
   res.json({
-    connected: Boolean(connection),
-    googleEmail: connection?.googleEmail ?? null,
+    connected: true,
+    googleEmail: connection.googleEmail,
+    // tokenExpired:true means the refresh token was revoked/expired;
+    // the user must reconnect. A transient network error also lands here, but
+    // repeated status calls will continue to return true until they reconnect.
+    tokenExpired: tokenExpired || undefined,
   });
 });
 
@@ -171,6 +188,7 @@ router.get("/google-calendar/callback", requireAuth, async (req, res) => {
         accessTokenExpiresAt: tokens.expiry_date
           ? new Date(tokens.expiry_date)
           : null,
+        needsReauth: false,
       })
       .onConflictDoUpdate({
         target: travelsGoogleCalendarConnections.userId,
@@ -181,6 +199,8 @@ router.get("/google-calendar/callback", requireAuth, async (req, res) => {
           accessTokenExpiresAt: tokens.expiry_date
             ? new Date(tokens.expiry_date)
             : null,
+          // Clear any prior invalid_grant flag — the user has reconnected.
+          needsReauth: false,
           updatedAt: new Date(),
         },
       });

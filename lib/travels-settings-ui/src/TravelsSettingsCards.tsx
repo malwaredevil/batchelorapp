@@ -22,6 +22,7 @@ import {
   Plus,
   Clock,
   RefreshCw,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -725,6 +726,27 @@ export function CalendarSyncCard({
         <p className="text-sm text-muted-foreground">Checking connection…</p>
       ) : status?.connected ? (
         <div className="space-y-4">
+          {status.tokenExpired && (
+            <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 dark:border-amber-900 dark:bg-amber-950/20">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                  Google Calendar connection expired
+                </p>
+                <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">
+                  Your Google authorization has been revoked or expired.
+                  Reconnect to restore calendar events and reminders.
+                </p>
+                <Button
+                  size="sm"
+                  className="mt-2"
+                  onClick={handleConnect}
+                >
+                  Reconnect Google Calendar
+                </Button>
+              </div>
+            </div>
+          )}
           <div className="flex items-center justify-between gap-3">
             <p className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
               <CheckCircle2 className="h-3.5 w-3.5" />

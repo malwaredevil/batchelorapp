@@ -737,11 +737,7 @@ export function CalendarSyncCard({
                   Your Google authorization has been revoked or expired.
                   Reconnect to restore calendar events and reminders.
                 </p>
-                <Button
-                  size="sm"
-                  className="mt-2"
-                  onClick={handleConnect}
-                >
+                <Button size="sm" className="mt-2" onClick={handleConnect}>
                   Reconnect Google Calendar
                 </Button>
               </div>

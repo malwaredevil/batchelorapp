@@ -49,9 +49,12 @@ vi.mock("@workspace/db", async (importOriginal) => {
   return { ...actual, db: dbMock };
 });
 
-const refreshGoogleToken = vi.fn<
-  (client: unknown) => Promise<{ accessToken: string; expiresAt: Date } | null>
->();
+const refreshGoogleToken =
+  vi.fn<
+    (
+      client: unknown,
+    ) => Promise<{ accessToken: string; expiresAt: Date } | null>
+  >();
 vi.mock("./google-oauth", () => ({
   OAUTH_EXPIRY_BUFFER_MS: 60_000,
   refreshGoogleToken: (client: unknown) => refreshGoogleToken(client),
@@ -77,13 +80,15 @@ vi.mock("./logger", () => ({
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeConnectionRow(overrides: Partial<{
-  userId: number;
-  refreshToken: string;
-  accessToken: string | null;
-  accessTokenExpiresAt: Date | null;
-  needsReauth: boolean;
-}> = {}) {
+function makeConnectionRow(
+  overrides: Partial<{
+    userId: number;
+    refreshToken: string;
+    accessToken: string | null;
+    accessTokenExpiresAt: Date | null;
+    needsReauth: boolean;
+  }> = {},
+) {
   return {
     userId: 1,
     refreshToken: "enc:refresh-tok",
@@ -158,7 +163,9 @@ describe("getValidAccessToken", () => {
   });
 
   it("sets needsReauth:true on the DB row when refresh fails with invalid_grant", async () => {
-    selectQueue.push([makeConnectionRow({ accessToken: null, accessTokenExpiresAt: null })]);
+    selectQueue.push([
+      makeConnectionRow({ accessToken: null, accessTokenExpiresAt: null }),
+    ]);
     const grantError = new Error("invalid_grant");
     refreshGoogleToken.mockRejectedValue(grantError);
     const { getValidAccessToken } = await import("./google-calendar-tokens");
@@ -173,11 +180,16 @@ describe("getValidAccessToken", () => {
   });
 
   it("sets needsReauth:true when the error carries invalid_grant in response.data.error", async () => {
-    selectQueue.push([makeConnectionRow({ accessToken: null, accessTokenExpiresAt: null })]);
+    selectQueue.push([
+      makeConnectionRow({ accessToken: null, accessTokenExpiresAt: null }),
+    ]);
     // Simulate the googleapis SDK error shape
-    const sdkError = Object.assign(new Error("Token has been expired or revoked."), {
-      response: { data: { error: "invalid_grant" } },
-    });
+    const sdkError = Object.assign(
+      new Error("Token has been expired or revoked."),
+      {
+        response: { data: { error: "invalid_grant" } },
+      },
+    );
     refreshGoogleToken.mockRejectedValue(sdkError);
     const { getValidAccessToken } = await import("./google-calendar-tokens");
 
@@ -190,7 +202,9 @@ describe("getValidAccessToken", () => {
   });
 
   it("does NOT set needsReauth when the error is a transient network failure", async () => {
-    selectQueue.push([makeConnectionRow({ accessToken: null, accessTokenExpiresAt: null })]);
+    selectQueue.push([
+      makeConnectionRow({ accessToken: null, accessTokenExpiresAt: null }),
+    ]);
     refreshGoogleToken.mockRejectedValue(new Error("ECONNREFUSED"));
     const { getValidAccessToken } = await import("./google-calendar-tokens");
 
@@ -202,7 +216,9 @@ describe("getValidAccessToken", () => {
   });
 
   it("returns null and does not throw when refreshGoogleToken returns null", async () => {
-    selectQueue.push([makeConnectionRow({ accessToken: null, accessTokenExpiresAt: null })]);
+    selectQueue.push([
+      makeConnectionRow({ accessToken: null, accessTokenExpiresAt: null }),
+    ]);
     refreshGoogleToken.mockResolvedValue(null);
     const { getValidAccessToken } = await import("./google-calendar-tokens");
 

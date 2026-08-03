@@ -160,7 +160,7 @@ export const APPS: AppEntry[] = [
     id: "elaine",
     name: "Elaine",
     href: `${base}elaine/`,
-    image: `${base}images/elaine-collection.svg`,
+    image: `${base}images/elaine-collection.png`,
     updated: "Your AI assistant",
     stats: [
       { value: "—", label: "Nudges" },

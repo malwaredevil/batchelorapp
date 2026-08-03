@@ -95,9 +95,7 @@ describe("GET /api/travels/google-calendar/status", () => {
     selectQueue.push([]);
     const app = buildApp();
 
-    const res = await request(app).get(
-      "/api/travels/google-calendar/status",
-    );
+    const res = await request(app).get("/api/travels/google-calendar/status");
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ connected: false, googleEmail: null });
@@ -119,9 +117,7 @@ describe("GET /api/travels/google-calendar/status", () => {
     getValidAccessToken.mockResolvedValue("live-access-token");
     const app = buildApp();
 
-    const res = await request(app).get(
-      "/api/travels/google-calendar/status",
-    );
+    const res = await request(app).get("/api/travels/google-calendar/status");
 
     expect(res.status).toBe(200);
     expect(res.body.connected).toBe(true);
@@ -146,9 +142,7 @@ describe("GET /api/travels/google-calendar/status", () => {
     getValidAccessToken.mockResolvedValue(null);
     const app = buildApp();
 
-    const res = await request(app).get(
-      "/api/travels/google-calendar/status",
-    );
+    const res = await request(app).get("/api/travels/google-calendar/status");
 
     expect(res.status).toBe(200);
     expect(res.body.connected).toBe(true);
@@ -172,9 +166,7 @@ describe("GET /api/travels/google-calendar/status", () => {
     getValidAccessToken.mockResolvedValue(null);
     const app = buildApp();
 
-    const res = await request(app).get(
-      "/api/travels/google-calendar/status",
-    );
+    const res = await request(app).get("/api/travels/google-calendar/status");
 
     expect(res.status).toBe(200);
     expect(res.body.tokenExpired).toBe(true);
@@ -190,9 +182,7 @@ describe("GET /api/travels/google-calendar/status", () => {
     });
     app.use("/api/travels", gcalRouter);
 
-    const res = await request(app).get(
-      "/api/travels/google-calendar/status",
-    );
+    const res = await request(app).get("/api/travels/google-calendar/status");
 
     expect(res.status).toBe(401);
     expect(getValidAccessToken).not.toHaveBeenCalled();

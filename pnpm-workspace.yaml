@@ -104,7 +104,7 @@ overrides:
   "esbuild>@esbuild/win32-x64": "-"
   "brace-expansion@^1": "^1.1.18" # CVE-2026-14257: OOM DoS via unbounded expansion length; patched 1.1.17
   "brace-expansion@^2": "^2.1.2"
-  "brace-expansion@^5": "^5.0.8"
+  "brace-expansion@^5": "^5.0.9" # GHSA-rgw5-rvv9-x895 (CVE-2026-69152): DoS via unbounded intermediate arrays, bypassing the earlier CVE-2026-14257 fix; patched 5.0.9
   filelist: ">=2.0.2 <3" # GHSA-mh99: transitively pulls minimatch@^10 which has no brace-expansion dep
   jake: ">=12.10.1 <13" # required by ejs; v12 uses filelist@^2, eliminating brace-expansion@^2 chain
   body-parser: ">=2.3.0"
@@ -125,7 +125,7 @@ overrides:
   fast-uri: ">=3.1.4 <4" # GHSA: URI confusion; patched 3.1.4; parent expects ^3
   linkify-it: ">=5.0.2 <6" # GHSA: ReDoS; patched 5.0.2; parent expects ^5
   markdown-it: ">=14.2.0 <15" # GHSA: HTML injection; patched 14.2.0; parent expects ^14
-  postcss: ">=8.5.18 <9" # GHSA: path traversal in sourceMappingURL; patched 8.5.18; parent expects ^8
+  postcss: ">=8.5.23 <9" # GHSA-fxqj-rqcc-2cmp (CVE-2026-69153): incomplete fix of prior sourceMappingURL path-traversal GHSA; patched 8.5.23; parent expects ^8
   qs: ">=6.15.2 <7" # CVE: prototype pollution; patched 6.15.2; parent expects ^6
   "rollup>@rollup/rollup-android-arm-eabi": "-"
   "rollup>@rollup/rollup-android-arm64": "-"

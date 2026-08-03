@@ -2964,6 +2964,13 @@ function ReminderRow({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
+// Logged once per page session each: if localStorage stays unavailable for a
+// whole session (private browsing, quota exceeded, disabled storage), every
+// read/toggle of the compact-docs preference would otherwise repeat the same
+// warning indefinitely.
+let hasWarnedCompactDocsReadFailure = false;
+let hasWarnedCompactDocsWriteFailure = false;
+
 export default function TripDetail({ id }: { id: number }) {
   const [, setLocation] = useLocation();
   const qc = useQueryClient();
@@ -3055,7 +3062,14 @@ export default function TripDetail({ id }: { id: number }) {
   const [compactDocs, setCompactDocs] = useState<boolean>(() => {
     try {
       return localStorage.getItem("travels-compact-docs") === "1";
-    } catch {
+    } catch (err) {
+      if (!hasWarnedCompactDocsReadFailure) {
+        hasWarnedCompactDocsReadFailure = true;
+        console.warn(
+          "travels-trip-detail: failed to read compact-docs preference",
+          err,
+        );
+      }
       return false;
     }
   });
@@ -3064,7 +3078,15 @@ export default function TripDetail({ id }: { id: number }) {
       const next = !v;
       try {
         localStorage.setItem("travels-compact-docs", next ? "1" : "0");
-      } catch {}
+      } catch (err) {
+        if (!hasWarnedCompactDocsWriteFailure) {
+          hasWarnedCompactDocsWriteFailure = true;
+          console.warn(
+            "travels-trip-detail: failed to persist compact-docs preference",
+            err,
+          );
+        }
+      }
       return next;
     });
   };

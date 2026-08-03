@@ -78,6 +78,8 @@ import {
 } from "@workspace/elaine-ui";
 
 const FABRICS_LIST_SS_KEY = "quilting-fabrics-list-state";
+let hasWarnedListStateSaveFailure = false;
+let hasWarnedListStateLoadFailure = false;
 
 type ListState = {
   search: string;
@@ -94,14 +96,29 @@ type ListState = {
 function saveListState(state: ListState) {
   try {
     sessionStorage.setItem(FABRICS_LIST_SS_KEY, JSON.stringify(state));
-  } catch {}
+  } catch (err) {
+    if (!hasWarnedListStateSaveFailure) {
+      hasWarnedListStateSaveFailure = true;
+      console.warn(
+        "quilting-fabrics: failed to persist list state to sessionStorage",
+        err,
+      );
+    }
+  }
 }
 
 function loadListState(): ListState | null {
   try {
     const raw = sessionStorage.getItem(FABRICS_LIST_SS_KEY);
     return raw ? (JSON.parse(raw) as ListState) : null;
-  } catch {
+  } catch (err) {
+    if (!hasWarnedListStateLoadFailure) {
+      hasWarnedListStateLoadFailure = true;
+      console.warn(
+        "quilting-fabrics: failed to restore list state from sessionStorage",
+        err,
+      );
+    }
     return null;
   }
 }

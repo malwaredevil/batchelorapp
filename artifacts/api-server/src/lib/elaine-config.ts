@@ -66,6 +66,19 @@ export interface FeaturesConfig {
   // chat UI. Summaries are also persisted so users can re-read them after a
   // page refresh.
   showReasoningSummary: boolean;
+  // OpenAI Responses API storage-retention controls. `openAIStoreEnabledDefault`
+  // applies when no scope/role override is set. Overrides are optional so admins
+  // can change only the surfaces they care about.
+  openAIStoreEnabledDefault: boolean;
+  openAIStoreScopeOverrides?: {
+    elaine?: boolean;
+    app?: boolean;
+  };
+  openAIStoreRoleOverrides?: {
+    reasoning?: boolean;
+    balanced?: boolean;
+    fast?: boolean;
+  };
 }
 
 export interface ThresholdsConfig {
@@ -140,6 +153,9 @@ export const DEFAULT_FEATURES: FeaturesConfig = {
   enableOpenAIResponsesFallback: true,
   enableBuiltinWebSearch: true,
   showReasoningSummary: true,
+  openAIStoreEnabledDefault: true,
+  openAIStoreScopeOverrides: {},
+  openAIStoreRoleOverrides: {},
 };
 
 export const DEFAULT_THRESHOLDS: ThresholdsConfig = {

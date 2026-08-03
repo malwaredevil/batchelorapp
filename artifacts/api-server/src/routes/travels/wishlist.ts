@@ -6,6 +6,7 @@ import { requireAuth } from "../../middleware/auth";
 import { fetchJsonSafe } from "../../lib/ssrf-safe-fetch";
 import { lookupFlightPrices } from "../../lib/travels/flights";
 import { env } from "../../lib/env";
+import { logger } from "../../lib/logger";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -20,7 +21,12 @@ async function geocodeDestination(
     });
     if (data[0])
       return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
-  } catch {}
+  } catch (err) {
+    logger.warn(
+      { err, destinationLength: destination.length },
+      "travels-wishlist: geocoding failed, continuing without coordinates",
+    );
+  }
   return null;
 }
 

@@ -618,6 +618,11 @@ export const STATEMENTS: string[] = [
   // meaningful on the connection row currently marked is_household_shared.
   `ALTER TABLE travels_google_calendar_connections ADD COLUMN IF NOT EXISTS travel_color_id TEXT`,
 
+  // needs_reauth: set true when a refresh-token use fails (revoked/expired
+  // grant) so the UI can prompt the connection owner to reconnect instead of
+  // silently retrying a dead token every sync cycle.
+  `ALTER TABLE travels_google_calendar_connections ADD COLUMN IF NOT EXISTS needs_reauth BOOLEAN NOT NULL DEFAULT false`,
+
   // travels_trip_calendar_events: maps a trip's itinerary content to the
   // Google Calendar event(s) synced for it — one row for the trip-level
   // event plus one per itinerary activity. Keyed by a content-derived
@@ -984,6 +989,10 @@ export const STATEMENTS: string[] = [
   // travels_trips.share_token: random hex token for public read-only itinerary share links.
   // Null until the user generates a share link for the first time.
   `ALTER TABLE travels_trips ADD COLUMN IF NOT EXISTS share_token TEXT`,
+  `ALTER TABLE travels_trips ADD COLUMN IF NOT EXISTS share_token_created_at TIMESTAMPTZ`,
+  `ALTER TABLE travels_trips ADD COLUMN IF NOT EXISTS share_token_expires_at TIMESTAMPTZ`,
+  `ALTER TABLE travels_trips ADD COLUMN IF NOT EXISTS share_token_last_accessed_at TIMESTAMPTZ`,
+  `ALTER TABLE travels_trips ADD COLUMN IF NOT EXISTS share_token_access_count INTEGER NOT NULL DEFAULT 0`,
 
   // ── Packing Lists ────────────────────────────────────────────────────────────
   // One packing list per trip (auto-created on first use). Separate from the
@@ -2945,6 +2954,19 @@ END $$`,
   `ALTER TABLE slack_webhook_deliveries ADD COLUMN IF NOT EXISTS processed_at TIMESTAMPTZ`,
   `CREATE INDEX IF NOT EXISTS slack_webhook_deliveries_status_received_idx
      ON slack_webhook_deliveries (status, received_at)`,
+  `CREATE TABLE IF NOT EXISTS app_webhook_side_effects (
+     effect_key TEXT PRIMARY KEY,
+     provider TEXT NOT NULL,
+     channel TEXT NOT NULL,
+     status TEXT NOT NULL DEFAULT 'processing',
+     first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     completed_at TIMESTAMPTZ,
+     last_error TEXT
+  )`,
+  `ALTER TABLE app_webhook_side_effects ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS app_webhook_side_effects_status_updated_idx
+     ON app_webhook_side_effects (status, updated_at)`,
 
   // ── #349: ornaments_categories name uniqueness (ORM .unique() → SQL) ───────
   // Note: pottery_categories.name and quilting_categories.name already have

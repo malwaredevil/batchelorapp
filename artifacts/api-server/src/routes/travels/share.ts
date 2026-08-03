@@ -6,6 +6,7 @@ import { db, travelsTrips } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 
 const router: IRouter = Router();
+const SHARE_TOKEN_TTL_DAYS = 30;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -101,6 +102,21 @@ router.get("/trips/:id/share", async (req, res) => {
     res.status(404).json({ error: "Not found" });
     return;
   }
+  if (
+    trip.shareTokenExpiresAt &&
+    trip.shareTokenExpiresAt.getTime() <= Date.now()
+  ) {
+    res.status(410).json({ error: "Share link expired" });
+    return;
+  }
+
+  await db
+    .update(travelsTrips)
+    .set({
+      shareTokenLastAccessedAt: new Date(),
+      shareTokenAccessCount: (trip.shareTokenAccessCount ?? 0) + 1,
+    })
+    .where(eq(travelsTrips.id, trip.id));
 
   res.json({
     id: trip.id,
@@ -132,6 +148,14 @@ router.get("/trips/:id/share", async (req, res) => {
 
 // POST /trips/:id/share — generate (or return existing) share token.
 router.post("/trips/:id/share", requireAuth, async (req, res) => {
+  const parsedBody = z
+    .object({ rotate: z.boolean().optional() })
+    .safeParse(req.body ?? {});
+  if (!parsedBody.success) {
+    res.status(400).json({ error: "Invalid share options" });
+    return;
+  }
+  const rotate = parsedBody.data.rotate === true;
   const id = parseInt(String(req.params["id"] ?? ""), 10);
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid id" });
@@ -139,7 +163,12 @@ router.post("/trips/:id/share", requireAuth, async (req, res) => {
   }
 
   const [trip] = await db
-    .select({ id: travelsTrips.id, shareToken: travelsTrips.shareToken })
+    .select({
+      id: travelsTrips.id,
+      shareToken: travelsTrips.shareToken,
+      shareTokenCreatedAt: travelsTrips.shareTokenCreatedAt,
+      shareTokenExpiresAt: travelsTrips.shareTokenExpiresAt,
+    })
     .from(travelsTrips)
     .where(eq(travelsTrips.id, id));
 
@@ -148,18 +177,54 @@ router.post("/trips/:id/share", requireAuth, async (req, res) => {
     return;
   }
 
-  if (trip.shareToken) {
-    res.json({ shareToken: trip.shareToken });
+  const now = Date.now();
+  const stillValid =
+    trip.shareToken &&
+    (!trip.shareTokenExpiresAt || trip.shareTokenExpiresAt.getTime() > now);
+  if (stillValid && !rotate) {
+    if (!trip.shareTokenExpiresAt || !trip.shareTokenCreatedAt) {
+      const refreshedCreatedAt = trip.shareTokenCreatedAt ?? new Date();
+      const refreshedExpiresAt = new Date(
+        refreshedCreatedAt.getTime() +
+          SHARE_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000,
+      );
+      await db
+        .update(travelsTrips)
+        .set({
+          shareTokenCreatedAt: refreshedCreatedAt,
+          shareTokenExpiresAt: refreshedExpiresAt,
+        })
+        .where(eq(travelsTrips.id, id));
+      res.json({
+        shareToken: trip.shareToken,
+        expiresAt: refreshedExpiresAt.toISOString(),
+      });
+      return;
+    }
+    res.json({
+      shareToken: trip.shareToken,
+      expiresAt: trip.shareTokenExpiresAt.toISOString(),
+    });
     return;
   }
 
   const token = crypto.randomBytes(16).toString("hex");
+  const createdAt = new Date();
+  const expiresAt = new Date(
+    createdAt.getTime() + SHARE_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000,
+  );
   await db
     .update(travelsTrips)
-    .set({ shareToken: token })
+    .set({
+      shareToken: token,
+      shareTokenCreatedAt: createdAt,
+      shareTokenExpiresAt: expiresAt,
+      shareTokenLastAccessedAt: null,
+      shareTokenAccessCount: 0,
+    })
     .where(eq(travelsTrips.id, id));
 
-  res.json({ shareToken: token });
+  res.json({ shareToken: token, expiresAt: expiresAt.toISOString() });
 });
 
 // DELETE /trips/:id/share — revoke (clear) the share token.
@@ -176,7 +241,13 @@ router.delete("/trips/:id/share", requireAuth, async (req, res) => {
   }
   await db
     .update(travelsTrips)
-    .set({ shareToken: null })
+    .set({
+      shareToken: null,
+      shareTokenCreatedAt: null,
+      shareTokenExpiresAt: null,
+      shareTokenLastAccessedAt: null,
+      shareTokenAccessCount: 0,
+    })
     .where(eq(travelsTrips.id, id));
   res.status(204).send();
 });

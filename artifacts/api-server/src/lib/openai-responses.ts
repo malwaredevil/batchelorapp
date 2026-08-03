@@ -23,6 +23,7 @@ import { env } from "./env";
 import { logger } from "./logger";
 
 export type OpenAIResponsesRole = "reasoning" | "balanced" | "fast";
+export type OpenAIResponsesScope = "elaine" | "app";
 export type OpenAIResponsesFallbackCategory =
   | "disabled"
   | "missing_key"
@@ -291,6 +292,7 @@ export function isRecoverableOpenAIStateError(err: unknown): boolean {
 
 interface SharedRequestOptions {
   role: OpenAIResponsesRole;
+  scope?: OpenAIResponsesScope;
   instructions: string;
   input: string | ResponseInput;
   previousResponseId?: string | null;
@@ -306,6 +308,20 @@ interface SharedRequestOptions {
    * on models that don't support reasoning summaries.
    */
   showReasoningSummary?: boolean;
+}
+
+export function resolveOpenAIResponsesStore(
+  config: ElaineGlobalConfig,
+  role: OpenAIResponsesRole,
+  scope: OpenAIResponsesScope = "elaine",
+): boolean {
+  const roleOverride = config.features.openAIStoreRoleOverrides?.[role];
+  if (typeof roleOverride === "boolean") return roleOverride;
+
+  const scopeOverride = config.features.openAIStoreScopeOverrides?.[scope];
+  if (typeof scopeOverride === "boolean") return scopeOverride;
+
+  return config.features.openAIStoreEnabledDefault;
 }
 
 export interface StreamOpenAIResponseRoundOptions extends SharedRequestOptions {
@@ -423,7 +439,11 @@ function createBaseParams(
     ],
     prompt_cache_key: options.promptCacheKey,
     safety_identifier: options.safetyIdentifier,
-    store: true,
+    store: resolveOpenAIResponsesStore(
+      config,
+      options.role,
+      options.scope ?? "elaine",
+    ),
   };
 }
 

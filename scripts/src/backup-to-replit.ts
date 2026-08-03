@@ -1599,6 +1599,20 @@ CREATE INDEX IF NOT EXISTS household_activity_log_occurred_at_idx
   ON household_activity_log (occurred_at DESC);
 CREATE INDEX IF NOT EXISTS household_activity_log_entity_idx
   ON household_activity_log (entity_type, entity_id);
+
+-- webhook side-effect idempotency ledger
+CREATE TABLE IF NOT EXISTS app_webhook_side_effects (
+  effect_key    TEXT         PRIMARY KEY,
+  provider      TEXT         NOT NULL,
+  channel       TEXT         NOT NULL,
+  status        TEXT         NOT NULL DEFAULT 'processing',
+  first_seen_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  completed_at  TIMESTAMPTZ,
+  last_error    TEXT
+);
+CREATE INDEX IF NOT EXISTS app_webhook_side_effects_status_updated_idx
+  ON app_webhook_side_effects (status, updated_at);
 `;
 
 async function copyTable(
@@ -3591,6 +3605,21 @@ async function main() {
     jsonbColumns: ["payload"],
   });
   await resetSequence(dest, "household_activity_log", "id");
+
+  summary["app_webhook_side_effects"] = await copyTable(source, dest, {
+    table: "app_webhook_side_effects",
+    columns: [
+      "effect_key",
+      "provider",
+      "channel",
+      "status",
+      "first_seen_at",
+      "updated_at",
+      "completed_at",
+      "last_error",
+    ],
+    orderBy: "first_seen_at",
+  });
 
   // ── Record backup history ─────────────────────────────────────────────────
   const note = Object.entries(summary)

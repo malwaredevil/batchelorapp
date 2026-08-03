@@ -1897,6 +1897,21 @@ async function main() {
   });
   await resetSequence(dest, "household_activity_log", "id");
 
+  await copyTable(source, dest, {
+    table: "app_webhook_side_effects",
+    columns: [
+      "effect_key",
+      "provider",
+      "channel",
+      "status",
+      "first_seen_at",
+      "updated_at",
+      "completed_at",
+      "last_error",
+    ],
+    orderBy: "first_seen_at",
+  });
+
   await dest.query("SET session_replication_role = DEFAULT");
   await dest.query("COMMIT");
 

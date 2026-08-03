@@ -40,6 +40,9 @@ if (!TOKEN) {
 
 const rawArgs = process.argv.slice(2);
 const confirmDeletions = rawArgs.includes("--confirm-deletions");
+// --skip-drift-check bypasses the GitHub-drift guard (use only when you
+// deliberately want to overwrite GitHub's version with local content).
+const skipDriftCheck = rawArgs.includes("--skip-drift-check");
 
 // --direct-to-main is permanently removed. Every change — including
 // .github/workflows/ files — goes through a branch + PR.
@@ -54,7 +57,7 @@ if (rawArgs.includes("--direct-to-main")) {
 }
 
 const commitMessage = rawArgs
-  .filter((a) => a !== "--confirm-deletions")
+  .filter((a) => a !== "--confirm-deletions" && a !== "--skip-drift-check")
   .join(" ")
   .trim();
 if (!commitMessage) {
@@ -348,6 +351,44 @@ async function main() {
   if (changedFiles.length === 0 && deletedFiles.length === 0) {
     console.log("✓ Nothing to sync — all local files match GitHub HEAD.");
     process.exit(0);
+  }
+
+  // -------------------------------------------------------------------------
+  // Drift guard: abort if any .github/workflows/ file that already exists on
+  // GitHub is being overwritten by a local version that differs.  This is the
+  // signature of a Dependabot auto-merge that landed on GitHub without a
+  // corresponding Replit task/Apply-Merge step — pushing local would silently
+  // revert the bump.
+  //
+  // Pass --skip-drift-check only when you deliberately want to overwrite the
+  // GitHub version (e.g. you are intentionally changing a workflow file and
+  // you have already verified the GitHub version is not newer).
+  // -------------------------------------------------------------------------
+  if (!skipDriftCheck) {
+    const workflowDrift = changedFiles.filter(
+      (f) =>
+        f.startsWith(".github/workflows/") &&
+        ghShaMap.has(f), // file existed on GitHub — this is a modification, not a new file
+    );
+    if (workflowDrift.length > 0) {
+      console.error(
+        `\n🚫  ABORTED — workflow file drift detected.\n` +
+          `\n   The following .github/workflows/ file(s) differ between local and GitHub main:\n` +
+          workflowDrift.map((f) => `     ${f}`).join("\n") +
+          `\n\n   This is often caused by a Dependabot auto-merge that landed on GitHub\n` +
+          `   without a Replit task/Apply-Merge step.  Pushing now would silently\n` +
+          `   revert those changes.\n` +
+          `\n   Recommended fix — pull the GitHub-main version into the local workspace first:\n` +
+          `\n     pnpm --filter @workspace/scripts run pull-from-github\n` +
+          `\n   Then review the changes, include them in your commit message, and re-run:\n` +
+          `\n     pnpm --filter @workspace/scripts run github-sync "${commitMessage}"\n` +
+          `\n   If you are intentionally overwriting GitHub's version (e.g. you are the\n` +
+          `   author of those workflow changes and have verified no Dependabot bump is\n` +
+          `   being reverted), bypass this check with:\n` +
+          `\n     pnpm --filter @workspace/scripts run github-sync "${commitMessage}" --skip-drift-check`,
+      );
+      process.exit(1);
+    }
   }
 
   if (deletedFiles.length > 0) {

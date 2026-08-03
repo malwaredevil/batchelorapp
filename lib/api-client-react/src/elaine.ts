@@ -1077,19 +1077,30 @@ export function useListElaineConversations<
 
 // ---------------------------------------------------------------------------
 // Infinite (paginated) conversations list — used by the history panel for
-// scroll-based load-more. The cursor is the `updatedAt` ISO string of the
-// last conversation in the previous page.
+// scroll-based load-more. The cursor is a composite of `updatedAt` + `id`
+// from the last conversation in the previous page, which guarantees stable
+// pagination even when multiple conversations share the same `updatedAt`
+// timestamp (e.g. rapid bulk creation).
 // ---------------------------------------------------------------------------
 
 export const getInfiniteElaineConversationsQueryKey = () =>
   [`/api/elaine/conversations`, "infinite"] as const;
 
+/** Composite cursor for the conversations list. */
+export interface ConversationListCursor {
+  before: string;
+  beforeId: number;
+}
+
 const fetchElaineConversationsPage = (
-  before: string | undefined,
+  cursor: ConversationListCursor | undefined,
   options?: RequestInit,
 ): Promise<ConversationSummaryPage> => {
   const search = new URLSearchParams();
-  if (before) search.set("before", before);
+  if (cursor) {
+    search.set("before", cursor.before);
+    search.set("beforeId", String(cursor.beforeId));
+  }
   const qs = search.toString();
   return customFetch<ConversationSummaryPage>(
     `/api/elaine/conversations${qs ? `?${qs}` : ""}`,
@@ -1108,15 +1119,18 @@ export function useInfiniteElaineConversations(options?: {
     queryKey,
     queryFn: ({ pageParam, signal }: { pageParam: unknown; signal: AbortSignal }) =>
       fetchElaineConversationsPage(
-        typeof pageParam === "string" ? pageParam : undefined,
+        pageParam != null && typeof pageParam === "object"
+          ? (pageParam as ConversationListCursor)
+          : undefined,
         { signal },
       ),
     getNextPageParam: (lastPage: ConversationSummaryPage) => {
       if (!lastPage.hasMore) return undefined;
       const last = lastPage.conversations[lastPage.conversations.length - 1];
-      return last?.updatedAt;
+      if (!last) return undefined;
+      return { before: last.updatedAt, beforeId: last.id } satisfies ConversationListCursor;
     },
-    initialPageParam: undefined as string | undefined,
+    initialPageParam: undefined as ConversationListCursor | undefined,
     ...options?.query,
   }) as UseInfiniteQueryResult<InfiniteData<ConversationSummaryPage>, unknown>;
 }

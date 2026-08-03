@@ -3077,11 +3077,30 @@ router.get("/conversations", async (req, res) => {
     ? Math.min(limitParam, CONVERSATION_PAGE_SIZE_MAX)
     : CONVERSATION_PAGE_SIZE_DEFAULT;
   const beforeParam = String(req.query["before"] ?? "").trim();
+  const beforeIdParam = parseInt(String(req.query["beforeId"] ?? ""), 10);
   const beforeDate =
     !searchQuery && beforeParam ? new Date(beforeParam) : undefined;
+  const beforeId =
+    !searchQuery && Number.isFinite(beforeIdParam) && beforeIdParam > 0
+      ? beforeIdParam
+      : undefined;
+  // Composite cursor: (updatedAt, id) DESC.  Using only updatedAt is unstable
+  // when multiple conversations share the same timestamp — rows at the page
+  // boundary would be skipped or duplicated non-deterministically.  The full
+  // predicate is: (updatedAt < before) OR (updatedAt = before AND id < beforeId).
+  // We accept a timestamp-only cursor for backwards compatibility (older clients
+  // that haven't sent beforeId yet), but composite is always preferred.
   const cursorCondition =
     beforeDate && !isNaN(beforeDate.getTime())
-      ? lt(elaineHistoryConversations.updatedAt, beforeDate)
+      ? beforeId !== undefined
+        ? or(
+            lt(elaineHistoryConversations.updatedAt, beforeDate),
+            and(
+              eq(elaineHistoryConversations.updatedAt, beforeDate),
+              lt(elaineHistoryConversations.id, beforeId),
+            ),
+          )
+        : lt(elaineHistoryConversations.updatedAt, beforeDate)
       : undefined;
 
   // When a search query is provided, first find matching conversation IDs via
@@ -3159,7 +3178,7 @@ router.get("/conversations", async (req, res) => {
     )
     .where(baseWhere)
     .groupBy(elaineHistoryConversations.id)
-    .orderBy(desc(elaineHistoryConversations.updatedAt))
+    .orderBy(desc(elaineHistoryConversations.updatedAt), desc(elaineHistoryConversations.id))
     .limit(fetchLimit);
 
   const hasMore = !searchQuery && rows.length > limit;

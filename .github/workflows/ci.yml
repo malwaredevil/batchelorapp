@@ -207,6 +207,28 @@ jobs:
       - name: Scan all public files for credentials and secret patterns
         run: pnpm --filter @workspace/scripts run check-public-file-secrets
 
+  security-audit:
+    name: Security audit (high+)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-workspace
+      - name: Audit dependencies for high-severity advisories
+        # pnpm overrides in pnpm-workspace.yaml already force patched versions for
+        # known CVEs into the lockfile — pnpm audit naturally checks the resolved
+        # (overridden) versions, so a passing audit means every override is in
+        # effect. Any NEW high-severity advisory not yet covered by an override
+        # will fail this step and require an explicit override entry + comment.
+        run: pnpm audit --audit-level high
+      - name: Check for stale security overrides
+        # Non-blocking advisory check: warns when a security override floor is
+        # already exceeded by the natural (upstream) resolved version, meaning
+        # the override may be removable.  Always exits 0; output is informational.
+        run: pnpm --filter @workspace/scripts run check-stale-overrides
+
   pii-scan:
     name: PII email scan
     runs-on: ubuntu-latest

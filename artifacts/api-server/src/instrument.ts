@@ -67,12 +67,25 @@ if (process.env.SENTRY_DSN) {
     dataCollection: {
       genAI: { inputs: true, outputs: true },
     },
+    // Single-user household app — richer request context (IP, headers) is
+    // safe here and helps diagnose issues, since there's no third-party user
+    // privacy boundary to protect. Sensitive keys are still scrubbed below.
+    sendDefaultPii: true,
+    // Sentry Logs: search/filter pino output in Sentry, trace-linked to the
+    // request that produced it, instead of only having it in workflow logs.
+    enableLogs: true,
     integrations: [
       // Auto-instruments all calls through the `openai` npm package (including
       // our OpenRouter client which uses it with a custom baseURL). Each model
       // call becomes a child span inside the parent request trace, and Sentry
       // groups them into AI Conversations via setConversationId() call sites.
       Sentry.openAIIntegration(),
+      // Forwards every pino log line as a Sentry structured log. Left at
+      // defaults (autoInstrument: true, error.levels: []) so this only adds
+      // Logs visibility — it does not also turn warn/error log lines into
+      // duplicate Sentry issues, since those already reach Sentry via the
+      // automatic Express/http error instrumentation.
+      Sentry.pinoIntegration(),
     ],
     beforeSend(event, hint) {
       // ZodError = request validation failure (already returned 400) — not a crash.

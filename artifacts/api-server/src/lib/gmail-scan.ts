@@ -16,7 +16,11 @@
 import crypto from "node:crypto";
 import { and, eq, ne } from "drizzle-orm";
 import { db, travelsGmailScanDecisions, travelsTrips } from "@workspace/db";
-import { shouldRunScheduledTask } from "./scheduler-guard";
+import {
+  shouldRunScheduledTask,
+  recordScheduledTaskSuccess,
+  recordScheduledTaskFailure,
+} from "./scheduler-guard";
 import {
   getAllGmailConnections,
   getValidGmailAccessToken,
@@ -385,11 +389,13 @@ export function startGmailScanScheduler(): () => void {
     try {
       await scanAllGmailConnections();
       logger.info({ durationMs: Date.now() - t0 }, "gmail-scan: run complete");
+      await recordScheduledTaskSuccess("gmail-scan");
     } catch (err) {
       logger.error(
         { err, durationMs: Date.now() - t0 },
         "gmail-scan: run failed",
       );
+      recordScheduledTaskFailure("gmail-scan");
     }
   };
 

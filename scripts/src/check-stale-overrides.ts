@@ -79,15 +79,17 @@ interface SecurityOverride {
 function extractFloor(specifier: string): string | null {
   // >=X.Y.Z variants — capture the first version number after >=
   const gte = />=\s*(\d+\.\d+(?:\.\d+)?)/.exec(specifier);
-  if (gte) return gte[1].includes(".") && gte[1].split(".").length === 2
-    ? `${gte[1]}.0`
-    : gte[1];
+  if (gte)
+    return gte[1].includes(".") && gte[1].split(".").length === 2
+      ? `${gte[1]}.0`
+      : gte[1];
 
   // ^X.Y.Z — the floor is X.Y.Z
   const caret = /^\^(\d+\.\d+(?:\.\d+)?)$/.exec(specifier.trim());
-  if (caret) return caret[1].includes(".") && caret[1].split(".").length === 2
-    ? `${caret[1]}.0`
-    : caret[1];
+  if (caret)
+    return caret[1].includes(".") && caret[1].split(".").length === 2
+      ? `${caret[1]}.0`
+      : caret[1];
 
   // Exact version like "4.3.0"
   const exact = /^(\d+\.\d+\.\d+)$/.exec(specifier.trim());
@@ -100,7 +102,9 @@ function extractFloor(specifier: string): string | null {
  * Parse pnpm-workspace.yaml raw text and return every override entry that has
  * an inline # CVE or # GHSA comment.
  */
-export function parseSecurityOverrides(workspaceYaml: string): SecurityOverride[] {
+export function parseSecurityOverrides(
+  workspaceYaml: string,
+): SecurityOverride[] {
   const results: SecurityOverride[] = [];
   const lines = workspaceYaml.split("\n");
   let inOverrides = false;
@@ -111,7 +115,12 @@ export function parseSecurityOverrides(workspaceYaml: string): SecurityOverride[
       inOverrides = true;
       continue;
     }
-    if (inOverrides && /^[a-zA-Z]/.test(line) && !/^\s/.test(line) && !line.startsWith("overrides")) {
+    if (
+      inOverrides &&
+      /^[a-zA-Z]/.test(line) &&
+      !/^\s/.test(line) &&
+      !line.startsWith("overrides")
+    ) {
       // A new top-level key — we've left the overrides block
       inOverrides = false;
     }
@@ -119,7 +128,9 @@ export function parseSecurityOverrides(workspaceYaml: string): SecurityOverride[
 
     // Match a line like:  pkgName: ">=1.2.3 <4" # CVE-...
     // The key may contain @, >, ^, quotes etc.
-    const m = /^\s+"?([^:"]+)"?\s*:\s*["']?([^#"'\n]+?)["']?\s*#\s*(.+)$/.exec(line);
+    const m = /^\s+"?([^:"]+)"?\s*:\s*["']?([^#"'\n]+?)["']?\s*#\s*(.+)$/.exec(
+      line,
+    );
     if (!m) continue;
 
     const rawKey = m[1].trim();
@@ -277,7 +288,9 @@ function main(): void {
   );
 
   if (active.length > 0) {
-    console.log("✓ Active overrides (resolved version equals the patched floor):");
+    console.log(
+      "✓ Active overrides (resolved version equals the patched floor):",
+    );
     for (const r of active) {
       const versions = r.resolvedVersions.join(", ");
       console.log(
@@ -308,7 +321,7 @@ function main(): void {
     );
     console.log(
       "   To verify: temporarily remove the override, run `pnpm install`, and check\n" +
-      "   that `pnpm audit` still reports no high-severity advisories.\n",
+        "   that `pnpm audit` still reports no high-severity advisories.\n",
     );
     for (const r of warnings) {
       const above = r.aboveFloor.join(", ");
@@ -327,7 +340,7 @@ function main(): void {
   } else {
     console.log(
       `Suggestion: ${totalWarnings} override(s) above may be removable. ` +
-      "Review each one before removing to confirm the parent now provides the patched version.",
+        "Review each one before removing to confirm the parent now provides the patched version.",
     );
   }
 

@@ -48,7 +48,10 @@ router.get("/dev/screenshot-login", async (req, res) => {
 
   const expectedToken = deriveAgentScreenshotToken(env.screenshotAuthToken);
   const token = req.query.token;
-  if (typeof token !== "string" || !timingSafeTokenMatch(token, expectedToken)) {
+  if (
+    typeof token !== "string" ||
+    !timingSafeTokenMatch(token, expectedToken)
+  ) {
     res.status(401).json({ error: "Invalid or missing token." });
     return;
   }

@@ -95,11 +95,26 @@ const resolved = parseResolvedVersions(SAMPLE_LOCKFILE);
 const names = resolved.map((r) => `${r.packageName}@${r.version}`);
 assert.ok(names.includes("dompurify@3.4.12"), "should find dompurify@3.4.12");
 assert.ok(names.includes("fast-uri@3.1.5"), "should find fast-uri@3.1.5");
-assert.ok(names.includes("fast-uri@3.2.0"), "should find fast-uri@3.2.0 (peer-dep suffix stripped)");
-assert.ok(names.includes("brace-expansion@1.1.18"), "should find brace-expansion@1.1.18");
-assert.ok(names.includes("brace-expansion@5.0.9"), "should find brace-expansion@5.0.9");
-assert.ok(names.includes("brace-expansion@5.1.0"), "should find brace-expansion@5.1.0");
-assert.ok(names.includes("@scoped/package@1.2.3"), "should find scoped package");
+assert.ok(
+  names.includes("fast-uri@3.2.0"),
+  "should find fast-uri@3.2.0 (peer-dep suffix stripped)",
+);
+assert.ok(
+  names.includes("brace-expansion@1.1.18"),
+  "should find brace-expansion@1.1.18",
+);
+assert.ok(
+  names.includes("brace-expansion@5.0.9"),
+  "should find brace-expansion@5.0.9",
+);
+assert.ok(
+  names.includes("brace-expansion@5.1.0"),
+  "should find brace-expansion@5.1.0",
+);
+assert.ok(
+  names.includes("@scoped/package@1.2.3"),
+  "should find scoped package",
+);
 
 // ---------------------------------------------------------------------------
 // checkOverrides
@@ -112,29 +127,54 @@ const results = checkOverrides(sampleOverrides, sampleResolved);
 // dompurify resolved at exactly the floor → active (not a warning)
 const domResult = results.find((r) => r.override.key === "dompurify");
 assert.ok(domResult, "should have a result for dompurify");
-assert.equal(domResult!.aboveFloor.length, 0, "dompurify@3.4.12 == floor → not above floor");
+assert.equal(
+  domResult!.aboveFloor.length,
+  0,
+  "dompurify@3.4.12 == floor → not above floor",
+);
 assert.equal(domResult!.allAtFloor, true, "dompurify should be allAtFloor");
 
 // fast-uri has two versions: 3.1.5 (== floor) and 3.2.0 (> floor) → warning
 const fastUriResult = results.find((r) => r.override.key === "fast-uri");
 assert.ok(fastUriResult, "should have a result for fast-uri");
-assert.ok(fastUriResult!.aboveFloor.includes("3.2.0"), "fast-uri@3.2.0 should be flagged as above floor");
+assert.ok(
+  fastUriResult!.aboveFloor.includes("3.2.0"),
+  "fast-uri@3.2.0 should be flagged as above floor",
+);
 
 // adm-zip not in lockfile → notInstalled
 const admZipResult = results.find((r) => r.override.key === "adm-zip");
 assert.ok(admZipResult, "should have a result for adm-zip");
-assert.equal(admZipResult!.notInstalled, true, "adm-zip should be notInstalled");
+assert.equal(
+  admZipResult!.notInstalled,
+  true,
+  "adm-zip should be notInstalled",
+);
 
 // brace-expansion@^1 → only 1.x; resolved 1.1.18 == floor → active
-const braceV1Result = results.find((r) => r.override.key === "brace-expansion@^1");
+const braceV1Result = results.find(
+  (r) => r.override.key === "brace-expansion@^1",
+);
 assert.ok(braceV1Result, "should have a result for brace-expansion@^1");
-assert.equal(braceV1Result!.aboveFloor.length, 0, "brace-expansion 1.1.18 == floor");
+assert.equal(
+  braceV1Result!.aboveFloor.length,
+  0,
+  "brace-expansion 1.1.18 == floor",
+);
 
 // brace-expansion@^5 → only 5.x; resolved 5.0.9 == floor AND 5.1.0 > floor → warning
-const braceV5Result = results.find((r) => r.override.key === "brace-expansion@^5");
+const braceV5Result = results.find(
+  (r) => r.override.key === "brace-expansion@^5",
+);
 assert.ok(braceV5Result, "should have a result for brace-expansion@^5");
-assert.ok(braceV5Result!.aboveFloor.includes("5.1.0"), "brace-expansion@5.1.0 should be flagged");
+assert.ok(
+  braceV5Result!.aboveFloor.includes("5.1.0"),
+  "brace-expansion@5.1.0 should be flagged",
+);
 // 5.0.9 is == floor, so not in aboveFloor
-assert.ok(!braceV5Result!.aboveFloor.includes("5.0.9"), "brace-expansion@5.0.9 should NOT be flagged");
+assert.ok(
+  !braceV5Result!.aboveFloor.includes("5.0.9"),
+  "brace-expansion@5.0.9 should NOT be flagged",
+);
 
 console.log("✓ check-stale-overrides: all assertions passed");

@@ -3514,7 +3514,10 @@ function stripLeakedReasoningMarker(content: string): {
   if (!LEAKED_REASONING_MARKER_RE.test(content)) {
     return { content, stripped: false };
   }
-  return { content: content.replace(LEAKED_REASONING_MARKER_RE, ""), stripped: true };
+  return {
+    content: content.replace(LEAKED_REASONING_MARKER_RE, ""),
+    stripped: true,
+  };
 }
 
 function buildElaineCoreSystemPrompt(params: {

@@ -146,8 +146,8 @@ export default function Preview() {
             ThinkingDisclosure – visual QA
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Verifies the grid-row animation across all states and both
-            narrow (widget ~320 px) and wide (full-page ~640 px) containers.
+            Verifies the grid-row animation across all states and both narrow
+            (widget ~320 px) and wide (full-page ~640 px) containers.
           </p>
         </div>
 
@@ -157,13 +157,14 @@ export default function Preview() {
             Narrow container · 320 px (floating widget)
           </h2>
           <div className="w-80 space-y-3 rounded-2xl border border-border bg-card p-4 shadow-sm">
-            <p className="text-xs text-muted-foreground">Closed (default after finish)</p>
-            <ThinkingDisclosure
-              summary={FULL_SUMMARY}
-              durationMs={3100}
-            />
+            <p className="text-xs text-muted-foreground">
+              Closed (default after finish)
+            </p>
+            <ThinkingDisclosure summary={FULL_SUMMARY} durationMs={3100} />
 
-            <p className="text-xs text-muted-foreground mt-4">Open (user-expanded)</p>
+            <p className="text-xs text-muted-foreground mt-4">
+              Open (user-expanded)
+            </p>
             <OpenedDisclosure summary={FULL_SUMMARY} durationMs={3100} />
 
             <p className="text-xs text-muted-foreground mt-4">Live streaming</p>
@@ -181,10 +182,7 @@ export default function Preview() {
           </h2>
           <div className="space-y-3 rounded-2xl border border-border bg-card p-4 shadow-sm">
             <p className="text-xs text-muted-foreground">Closed</p>
-            <ThinkingDisclosure
-              summary={FULL_SUMMARY}
-              durationMs={8500}
-            />
+            <ThinkingDisclosure summary={FULL_SUMMARY} durationMs={8500} />
 
             <p className="text-xs text-muted-foreground mt-4">Open</p>
             <OpenedDisclosure summary={FULL_SUMMARY} durationMs={8500} />
@@ -237,11 +235,15 @@ function OpenedDisclosure({
   // where the user has "already toggled" (open stays).
   const [key] = useState(() => Math.random());
   return (
-    <_OpenedDisclosureInner key={key} summary={summary} durationMs={durationMs} />
+    <OpenedDisclosureInner
+      key={key}
+      summary={summary}
+      durationMs={durationMs}
+    />
   );
 }
 
-function _OpenedDisclosureInner({
+function OpenedDisclosureInner({
   summary,
   durationMs,
 }: {
@@ -267,7 +269,9 @@ function _OpenedDisclosureInner({
           className="h-3 w-3 shrink-0 transition-transform duration-200"
           style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)" }}
         />
-        <span className="font-medium transition-opacity duration-150">{label}</span>
+        <span className="font-medium transition-opacity duration-150">
+          {label}
+        </span>
       </button>
       <div
         style={{

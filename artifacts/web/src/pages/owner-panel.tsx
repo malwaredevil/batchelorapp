@@ -601,7 +601,8 @@ function UserManagementContent() {
         fieldErrors?: Record<string, unknown>;
       };
       const parts: string[] = [];
-      if (Array.isArray(flat.formErrors)) parts.push(...flat.formErrors.map(String));
+      if (Array.isArray(flat.formErrors))
+        parts.push(...flat.formErrors.map(String));
       if (flat.fieldErrors && typeof flat.fieldErrors === "object") {
         for (const [field, messages] of Object.entries(flat.fieldErrors)) {
           if (Array.isArray(messages) && messages.length > 0) {
@@ -972,7 +973,9 @@ function UserManagementContent() {
                         setForm((f) => ({ ...f, timezone: e.target.value }))
                       }
                     >
-                      <option value="">(unset — defaults to Europe/Berlin)</option>
+                      <option value="">
+                        (unset — defaults to Europe/Berlin)
+                      </option>
                       {timezoneOptions.map((tz) => (
                         <option key={tz} value={tz}>
                           {tz}

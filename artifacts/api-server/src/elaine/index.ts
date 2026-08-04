@@ -183,6 +183,11 @@ import {
   appendCrossChannelEntry,
 } from "../lib/elaine-cross-channel";
 import {
+  RESTRICTED_EXCLUDED_ACTION_TYPES,
+  RESTRICTED_SOFT_TOOL_NAMES,
+} from "./restricted-channel-config";
+import { calculateYardage } from "./yardage-math";
+import {
   GET_ELAINE_TASK_TOOL_NAME,
   GET_NOTE_TOOL_NAME,
   GET_NOTIFICATION_COUNTS_TOOL_NAME,
@@ -261,6 +266,7 @@ import {
   ELAINE_PLANNER_TOOL_CATALOG,
   FETCH_PAGE_TOOL_NAME,
   FIND_NEARBY_PLACES_TOOL_NAME,
+  GENERATE_DOCUMENT_TOOL_NAME,
   GET_AIR_QUALITY_TOOL_NAME,
   GET_EXCHANGE_RATE_TOOL_NAME,
   GET_POLLEN_FORECAST_TOOL_NAME,
@@ -306,6 +312,21 @@ import {
   ELAINE_ATTACHMENTS_BUCKET_POLICY,
 } from "../lib/storage-core";
 import pdfParse from "pdf-parse";
+import {
+  extractDocumentText,
+  docTypeTagForMime,
+} from "../lib/document-parsing";
+import {
+  generatePdf,
+  generateDocx,
+  generateCsv,
+  generateXlsx,
+  buildDocumentBuffer,
+  DOCUMENT_MIME_BY_FORMAT,
+  DOCUMENT_EXTENSION_BY_FORMAT,
+  type StructuredDocumentSpec,
+  type TabularDocumentSpec,
+} from "../lib/document-generation";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -336,12 +357,29 @@ type ChatMessage = {
    *  messages stored before this field was added (treated as no-timestamp on
    *  the client). */
   createdAt?: string;
+  /** True when this assistant turn was interrupted by the user clicking Stop
+   *  before the model finished. Only meaningful for `role: "assistant"`. */
+  stopped?: boolean;
 };
 
-// A single image/PDF attachment stored alongside a user message. `name` is
-// only meaningful for PDFs (the original upload filename — the storage path
-// itself is a random UUID and must never be shown to the user).
-type AttachmentRef = { url: string; type: "image" | "pdf"; name?: string };
+// A single image/document attachment stored alongside a user message. `name`
+// is only meaningful for non-image types (the original upload filename —
+// the storage path itself is a random UUID and must never be shown to the user).
+type AttachmentRef = {
+  url: string;
+  type: "image" | "pdf" | "csv" | "docx" | "xlsx";
+  name?: string;
+};
+
+// A stopped assistant turn's persisted `content` is only whatever had
+// streamed before the user clicked Stop — often a mid-sentence fragment.
+// When that turn is later replayed into the model's own context (this turn
+// or any future one), append an explicit note so the model understands the
+// cutoff rather than treating the fragment as a complete, intentional reply.
+function annotateStoppedContent(content: string, stopped: boolean): string {
+  if (!stopped) return content;
+  return `${content}\n\n[This reply was stopped by the user before it finished — treat it as incomplete, not a full answer.]`;
+}
 
 // Rows stored before this field existed as objects were plain URL strings.
 // Normalize on read so older conversations still render sensibly (falling
@@ -390,6 +428,22 @@ const ChatBody = z.object({
       z.object({
         url: z.string().max(2000),
         name: z.string().max(200),
+        extractedText: z.string().max(8000).optional(),
+      }),
+    )
+    .max(3)
+    .optional(),
+  // CSV/DOCX/XLSX attachments — same shape as attachmentPdfs (signed URL +
+  // original filename + server-extracted text), kept as a separate field
+  // rather than widening attachmentPdfs so existing PDF-only call sites are
+  // untouched. `docType` records which of the three formats it is so the
+  // resulting AttachmentRef gets the right icon/type client-side.
+  attachmentDocs: z
+    .array(
+      z.object({
+        url: z.string().max(2000),
+        name: z.string().max(200),
+        docType: z.enum(["csv", "docx", "xlsx"]),
         extractedText: z.string().max(8000).optional(),
       }),
     )
@@ -2698,6 +2752,31 @@ const ShowTripCardToolPayload = z.object({
   countdownDays: z.number().int().optional(),
 });
 
+const DocumentTablePayload = z.object({
+  headers: z.array(z.string().max(80)).min(1).max(20),
+  rows: z.array(z.array(z.union([z.string(), z.number()])).max(20)).max(500),
+});
+
+const DocumentSectionPayload = z.object({
+  heading: z.string().max(150).optional(),
+  paragraphs: z.array(z.string().max(4000)).max(20).optional(),
+  bullets: z.array(z.string().max(500)).max(50).optional(),
+  table: DocumentTablePayload.optional(),
+});
+
+const GenerateDocumentToolPayload = z.object({
+  format: z.enum(["pdf", "docx", "xlsx", "csv"]),
+  filename: z
+    .string()
+    .min(1)
+    .max(100)
+    .transform((s) => s.replace(/[/\\?%*:|"<>]/g, "").trim() || "document"),
+  title: z.string().max(200).optional(),
+  sections: z.array(DocumentSectionPayload).max(20).optional(),
+  table: DocumentTablePayload.optional(),
+  sheetName: z.string().max(31).optional(),
+});
+
 const SuggestClothingLayersPayload = z.object({
   destination: z.string().min(1).max(200),
   startDate: z.string().optional(),
@@ -2787,6 +2866,7 @@ async function mapHistoryMessageRows(
     attachmentUrls: unknown;
     reasoningSummary: string | null;
     reasoningDurationMs: number | null;
+    stopped: boolean;
     createdAt: Date;
   }[],
 ) {
@@ -2811,6 +2891,7 @@ async function mapHistoryMessageRows(
     ...(m.reasoningDurationMs != null
       ? { reasoningDurationMs: m.reasoningDurationMs }
       : {}),
+    ...(m.stopped ? { stopped: true } : {}),
     createdAt: m.createdAt.toISOString(),
   }));
 }
@@ -2835,6 +2916,7 @@ async function fetchConversationMessagePage(
       attachmentUrls: elaineHistoryMessages.attachmentUrls,
       reasoningSummary: elaineHistoryMessages.reasoningSummary,
       reasoningDurationMs: elaineHistoryMessages.reasoningDurationMs,
+      stopped: elaineHistoryMessages.stopped,
       createdAt: elaineHistoryMessages.createdAt,
     })
     .from(elaineHistoryMessages)
@@ -2966,7 +3048,21 @@ const ACCEPTED_ATTACHMENT_TYPES = [
   "image/png",
   "image/webp",
   "application/pdf",
+  "text/csv",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ] as const;
+
+const ATTACHMENT_EXT_BY_MIME: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "application/pdf": "pdf",
+  "text/csv": "csv",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+    "docx",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+};
 
 const attachmentUpload = multer({
   storage: multer.memoryStorage(),
@@ -2976,16 +3072,21 @@ const attachmentUpload = multer({
       file.mimetype,
     );
     if (!ok) {
-      cb(new Error("Only JPEG, PNG, WebP images and PDFs are accepted"));
+      cb(
+        new Error(
+          "Only JPEG, PNG, WebP images, PDFs, CSV, Word, and Excel files are accepted",
+        ),
+      );
     } else {
       cb(null, true);
     }
   },
 });
 
-// POST /attachments — upload a single image or PDF for use as a message attachment.
-// Images are accepted for AI vision; PDFs have their text extracted server-side.
-// Files are stored in the PRIVATE elaine-attachments bucket; a 5-year signed URL
+// POST /attachments — upload a single image, PDF, CSV, Word (docx), or Excel
+// (xlsx) file for use as a message attachment. Images are accepted for AI
+// vision; all document types have their text extracted server-side. Files
+// are stored in the PRIVATE elaine-attachments bucket; a 5-year signed URL
 // is returned so the client can display the file and pass it back on chat sends.
 router.post(
   "/attachments",
@@ -2995,15 +3096,20 @@ router.post(
       res.status(400).json({ error: "No file provided" });
       return;
     }
+    if (
+      !(ACCEPTED_ATTACHMENT_TYPES as readonly string[]).includes(
+        req.file.mimetype,
+      )
+    ) {
+      res.status(400).json({ error: "Unsupported file type" });
+      return;
+    }
+    const mimetype = req.file
+      .mimetype as (typeof ACCEPTED_ATTACHMENT_TYPES)[number];
     const userId = req.session.userId!;
-    const isPdf = req.file.mimetype === "application/pdf";
-    const ext = isPdf
-      ? "pdf"
-      : req.file.mimetype === "image/jpeg"
-        ? "jpg"
-        : req.file.mimetype === "image/webp"
-          ? "webp"
-          : "png";
+    const isImage = mimetype.startsWith("image/");
+    const docTypeTag = docTypeTagForMime(mimetype);
+    const ext = ATTACHMENT_EXT_BY_MIME[mimetype] ?? "bin";
     const storagePath = `${userId}/${randomUUID()}.${ext}`;
 
     try {
@@ -3040,20 +3146,16 @@ router.post(
       return;
     }
 
-    if (isPdf) {
+    if (!isImage && docTypeTag) {
       // Extract text so the AI can read the document without vision tokens.
-      let extractedText: string | undefined;
-      try {
-        const parsed = await pdfParse(req.file.buffer);
-        const raw = parsed.text ?? "";
-        extractedText = raw.slice(0, 8000) || undefined;
-      } catch (err) {
-        req.log.warn({ err }, "elaine pdf text extraction failed (non-fatal)");
-      }
+      const extractedText = await extractDocumentText(
+        req.file.buffer,
+        mimetype,
+      );
       res.status(201).json({
         url: signedData.signedUrl,
-        type: "pdf",
-        name: req.file.originalname ?? "document.pdf",
+        type: docTypeTag,
+        name: req.file.originalname ?? `document.${ext}`,
         ...(extractedText !== undefined ? { extractedText } : {}),
       });
       return;
@@ -3709,7 +3811,9 @@ CONTEXT-AWARE LOOKUPS — read the on-screen state and act, don't ask: When the 
 
 **General rule**: If the data needed to call a tool is visible in the on-screen context, treat it as already provided and call the tool. Only ask for clarification if a required parameter is genuinely absent from both what the user said and what's on screen.
 
-EMAIL: Whenever you've just given the user something substantial worth keeping — a list of recommendations, an itinerary summary, packing tips, etc. — offer to email it to them, e.g. "Want me to email you this list?" Only call send_email once they say yes; never call it unprompted or assume they want it. It always goes to their own registered account email, so never ask for an address and never offer to send it to anyone else. Write a short subject and a plain-text body (no markdown/HTML, blank line between paragraphs) — it gets formatted into a nice email automatically. You have no way to export a PDF or Word document, so don't offer that; email is the only export option available.
+DOCUMENTS: You can generate real, downloadable files — PDF, Word (docx), Excel (xlsx), or CSV — via generate_document. Use it whenever the user asks you to create, export, write, or make a document, list, report, itinerary, spreadsheet, or table they can download or share. It attaches a download chip directly to your reply; don't paste the full content again in your visible text afterward, just briefly describe what you made. You can also read CSV, DOCX, and XLSX files the user attaches, the same way you already read PDFs and images.
+
+EMAIL: Whenever you've just given the user something substantial worth keeping — a list of recommendations, an itinerary summary, packing tips, a generated document, etc. — offer to email it to them too, e.g. "Want me to email you this as well?" Only call send_email once they say yes; never call it unprompted or assume they want it. It always goes to their own registered account email, so never ask for an address and never offer to send it to anyone else. Write a short subject and a plain-text body (no markdown/HTML, blank line between paragraphs) — it gets formatted into a nice email automatically. When the user asks for a document, deliver it via whichever channel they asked for (chat download or email) and offer the other one — don't do both unprompted.
 
 ACCOUNT & NOTIFICATIONS: These only make sense on the shared Account settings page (hub-account context). Use send_test_email if the user wants to confirm email delivery is working — always their own account address. Use send_test_sms the same way for texts, but only if the page context shows they already have a verified phone number; if not, tell them to verify one first instead of calling it. Use send_phone_verification_code when the user wants to add or change their phone number — you must have their explicit, clearly-stated agreement to receive SMS messages before calling it (set consent to true only then), and the number must be in E.164 format (e.g. +12105551234); ask them to reformat a local number if needed. Use verify_phone_code once they tell you the 6-digit code they received by text — never invent or reuse a code from earlier in the conversation. None of these four actions are available outside the Account page, and none of them ever touch another household member's phone/email. Use update_elaine_settings when the user explicitly asks to toggle Elaine on/off or change the chat window size (compact / comfortable / large) — this is also only appropriate on the Account page, never in other apps. For confirmation-mode changes, use set_action_confirmation_mode instead.
 
@@ -3793,6 +3897,7 @@ router.post("/chat", async (req, res) => {
     conversationId,
     attachmentUrls,
     attachmentPdfs,
+    attachmentDocs,
     pageScreenshotUrl,
     userLat,
     userLng,
@@ -3870,6 +3975,7 @@ router.post("/chat", async (req, res) => {
           id: elaineHistoryMessages.id,
           role: elaineHistoryMessages.role,
           content: elaineHistoryMessages.content,
+          stopped: elaineHistoryMessages.stopped,
         })
         .from(elaineHistoryMessages)
         .where(eq(elaineHistoryMessages.conversationId, histConvId))
@@ -3932,12 +4038,14 @@ router.post("/chat", async (req, res) => {
 
       history = recentMsgs.map((m) => ({
         role: m.role as "user" | "assistant",
-        content: m.content,
+        content: annotateStoppedContent(m.content, m.stopped),
+        stopped: m.stopped,
       }));
     } else {
       history = histMsgsRaw.map((m) => ({
         role: m.role as "user" | "assistant",
-        content: m.content,
+        content: annotateStoppedContent(m.content, m.stopped),
+        stopped: m.stopped,
       }));
     }
   } else {
@@ -3990,16 +4098,28 @@ router.post("/chat", async (req, res) => {
   // are always text-only (URLs are stored in the DB but not re-sent to the model).
   const hasImages = attachmentUrls && attachmentUrls.length > 0;
   const hasPdfs = attachmentPdfs && attachmentPdfs.length > 0;
+  const hasDocs = attachmentDocs && attachmentDocs.length > 0;
   const hasPageScreenshot = !!pageScreenshotUrl;
+  const DOC_TYPE_LABEL: Record<"csv" | "docx" | "xlsx", string> = {
+    csv: "CSV",
+    docx: "Word document",
+    xlsx: "Excel spreadsheet",
+  };
   const userTurnContent:
     | OpenAI.Chat.Completions.ChatCompletionContentPart[]
     | string =
-    hasImages || hasPdfs || hasPageScreenshot
+    hasImages || hasPdfs || hasDocs || hasPageScreenshot
       ? [
           ...(hasPdfs
             ? attachmentPdfs!.map((pdf) => ({
                 type: "text" as const,
                 text: `[Attached PDF: ${pdf.name}]\n${pdf.extractedText ?? "(no text extracted)"}`,
+              }))
+            : []),
+          ...(hasDocs
+            ? attachmentDocs!.map((doc) => ({
+                type: "text" as const,
+                text: `[Attached ${DOC_TYPE_LABEL[doc.docType]}: ${doc.name}]\n${doc.extractedText ?? "(no text extracted)"}`,
               }))
             : []),
           { type: "text" as const, text: message },
@@ -4032,6 +4152,9 @@ router.post("/chat", async (req, res) => {
     ...(attachmentPdfs?.map(
       (p): AttachmentRef => ({ url: p.url, type: "pdf", name: p.name }),
     ) ?? []),
+    ...(attachmentDocs?.map(
+      (d): AttachmentRef => ({ url: d.url, type: d.docType, name: d.name }),
+    ) ?? []),
   ];
 
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
@@ -4063,7 +4186,34 @@ router.post("/chat", async (req, res) => {
   res.setHeader("X-Accel-Buffering", "no");
   res.flushHeaders();
 
+  // Client Stop button (or a genuine network drop) closes the connection.
+  // Only treat it as a client-side abort when the response hadn't already
+  // finished normally (finishing normally also closes the underlying socket
+  // and would otherwise fire this same event). Aborting the controller cuts
+  // off the in-flight model call and, checked at the top of the round loop
+  // and in its catch block, stops any further tool-call round from starting
+  // — the turn's finalization code still runs afterward so whatever had
+  // streamed is persisted, just marked `stopped`, instead of the server
+  // continuing to generate in the background after the client has moved on.
+  //
+  // This listens on `res` (not `req`): the request body (a small JSON
+  // payload) is already fully read and closed by the time this handler
+  // runs, so `req`'s own "close" has already fired long before the SSE
+  // response starts streaming and will never fire again. The socket-level
+  // signal that actually reflects "client stopped/dropped mid-response" is
+  // `res`'s "close" event, guarded by `writableEnded` to distinguish a
+  // genuine client-side abort from the socket closing normally after we
+  // finished.
+  const abortController = new AbortController();
+  let clientDisconnected = false;
+  res.on("close", () => {
+    if (res.writableEnded) return;
+    clientDisconnected = true;
+    abortController.abort();
+  });
+
   function sendEvent(event: string, data: unknown) {
+    if (clientDisconnected) return;
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   }
 
@@ -4347,6 +4497,13 @@ router.post("/chat", async (req, res) => {
   let suppressToolsNextRound = false;
 
   for (let round = 0; round < MAX_ROUNDS; round++) {
+    if (abortController.signal.aborted) {
+      req.log.info(
+        { traceId },
+        "elaine: turn stopped by client before next round started",
+      );
+      break;
+    }
     if (!runtime.recordModelRound()) {
       req.log.warn({ traceId }, "elaine runtime model budget exhausted");
       break;
@@ -4397,7 +4554,10 @@ router.post("/chat", async (req, res) => {
                     }
                   : {}),
             },
-            { timeout: elaineConfig.requestTimeoutMs },
+            {
+              timeout: elaineConfig.requestTimeoutMs,
+              signal: abortController.signal,
+            },
           );
 
           for await (const chunk of stream) {
@@ -4451,6 +4611,7 @@ router.post("/chat", async (req, res) => {
               elaineConfig.features.showReasoningSummary,
             ),
             config: elaineConfig,
+            signal: abortController.signal,
             onTextDelta: (delta) => {
               rawContent += delta;
               sendEvent("delta", { text: delta });
@@ -4508,6 +4669,17 @@ router.post("/chat", async (req, res) => {
         await runOpenRouterRound();
       }
     } catch (err) {
+      if (abortController.signal.aborted) {
+        // Client stopped mid-round: skip all fallback/retry/error-emission
+        // logic below and fall through to the normal finalization code after
+        // the loop, which persists whatever had streamed so far as a
+        // `stopped` message instead of silently dropping it.
+        req.log.info(
+          { traceId },
+          "elaine: turn stopped by client during model round",
+        );
+        break;
+      }
       let unresolvedModelError: unknown = err;
       if (
         useOpenAIResponses &&
@@ -5363,28 +5535,17 @@ router.post("/chat", async (req, res) => {
                 bindingStripWidthInches: bindingStripWidth,
               } = parsed.data;
 
-              // Backing needs an ~8" overhang on each dimension for
-              // longarm/hand quilting, and must be pieced into panels if the
-              // quilt is wider than the fabric bolt.
-              const backingWidthNeeded = w + 8;
-              const backingHeightNeeded = h + 8;
-              const backingPanels = Math.max(
-                1,
-                Math.ceil(backingWidthNeeded / fabricWidth),
-              );
-              const backingLengthInches = backingHeightNeeded * backingPanels;
-              const backingYards =
-                Math.ceil((backingLengthInches / 36) * 8) / 8;
-
-              // Binding: perimeter plus ~15" slack for mitered corners and
-              // the join, cut into strips from the fabric bolt.
-              const bindingPerimeterInches = 2 * (w + h) + 15;
-              const bindingStrips = Math.max(
-                1,
-                Math.ceil(bindingPerimeterInches / fabricWidth),
-              );
-              const bindingYards =
-                Math.ceil(((bindingStrips * bindingStripWidth) / 36) * 8) / 8;
+              const {
+                backingYards,
+                backingPanels,
+                bindingYards,
+                bindingStrips,
+              } = calculateYardage({
+                quiltWidthInches: w,
+                quiltHeightInches: h,
+                fabricWidthInches: fabricWidth,
+                bindingStripWidthInches: bindingStripWidth,
+              });
 
               resultText =
                 `For a ${w}x${h}" finished quilt:\n` +
@@ -5590,6 +5751,55 @@ router.post("/chat", async (req, res) => {
                 runtimeSummary = "Exchange-rate provider was unavailable";
                 runtimeErrorCategory = "provider_error";
                 resultText = `Couldn't fetch exchange rates for ${from} right now — tell the user to try again.`;
+              }
+            }
+          } else if (call.name === GENERATE_DOCUMENT_TOOL_NAME) {
+            const parsed = GenerateDocumentToolPayload.safeParse(
+              JSON.parse(call.args),
+            );
+            if (!parsed.success) {
+              resultText =
+                "Invalid document spec — couldn't generate the file.";
+            } else {
+              try {
+                const buffer = await buildDocumentBuffer(parsed.data);
+                const ext = DOCUMENT_EXTENSION_BY_FORMAT[parsed.data.format];
+                const mime = DOCUMENT_MIME_BY_FORMAT[parsed.data.format];
+                const storagePath = `${userId}/generated/${randomUUID()}.${ext}`;
+                await ensureAttachmentBucket();
+                const { error: uploadError } = await attachmentStorage.storage
+                  .from(ATTACHMENT_BUCKET)
+                  .upload(storagePath, buffer, {
+                    contentType: mime,
+                    upsert: false,
+                  });
+                if (uploadError) throw new Error("upload failed");
+                const FIVE_YEARS_SECS = 5 * 365 * 24 * 3600;
+                const { data: signedData, error: signError } =
+                  await attachmentStorage.storage
+                    .from(ATTACHMENT_BUCKET)
+                    .createSignedUrl(storagePath, FIVE_YEARS_SECS);
+                if (signError || !signedData) throw new Error("sign failed");
+                const displayFilename = `${parsed.data.filename}.${ext}`;
+                sendEvent("widget", {
+                  type: "generated_document",
+                  document: {
+                    url: signedData.signedUrl,
+                    filename: displayFilename,
+                    format: parsed.data.format,
+                  },
+                });
+                runtimeSummary = `A ${parsed.data.format.toUpperCase()} document was generated`;
+                resultText = `Document "${displayFilename}" was generated and is now shown to the user as a downloadable attachment. Do not repeat its full contents in your reply text — just briefly describe what you made.`;
+              } catch (err) {
+                req.log.error({ err }, "elaine generate_document failed");
+                _toolEvidenceComplete = false;
+                runtimeErrorCategory = "provider_error";
+                resultText =
+                  err instanceof Error &&
+                  /requires `(sections|table)`/.test(err.message)
+                    ? `Couldn't generate the document: ${err.message}. Provide the required field and try again.`
+                    : "Couldn't generate that document right now — tell the user to try again.";
               }
             }
           } else if (call.name === SHOW_TRIP_CARD_TOOL_NAME) {
@@ -6140,6 +6350,7 @@ router.post("/chat", async (req, res) => {
             ? Date.now() - turnStartMs
             : null,
           channel: "web",
+          stopped: clientDisconnected,
         },
       ])
       .returning({
@@ -6200,28 +6411,33 @@ router.post("/chat", async (req, res) => {
     }
   }
 
-  sendEvent("done", {
-    role: "assistant",
-    content,
-    navigate,
-    actions: resolvedActions,
-    executedActions,
-    actionConfirmationMode:
-      updatedActionConfirmationMode ?? actionConfirmationMode,
-    // Legacy field — no longer backed by the rolling JSONB blob; clients must
-    // use `userMessageId`/`assistantMessageId` to reconcile history state.
-    messages: [] as ChatMessage[],
-    // Real, persisted ids for this turn's two rows in elaineHistoryMessages
-    // (null only in the rare case histConvId couldn't be resolved). Clients
-    // must use these — not an array position — to reconcile the optimistic
-    // message and to keep "load older" pagination cursors correct.
-    userMessageId,
-    assistantMessageId,
-    conversationId: histConvId,
-    runtimeTrace: finalTrace,
-    reasoningSummary: finalReasoningSummary ?? null,
-  });
-  res.end();
+  // The client already disconnected (Stop button, or a real network drop) —
+  // nothing is listening on the other end, so skip emitting the terminal
+  // event and ending an already-closed response.
+  if (!clientDisconnected) {
+    sendEvent("done", {
+      role: "assistant",
+      content,
+      navigate,
+      actions: resolvedActions,
+      executedActions,
+      actionConfirmationMode:
+        updatedActionConfirmationMode ?? actionConfirmationMode,
+      // Legacy field — no longer backed by the rolling JSONB blob; clients must
+      // use `userMessageId`/`assistantMessageId` to reconcile history state.
+      messages: [] as ChatMessage[],
+      // Real, persisted ids for this turn's two rows in elaineHistoryMessages
+      // (null only in the rare case histConvId couldn't be resolved). Clients
+      // must use these — not an array position — to reconcile the optimistic
+      // message and to keep "load older" pagination cursors correct.
+      userMessageId,
+      assistantMessageId,
+      conversationId: histConvId,
+      runtimeTrace: finalTrace,
+      reasoningSummary: finalReasoningSummary ?? null,
+    });
+    res.end();
+  }
 
   // Fire-and-forget personal summary update. Durable facts are never inferred
   // from a turn; only the explicit remember/correct flows may write them.
@@ -7296,37 +7512,9 @@ router.get("/history/unified", async (req, res) => {
 //    no such list available over SMS/email (see
 //    .agents/memory/travels-calendar-oauth-constraint.md). disconnect_calendar
 //    has no such requirement and stays enabled.
-const RESTRICTED_EXCLUDED_ACTION_TYPES = new Set<string>([
-  "send_test_email",
-  "send_test_sms",
-  "send_phone_verification_code",
-  "verify_phone_code",
-  "update_card_layout",
-  "update_trip_card_collapse",
-  "add_connected_calendar",
-  // Adaptive memory and durable-task actions require the in-app confirmation
-  // UI and exact IDs returned only by their web-only read tools.
-  "correct_memory",
-  "forget_memory",
-  "queue_research_task",
-  "cancel_elaine_task",
-  // Admin-only action — requires the owner to be looking at the Control Panel
-  // with config keys visible on screen; not meaningful over SMS/voice/email.
-  "update_app_config",
-  // broadcast_message: fans out to ALL the user's channels simultaneously.
-  // Excluded from inbound restricted channels to prevent delivery loops
-  // (an SMS-triggered broadcast would echo back to the SMS channel it came
-  // from) and to ensure the user consciously triggers it from the web UI.
-  "broadcast_message",
-  // call_contact / message_contact: excluded from the base allowlist so
-  // the email channel — where inbound From headers are spoofable — cannot
-  // trigger outbound calls or messages to household members. SMS/voice and
-  // Slack re-allow them via channelAllowedExtras because sender identity is
-  // strongly verified on those channels (E.164 phone HMAC / Slack OAuth)
-  // before the turn runs. See capability-registry.ts for the full reasoning.
-  "call_contact",
-  "message_contact",
-]);
+// RESTRICTED_EXCLUDED_ACTION_TYPES is imported from ./restricted-channel-config
+// (exported there so the coverage test can import it without pulling in this
+// entire route module).
 
 // Full parity with the in-app chat widget's action tools, minus the
 // session/screen-bound exclusions above. This intentionally includes
@@ -7359,40 +7547,9 @@ const SMS_SLACK_CHANNEL_EXTRA_TOOLS = ACTION_TOOLS.filter(
   (t) => t.type === "function" && SMS_SLACK_CHANNEL_EXTRAS.has(t.function.name),
 );
 
-// Read/utility "soft" tools also given to the restricted channels — this is
-// what lets Elaine answer factual questions ("when's my next trip?") over
-// email/SMS instead of refusing, matching the in-app chat's capability.
-// Deliberately excludes: SHOW_* visual card tools (no-op without a screen),
-// SET_MODE_TOOL_NAME (restricted channels are always auto-run, no
-// confirmation modes to switch), and SUGGEST_CLOTHING_LAYERS (needs a
-// multi-step subagent flow not worth the added round-trip cost here).
-const RESTRICTED_SOFT_TOOL_NAMES = new Set<string>([
-  SEARCH_HOUSEHOLD_TOOL_NAME,
-  SHOW_TRIP_CARD_TOOL_NAME,
-  SHOW_POTTERY_ITEM_TOOL_NAME,
-  SHOW_FABRIC_SWATCH_TOOL_NAME,
-  SHOW_ORNAMENT_ITEM_TOOL_NAME,
-  QUERY_HOUSEHOLD_TOOL_NAME,
-  WEB_SEARCH_TOOL_NAME,
-  EBAY_SEARCH_TOOL_NAME,
-  SEARCH_HALLMARK_TOOL_NAME,
-  SEARCH_FLIGHTS_TOOL_NAME,
-  FETCH_PAGE_TOOL_NAME,
-  GET_EXCHANGE_RATE_TOOL_NAME,
-  SEARCH_TRIP_DOCUMENTS_TOOL_NAME,
-  GET_WEATHER_TOOL_NAME,
-  FIND_NEARBY_PLACES_TOOL_NAME,
-  GET_ROUTE_INFO_TOOL_NAME,
-  GET_AIR_QUALITY_TOOL_NAME,
-  GET_POLLEN_FORECAST_TOOL_NAME,
-  CONSULT_EXPERTS_TOOL_NAME,
-  CALCULATE_YARDAGE_TOOL_NAME,
-  REMEMBER_TOOL_NAME,
-  SHOW_DATA_CARD_TOOL_NAME,
-  LOOKUP_BARCODE_TOOL_NAME,
-  LIST_SCHEDULED_CONTACTS_TOOL_NAME,
-  LIST_CONTACT_CHANNELS_TOOL_NAME,
-]);
+// RESTRICTED_SOFT_TOOL_NAMES is imported from ./restricted-channel-config
+// (exported there so the coverage test can import it without pulling in this
+// entire route module).
 
 const RESTRICTED_SOFT_TOOLS = [...SOFT_TOOLS, ...SOFT_TOOLS_EXTRA].filter(
   (t) =>
@@ -7814,21 +7971,13 @@ async function executeRestrictedSoftTool(
         fabricWidthInches: fabricWidth,
         bindingStripWidthInches: bindingStripWidth,
       } = parsed.data;
-      const backingWidthNeeded = w + 8;
-      const backingHeightNeeded = h + 8;
-      const backingPanels = Math.max(
-        1,
-        Math.ceil(backingWidthNeeded / fabricWidth),
-      );
-      const backingLengthInches = backingHeightNeeded * backingPanels;
-      const backingYards = Math.ceil((backingLengthInches / 36) * 8) / 8;
-      const bindingPerimeterInches = 2 * (w + h) + 15;
-      const bindingStrips = Math.max(
-        1,
-        Math.ceil(bindingPerimeterInches / fabricWidth),
-      );
-      const bindingYards =
-        Math.ceil(((bindingStrips * bindingStripWidth) / 36) * 8) / 8;
+      const { backingYards, backingPanels, bindingYards, bindingStrips } =
+        calculateYardage({
+          quiltWidthInches: w,
+          quiltHeightInches: h,
+          fabricWidthInches: fabricWidth,
+          bindingStripWidthInches: bindingStripWidth,
+        });
       return (
         `For a ${w}x${h}" finished quilt:\n` +
         `Backing: ~${backingYards} yards` +
@@ -7956,6 +8105,92 @@ async function executeRestrictedSoftTool(
         typeof parsed.contactName === "string" ? parsed.contactName : "";
       if (!contactName) return "Please provide a contact name.";
       return await executeListContactChannels(contactName);
+    }
+
+    if (name === LOOKUP_BARCODE_TOOL_NAME) {
+      const parsed = z
+        .object({ barcode: z.string() })
+        .safeParse(JSON.parse(args || "{}"));
+      if (!parsed.success) return "Invalid barcode argument.";
+      const result = await lookupBarcode(parsed.data.barcode);
+      const lines: string[] = [];
+      if (result.found) {
+        lines.push(`Found: ${result.name ?? "Unknown product"}`);
+        if (result.brand) lines.push(`Brand: ${result.brand}`);
+        if (result.year) lines.push(`Year: ${result.year}`);
+        if (result.seriesOrCollection)
+          lines.push(`Series/Collection: ${result.seriesOrCollection}`);
+        if (result.description)
+          lines.push(`Description: ${result.description}`);
+        if (result.hallmarkArtist)
+          lines.push(`Artist: ${result.hallmarkArtist}`);
+        if (result.hallmarkSku)
+          lines.push(`Hallmark SKU: ${result.hallmarkSku}`);
+        if (result.hallmarkSeriesName)
+          lines.push(`Hallmark series: ${result.hallmarkSeriesName}`);
+        if (result.hallmarkRetailPriceUsd != null)
+          lines.push(
+            `Original retail price: $${result.hallmarkRetailPriceUsd}`,
+          );
+        if (result.hallmarkCollectorPriceUsd != null)
+          lines.push(
+            `Collector book value: $${result.hallmarkCollectorPriceUsd}`,
+          );
+        if (result.hallmarkInStock != null)
+          lines.push(
+            `In stock on Hallmark.com: ${result.hallmarkInStock ? "yes" : "no"}`,
+          );
+        if (result.hallmarkProductUrl)
+          lines.push(`Hallmark page: ${result.hallmarkProductUrl}`);
+      } else {
+        lines.push(
+          `No product found for barcode ${parsed.data.barcode}. Not in the Hallmark catalog or general product database.`,
+        );
+      }
+      return lines.join("\n");
+    }
+
+    if (name === SUGGEST_CLOTHING_LAYERS_TOOL_NAME) {
+      const parsed = SuggestClothingLayersPayload.safeParse(
+        JSON.parse(args || "{}"),
+      );
+      if (!parsed.success)
+        return "Invalid clothing suggestion parameters — ask the user to specify a destination.";
+      const { destination, startDate, endDate, activities, climate } =
+        parsed.data;
+      const dateRange = startDate
+        ? `${startDate}${endDate ? ` to ${endDate}` : ""}`
+        : "unspecified dates";
+      const actStr = activities?.length
+        ? `Activities: ${activities.join(", ")}.`
+        : "";
+      const climateStr = climate ? `Expected climate: ${climate}.` : "";
+      const clothingConfig = await getElaineGlobalConfig();
+      const advice = await callModel(
+        clothingConfig.chatModel,
+        async (client, model) => {
+          const completion = await client.chat.completions.create({
+            model,
+            max_tokens: 600,
+            messages: [
+              {
+                role: "system",
+                content:
+                  "You are a practical travel-packing expert. Give concise, specific clothing layer recommendations. No generic advice — tailor everything to the destination and dates. Use short bullet points under each heading. Keep the total response under 300 words.",
+              },
+              {
+                role: "user",
+                content: `Layered clothing recommendations for a trip to ${destination} (${dateRange}). ${climateStr} ${actStr}\n\nOrganise as:\nBase layers (moisture management)\nMid layers (insulation)\nOuter layers (weather protection)\nActivity-specific (if applicable)\nAccessories`,
+              },
+            ],
+          });
+          return completion;
+        },
+      );
+      return (
+        advice.choices[0]?.message.content ??
+        "Unable to generate clothing suggestions right now."
+      );
     }
 
     return "Unsupported tool.";
@@ -8264,6 +8499,49 @@ async function runRestrictedElaineTurn(params: {
               ? `Trip card shown. Server-verified countdown: ${serverCountdownDays} days (${serverCountdownDays < 0 ? "trip is in the past" : serverCountdownDays === 0 ? "trip starts today" : `trip starts in ${serverCountdownDays} day${serverCountdownDays === 1 ? "" : "s"}`}). Use this exact number in your reply — do not recalculate.`
               : "Trip card shown.";
         }
+      } else if (name === GENERATE_DOCUMENT_TOOL_NAME) {
+        // Restricted channels (SMS/voice/email) are text-only — there's no
+        // widget to render, so return a signed download link as plain text,
+        // same pattern as RESTRICTED_NAVIGATE_TOOL_NAME above.
+        const parsed = GenerateDocumentToolPayload.safeParse(
+          JSON.parse(call.function.arguments || "{}"),
+        );
+        if (!parsed.success) {
+          resultText = "Invalid document spec — couldn't generate the file.";
+        } else {
+          try {
+            const buffer = await buildDocumentBuffer(parsed.data);
+            const ext = DOCUMENT_EXTENSION_BY_FORMAT[parsed.data.format];
+            const mime = DOCUMENT_MIME_BY_FORMAT[parsed.data.format];
+            const storagePath = `${userId}/generated/${randomUUID()}.${ext}`;
+            await ensureAttachmentBucket();
+            const { error: uploadError } = await attachmentStorage.storage
+              .from(ATTACHMENT_BUCKET)
+              .upload(storagePath, buffer, {
+                contentType: mime,
+                upsert: false,
+              });
+            if (uploadError) throw new Error("upload failed");
+            const FIVE_YEARS_SECS = 5 * 365 * 24 * 3600;
+            const { data: signedData, error: signError } =
+              await attachmentStorage.storage
+                .from(ATTACHMENT_BUCKET)
+                .createSignedUrl(storagePath, FIVE_YEARS_SECS);
+            if (signError || !signedData) throw new Error("sign failed");
+            const displayFilename = `${parsed.data.filename}.${ext}`;
+            resultText = `Document generated. Share this download link exactly as-is in your reply, alongside a brief description of what you made: ${signedData.signedUrl} (${displayFilename})`;
+          } catch (err) {
+            logger.error(
+              { err },
+              "restricted-channel generate_document tool failed",
+            );
+            resultText =
+              err instanceof Error &&
+              /requires `(sections|table)`/.test(err.message)
+                ? `Couldn't generate the document: ${err.message}.`
+                : "Couldn't generate that document right now.";
+          }
+        }
       } else if (name === SHOW_POTTERY_ITEM_TOOL_NAME) {
         const parsed = ShowPotteryItemToolPayload.safeParse(
           JSON.parse(call.function.arguments || "{}"),
@@ -8458,6 +8736,13 @@ async function runRestrictedElaineTurn(params: {
         } catch {
           // Malformed JSON — drop it.
         }
+      } else if (name === LIST_ELAINE_MEMORIES_TOOL_NAME) {
+        resultText =
+          (await executeUniversalReadTool(
+            name,
+            call.function.arguments,
+            userId,
+          )) ?? "Unsupported app data tool.";
       } else if (RESTRICTED_SOFT_TOOL_NAMES.has(name)) {
         resultText = await executeRestrictedSoftTool(
           name,

@@ -5,7 +5,21 @@ import {
 } from "@workspace/upload-policy";
 
 export type SupportedMimeType = "image/jpeg" | "image/png" | "image/webp";
-export type SupportedDocMimeType = SupportedMimeType | "application/pdf";
+export type SupportedOfficeMimeType =
+  | "text/csv"
+  | "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+/**
+ * GIF is deliberately NOT part of `SupportedMimeType` / `isImageMimeType`.
+ * Those gate the sharp-based `stripMetadata` re-encode pipeline, which would
+ * flatten an animated GIF to its first frame. GIF is sniffed and accepted
+ * here but stored raw (same treatment as PDF) — see attachments/upload.ts.
+ */
+export type SupportedDocMimeType =
+  | SupportedMimeType
+  | "application/pdf"
+  | "image/gif"
+  | SupportedOfficeMimeType;
 
 /**
  * Maximum file size for standard photo uploads (pottery, quilting, ornaments).
@@ -113,7 +127,34 @@ export function sniffImageType(buffer: Buffer): SupportedMimeType | null {
   return null;
 }
 
-function sniffDocMimeType(buffer: Buffer): SupportedDocMimeType | null {
+/**
+ * DOCX and XLSX are both ZIP containers (OOXML) — they share the same PK
+ * magic bytes, so the ZIP signature alone can't tell them apart. We treat any
+ * ZIP-signed buffer as a match for whichever of the two the caller declared,
+ * rather than unzipping to inspect internal entry names (word/document.xml
+ * vs xl/workbook.xml). This is a deliberately looser check than the
+ * byte-exact sniffing used for images/PDF — acceptable here because this is
+ * a single-household app, not a multi-tenant upload surface, and a mismatch
+ * only causes a parse failure downstream, not a security issue.
+ */
+function isZipSignature(buffer: Buffer): boolean {
+  return (
+    buffer.length >= 4 &&
+    buffer[0] === 0x50 &&
+    buffer[1] === 0x4b &&
+    (buffer[2] === 0x03 || buffer[2] === 0x05 || buffer[2] === 0x07)
+  );
+}
+
+const OOXML_ZIP_MIME_TYPES = new Set<string>([
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+]);
+
+function sniffDocMimeType(
+  buffer: Buffer,
+  declaredMime?: string,
+): SupportedDocMimeType | null {
   const imageType = sniffImageType(buffer);
   if (imageType) return imageType;
 
@@ -125,6 +166,34 @@ function sniffDocMimeType(buffer: Buffer): SupportedDocMimeType | null {
     buffer[3] === 0x46
   ) {
     return "application/pdf";
+  }
+
+  // GIF87a / GIF89a magic bytes.
+  if (
+    buffer.length >= 6 &&
+    buffer.toString("ascii", 0, 3) === "GIF" &&
+    (buffer.toString("ascii", 3, 6) === "87a" ||
+      buffer.toString("ascii", 3, 6) === "89a")
+  ) {
+    return "image/gif";
+  }
+
+  if (
+    declaredMime &&
+    OOXML_ZIP_MIME_TYPES.has(declaredMime) &&
+    isZipSignature(buffer)
+  ) {
+    return declaredMime as SupportedOfficeMimeType;
+  }
+
+  // CSV is plain text with no magic bytes to sniff. Accept the declared MIME
+  // as long as the content looks like text (no embedded NUL bytes in the
+  // first chunk) rather than a disguised binary payload.
+  if (declaredMime === "text/csv") {
+    const sample = buffer.subarray(0, Math.min(buffer.length, 4096));
+    if (!sample.includes(0x00)) {
+      return "text/csv";
+    }
   }
 
   return null;
@@ -146,7 +215,7 @@ export function sniffAndValidateMime(
   buffer: Buffer,
   declaredMime: string,
 ): SupportedDocMimeType {
-  const sniffed = sniffDocMimeType(buffer);
+  const sniffed = sniffDocMimeType(buffer, declaredMime);
   if (!sniffed) {
     throw new UploadValidationError(
       `File content does not match a supported format (declared MIME: ${declaredMime})`,
@@ -161,7 +230,7 @@ export function sniffAndValidateMime(
 export function isImageMimeType(
   mime: SupportedDocMimeType,
 ): mime is SupportedMimeType {
-  return mime !== "application/pdf";
+  return mime === "image/jpeg" || mime === "image/png" || mime === "image/webp";
 }
 
 /**

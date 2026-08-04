@@ -222,6 +222,45 @@ export function installScreenshotImageAutoAuth(): void {
   };
 }
 
+let _screenshotFetchPatchInstalled = false;
+
+/**
+ * Dev-only: when a `?screenshotToken=...` is present, monkey-patch the
+ * global `fetch` so every same-origin `/api/` request automatically carries
+ * `X-Screenshot-Token` — including raw `fetch()` calls that bypass
+ * `customFetch` entirely (there are dozens of these across the app: admin
+ * panels, recycle bin, integration health checks, quilting lab tools, etc.).
+ * Without this, screenshotting any page that happens to use a raw fetch()
+ * shows a 401 instead of real data, even though the user is genuinely
+ * logged in — a false negative, not a real auth bug. `customFetch` already
+ * attaches the header on its own call sites; this patch is what extends the
+ * same coverage to every other corner of the app. No-op when no token is
+ * present, so this is completely inert for normal users; safe to call once
+ * from each artifact's entrypoint (e.g. via `mountApp()`).
+ */
+export function installScreenshotFetchAutoAuth(): void {
+  if (typeof window === "undefined" || typeof window.fetch !== "function") {
+    return;
+  }
+  if (!_screenshotToken) return;
+  if (_screenshotFetchPatchInstalled) return;
+  _screenshotFetchPatchInstalled = true;
+
+  const origFetch = window.fetch.bind(window);
+  window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = resolveUrl(input);
+    if (!isTrustedApiUrl(url)) return origFetch(input, init);
+
+    const headers = mergeHeaders(
+      isRequest(input) ? input.headers : undefined,
+      init?.headers,
+    );
+    if (headers.has("x-screenshot-token")) return origFetch(input, init);
+    headers.set("x-screenshot-token", _screenshotToken!);
+    return origFetch(input, { ...init, headers });
+  }) as typeof window.fetch;
+}
+
 function isRequest(input: RequestInfo | URL): input is Request {
   return typeof Request !== "undefined" && input instanceof Request;
 }

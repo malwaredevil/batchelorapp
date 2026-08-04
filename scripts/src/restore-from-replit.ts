@@ -1061,6 +1061,7 @@ async function main() {
       "role",
       "content",
       "attachment_urls",
+      "stopped",
       "created_at",
     ],
     orderBy: "id",

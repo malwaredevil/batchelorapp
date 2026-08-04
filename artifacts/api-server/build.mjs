@@ -75,6 +75,12 @@ async function buildAll() {
       "@mikro-orm/*",
       "@grpc/*",
       "@swc/*",
+      // pdfkit (and its transitive deps fontkit/brotli/png-js) load font/data
+      // files via paths relative to their own package directory at runtime.
+      // Bundling flattens that directory structure and breaks resolution
+      // (e.g. "ENOENT ... dist/data/Helvetica.afm"), so keep it external and
+      // let it resolve from node_modules like the other asset-loading libs.
+      "pdfkit",
       "@aws-sdk/*",
       "@azure/*",
       "@google-cloud/*",

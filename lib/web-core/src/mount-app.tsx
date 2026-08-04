@@ -1,5 +1,8 @@
 import { createRoot } from "react-dom/client";
-import { installScreenshotImageAutoAuth } from "@workspace/api-client-react";
+import {
+  installScreenshotImageAutoAuth,
+  installScreenshotFetchAutoAuth,
+} from "@workspace/api-client-react";
 import type { ComponentType } from "react";
 
 // Reload at most once per 10s so a genuinely broken/offline load can't loop.
@@ -36,6 +39,7 @@ function installStaleChunkReload(): void {
  */
 export function mountApp(App: ComponentType, rootId = "root"): void {
   installScreenshotImageAutoAuth();
+  installScreenshotFetchAutoAuth();
   installStaleChunkReload();
   createRoot(document.getElementById(rootId)!).render(<App />);
 }

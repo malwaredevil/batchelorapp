@@ -793,6 +793,14 @@ CREATE TABLE IF NOT EXISTS elaine_history_messages (
   attachment_urls   JSONB NOT NULL DEFAULT '[]'::jsonb,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE elaine_history_messages
+  ADD COLUMN IF NOT EXISTS reasoning_summary TEXT;
+ALTER TABLE elaine_history_messages
+  ADD COLUMN IF NOT EXISTS reasoning_duration_ms INTEGER;
+ALTER TABLE elaine_history_messages
+  ADD COLUMN IF NOT EXISTS channel TEXT;
+ALTER TABLE elaine_history_messages
+  ADD COLUMN IF NOT EXISTS stopped BOOLEAN NOT NULL DEFAULT false;
 
 -- Gmail travel-document scanning
 CREATE TABLE IF NOT EXISTS travels_gmail_connections (
@@ -2639,6 +2647,7 @@ async function main() {
       "role",
       "content",
       "attachment_urls",
+      "stopped",
       "created_at",
     ],
     orderBy: "id",

@@ -9,12 +9,15 @@ import {
   SmilePlus,
 } from "lucide-react";
 import type { MessengerMessengerMessage } from "@workspace/api-client-react";
-import { MarkdownMessage, ChatWidget } from "@workspace/elaine-ui";
+import { MarkdownMessage, ChatWidget, useTheme } from "@workspace/elaine-ui";
 import type { ChatWidget as ChatWidgetType } from "@workspace/elaine-ui";
 import { LinkPreviewCard } from "./LinkPreviewCard";
 import { ImageModal } from "./ImageModal";
+import { ReactionEmojiPicker } from "./ReactionEmojiPicker";
 
-const QUICK_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🎉", "👏", "🔥"];
+// Shown directly on the hover toolbar for one-click reacting, Teams-style.
+// Anything else is reachable by opening the full picker via the "+" button.
+const TOOLBAR_QUICK_EMOJIS = ["👍", "❤️", "😂", "😮"];
 
 /** Two small circles: hollow = delivered, filled blue = read. Only shown on own messages. */
 function ReadReceipt({ isRead }: { isRead: boolean }) {
@@ -75,7 +78,8 @@ export function MessageItem({
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(message.body);
   const [saving, setSaving] = useState(false);
-  const [showPicker, setShowPicker] = useState(false);
+  const [showFullPicker, setShowFullPicker] = useState(false);
+  const [toolbarBelow, setToolbarBelow] = useState(false);
   // On touch devices hover never fires, so always show the reaction / action
   // buttons (they are small and unobtrusive even when persistently visible).
   const isTouchDevice =
@@ -86,10 +90,25 @@ export function MessageItem({
     name: string;
   } | null>(null);
   const editRef = useRef<HTMLTextAreaElement>(null);
-  const pickerRef = useRef<HTMLDivElement>(null);
+  const plusButtonRef = useRef<HTMLButtonElement>(null);
+  const bubbleWrapRef = useRef<HTMLDivElement>(null);
+  const { isDark } = useTheme();
 
   const isElaine = message.senderId === null;
   const isDeleted = !!message.deletedAt;
+  const toolbarVisible =
+    (hovered || isTouchDevice || showFullPicker) && !isDeleted && !editing;
+
+  // Flip the hover toolbar (and its "+" full-picker) to sit below the bubble
+  // instead of above whenever there isn't ~40px of room above it — e.g. for
+  // messages near the top of the scrollable list — so it can never render
+  // partly off the top of the page.
+  useEffect(() => {
+    if (!toolbarVisible) return;
+    const el = bubbleWrapRef.current;
+    if (!el) return;
+    setToolbarBelow(el.getBoundingClientRect().top < 40);
+  }, [toolbarVisible]);
 
   useEffect(() => {
     if (editing && editRef.current) {
@@ -97,18 +116,6 @@ export function MessageItem({
       editRef.current.select();
     }
   }, [editing]);
-
-  // Close picker on outside click
-  useEffect(() => {
-    if (!showPicker) return;
-    function handleClick(e: MouseEvent) {
-      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
-        setShowPicker(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, [showPicker]);
 
   const urls = isDeleted ? [] : extractUrls(message.body);
   const firstUrl = urls[0] ?? null;
@@ -172,7 +179,7 @@ export function MessageItem({
   };
 
   const handlePickEmoji = async (emoji: string) => {
-    setShowPicker(false);
+    setShowFullPicker(false);
     if (!onAddReaction) return;
     await onAddReaction(message.id, emoji);
   };
@@ -190,92 +197,123 @@ export function MessageItem({
 
   const reactions = message.reactions ?? [];
   const canReact = !isDeleted && (onAddReaction || onRemoveReaction);
+  const userReactedWith = (emoji: string) =>
+    reactions.some((r) => r.emoji === emoji && r.userReacted);
 
-  const reactionButton = canReact &&
-    (hovered || isTouchDevice || showPicker) &&
-    !editing && (
-      <div style={{ position: "relative" }} ref={pickerRef}>
-        <button
-          onClick={() => setShowPicker((v) => !v)}
-          aria-label="Add reaction"
-          style={{
-            background: showPicker
-              ? "hsl(var(--muted))"
-              : "hsl(var(--background))",
-            border: "1px solid hsl(var(--border))",
-            cursor: "pointer",
-            color: "hsl(var(--muted-foreground))",
-            padding: "2px 5px",
-            borderRadius: 6,
-            display: "flex",
-            alignItems: "center",
-            gap: 2,
-            fontSize: 12,
-          }}
-        >
-          <SmilePlus size={13} />
-        </button>
-        {showPicker && (
-          <div
-            style={{
-              position: "absolute",
-              bottom: "calc(100% + 4px)",
-              ...(isOwn ? { right: 0 } : { left: 0 }),
-              background: "hsl(var(--card))",
-              border: "1px solid hsl(var(--border))",
-              borderRadius: 10,
-              padding: "6px 8px",
-              display: "flex",
-              gap: 2,
-              boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
-              zIndex: 50,
-              whiteSpace: "nowrap",
+  const toolbarButtonStyle: React.CSSProperties = {
+    background: "none",
+    border: "none",
+    cursor: "pointer",
+    padding: 4,
+    borderRadius: 6,
+    display: "flex",
+    alignItems: "center",
+    lineHeight: 1,
+  };
+
+  // Teams-style floating toolbar: a few one-click quick reactions, a "+" that
+  // opens the full categorized/searchable emoji grid, and edit/delete for
+  // own messages. Rendered as an absolutely-positioned pill overlapping the
+  // top edge of the bubble so it never affects the row's layout width (the
+  // old side-by-side flex buttons could overflow a narrow mobile viewport
+  // once more buttons were added).
+  const hoverToolbar = toolbarVisible && (
+    <div
+      style={{
+        position: "absolute",
+        ...(toolbarBelow ? { top: "calc(100% + 4px)" } : { top: -34 }),
+        ...(isOwn ? { right: 0 } : { left: 0 }),
+        display: "flex",
+        alignItems: "center",
+        gap: 1,
+        background: "hsl(var(--card))",
+        border: "1px solid hsl(var(--border))",
+        borderRadius: 999,
+        padding: "3px 4px",
+        boxShadow: "0 2px 10px rgba(0,0,0,0.14)",
+        zIndex: 40,
+      }}
+    >
+      {canReact &&
+        TOOLBAR_QUICK_EMOJIS.map((emoji) => (
+          <button
+            key={emoji}
+            onClick={() =>
+              void handleReactionChipClick(emoji, userReactedWith(emoji))
+            }
+            aria-label={`React with ${emoji}`}
+            style={{ ...toolbarButtonStyle, fontSize: 16 }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.transform =
+                "scale(1.25)";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.transform =
+                "scale(1)";
             }}
           >
-            {QUICK_EMOJIS.map((emoji) => (
-              <button
-                key={emoji}
-                onClick={() => void handlePickEmoji(emoji)}
-                style={{
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  fontSize: 20,
-                  padding: "2px 4px",
-                  borderRadius: 6,
-                  lineHeight: 1,
-                  transition: "transform 0.1s",
-                }}
-                onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLButtonElement).style.transform =
-                    "scale(1.3)";
-                  (e.currentTarget as HTMLButtonElement).style.background =
-                    "hsl(var(--muted))";
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLButtonElement).style.transform =
-                    "scale(1)";
-                  (e.currentTarget as HTMLButtonElement).style.background =
-                    "none";
-                }}
-              >
-                {emoji}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    );
+            {emoji}
+          </button>
+        ))}
+      {canReact && (
+        <div style={{ position: "relative" }}>
+          <button
+            ref={plusButtonRef}
+            onClick={() => setShowFullPicker((v) => !v)}
+            aria-label="More reactions"
+            style={{
+              ...toolbarButtonStyle,
+              color: showFullPicker
+                ? "#3b82f6"
+                : "hsl(var(--muted-foreground))",
+            }}
+          >
+            <SmilePlus size={15} />
+          </button>
+          {showFullPicker && (
+            <ReactionEmojiPicker
+              anchorRef={plusButtonRef}
+              isDark={isDark}
+              align={isOwn ? "right" : "left"}
+              onSelect={(emoji) => void handlePickEmoji(emoji)}
+              onClose={() => setShowFullPicker(false)}
+            />
+          )}
+        </div>
+      )}
+      {isOwn && canEdit && onEdit && (
+        <button
+          onClick={() => setEditing(true)}
+          aria-label="Edit message"
+          style={{
+            ...toolbarButtonStyle,
+            color: "hsl(var(--muted-foreground))",
+          }}
+        >
+          <Pencil size={13} />
+        </button>
+      )}
+      {isOwn && onDelete && (
+        <button
+          onClick={() => onDelete(message.id)}
+          aria-label="Delete message"
+          style={{ ...toolbarButtonStyle, color: "#ef4444" }}
+        >
+          <Trash2 size={13} />
+        </button>
+      )}
+    </div>
+  );
 
   return (
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => {
         setHovered(false);
-        // Don't close showPicker here — the emoji picker floats above the
-        // message row (position:absolute, bottom:100%), so moving the mouse
-        // into it triggers mouseleave on this div. The click-outside handler
-        // (above) already closes the picker when the user clicks elsewhere.
+        // Don't close showFullPicker here — it floats above/below the
+        // message row, so moving the mouse into it triggers mouseleave on
+        // this div. ReactionEmojiPicker's own click-outside handler closes
+        // it when the user clicks elsewhere.
       }}
       style={{
         display: "flex",
@@ -317,50 +355,11 @@ export function MessageItem({
 
       {/* Bubble row */}
       <div style={{ display: "flex", alignItems: "flex-end", gap: 6 }}>
-        {isOwn &&
-          (hovered || isTouchDevice || showPicker) &&
-          !isDeleted &&
-          !editing && (
-            <div style={{ display: "flex", gap: 2, alignItems: "center" }}>
-              {reactionButton}
-              {canEdit && onEdit && (
-                <button
-                  onClick={() => setEditing(true)}
-                  aria-label="Edit message"
-                  style={{
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    color: "hsl(var(--muted-foreground))",
-                    padding: 4,
-                    borderRadius: 4,
-                    display: "flex",
-                  }}
-                >
-                  <Pencil size={13} />
-                </button>
-              )}
-              {onDelete && (
-                <button
-                  onClick={() => onDelete(message.id)}
-                  aria-label="Delete message"
-                  style={{
-                    background: "none",
-                    border: "none",
-                    cursor: "pointer",
-                    color: "#ef4444",
-                    padding: 4,
-                    borderRadius: 4,
-                    display: "flex",
-                  }}
-                >
-                  <Trash2 size={13} />
-                </button>
-              )}
-            </div>
-          )}
-
-        <div style={{ maxWidth: 280 }}>
+        <div
+          ref={bubbleWrapRef}
+          style={{ maxWidth: 280, position: "relative" }}
+        >
+          {hoverToolbar}
           {/* Bubble — normal or edit mode */}
           {editing ? (
             <div
@@ -601,16 +600,6 @@ export function MessageItem({
             </div>
           )}
         </div>
-
-        {/* Reaction button for non-own messages (right side of bubble) */}
-        {!isOwn &&
-          (hovered || isTouchDevice || showPicker) &&
-          !isDeleted &&
-          !editing && (
-            <div style={{ display: "flex", gap: 2, alignItems: "center" }}>
-              {reactionButton}
-            </div>
-          )}
       </div>
 
       {/* Timestamp + edited indicator + read receipt */}

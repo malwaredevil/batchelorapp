@@ -6,12 +6,20 @@ export const IMAGE_MIME_TYPES = [
   "image/png",
   "image/webp",
 ] as const;
+export const OFFICE_DOCUMENT_MIME_TYPES = [
+  "text/csv",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+] as const;
 export const DOCUMENT_MIME_TYPES = [
   ...IMAGE_MIME_TYPES,
   "application/pdf",
+  ...OFFICE_DOCUMENT_MIME_TYPES,
 ] as const;
 
 export type ImageMimeType = (typeof IMAGE_MIME_TYPES)[number];
+export type OfficeDocumentMimeType =
+  (typeof OFFICE_DOCUMENT_MIME_TYPES)[number];
 export type DocumentMimeType = (typeof DOCUMENT_MIME_TYPES)[number];
 
 export interface ClientUploadFile {

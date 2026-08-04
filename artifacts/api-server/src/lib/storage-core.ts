@@ -223,24 +223,33 @@ export const TRAVELS_BUCKET_POLICY: BucketPolicy = {
 
 export const MESSENGER_BUCKET_POLICY: BucketPolicy = {
   // Same 50 MB Supabase-side cap; messenger accepts plain text too.
+  // image/gif is stored raw (never re-encoded via stripMetadata, see
+  // upload-validation) so animated GIFs — manual uploads and GIF-picker
+  // sends alike — survive intact.
   fileSizeLimit: SUPABASE_BUCKET_FILE_BYTES,
   allowedMimeTypes: [
     "image/jpeg",
     "image/png",
     "image/webp",
+    "image/gif",
     "application/pdf",
     "text/plain",
   ],
 };
 
 export const ELAINE_ATTACHMENTS_BUCKET_POLICY: BucketPolicy = {
-  // Same 50 MB Supabase-side cap; Elaine attachments are images/PDFs only.
+  // Same 50 MB Supabase-side cap. Elaine attachments cover images, PDFs, and
+  // the office document formats she can both read and generate (CSV, DOCX,
+  // XLSX) — see lib/document-parsing.ts and lib/document-generation.ts.
   fileSizeLimit: SUPABASE_BUCKET_FILE_BYTES,
   allowedMimeTypes: [
     "image/jpeg",
     "image/png",
     "image/webp",
     "application/pdf",
+    "text/csv",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   ],
 };
 

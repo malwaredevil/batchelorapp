@@ -42,6 +42,7 @@ export const MODEL_VISIBLE_HARD_TOOL_NAMES = new Set<string>([
   "discover_app_operations",
   "read_app_operation",
   "check_integrations_health",
+  "generate_document",
 ]);
 
 export const MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS: Readonly<
@@ -85,6 +86,7 @@ export const MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS: Readonly<
   discover_app_operations: "checking available app capabilities",
   read_app_operation: "checking the Batchelor App",
   check_integrations_health: "checking connected services",
+  generate_document: "creating that document",
 };
 
 export const SPECIALIZED_CURRENT_TOOL_NAMES = new Set<string>([

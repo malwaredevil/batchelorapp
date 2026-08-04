@@ -6,6 +6,7 @@ import attachmentsRouter from "./attachments";
 import linkPreviewRouter from "./link-preview";
 import pushRouter from "./push";
 import typingRouter from "./typing";
+import gifsRouter from "./gifs";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(attachmentsRouter);
 router.use(linkPreviewRouter);
 router.use(pushRouter);
 router.use(typingRouter);
+router.use(gifsRouter);
 
 export default router;

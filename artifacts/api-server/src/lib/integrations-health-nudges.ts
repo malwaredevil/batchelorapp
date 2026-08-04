@@ -33,7 +33,11 @@
 import { pool, db, appUsers } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "./logger";
-import { shouldRunScheduledTask } from "./scheduler-guard";
+import {
+  shouldRunScheduledTask,
+  recordScheduledTaskSuccess,
+  recordScheduledTaskFailure,
+} from "./scheduler-guard";
 import { runAllChecks } from "../routes/admin/integrations-health";
 import type { ServiceCheckStatus } from "../routes/admin/integrations-health";
 
@@ -310,11 +314,13 @@ export function startIntegrationsHealthNudgeScheduler(): () => void {
         { durationMs: Date.now() - t0 },
         "integrations-health-nudges: run complete",
       );
+      await recordScheduledTaskSuccess("integrations-health-nudges");
     } catch (err) {
       logger.error(
         { err, durationMs: Date.now() - t0 },
         "integrations-health-nudges: run failed",
       );
+      recordScheduledTaskFailure("integrations-health-nudges");
     }
   };
 

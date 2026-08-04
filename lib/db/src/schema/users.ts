@@ -129,6 +129,14 @@ export type InsertPasswordResetToken = typeof passwordResetTokens.$inferInsert;
 export const schedulerRuns = pgTable("scheduler_runs", {
   name: text("name").primaryKey(),
   lastRunAt: timestamp("last_run_at", { withTimezone: true }).notNull(),
+  lastSuccessAt: timestamp("last_success_at", { withTimezone: true }),
+  // Cadence this task expects to run at (ms), refreshed on every claim
+  // attempt. Sentry's free plan allows exactly ONE Cron Monitor per org, so
+  // we can't give every scheduler its own monitor — a single shared
+  // heartbeat (see startSchedulerHeartbeat in api-server's scheduler-guard)
+  // reads this column across all rows to decide whether ANY task has gone
+  // silent, and reports one aggregate check-in instead of N.
+  expectedIntervalMs: integer("expected_interval_ms"),
 }).enableRLS();
 
 export type SchedulerRun = typeof schedulerRuns.$inferSelect;

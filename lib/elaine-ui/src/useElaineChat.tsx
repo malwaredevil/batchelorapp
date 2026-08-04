@@ -89,6 +89,16 @@ export function useElaineChat({
   );
   const endRef = useRef<HTMLDivElement | null>(null);
 
+  // Drives the live "Thinking…" panel's streaming/collapsing state
+  // independently of `isStreaming` (which controls whether the whole
+  // streaming bubble is mounted at all). Flipping this false slightly
+  // *before* the bubble unmounts gives the disclosure a moment to visibly
+  // collapse instead of just vanishing when swapped for the persisted
+  // message. See the `finally` block in handleSend for the handoff.
+  const [reasoningActive, setReasoningActive] = useState(false);
+  const hadReasoningRef = useRef(false);
+  const turnStartRef = useRef(0);
+
   // Active named conversation ID (null = use the rolling single-thread history)
   const [conversationId, setConversationId] = useState<number | null>(null);
 
@@ -299,6 +309,9 @@ export function useElaineChat({
           m.attachmentUrls.length > 0 ? m.attachmentUrls : undefined,
         ...(m.runtimeTrace ? { runtimeTrace: m.runtimeTrace } : {}),
         ...(m.reasoningSummary ? { reasoningSummary: m.reasoningSummary } : {}),
+        ...(m.reasoningDurationMs != null
+          ? { reasoningDurationMs: m.reasoningDurationMs }
+          : {}),
         createdAt: m.createdAt,
       }));
       if (older.length > 0) {
@@ -377,6 +390,9 @@ export function useElaineChat({
           m.attachmentUrls.length > 0 ? m.attachmentUrls : undefined,
         ...(m.runtimeTrace ? { runtimeTrace: m.runtimeTrace } : {}),
         ...(m.reasoningSummary ? { reasoningSummary: m.reasoningSummary } : {}),
+        ...(m.reasoningDurationMs != null
+          ? { reasoningDurationMs: m.reasoningDurationMs }
+          : {}),
         createdAt: m.createdAt,
       })) as AssistantMessage[],
     );
@@ -496,6 +512,9 @@ export function useElaineChat({
     setStreamingReasoningSummary("");
     setStatusMessage("");
     setRuntimeTrace(null);
+    hadReasoningRef.current = false;
+    setReasoningActive(false);
+    turnStartRef.current = Date.now();
     const optimisticAttachmentRefs = [
       ...imageAttachments.map((a) => ({
         url: a.uploadedUrl!,
@@ -552,6 +571,8 @@ export function useElaineChat({
             setStreamingContent((prev) => prev + text);
           },
           onReasoningSummaryDelta: (delta) => {
+            hadReasoningRef.current = true;
+            setReasoningActive(true);
             setStreamingReasoningSummary((prev) => prev + delta);
           },
           onResponseReset: () => setStreamingContent(""),
@@ -565,6 +586,11 @@ export function useElaineChat({
             // `res.userMessageId` / `res.assistantMessageId` — real
             // elaineHistoryMessages row ids — to reconcile the optimistic
             // message and keep "load older" cursors correct.
+            // Stop force-holding the live panel open the moment we know the
+            // turn is done, while the bubble is still mounted (isStreaming
+            // hasn't flipped false yet) — this is what lets the disclosure
+            // visibly collapse instead of just disappearing.
+            if (hadReasoningRef.current) setReasoningActive(false);
             const assistantMsg: AssistantMessage = {
               id: res.assistantMessageId ?? undefined,
               role: "assistant",
@@ -572,6 +598,9 @@ export function useElaineChat({
               runtimeTrace: res.runtimeTrace,
               ...(res.reasoningSummary
                 ? { reasoningSummary: res.reasoningSummary }
+                : {}),
+              ...(hadReasoningRef.current
+                ? { reasoningDurationMs: Date.now() - turnStartRef.current }
                 : {}),
             };
             setMessages((prev) => {
@@ -656,6 +685,14 @@ export function useElaineChat({
       setPendingActions([]);
       setRuntimeTrace(null);
     } finally {
+      // If the live "Thinking" panel was ever shown, give its collapse
+      // animation (triggered by `setReasoningActive(false)` in onDone above)
+      // a brief moment to actually play before the streaming bubble is
+      // unmounted and swapped for the persisted message — otherwise the
+      // panel would just vanish rather than visibly close.
+      if (hadReasoningRef.current) {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      }
       setStreamingContent("");
       setStreamingReasoningSummary("");
       setStatusMessage("");
@@ -787,6 +824,7 @@ export function useElaineChat({
     isStreaming,
     streamingContent,
     streamingReasoningSummary,
+    reasoningActive,
     statusMessage,
     runtimeTrace,
     endRef,

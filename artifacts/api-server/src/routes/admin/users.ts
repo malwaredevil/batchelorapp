@@ -6,6 +6,7 @@ import { requireAuth } from "../../middleware/auth";
 import { requireOwner } from "../../middleware/owner";
 import { adminLimiter } from "../../middleware/rateLimit";
 import { getAuthenticatedUserId } from "../../lib/auth-context";
+import { isValidIanaTimeZone } from "../../lib/timezone";
 
 const router = Router();
 router.use(adminLimiter, requireAuth, requireOwner);
@@ -55,12 +56,19 @@ router.get("/", async (_req, res) => {
 const PatchUserSchema = z.object({
   displayName: z.string().trim().min(1).max(200).nullable().optional(),
   email: z.string().email().max(254).optional(),
-  themePreference: z.string().max(50).nullable().optional(),
-  timezone: z.string().max(100).nullable().optional(),
+  themePreference: z.enum(["light", "dark"]).nullable().optional(),
+  timezone: z
+    .string()
+    .max(100)
+    .nullable()
+    .optional()
+    .refine((tz) => tz == null || isValidIanaTimeZone(tz), {
+      message: "Must be a valid IANA timezone (e.g. America/Denver)",
+    }),
   travelsReminderEmail: z.string().email().max(254).nullable().optional(),
   birthday: z
     .string()
-    .regex(/^\d{2}-\d{2}$/, "Must be MM-DD")
+    .regex(/^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/, "Must be MM-DD")
     .nullable()
     .optional(),
   slackUserId: z.string().max(50).nullable().optional(),

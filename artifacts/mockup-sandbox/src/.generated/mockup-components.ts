@@ -5,5 +5,6 @@ export const modules: ModuleMap = {
   "./components/mockups/ornament-detail/InlineFieldsWithCalc.tsx": () => import("../components/mockups/ornament-detail/InlineFieldsWithCalc.tsx"),
   "./components/mockups/ornament-detail/MagazineSplit.tsx": () => import("../components/mockups/ornament-detail/MagazineSplit.tsx"),
   "./components/mockups/ornament-detail/TabView.tsx": () => import("../components/mockups/ornament-detail/TabView.tsx"),
-  "./components/mockups/ornament-detail/WideCanvas.tsx": () => import("../components/mockups/ornament-detail/WideCanvas.tsx")
+  "./components/mockups/ornament-detail/WideCanvas.tsx": () => import("../components/mockups/ornament-detail/WideCanvas.tsx"),
+  "./components/mockups/thinking-disclosure/ThinkingDisclosure.tsx": () => import("../components/mockups/thinking-disclosure/ThinkingDisclosure.tsx")
 };

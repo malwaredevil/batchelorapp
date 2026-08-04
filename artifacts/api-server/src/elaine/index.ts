@@ -2786,6 +2786,7 @@ async function mapHistoryMessageRows(
     content: string;
     attachmentUrls: unknown;
     reasoningSummary: string | null;
+    reasoningDurationMs: number | null;
     createdAt: Date;
   }[],
 ) {
@@ -2807,6 +2808,9 @@ async function mapHistoryMessageRows(
       ? { runtimeTrace: tracesByMessage.get(m.id) }
       : {}),
     ...(m.reasoningSummary ? { reasoningSummary: m.reasoningSummary } : {}),
+    ...(m.reasoningDurationMs != null
+      ? { reasoningDurationMs: m.reasoningDurationMs }
+      : {}),
     createdAt: m.createdAt.toISOString(),
   }));
 }
@@ -2830,6 +2834,7 @@ async function fetchConversationMessagePage(
       content: elaineHistoryMessages.content,
       attachmentUrls: elaineHistoryMessages.attachmentUrls,
       reasoningSummary: elaineHistoryMessages.reasoningSummary,
+      reasoningDurationMs: elaineHistoryMessages.reasoningDurationMs,
       createdAt: elaineHistoryMessages.createdAt,
     })
     .from(elaineHistoryMessages)
@@ -3489,6 +3494,32 @@ function sanitizePageContext(raw: string | null | undefined): string {
     .slice(0, 6000);
 }
 
+/**
+ * Defense-in-depth against the model occasionally ignoring the "never write
+ * out THINK -> PLAN -> ACT" instruction and leaking a literal internal
+ * reasoning preamble (e.g. "THINK. The user asked for... 1. Acknowledge...
+ * 2. Summarize...") into the visible reply before its real answer. There is
+ * usually no clean delimiter between the leaked preamble and the real
+ * answer, so this only strips the unambiguous ALL-CAPS marker word itself
+ * when it opens the response — it cannot safely reconstruct the rest of a
+ * run-on leak, but it removes the most jarring part and the caller logs a
+ * warning so a full leak is visible in the logs for follow-up.
+ */
+const LEAKED_REASONING_MARKER_RE = /^\s*(?:THINK|PLAN|ACT)\.?\s*/;
+
+function stripLeakedReasoningMarker(content: string): {
+  content: string;
+  stripped: boolean;
+} {
+  if (!LEAKED_REASONING_MARKER_RE.test(content)) {
+    return { content, stripped: false };
+  }
+  return {
+    content: content.replace(LEAKED_REASONING_MARKER_RE, ""),
+    stripped: true,
+  };
+}
+
 function buildElaineCoreSystemPrompt(params: {
   userName: string;
   channelLabel: string;
@@ -3617,10 +3648,10 @@ ${crossChannelContext}
     : ""
 }
 
-THINK → PLAN → ACT (mandatory for every multi-step or trip-related question): Before calling any tool, take a moment to reason through what you actually need. Ask yourself: (1) What is the user really asking? (2) What information do I already have — from the page context, from earlier in this conversation, from a tool result I just received? (3) What am I missing that I genuinely need to look up? (4) What is the right sequence of tool calls, and do any of them depend on the result of a prior call? Only then call tools — in the correct dependency order. Never fire a tool with assumed/default parameters when the user's question implies specific context (e.g. their trip dates, their destination, their hotel) that you don't yet have. Examples of good planning:
-- User: "What's the weather when we visit?" → Plan: (1) Do I know which trip and its dates? No. → search_household_data for the trip to get destination + dates. (2) Are those dates within 10 days? If yes → get_weather_forecast. If no → web_search for seasonal/historical weather. Never skip step 1.
-- User: "What flights are available?" on a non-trip page → Plan: (1) Do I know the destination and dates? No → search_household_data for the upcoming trip. (2) Then call search_flights with those dates.
-- User: "What should I pack?" → Plan: (1) Do I have destination + trip dates? If not, search. (2) Call get_weather_forecast or web_search depending on how far out. (3) Synthesize weather + destination + duration into packing advice.
+THINK → PLAN → ACT (mandatory for every multi-step or trip-related question): This is a private mental checklist you run silently before calling any tool — it must never appear as text anywhere in your visible reply. Do NOT write the words "THINK", "PLAN", or "ACT", do NOT write out a numbered list of your own reasoning steps, and do NOT narrate what you're about to do ("First I'll check...", "Step 1:..."). Your visible reply must start directly with the substantive answer — nothing before it. Privately (never in the output): (1) What is the user really asking? (2) What information do I already have — from the page context, from earlier in this conversation, from a tool result I just received? (3) What am I missing that I genuinely need to look up? (4) What is the right sequence of tool calls, and do any of them depend on the result of a prior call? Only then call tools — in the correct dependency order. Never fire a tool with assumed/default parameters when the user's question implies specific context (e.g. their trip dates, their destination, their hotel) that you don't yet have. Examples of good private planning (never written into the reply):
+- User: "What's the weather when we visit?" → Privately: (1) Do I know which trip and its dates? No. → search_household_data for the trip to get destination + dates. (2) Are those dates within 10 days? If yes → get_weather_forecast. If no → web_search for seasonal/historical weather. Never skip step 1. Visible reply: just the weather answer.
+- User: "What flights are available?" on a non-trip page → Privately: (1) Do I know the destination and dates? No → search_household_data for the upcoming trip. (2) Then call search_flights with those dates. Visible reply: just the flight answer.
+- User: "What should I pack?" → Privately: (1) Do I have destination + trip dates? If not, search. (2) Call get_weather_forecast or web_search depending on how far out. (3) Synthesize weather + destination + duration into packing advice. Visible reply: just the packing suggestions.
 If information was already established earlier in this conversation (e.g. the trip was shown via show_trip_card or the user already told you the dates), use it — don't re-search unless you need updated detail.
 
 TOOLS: You have tools available for navigation suggestions, explicit memory, durable research tasks, and proposing changes throughout the app. Each tool's own description explains exactly when and how to use it — follow those rules precisely, especially around never fabricating numeric IDs and asking permission in your visible reply before any action tool. If a request naturally involves multiple write-actions, call all relevant action tools in the same turn and name every proposed change so nothing is a surprise. Use queue_research_task only for multi-search work that may outlast this response; ordinary current questions should use the immediate read tools. Use list_elaine_tasks/get_elaine_task for status and exact IDs before proposing cancellation.
@@ -3752,6 +3783,9 @@ Update the summary only when this exchange contains durable, explicitly stated o
 
 router.post("/chat", async (req, res) => {
   const userId = req.session.userId!;
+  // Record wall-clock start so we can persist how long the reasoning phase
+  // took alongside the assistant message row (mirrors client-side turnStartRef).
+  const turnStartMs = Date.now();
   const {
     message,
     pageContext,
@@ -6065,12 +6099,20 @@ router.post("/chat", async (req, res) => {
   }
   const finalTrace = runtime.complete();
 
+  const reasoningLeakCheck = stripLeakedReasoningMarker(rawContent.trim());
+  if (reasoningLeakCheck.stripped) {
+    req.log.warn(
+      { traceId },
+      "elaine: model leaked a THINK/PLAN/ACT reasoning marker into visible content — stripped the marker (rest of any leaked preamble may remain since there is no reliable delimiter)",
+    );
+  }
+
   // \x1f (ASCII unit separator) is the delimiter before the citation list.
   // \x00 (null byte) is rejected by PostgreSQL JSONB — \x1f is safe and
   // will never appear in model-generated text.
   const citationSuffix =
     allCitations.length > 0 ? `\x1f${JSON.stringify(allCitations)}` : "";
-  const content = rawContent.trim() + citationSuffix;
+  const content = reasoningLeakCheck.content + citationSuffix;
 
   // Save turn to the named history conversation.
   let assistantMessageId: number | null = null;
@@ -6094,6 +6136,9 @@ router.post("/chat", async (req, res) => {
           content,
           attachmentUrls: [],
           reasoningSummary: finalReasoningSummary ?? null,
+          reasoningDurationMs: finalReasoningSummary
+            ? Date.now() - turnStartMs
+            : null,
           channel: "web",
         },
       ])
@@ -8486,6 +8531,14 @@ async function runRestrictedElaineTurn(params: {
   if (!replyText) {
     replyText =
       "Sorry, I couldn't process that — please try again or use the app.";
+  }
+  const restrictedLeakCheck = stripLeakedReasoningMarker(replyText);
+  if (restrictedLeakCheck.stripped) {
+    logger.warn(
+      { channelLabel },
+      "elaine: model leaked a THINK/PLAN/ACT reasoning marker into a restricted-channel reply — stripped the marker",
+    );
+    replyText = restrictedLeakCheck.content;
   }
 
   const updatedHistory = [

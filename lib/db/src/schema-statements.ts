@@ -77,6 +77,7 @@ export const STATEMENTS: string[] = [
   )`,
   `ALTER TABLE scheduler_runs ENABLE ROW LEVEL SECURITY`,
   `ALTER TABLE scheduler_runs ADD COLUMN IF NOT EXISTS last_success_at timestamptz`,
+  `ALTER TABLE scheduler_runs ADD COLUMN IF NOT EXISTS expected_interval_ms integer`,
 
   // ── Session stores (owned by connect-pg-simple, never altered by drizzle) ──
   `CREATE TABLE IF NOT EXISTS pottery_sessions (
@@ -3037,6 +3038,13 @@ END $$`,
   // before this column was added.
   `ALTER TABLE elaine_history_messages
      ADD COLUMN IF NOT EXISTS reasoning_summary TEXT`,
+
+  // ── Elaine reasoning-duration column (Task #650) ─────────────────────────
+  // Server-measured wall-clock duration (ms) of the reasoning phase so
+  // "Thought for Xs" survives page reloads. NULL for user messages,
+  // non-reasoning turns, and rows written before this column was added.
+  `ALTER TABLE elaine_history_messages
+     ADD COLUMN IF NOT EXISTS reasoning_duration_ms INTEGER`,
 
   // ── Elaine history channel label (Task #574) ─────────────────────────────
   // "web", "Slack", "SMS/voice", or "email". NULL on rows written before this

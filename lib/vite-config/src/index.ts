@@ -94,6 +94,15 @@ export async function createWorkspaceViteConfig(
               project: process.env.SENTRY_PROJECT_SLUG,
               authToken: process.env.SENTRY_AUTH_TOKEN,
               silent: true,
+              // Without this, the plugin auto-detects a release name via
+              // `git rev-parse HEAD` (the FULL sha), which does not match the
+              // short sha used to tag runtime events (see VITE_APP_VERSION
+              // below and instrument.ts's Sentry.init({ release })). That
+              // mismatch meant uploaded sourcemaps were silently attached to
+              // a release no error event ever pointed at.
+              release: {
+                name: getGitSha(),
+              },
               sourcemaps: {
                 // Delete the uploaded .map files from the dist directory so
                 // they are never served to end users.

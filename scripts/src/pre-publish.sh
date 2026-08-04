@@ -183,7 +183,7 @@ echo "  │     DOMAIN=\$REPLIT_DEV_DOMAIN                                      
 echo "  │     Screenshot({ type:'externalUrl',                                       │"
 echo "  │       url:\`https://\${DOMAIN}/<path>?screenshotToken=\${TOKEN}\` })           │"
 echo "  │   Paths: / /modules/pottery /modules/quilting /modules/travels             │"
-echo "  │          /modules/ornaments /modules/office /elaine /owner                 │"
+echo "  │          /modules/ornaments /modules/office /elaine/ /owner-panel          │"
 echo "  │   Broken image visible? It is a real bug. Fix before continuing.           │"
 echo "  │                                                                             │"
 echo "  │ Stage 1b  — Sentry issue triage (REQUIRED — must happen before sync):      │"

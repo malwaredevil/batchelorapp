@@ -5,6 +5,7 @@ import {
   isValidE164PhoneNumber,
   runReminderAlerts,
 } from "./reminder-scheduler";
+import { logger } from "./logger";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -749,6 +750,146 @@ describe("runReminderAlerts — call channel", () => {
     await runReminderAlerts();
 
     expect(initiateOutboundCall).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: runReminderAlerts — run summary logging
+// ---------------------------------------------------------------------------
+
+describe("runReminderAlerts — run summary", () => {
+  beforeEach(() => {
+    queryQueue.length = 0;
+    mockClient.query.mockClear();
+    mockClient.release.mockClear();
+    sendReminderAlertEmail.mockClear();
+    resendConfigured.mockReturnValue(true);
+    smsConfigured.mockReturnValue(false);
+    slackConfigured.mockReturnValue(false);
+    callsConfigured.mockReturnValue(false);
+    vi.mocked(logger.info).mockClear();
+  });
+
+  it("emits a structured run summary with zero counts when no reminders are due", async () => {
+    // Guards the zero-candidate path: the scheduler must emit a structured
+    // info-level summary even when the DB returns no rows, so every run is
+    // observable in logs without a direct DB query.
+    queryQueue.push({ rows: [] }); // candidates query returns nothing
+
+    await runReminderAlerts();
+
+    expect(sendReminderAlertEmail).not.toHaveBeenCalled();
+    expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        candidatesChecked: 0,
+        attempted: 0,
+        sent: 0,
+        failed: 0,
+        skippedAlreadySent: 0,
+      }),
+      "reminder-scheduler: run summary",
+    );
+  });
+
+  it("emits a structured run summary when no alert channels are configured", async () => {
+    resendConfigured.mockReturnValue(false);
+
+    await runReminderAlerts();
+
+    expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        candidatesChecked: 0,
+        attempted: 0,
+        sent: 0,
+        failed: 0,
+        skippedAlreadySent: 0,
+      }),
+      "reminder-scheduler: run summary (no alert channels configured)",
+    );
+  });
+
+  it("emits a run summary with sent/failed counts when every send succeeds", async () => {
+    pushCandidate();
+    queryQueue.push({ rows: [] }); // delivery insert
+
+    await runReminderAlerts();
+
+    expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        candidatesChecked: 1,
+        attempted: 1,
+        sent: 1,
+        failed: 0,
+        skippedAlreadySent: 0,
+      }),
+      "reminder-scheduler: run summary",
+    );
+  });
+
+  it("emits a run summary with sent:0 failed:1 when every send fails", async () => {
+    // The !anySucceeded early-return used to fire before the summary log,
+    // making all-failure runs invisible in logs.  This test guards that regression.
+    sendReminderAlertEmail.mockRejectedValueOnce(new Error("Resend 503"));
+    pushCandidate();
+
+    await runReminderAlerts();
+
+    expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        candidatesChecked: 1,
+        attempted: 1,
+        sent: 0,
+        failed: 1,
+        skippedAlreadySent: 0,
+      }),
+      "reminder-scheduler: run summary",
+    );
+  });
+
+  it("logs skippedAlreadySent:1 in the 'no new alerts' message when all recipients have prior delivery rows", async () => {
+    // When every recipient is in the deliveredKeys set, workItems is empty
+    // and the function returns early with a "no new alerts" log (not "run
+    // summary" — that only fires when at least one send was attempted).
+    // This test guards that skippedAlreadySent is visible in the early-return path too.
+    queryQueue.push({
+      rows: [
+        {
+          reminder_id: 1,
+          user_id: 1,
+          reminder_title: "Pack bags",
+          trip_title: "Paris",
+          trip_destination: "Paris",
+          due_date: new Date().toISOString().slice(0, 10),
+          recipient_emails: ["user@example.com"],
+          sms_recipient_user_ids: [],
+          slack_recipient_user_ids: [],
+          call_recipient_user_ids: [],
+          alert_days_before: [0],
+        },
+      ],
+    });
+    queryQueue.push({ rows: [] }); // alert log — not done at channel level
+    queryQueue.push({
+      rows: [
+        {
+          reminder_id: 1,
+          alert_type: "0_day",
+          channel: "email",
+          recipient_key: "user@example.com",
+        },
+      ],
+    }); // deliveries — already sent
+
+    await runReminderAlerts();
+
+    expect(sendReminderAlertEmail).not.toHaveBeenCalled();
+    expect(vi.mocked(logger.info)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        candidatesChecked: 1,
+        skippedAlreadySent: 1,
+      }),
+      "reminder-scheduler: no new alerts to send this run (all already delivered or no due dates matched)",
+    );
   });
 
   it("defensively handles a null call_recipient_user_ids from a legacy DB row", async () => {

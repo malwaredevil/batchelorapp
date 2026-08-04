@@ -135,8 +135,10 @@ export async function computeAndStoreNudges(): Promise<void> {
       }
     }
 
+    let inserted = 0;
+    let alreadyExisted = 0;
     for (const candidate of candidates) {
-      await client.query(
+      const insertResult = await client.query(
         `INSERT INTO elaine_nudges (user_id, source_app, source_id, nudge_key, message)
          VALUES ($1, 'travels', $2, $3, $4)
          ON CONFLICT (user_id, nudge_key) DO NOTHING`,
@@ -147,14 +149,22 @@ export async function computeAndStoreNudges(): Promise<void> {
           candidate.message,
         ],
       );
+      if (insertResult.rowCount && insertResult.rowCount > 0) {
+        inserted++;
+      } else {
+        alreadyExisted++;
+      }
     }
 
-    if (candidates.length > 0) {
-      logger.info(
-        { candidateCount: candidates.length },
-        "travels-nudges: evaluated proactive nudge candidates",
-      );
-    }
+    logger.info(
+      {
+        tripsInWindow: trips.length,
+        candidateCount: candidates.length,
+        inserted,
+        alreadyExisted,
+      },
+      "travels-nudges: run summary",
+    );
   } finally {
     client.release();
   }

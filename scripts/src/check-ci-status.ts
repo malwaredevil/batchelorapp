@@ -62,6 +62,7 @@ interface CheckRun {
   status: "queued" | "in_progress" | "completed";
   conclusion: string | null;
   html_url: string;
+  started_at?: string;
 }
 
 interface CheckRunsResponse {
@@ -157,16 +158,53 @@ export type CheckRunVerdict =
   | { ok: false; reason: "all-skipped"; names: string[] };
 
 /**
+ * GitHub's check-runs API returns every attempt for a given check name, not
+ * just the latest — a manual re-run (or a required check that was retried)
+ * leaves the original failed/pending run in the list alongside the run that
+ * actually superseded it. Branch protection only cares about the latest
+ * attempt per name, so evaluating the raw list can report a false "failed"
+ * verdict for a commit that GitHub itself already let merge.
+ *
+ * This collapses the list to one entry per check name, keeping whichever
+ * has the latest `started_at` (falls back to array order — i.e. "last one
+ * wins" — for runs missing a timestamp, which only happens in unit tests).
+ */
+export function dedupeCheckRunsByName(runs: CheckRun[]): CheckRun[] {
+  const latestByName = new Map<string, CheckRun>();
+  for (const run of runs) {
+    const existing = latestByName.get(run.name);
+    if (!existing) {
+      latestByName.set(run.name, run);
+      continue;
+    }
+    const existingTime = existing.started_at
+      ? new Date(existing.started_at).getTime()
+      : -Infinity;
+    const runTime = run.started_at
+      ? new Date(run.started_at).getTime()
+      : -Infinity;
+    if (runTime >= existingTime) {
+      latestByName.set(run.name, run);
+    }
+  }
+  return [...latestByName.values()];
+}
+
+/**
  * Pure function: given a list of completed check-runs, returns a verdict
  * without making any network calls or touching process.exitCode.
  *
  * Rules (mirroring the main() logic):
+ *   0. Runs are first deduped by name, keeping only the latest attempt per
+ *      check (see dedupeCheckRunsByName) — a re-run that later succeeded
+ *      must not be shadowed by its own earlier failed attempt.
  *   1. Any run that is not "completed" → reason: "incomplete"
  *   2. Any completed run whose conclusion is not success/neutral/skipped → reason: "failed"
  *   3. All runs completed but none with conclusion "success" → reason: "all-skipped"
  *   4. Otherwise → ok: true
  */
-export function evaluateCheckRuns(runs: CheckRun[]): CheckRunVerdict {
+export function evaluateCheckRuns(rawRuns: CheckRun[]): CheckRunVerdict {
+  const runs = dedupeCheckRunsByName(rawRuns);
   const incomplete = runs.filter((r) => r.status !== "completed");
   if (incomplete.length > 0) {
     return {

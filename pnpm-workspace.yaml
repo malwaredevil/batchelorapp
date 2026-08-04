@@ -122,7 +122,7 @@ overrides:
   # Security overrides — each is bounded to the patched major so an unreviewed
   # new major can never be silently selected by a future lockfile regeneration.
   dompurify: ">=3.4.12 <4" # GHSA: XSS bypass; patched 3.4.12; parent expects ^3
-  fast-uri: ">=3.1.4 <4" # GHSA: URI confusion; patched 3.1.4; parent expects ^3
+  fast-uri: ">=3.1.5 <4" # CVE-2026-18446 / GHSA-7p8r-x3mc-p8w7: host confusion via backslash; patched 3.1.5; parent expects ^3
   linkify-it: ">=5.0.2 <6" # GHSA: ReDoS; patched 5.0.2; parent expects ^5
   markdown-it: ">=14.2.0 <15" # GHSA: HTML injection; patched 14.2.0; parent expects ^14
   postcss: ">=8.5.23 <9" # GHSA-fxqj-rqcc-2cmp (CVE-2026-69153): incomplete fix of prior sourceMappingURL path-traversal GHSA; patched 8.5.23; parent expects ^8

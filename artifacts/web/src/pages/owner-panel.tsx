@@ -615,6 +615,18 @@ function UserManagementContent() {
     return String(error ?? "Unknown error");
   };
 
+  // The phone field has no input mask, so people naturally type it the way
+  // they'd say it out loud ("+1 210-639-0465", "(210) 639-0465", …). The
+  // server's E.164 regex rejects anything but `+` + digits, which silently
+  // 400'd the whole save. Normalize to E.164 here instead of forcing users
+  // to hand-format it themselves.
+  const normalizePhoneNumber = (raw: string): string | null => {
+    const trimmed = raw.trim();
+    if (!trimmed) return null;
+    const digits = trimmed.replace(/\D/g, "");
+    return digits ? `+${digits}` : null;
+  };
+
   const handleSave = async () => {
     if (!editingUser) return;
     setSaving(true);
@@ -627,7 +639,7 @@ function UserManagementContent() {
         timezone: form.timezone.trim() || null,
         travelsReminderEmail: form.travelsReminderEmail.trim() || null,
         isOwner: form.isOwner,
-        phoneNumber: form.phoneNumber.trim() || null,
+        phoneNumber: normalizePhoneNumber(form.phoneNumber),
         phoneVerified: form.phoneVerified,
         smsConsentNow: form.smsConsentNow,
         smsOptedOut: form.smsOptedOut,
@@ -1149,7 +1161,7 @@ function UserManagementContent() {
                     setDeleteConfirmName("");
                     setEditingUser(null);
                   }}
-                  className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-destructive border border-destructive/40 hover:bg-destructive/10 transition-colors"
+                  className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-destructive bg-destructive/10 border border-destructive/40 hover:bg-destructive/20 transition-colors"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                   Delete user

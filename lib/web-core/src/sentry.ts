@@ -22,6 +22,10 @@ export function initBrowserMonitoring({
     dsn,
     environment: "production",
     release: release || undefined,
+    // Single-user household app — richer request/user context is safe here.
+    sendDefaultPii: true,
+    // Sentry Logs: capture console.warn/error as searchable, trace-linked logs.
+    enableLogs: true,
     integrations: [
       Sentry.browserTracingIntegration(),
       Sentry.replayIntegration({
@@ -39,9 +43,13 @@ export function initBrowserMonitoring({
           [504, 599],
         ],
       }),
+      Sentry.consoleLoggingIntegration({ levels: ["warn", "error"] }),
     ],
     tracesSampleRate: 1.0,
-    replaysSessionSampleRate: 0,
+    // Always record a slice of normal sessions (not just error sessions) so
+    // there's visibility into everyday usage, not only crashes. Kept modest
+    // to stay within the free plan's monthly replay quota.
+    replaysSessionSampleRate: 0.1,
     replaysOnErrorSampleRate: 1.0,
   });
 }

@@ -14,7 +14,11 @@
 import { pool } from "@workspace/db";
 import { logger } from "./logger";
 import { getAirQuality, getPollenForecast } from "./travels/google-maps";
-import { shouldRunScheduledTask } from "./scheduler-guard";
+import {
+  shouldRunScheduledTask,
+  recordScheduledTaskSuccess,
+  recordScheduledTaskFailure,
+} from "./scheduler-guard";
 
 // How close a trip's start date has to be before we start nudging about it.
 const NUDGE_WINDOW_DAYS = 3;
@@ -183,11 +187,13 @@ export function startNudgeScheduler(): () => void {
         { durationMs: Date.now() - t0 },
         "travels-nudges: run complete",
       );
+      await recordScheduledTaskSuccess("travels-nudges");
     } catch (err) {
       logger.error(
         { err, durationMs: Date.now() - t0 },
         "travels-nudges: run failed",
       );
+      recordScheduledTaskFailure("travels-nudges");
     }
   };
 

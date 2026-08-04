@@ -22,8 +22,33 @@
  * must survive the exact restarts that caused the problem.
  */
 import { sql } from "drizzle-orm";
+import * as Sentry from "@sentry/node";
 import { db } from "@workspace/db";
 import { logger } from "./logger";
+
+/**
+ * Sentry Cron Monitoring check-ins for every in-process scheduler (and the
+ * `send-reminder-alerts` Scheduled Deployment script, which calls the same
+ * underlying task functions and therefore the same guard). Centralizing this
+ * here — rather than in each of the ~6 scheduler files — means every
+ * scheduled task gets "did this silently stop running?" alerting for free,
+ * with no per-scheduler wiring. Correlating the "in_progress" and "ok"/
+ * "error" check-ins only needs an in-memory map because each taskName's
+ * claim → finish sequence runs to completion before the next one starts.
+ */
+const activeCheckIns = new Map<string, string>();
+
+function msToCronSchedule(
+  ms: number,
+): { value: number; unit: "minute" | "hour" | "day" } {
+  if (ms % (24 * 60 * 60 * 1000) === 0) {
+    return { value: ms / (24 * 60 * 60 * 1000), unit: "day" };
+  }
+  if (ms % (60 * 60 * 1000) === 0) {
+    return { value: ms / (60 * 60 * 1000), unit: "hour" };
+  }
+  return { value: Math.max(1, Math.round(ms / (60 * 1000))), unit: "minute" };
+}
 
 /**
  * Records that a scheduled task completed successfully.
@@ -45,6 +70,29 @@ export async function recordScheduledTaskSuccess(
       { err, taskName },
       "scheduler-guard: failed to record task success — continuing",
     );
+  }
+  const checkInId = activeCheckIns.get(taskName);
+  if (checkInId) {
+    activeCheckIns.delete(taskName);
+    Sentry.captureCheckIn({ checkInId, monitorSlug: taskName, status: "ok" });
+  }
+}
+
+/**
+ * Records that a scheduled task's run threw. Call this from the same catch
+ * block that already logs the failure — it closes out the Sentry Cron
+ * Monitoring check-in as "error" so a broken job surfaces as a Sentry alert
+ * instead of only a log line nobody is watching.
+ */
+export function recordScheduledTaskFailure(taskName: string): void {
+  const checkInId = activeCheckIns.get(taskName);
+  if (checkInId) {
+    activeCheckIns.delete(taskName);
+    Sentry.captureCheckIn({
+      checkInId,
+      monitorSlug: taskName,
+      status: "error",
+    });
   }
 }
 
@@ -69,7 +117,24 @@ export async function shouldRunScheduledTask(
           < now() - (${minIntervalMs}::text || ' milliseconds')::interval
       RETURNING name
     `);
-    return result.rows.length > 0;
+    const claimed = result.rows.length > 0;
+    if (claimed) {
+      const { value, unit } = msToCronSchedule(minIntervalMs);
+      const checkInId = Sentry.captureCheckIn(
+        { monitorSlug: taskName, status: "in_progress" },
+        {
+          schedule: { type: "interval", value, unit },
+          checkinMargin: Math.max(
+            5,
+            Math.round((minIntervalMs / 60_000) * 0.25),
+          ),
+          maxRuntime: 20,
+          timezone: "Etc/UTC",
+        },
+      );
+      activeCheckIns.set(taskName, checkInId);
+    }
+    return claimed;
   } catch (err) {
     // Fail closed on the side of NOT running an expensive AI job if the
     // guard itself is broken (e.g. table missing before bootstrap runs) —

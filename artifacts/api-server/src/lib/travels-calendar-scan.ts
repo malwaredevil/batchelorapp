@@ -23,7 +23,11 @@ import {
 } from "./google-calendar-tokens";
 import { listCalendarEvents, type CalendarEvent } from "./google-calendar";
 import { callModel, getModels } from "./ai-client";
-import { shouldRunScheduledTask } from "./scheduler-guard";
+import {
+  shouldRunScheduledTask,
+  recordScheduledTaskSuccess,
+  recordScheduledTaskFailure,
+} from "./scheduler-guard";
 import { logger } from "./logger";
 
 const SCAN_WINDOW_DAYS_PAST = 7;
@@ -266,11 +270,13 @@ export function startCalendarTripScanScheduler(): () => void {
         { durationMs: Date.now() - t0 },
         "travels-calendar-scan: run complete",
       );
+      await recordScheduledTaskSuccess("travels-calendar-scan");
     } catch (err) {
       logger.error(
         { err, durationMs: Date.now() - t0 },
         "travels-calendar-scan: run failed",
       );
+      recordScheduledTaskFailure("travels-calendar-scan");
     }
   };
 

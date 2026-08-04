@@ -23,7 +23,11 @@ import {
   travelsMonitoringPreferences,
 } from "@workspace/db";
 import { createNotification, NOTIFICATION_TYPES } from "./notifications";
-import { shouldRunScheduledTask } from "./scheduler-guard";
+import {
+  shouldRunScheduledTask,
+  recordScheduledTaskSuccess,
+  recordScheduledTaskFailure,
+} from "./scheduler-guard";
 import { logger } from "./logger";
 import { createHash } from "crypto";
 
@@ -505,8 +509,10 @@ export function startMonitoringScheduler(): () => void {
       return;
     try {
       await runMonitoringCycle();
+      await recordScheduledTaskSuccess("monitoring-scheduler");
     } catch (err) {
       logger.error({ err }, "monitoring-scheduler: unhandled error");
+      recordScheduledTaskFailure("monitoring-scheduler");
     }
   };
 

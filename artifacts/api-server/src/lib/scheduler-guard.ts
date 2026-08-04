@@ -27,28 +27,17 @@ import { db } from "@workspace/db";
 import { logger } from "./logger";
 
 /**
- * Sentry Cron Monitoring check-ins for every in-process scheduler (and the
- * `send-reminder-alerts` Scheduled Deployment script, which calls the same
- * underlying task functions and therefore the same guard). Centralizing this
- * here — rather than in each of the ~6 scheduler files — means every
- * scheduled task gets "did this silently stop running?" alerting for free,
- * with no per-scheduler wiring. Correlating the "in_progress" and "ok"/
- * "error" check-ins only needs an in-memory map because each taskName's
- * claim → finish sequence runs to completion before the next one starts.
+ * Sentry Cron Monitoring: Sentry's free/Developer plan allows exactly ONE
+ * Cron Monitor for the whole organization (confirmed via the "Cron Monitors
+ * budget consumed: 1/1" quota email after this originally shipped as one
+ * monitor per scheduler — see startSchedulerHeartbeat below for the fix).
+ * Per-taskName check-ins are intentionally NOT sent from here anymore; only
+ * the single shared heartbeat monitor reports to Sentry. This function still
+ * does the real work — the atomic DB-persisted claim — which is unrelated to
+ * Sentry and unaffected by the quota.
  */
-const activeCheckIns = new Map<string, string>();
-
-function msToCronSchedule(
-  ms: number,
-): { value: number; unit: "minute" | "hour" | "day" } {
-  if (ms % (24 * 60 * 60 * 1000) === 0) {
-    return { value: ms / (24 * 60 * 60 * 1000), unit: "day" };
-  }
-  if (ms % (60 * 60 * 1000) === 0) {
-    return { value: ms / (60 * 60 * 1000), unit: "hour" };
-  }
-  return { value: Math.max(1, Math.round(ms / (60 * 1000))), unit: "minute" };
-}
+const HEARTBEAT_MONITOR_SLUG = "scheduled-tasks-heartbeat";
+const HEARTBEAT_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
 
 /**
  * Records that a scheduled task completed successfully.
@@ -71,29 +60,19 @@ export async function recordScheduledTaskSuccess(
       "scheduler-guard: failed to record task success — continuing",
     );
   }
-  const checkInId = activeCheckIns.get(taskName);
-  if (checkInId) {
-    activeCheckIns.delete(taskName);
-    Sentry.captureCheckIn({ checkInId, monitorSlug: taskName, status: "ok" });
-  }
 }
 
 /**
  * Records that a scheduled task's run threw. Call this from the same catch
- * block that already logs the failure — it closes out the Sentry Cron
- * Monitoring check-in as "error" so a broken job surfaces as a Sentry alert
- * instead of only a log line nobody is watching.
+ * block that already logs the failure. Deliberately a no-op beyond that log
+ * line: last_success_at simply won't advance, which is exactly what the
+ * shared heartbeat (below) uses to detect a stuck/failing task — no separate
+ * failure bookkeeping needed.
  */
-export function recordScheduledTaskFailure(taskName: string): void {
-  const checkInId = activeCheckIns.get(taskName);
-  if (checkInId) {
-    activeCheckIns.delete(taskName);
-    Sentry.captureCheckIn({
-      checkInId,
-      monitorSlug: taskName,
-      status: "error",
-    });
-  }
+export function recordScheduledTaskFailure(_taskName: string): void {
+  // Intentionally a no-op: absence of a fresh last_success_at IS the signal.
+  // Kept as a named export so call sites read clearly and can gain real
+  // behavior later without touching every scheduler file again.
 }
 
 /**
@@ -101,7 +80,9 @@ export function recordScheduledTaskFailure(taskName: string): void {
  * successful claim for `taskName` (or if this task has never run before).
  * Claiming updates the persisted timestamp immediately, before the caller's
  * work even starts, so a slow or failing run doesn't cause runaway retries
- * on every subsequent restart before it's finished.
+ * on every subsequent restart before it's finished. Also refreshes
+ * expected_interval_ms every call (claimed or not) so the shared heartbeat
+ * always knows this task's current cadence.
  */
 export async function shouldRunScheduledTask(
   taskName: string,
@@ -109,8 +90,8 @@ export async function shouldRunScheduledTask(
 ): Promise<boolean> {
   try {
     const result = await db.execute<{ name: string }>(sql`
-      INSERT INTO scheduler_runs (name, last_run_at)
-      VALUES (${taskName}, now())
+      INSERT INTO scheduler_runs (name, last_run_at, expected_interval_ms)
+      VALUES (${taskName}, now(), ${minIntervalMs})
       ON CONFLICT (name) DO UPDATE
         SET last_run_at = now()
         WHERE scheduler_runs.last_run_at
@@ -118,22 +99,14 @@ export async function shouldRunScheduledTask(
       RETURNING name
     `);
     const claimed = result.rows.length > 0;
-    if (claimed) {
-      const { value, unit } = msToCronSchedule(minIntervalMs);
-      const checkInId = Sentry.captureCheckIn(
-        { monitorSlug: taskName, status: "in_progress" },
-        {
-          schedule: { type: "interval", value, unit },
-          checkinMargin: Math.max(
-            5,
-            Math.round((minIntervalMs / 60_000) * 0.25),
-          ),
-          maxRuntime: 20,
-          timezone: "Etc/UTC",
-        },
-      );
-      activeCheckIns.set(taskName, checkInId);
-    }
+    // Keep expected_interval_ms current even on an unclaimed (too-soon) call
+    // — the row is guaranteed to exist by this point (inserted above or
+    // pre-existing), so this is a plain, always-run update.
+    await db.execute(sql`
+      UPDATE scheduler_runs
+      SET expected_interval_ms = ${minIntervalMs}
+      WHERE name = ${taskName}
+    `);
     return claimed;
   } catch (err) {
     // Fail closed on the side of NOT running an expensive AI job if the
@@ -146,4 +119,109 @@ export async function shouldRunScheduledTask(
     );
     return false;
   }
+}
+
+type SchedulerRunRow = {
+  name: string;
+  last_run_at: string | Date;
+  last_success_at: string | Date | null;
+  expected_interval_ms: number | null;
+};
+
+/**
+ * Starts the single, shared Sentry Cron Monitor for every in-process
+ * scheduler. Sentry's free/Developer plan grants exactly one Cron Monitor
+ * per org, so instead of one monitor per taskName (which silently hit the
+ * quota after the very first one was created), this ticks on its own fixed
+ * cadence and inspects every row in scheduler_runs to decide whether ANY
+ * task has gone quiet for longer than its own expected interval allows.
+ *
+ * A task counts as stale once `now - COALESCE(last_success_at, last_run_at)`
+ * exceeds `expected_interval_ms + tolerance` (tolerance = the larger of 15
+ * minutes or half the task's own interval). Using last_run_at as the
+ * fallback when last_success_at is null means a brand-new task gets one
+ * full interval + tolerance of grace before it can be flagged, instead of
+ * being reported stale the instant it's first claimed.
+ *
+ * Per-task detail (which task, how overdue) goes to a structured
+ * logger.error/info line — already flowing into Sentry Logs via the pino
+ * integration — while Sentry Cron Monitoring itself only ever sees one
+ * ok/error check-in for the whole subsystem.
+ */
+export function startSchedulerHeartbeat(): () => void {
+  const run = async (): Promise<void> => {
+    const checkInId = Sentry.captureCheckIn(
+      { monitorSlug: HEARTBEAT_MONITOR_SLUG, status: "in_progress" },
+      {
+        schedule: {
+          type: "interval",
+          value: HEARTBEAT_INTERVAL_MS / 60_000,
+          unit: "minute",
+        },
+        checkinMargin: 10,
+        maxRuntime: 5,
+        timezone: "Etc/UTC",
+      },
+    );
+
+    try {
+      const result = await db.execute<SchedulerRunRow>(sql`
+        SELECT name, last_run_at, last_success_at, expected_interval_ms
+        FROM scheduler_runs
+        WHERE expected_interval_ms IS NOT NULL
+      `);
+
+      const now = Date.now();
+      const stale: Array<{ name: string; overdueMs: number }> = [];
+      for (const row of result.rows) {
+        const expectedMs = row.expected_interval_ms;
+        if (!expectedMs) continue;
+        const anchor = row.last_success_at ?? row.last_run_at;
+        const anchorMs = new Date(anchor).getTime();
+        const toleranceMs = Math.max(15 * 60 * 1000, expectedMs / 2);
+        const ageMs = now - anchorMs;
+        if (ageMs > expectedMs + toleranceMs) {
+          stale.push({ name: row.name, overdueMs: ageMs - expectedMs });
+        }
+      }
+
+      if (stale.length > 0) {
+        logger.error(
+          { stale },
+          "scheduler-heartbeat: one or more scheduled tasks have gone silent",
+        );
+        Sentry.captureCheckIn({
+          checkInId,
+          monitorSlug: HEARTBEAT_MONITOR_SLUG,
+          status: "error",
+        });
+      } else {
+        Sentry.captureCheckIn({
+          checkInId,
+          monitorSlug: HEARTBEAT_MONITOR_SLUG,
+          status: "ok",
+        });
+      }
+    } catch (err) {
+      logger.warn(
+        { err },
+        "scheduler-heartbeat: failed to evaluate scheduler health — reporting error check-in",
+      );
+      Sentry.captureCheckIn({
+        checkInId,
+        monitorSlug: HEARTBEAT_MONITOR_SLUG,
+        status: "error",
+      });
+    }
+  };
+
+  void run();
+  const interval = setInterval(() => void run(), HEARTBEAT_INTERVAL_MS);
+  interval.unref();
+
+  logger.info(
+    { intervalMinutes: HEARTBEAT_INTERVAL_MS / 60_000 },
+    "scheduler-heartbeat: started (single shared Sentry Cron Monitor for all schedulers)",
+  );
+  return () => clearInterval(interval);
 }

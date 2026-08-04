@@ -317,10 +317,6 @@ import {
   docTypeTagForMime,
 } from "../lib/document-parsing";
 import {
-  generatePdf,
-  generateDocx,
-  generateCsv,
-  generateXlsx,
   buildDocumentBuffer,
   DOCUMENT_MIME_BY_FORMAT,
   DOCUMENT_EXTENSION_BY_FORMAT,

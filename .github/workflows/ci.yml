@@ -223,6 +223,11 @@ jobs:
         # effect. Any NEW high-severity advisory not yet covered by an override
         # will fail this step and require an explicit override entry + comment.
         run: pnpm audit --audit-level high
+      - name: Check for stale security overrides
+        # Non-blocking advisory check: warns when a security override floor is
+        # already exceeded by the natural (upstream) resolved version, meaning
+        # the override may be removable.  Always exits 0; output is informational.
+        run: pnpm --filter @workspace/scripts run check-stale-overrides
 
   pii-scan:
     name: PII email scan

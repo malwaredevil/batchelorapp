@@ -46,7 +46,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "tsx ./src/pii-scan.test.ts && tsx ./src/check-domain-composition.test.ts && tsx ./src/check-workflow-security.test.ts && tsx ./src/check-public-file-secrets.test.ts && tsx ./src/check-secrets-registry.test.ts && tsx ./src/check-guardrails.test.ts && tsx ./src/check-github-drift.test.ts && tsx ./src/check-ci-status.test.ts && tsx ./src/github-sync.test.ts",
     "secret-audit": "python3 ../.local/secret-audit.py",
-    "docs:test": "tsx ./src/docs/generate.test.ts"
+    "docs:test": "tsx ./src/docs/generate.test.ts",
+    "check-stale-overrides": "node --import tsx ./src/check-stale-overrides.ts"
   },
   "dependencies": {
     "@types/libsodium-wrappers": "^0.8.2",

@@ -2786,6 +2786,7 @@ async function mapHistoryMessageRows(
     content: string;
     attachmentUrls: unknown;
     reasoningSummary: string | null;
+    reasoningDurationMs: number | null;
     createdAt: Date;
   }[],
 ) {
@@ -2807,6 +2808,9 @@ async function mapHistoryMessageRows(
       ? { runtimeTrace: tracesByMessage.get(m.id) }
       : {}),
     ...(m.reasoningSummary ? { reasoningSummary: m.reasoningSummary } : {}),
+    ...(m.reasoningDurationMs != null
+      ? { reasoningDurationMs: m.reasoningDurationMs }
+      : {}),
     createdAt: m.createdAt.toISOString(),
   }));
 }
@@ -2830,6 +2834,7 @@ async function fetchConversationMessagePage(
       content: elaineHistoryMessages.content,
       attachmentUrls: elaineHistoryMessages.attachmentUrls,
       reasoningSummary: elaineHistoryMessages.reasoningSummary,
+      reasoningDurationMs: elaineHistoryMessages.reasoningDurationMs,
       createdAt: elaineHistoryMessages.createdAt,
     })
     .from(elaineHistoryMessages)
@@ -3775,6 +3780,9 @@ Update the summary only when this exchange contains durable, explicitly stated o
 
 router.post("/chat", async (req, res) => {
   const userId = req.session.userId!;
+  // Record wall-clock start so we can persist how long the reasoning phase
+  // took alongside the assistant message row (mirrors client-side turnStartRef).
+  const turnStartMs = Date.now();
   const {
     message,
     pageContext,
@@ -6125,6 +6133,9 @@ router.post("/chat", async (req, res) => {
           content,
           attachmentUrls: [],
           reasoningSummary: finalReasoningSummary ?? null,
+          reasoningDurationMs: finalReasoningSummary
+            ? Date.now() - turnStartMs
+            : null,
           channel: "web",
         },
       ])

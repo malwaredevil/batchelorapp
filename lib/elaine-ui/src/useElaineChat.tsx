@@ -309,6 +309,9 @@ export function useElaineChat({
           m.attachmentUrls.length > 0 ? m.attachmentUrls : undefined,
         ...(m.runtimeTrace ? { runtimeTrace: m.runtimeTrace } : {}),
         ...(m.reasoningSummary ? { reasoningSummary: m.reasoningSummary } : {}),
+        ...(m.reasoningDurationMs != null
+          ? { reasoningDurationMs: m.reasoningDurationMs }
+          : {}),
         createdAt: m.createdAt,
       }));
       if (older.length > 0) {
@@ -387,6 +390,9 @@ export function useElaineChat({
           m.attachmentUrls.length > 0 ? m.attachmentUrls : undefined,
         ...(m.runtimeTrace ? { runtimeTrace: m.runtimeTrace } : {}),
         ...(m.reasoningSummary ? { reasoningSummary: m.reasoningSummary } : {}),
+        ...(m.reasoningDurationMs != null
+          ? { reasoningDurationMs: m.reasoningDurationMs }
+          : {}),
         createdAt: m.createdAt,
       })) as AssistantMessage[],
     );

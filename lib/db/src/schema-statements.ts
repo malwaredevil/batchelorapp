@@ -3038,6 +3038,13 @@ END $$`,
   `ALTER TABLE elaine_history_messages
      ADD COLUMN IF NOT EXISTS reasoning_summary TEXT`,
 
+  // ── Elaine reasoning-duration column (Task #650) ─────────────────────────
+  // Server-measured wall-clock duration (ms) of the reasoning phase so
+  // "Thought for Xs" survives page reloads. NULL for user messages,
+  // non-reasoning turns, and rows written before this column was added.
+  `ALTER TABLE elaine_history_messages
+     ADD COLUMN IF NOT EXISTS reasoning_duration_ms INTEGER`,
+
   // ── Elaine history channel label (Task #574) ─────────────────────────────
   // "web", "Slack", "SMS/voice", or "email". NULL on rows written before this
   // column; UI treats NULL as "web".

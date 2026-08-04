@@ -186,10 +186,10 @@ export interface AssistantMessage {
   /** Model-produced reasoning summary for this assistant turn. Absent when
    *  the model emitted no reasoning or the feature is disabled. */
   reasoningSummary?: string | null;
-  /** Client-measured wall-clock time (ms) the turn spent "thinking" before
-   *  the final reply was ready. Computed locally in the chat hook, not
-   *  persisted server-side, so it's only present for the live session that
-   *  produced the message (absent after a reload/history load). */
+  /** Wall-clock time (ms) the turn spent "thinking" before the final reply
+   *  was ready. For new messages in the current session this is set from the
+   *  live client-side timer; for history-loaded messages it comes from the
+   *  server-persisted value so "Thought for Xs" survives page reloads. */
   reasoningDurationMs?: number;
   /** ISO timestamp from the server. Present on history-loaded messages;
    *  absent on optimistically-inserted messages (streaming in progress). */
@@ -1029,6 +1029,9 @@ export interface ConversationMessage {
   runtimeTrace?: ElaineRuntimeTrace;
   /** Model-produced reasoning summary for assistant turns. */
   reasoningSummary?: string | null;
+  /** Server-measured wall-clock duration (ms) of the reasoning phase.
+   *  Present only for assistant turns that had reasoning; absent otherwise. */
+  reasoningDurationMs?: number | null;
   createdAt: string;
 }
 

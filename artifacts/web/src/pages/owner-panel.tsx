@@ -51,6 +51,7 @@ import {
 import { ApplicationHeader } from "@workspace/app-shell";
 import { useAuth } from "@/lib/auth";
 import { usePageAssistantContext } from "@/lib/assistant-context";
+import { COMMON_TIMEZONES } from "@/lib/timezones";
 import { ControlPanelContent } from "@/pages/control-panel";
 import { GoogleApisDemoContent } from "@/pages/google-apis-demo";
 import { ServicesCatalogContent } from "@/pages/services-catalog";
@@ -565,6 +566,12 @@ function UserManagementContent() {
     loadUsers();
   }, [loadUsers]);
 
+  const timezoneOptions = (() => {
+    const set = new Set(COMMON_TIMEZONES);
+    if (form.timezone) set.add(form.timezone);
+    return Array.from(set).sort();
+  })();
+
   const openEdit = (u: AdminUser) => {
     setEditingUser(u);
     setForm({
@@ -581,6 +588,31 @@ function UserManagementContent() {
       smsOptedOut: !!u.smsOptedOutAt,
       slackUserId: u.slackUserId ?? "",
     });
+  };
+
+  // The admin PATCH schema returns Zod's `.flatten()` shape on validation
+  // failure (`{ formErrors: string[], fieldErrors: Record<string, string[]> }`).
+  // Stringifying that object directly produces the unhelpful "[object
+  // Object]" — this renders it as a readable "field: message" list instead.
+  const formatSaveError = (error: unknown): string => {
+    if (error && typeof error === "object") {
+      const flat = error as {
+        formErrors?: unknown;
+        fieldErrors?: Record<string, unknown>;
+      };
+      const parts: string[] = [];
+      if (Array.isArray(flat.formErrors))
+        parts.push(...flat.formErrors.map(String));
+      if (flat.fieldErrors && typeof flat.fieldErrors === "object") {
+        for (const [field, messages] of Object.entries(flat.fieldErrors)) {
+          if (Array.isArray(messages) && messages.length > 0) {
+            parts.push(`${field}: ${messages.join(", ")}`);
+          }
+        }
+      }
+      if (parts.length > 0) return parts.join("; ");
+    }
+    return String(error ?? "Unknown error");
   };
 
   const handleSave = async () => {
@@ -611,7 +643,7 @@ function UserManagementContent() {
       if (!resp.ok) {
         toast({
           title: "Save failed",
-          description: String(data.error ?? "Unknown error"),
+          description: formatSaveError(data.error),
           variant: "destructive",
         });
       } else {
@@ -659,7 +691,7 @@ function UserManagementContent() {
       if (!resp.ok) {
         toast({
           title: "Delete failed",
-          description: String(data.error ?? "Unknown error"),
+          description: formatSaveError(data.error),
           variant: "destructive",
         });
       } else {
@@ -915,7 +947,7 @@ function UserManagementContent() {
                     <span className="text-xs text-muted-foreground">
                       Theme preference
                     </span>
-                    <input
+                    <select
                       className="mt-1 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                       value={form.themePreference}
                       onChange={(e) =>
@@ -924,21 +956,32 @@ function UserManagementContent() {
                           themePreference: e.target.value,
                         }))
                       }
-                      placeholder="light / dark / system"
-                    />
+                    >
+                      <option value="">(unset — follows system)</option>
+                      <option value="light">Light</option>
+                      <option value="dark">Dark</option>
+                    </select>
                   </label>
                   <label className="block">
                     <span className="text-xs text-muted-foreground">
                       Timezone (IANA)
                     </span>
-                    <input
+                    <select
                       className="mt-1 w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring"
                       value={form.timezone}
                       onChange={(e) =>
                         setForm((f) => ({ ...f, timezone: e.target.value }))
                       }
-                      placeholder="America/Denver"
-                    />
+                    >
+                      <option value="">
+                        (unset — defaults to Europe/Berlin)
+                      </option>
+                      {timezoneOptions.map((tz) => (
+                        <option key={tz} value={tz}>
+                          {tz}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                   <label className="block">
                     <span className="text-xs text-muted-foreground">

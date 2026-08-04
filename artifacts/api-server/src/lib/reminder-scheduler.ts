@@ -13,7 +13,11 @@ import {
   buildReminderCallScript,
 } from "./calls";
 import { pullReminderAlertDaysFromCalendar } from "../routes/travels/reminders";
-import { shouldRunScheduledTask } from "./scheduler-guard";
+import {
+  shouldRunScheduledTask,
+  recordScheduledTaskSuccess,
+  recordScheduledTaskFailure,
+} from "./scheduler-guard";
 import { logger } from "./logger";
 
 /**
@@ -718,11 +722,13 @@ export function startReminderScheduler(): () => void {
         { durationMs: Date.now() - t0 },
         "reminder-scheduler: run complete",
       );
+      await recordScheduledTaskSuccess("reminder-scheduler");
     } catch (err) {
       logger.error(
         { err, durationMs: Date.now() - t0 },
         "reminder-scheduler: run failed",
       );
+      recordScheduledTaskFailure("reminder-scheduler");
     }
   };
 

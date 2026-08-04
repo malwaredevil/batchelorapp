@@ -287,6 +287,10 @@ export const elaineHistoryMessages = pgTable(
     /** Model-produced reasoning summary for the assistant turn, null for user
      *  messages and older rows written before this column existed. */
     reasoningSummary: text("reasoning_summary"),
+    /** Server-measured wall-clock duration (ms) of the reasoning phase for the
+     *  assistant turn. Null for user messages, non-reasoning turns, and rows
+     *  written before this column was added. */
+    reasoningDurationMs: integer("reasoning_duration_ms"),
     /** Channel the message came from: "web", "Slack", "SMS/voice", "email".
      *  Null on rows written before this column was added — render as "web". */
     channel: text("channel"),

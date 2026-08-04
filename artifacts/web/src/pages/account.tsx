@@ -45,6 +45,7 @@ import {
 import { useAuth } from "@/lib/auth";
 import { useTheme, ElaineSettingsCard } from "@workspace/elaine-ui";
 import { usePageAssistantContext } from "@/lib/assistant-context";
+import { COMMON_TIMEZONES } from "@/lib/timezones";
 
 const base = import.meta.env.BASE_URL;
 
@@ -58,29 +59,6 @@ function extractError(err: unknown, fallback: string): string {
 }
 
 const BIRTHDAY_RE = /^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
-
-const COMMON_TIMEZONES = [
-  "America/New_York",
-  "America/Chicago",
-  "America/Denver",
-  "America/Los_Angeles",
-  "America/Anchorage",
-  "Pacific/Honolulu",
-  "America/Toronto",
-  "America/Vancouver",
-  "Europe/London",
-  "Europe/Paris",
-  "Europe/Berlin",
-  "Europe/Madrid",
-  "Europe/Rome",
-  "Asia/Tokyo",
-  "Asia/Shanghai",
-  "Asia/Kolkata",
-  "Asia/Dubai",
-  "Australia/Sydney",
-  "Pacific/Auckland",
-  "UTC",
-];
 
 function formatBirthdayDisplay(mmdd: string): string {
   const [mm, dd] = mmdd.split("-");

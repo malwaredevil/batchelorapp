@@ -229,6 +229,19 @@ async function sendCommCheckSlack(
   );
 }
 
+// Returns a time-of-day-appropriate sign-off ("Have a great morning/
+// afternoon/evening!") based on the actual clock time in the owner's
+// effective timezone at the moment the call is placed — not the time the
+// check happened to be scheduled for.
+async function getTimeOfDaySignoff(now: Date = new Date()): Promise<string> {
+  const tz = await getEffectiveTimezone();
+  const minuteOfDay = getMinuteOfDayInTz(tz, now);
+  const hour = Math.floor(minuteOfDay / 60);
+  if (hour < 12) return "Have a great morning!";
+  if (hour < 18) return "Have a great afternoon!";
+  return "Have a great evening!";
+}
+
 // Phone comms check — places the call and returns the AgentPhone call ID so
 // callers can verify the call actually connected (duration > 0).
 async function sendCommCheckPhone(
@@ -238,9 +251,10 @@ async function sendCommCheckPhone(
   if (!callsConfigured()) {
     throw new Error("AgentPhone connector not configured");
   }
+  const signoff = await getTimeOfDaySignoff();
   return initiateOutboundCall({
     toNumber,
-    initialGreeting: `Hi! This is your daily Batchelor App communications check for ${date}. The phone lane is working correctly. Have a great evening!`,
+    initialGreeting: `Hi! This is your daily Batchelor App communications check for ${date}. The phone lane is working correctly. ${signoff}`,
     callScreeningIdentity: "Elaine from Batchelor App",
     callScreeningPurpose: "daily communications test",
   });

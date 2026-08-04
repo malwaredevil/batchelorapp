@@ -5,6 +5,7 @@ import { db, appUsers } from "@workspace/db";
 import { env } from "../lib/env";
 import { Sentry } from "../lib/sentry";
 import { setAuthContext } from "../lib/auth-context";
+import { deriveAgentScreenshotToken } from "../lib/agent-screenshot-auth";
 
 function timingSafeTokenMatch(provided: string, expected: string): boolean {
   const a = Buffer.from(provided);
@@ -23,7 +24,8 @@ async function tryScreenshotTokenAuth(req: Request): Promise<number | null> {
       ? req.query.screenshotToken
       : undefined;
   const provided = header || queryToken;
-  if (!provided || !timingSafeTokenMatch(provided, env.screenshotAuthToken)) {
+  const expectedToken = deriveAgentScreenshotToken(env.screenshotAuthToken);
+  if (!provided || !timingSafeTokenMatch(provided, expectedToken)) {
     return null;
   }
 

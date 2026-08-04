@@ -77,12 +77,23 @@ export function recordScheduledTaskFailure(_taskName: string): void {
 
 /**
  * Returns true if at least `minIntervalMs` has elapsed since the last
- * successful claim for `taskName` (or if this task has never run before).
- * Claiming updates the persisted timestamp immediately, before the caller's
- * work even starts, so a slow or failing run doesn't cause runaway retries
- * on every subsequent restart before it's finished. Also refreshes
- * expected_interval_ms every call (claimed or not) so the shared heartbeat
- * always knows this task's current cadence.
+ * successful run for `taskName` (or if this task has never run before).
+ * Claiming updates last_run_at immediately, before the caller's work even
+ * starts, so two racing instances can't both claim the same run window.
+ *
+ * The interval check uses COALESCE(last_success_at, last_run_at) — not
+ * last_run_at alone. The distinction matters when a server is killed
+ * mid-run: last_run_at stays at the time of the killed claim while
+ * last_success_at stays at the previous successful run. With last_run_at
+ * alone, a deployment restart during an in-progress run would block the
+ * next deployment from running the task for the full minIntervalMs (because
+ * the killed claim looks "fresh"). Using last_success_at as the interval
+ * anchor instead means a new deployment can claim immediately — the killed
+ * run's stale claim is ignored. Both tasks guarded here are idempotent so
+ * the tiny concurrent-claim window during a deployment transition is safe.
+ *
+ * Also refreshes expected_interval_ms every call (claimed or not) so the
+ * shared heartbeat always knows this task's current cadence.
  */
 export async function shouldRunScheduledTask(
   taskName: string,
@@ -94,7 +105,7 @@ export async function shouldRunScheduledTask(
       VALUES (${taskName}, now(), ${minIntervalMs})
       ON CONFLICT (name) DO UPDATE
         SET last_run_at = now()
-        WHERE scheduler_runs.last_run_at
+        WHERE COALESCE(scheduler_runs.last_success_at, scheduler_runs.last_run_at)
           < now() - (${minIntervalMs}::text || ' milliseconds')::interval
       RETURNING name
     `);

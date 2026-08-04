@@ -44,6 +44,7 @@ const IMPLEMENTED_MAIN_CHAT_HARD_TOOLS = [
   "get_exchange_rate",
   "suggest_clothing_layers",
   "check_integrations_health",
+  "generate_document",
 ].sort();
 
 describe("model-visible hard-tool policy", () => {

@@ -294,6 +294,13 @@ export const elaineHistoryMessages = pgTable(
     /** Channel the message came from: "web", "Slack", "SMS/voice", "email".
      *  Null on rows written before this column was added — render as "web". */
     channel: text("channel"),
+    /** True when this assistant turn was interrupted by the user clicking
+     *  Stop before the model finished responding. The persisted `content` is
+     *  whatever had streamed so far — never silently dropped — and this flag
+     *  lets the UI show a "Stopped" marker and lets Elaine's own context
+     *  building recognize the turn was cut short. Always false for user
+     *  messages and for rows written before this column was added. */
+    stopped: boolean("stopped").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

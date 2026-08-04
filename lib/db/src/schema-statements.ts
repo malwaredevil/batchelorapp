@@ -3052,6 +3052,13 @@ END $$`,
   `ALTER TABLE elaine_history_messages
      ADD COLUMN IF NOT EXISTS channel TEXT`,
 
+  // ── Elaine stopped-turn marker (Task #663) ───────────────────────────────
+  // True when the user clicked Stop before this assistant turn finished
+  // responding. Persisted content is whatever had streamed so far. FALSE for
+  // user messages and for rows written before this column was added.
+  `ALTER TABLE elaine_history_messages
+     ADD COLUMN IF NOT EXISTS stopped BOOLEAN NOT NULL DEFAULT false`,
+
   // ── Elaine cross-channel context (Task #556) ──────────────────────────────
   // Rolling log of recent Elaine turns across all channels (web, Slack, SMS,
   // email). One row per user; entries[] is newest-first, capped at 15.

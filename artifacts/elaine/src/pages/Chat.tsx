@@ -14,6 +14,8 @@ import {
   Pencil,
   PanelLeftClose,
   PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
   Plus,
   RefreshCw,
   Search,
@@ -113,6 +115,9 @@ export default function Chat() {
 
   // Sidebar starts collapsed — user can open it with the toggle button.
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Right "Elaine surfaced" panel — starts open, user can close/reopen it.
+  const [rightPanelOpen, setRightPanelOpen] = useState(true);
 
   const [searchQuery, setSearchQuery] = useState("");
   // useDeferredValue delays the query sent to the server by one render cycle,
@@ -472,69 +477,105 @@ export default function Chat() {
         </div>
 
         {/* ── Right sidebar: surfaced content ───────────────────────────── */}
-        <aside className="hidden w-72 shrink-0 flex-col overflow-y-auto p-4 lg:flex">
-          <h2 className="mb-3 text-sm font-semibold text-foreground">
-            Elaine surfaced
-          </h2>
-          {!hasSidePanelContent && (
-            <p className="text-xs text-muted-foreground">
-              Images, links, and websites Elaine finds during your conversation
-              will show up here.
-            </p>
-          )}
-
-          {images.length > 0 && (
-            <div className="mb-5 space-y-2">
-              <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                <ImageIcon className="h-3.5 w-3.5" />
-                Images
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                {images.map((img, i) => (
-                  <a
-                    key={i}
-                    href={crossAppUrl(`/modules/travels/trips/${img.tripId}`)}
-                  >
-                    <div className="group overflow-hidden rounded-lg border border-border/50">
-                      <img
-                        src={img.src}
-                        alt={img.tripTitle}
-                        className="aspect-square w-full object-cover transition-transform group-hover:scale-105"
-                      />
-                      <p className="truncate px-1.5 py-1 text-[11px] text-muted-foreground">
-                        {img.tripTitle}
-                      </p>
-                    </div>
-                  </a>
-                ))}
-              </div>
+        {rightPanelOpen ? (
+          <aside className="hidden w-72 shrink-0 flex-col overflow-y-auto p-4 lg:flex">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-foreground">
+                Elaine surfaced
+              </h2>
+              <button
+                type="button"
+                onClick={() => setRightPanelOpen(false)}
+                className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                title="Hide panel"
+              >
+                <PanelRightClose className="h-4 w-4" />
+              </button>
             </div>
-          )}
-
-          {links.length > 0 && (
-            <div className="space-y-2">
-              <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                <Link2 className="h-3.5 w-3.5" />
-                Websites & sources
+            {!hasSidePanelContent && (
+              <p className="text-xs text-muted-foreground">
+                Images, links, and websites Elaine finds during your
+                conversation will show up here.
               </p>
-              <ul className="space-y-1.5">
-                {links.map(([url, host]) => (
-                  <li key={url}>
+            )}
+
+            {images.length > 0 && (
+              <div className="mb-5 space-y-2">
+                <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                  <ImageIcon className="h-3.5 w-3.5" />
+                  Images
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {images.map((img, i) => (
                     <a
-                      href={url}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      className="flex items-center gap-1.5 rounded-lg border border-border/50 px-2.5 py-2 text-xs transition-colors hover:border-primary/30 hover:bg-muted/50"
+                      key={i}
+                      href={crossAppUrl(`/modules/travels/trips/${img.tripId}`)}
                     >
-                      <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" />
-                      <span className="truncate text-foreground">{host}</span>
+                      <div className="group overflow-hidden rounded-lg border border-border/50">
+                        <img
+                          src={img.src}
+                          alt={img.tripTitle}
+                          className="aspect-square w-full object-cover transition-transform group-hover:scale-105"
+                        />
+                        <p className="truncate px-1.5 py-1 text-[11px] text-muted-foreground">
+                          {img.tripTitle}
+                        </p>
+                      </div>
                     </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </aside>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {links.length > 0 && (
+              <div className="space-y-2">
+                <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                  <Link2 className="h-3.5 w-3.5" />
+                  Websites & sources
+                </p>
+                <ul className="space-y-1.5">
+                  {links.map(([url, host]) => (
+                    <li key={url}>
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="flex items-center gap-1.5 rounded-lg border border-border/50 px-2.5 py-2 text-xs transition-colors hover:border-primary/30 hover:bg-muted/50"
+                      >
+                        <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" />
+                        <span className="truncate text-foreground">{host}</span>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </aside>
+        ) : (
+          <div className="hidden shrink-0 flex-col items-center border-l border-border/50 pt-3 lg:flex">
+            <button
+              type="button"
+              onClick={() => setRightPanelOpen(true)}
+              className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+              title={
+                hasSidePanelContent
+                  ? "Show Elaine surfaced panel"
+                  : "Show Elaine surfaced panel (empty)"
+              }
+            >
+              <PanelRightOpen className="h-4 w-4" />
+              {hasSidePanelContent && (
+                <span className="sr-only">(has new content)</span>
+              )}
+            </button>
+            {hasSidePanelContent && (
+              <span
+                className="mt-1 h-1.5 w-1.5 rounded-full bg-primary"
+                aria-hidden="true"
+              />
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

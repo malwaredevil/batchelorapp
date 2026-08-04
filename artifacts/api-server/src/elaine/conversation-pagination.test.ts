@@ -444,6 +444,7 @@ vi.mock("./planner-tool-catalog", () => ({
   EBAY_SEARCH_TOOL_NAME: "ebay_search",
   FETCH_PAGE_TOOL_NAME: "fetch_page",
   FIND_NEARBY_PLACES_TOOL_NAME: "find_nearby_places",
+  GENERATE_DOCUMENT_TOOL_NAME: "generate_document",
   GET_AIR_QUALITY_TOOL_NAME: "get_air_quality",
   GET_EXCHANGE_RATE_TOOL_NAME: "get_exchange_rate",
   GET_POLLEN_FORECAST_TOOL_NAME: "get_pollen_forecast",

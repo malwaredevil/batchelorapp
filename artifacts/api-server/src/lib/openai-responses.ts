@@ -342,6 +342,12 @@ export interface StreamOpenAIResponseRoundOptions extends SharedRequestOptions {
    * model doesn't see both simultaneously.
    */
   useBuiltinWebSearch?: boolean;
+  /**
+   * Aborts the in-flight request (and the streaming loop below) when the
+   * caller's client disconnects or clicks Stop, instead of letting the
+   * Responses API call keep running after nobody is listening.
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -475,21 +481,24 @@ export async function streamOpenAIResponseRound(
           options.useBuiltinWebSearch ?? false,
         );
 
-        const stream = await client.responses.create({
-          ...params,
-          stream: true,
-          parallel_tool_calls: true,
-          tools: allTools,
-          tool_choice: options.toolChoice,
-          stream_options: { include_obfuscation: false },
-          // Request source URLs for built-in web search calls so we can
-          // surface them as citations in the chat UI.
-          include: options.useBuiltinWebSearch
-            ? ([
-                "web_search_call.action.sources",
-              ] as ResponseCreateParams["include"])
-            : undefined,
-        });
+        const stream = await client.responses.create(
+          {
+            ...params,
+            stream: true,
+            parallel_tool_calls: true,
+            tools: allTools,
+            tool_choice: options.toolChoice,
+            stream_options: { include_obfuscation: false },
+            // Request source URLs for built-in web search calls so we can
+            // surface them as citations in the chat UI.
+            include: options.useBuiltinWebSearch
+              ? ([
+                  "web_search_call.action.sources",
+                ] as ResponseCreateParams["include"])
+              : undefined,
+          },
+          { signal: options.signal },
+        );
 
         let completedResponse: {
           id: string;
@@ -506,6 +515,7 @@ export async function streamOpenAIResponseRound(
         const reasoningSummaryParts = new Map<number, string>();
 
         for await (const event of stream) {
+          if (options.signal?.aborted) break;
           const summaryDelta = accumulateReasoningSummaryEvent(
             reasoningSummaryParts,
             event as {

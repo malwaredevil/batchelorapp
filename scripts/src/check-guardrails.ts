@@ -207,16 +207,25 @@ export const EXCLUSION_SHRINK_HELP = [
 // and via manual `--base` runs).
 // ---------------------------------------------------------------------------
 const ELAINE_INDEX_PATH = "artifacts/api-server/src/elaine/index.ts";
+const RESTRICTED_EXCLUSION_SOURCE_PATH =
+  "artifacts/api-server/src/elaine/restricted-channel-config.ts";
 
 // This script is invoked via `pnpm --filter @workspace/scripts run
 // check-guardrails`, which runs with cwd set to scripts/, not the repo root.
-// All paths below (changed-file lists, diff pathspecs, elaine/index.ts) are
-// repo-root-relative, so every git invocation is pinned to the repo root
-// with `-C`, and every fs read is joined against it explicitly. Resolving
-// against process.cwd() here previously silently no-op'd two of the six
-// checks (the exclusion-shrink guard read this-commit content as `null`, and
-// the drizzle-kit-push exclusion pathspecs never matched anything, so the
-// script's own help text tripped its own ban).
+// All paths below (changed-file lists, diff pathspecs, restricted-channel
+// config) are repo-root-relative, so every git invocation is pinned to the
+// repo root with `-C`, and every fs read is joined against it explicitly.
+// Resolving against process.cwd() here previously silently no-op'd two of
+// the six checks (the exclusion-shrink guard read this-commit content as
+// `null`, and the drizzle-kit-push exclusion pathspecs never matched
+// anything, so the script's own help text tripped its own ban).
+//
+// RESTRICTED_EXCLUDED_ACTION_TYPES_SOURCE used to live inline in
+// elaine/index.ts; a later refactor extracted it into its own
+// restricted-channel-config.ts module. The exclusion-shrink guard must track
+// wherever the array actually lives today, or it silently reads 0 entries
+// from index.ts (which now only imports the name) and false-positives on
+// every PR. Update RESTRICTED_EXCLUSION_SOURCE_PATH if it moves again.
 function repoRoot(): string {
   return execFileSync("git", ["rev-parse", "--show-toplevel"], {
     encoding: "utf8",
@@ -271,14 +280,27 @@ export function runGuardrailChecks(base: string): CheckResult[] {
     "lib/db/src/schema-statements.ts",
   ]);
 
-  let baseElaineIndex: string | null = null;
-  try {
-    baseElaineIndex = git(root, ["show", `${base}:${ELAINE_INDEX_PATH}`]);
-  } catch {
-    baseElaineIndex = null;
-  }
-
   const readFile = (file: string) => readFileOrNull(root, file);
+
+  // The exclusion array historically lived inline in elaine/index.ts before
+  // being extracted into restricted-channel-config.ts. Fall back to
+  // index.ts so the guard still works correctly against a base commit that
+  // predates the extraction (old base content still has real entries there).
+  let baseExclusionSource: string | null = null;
+  try {
+    baseExclusionSource = git(root, [
+      "show",
+      `${base}:${RESTRICTED_EXCLUSION_SOURCE_PATH}`,
+    ]);
+  } catch {
+    try {
+      baseExclusionSource = git(root, ["show", `${base}:${ELAINE_INDEX_PATH}`]);
+    } catch {
+      baseExclusionSource = null;
+    }
+  }
+  const currentExclusionSource =
+    readFile(RESTRICTED_EXCLUSION_SOURCE_PATH) ?? readFile(ELAINE_INDEX_PATH);
 
   return [
     {
@@ -309,8 +331,8 @@ export function runGuardrailChecks(base: string): CheckResult[] {
     {
       name: "Guard: RESTRICTED_EXCLUDED_ACTION_TYPES must not shrink",
       violations: checkExclusionSetShrink(
-        readFile(ELAINE_INDEX_PATH),
-        baseElaineIndex,
+        currentExclusionSource,
+        baseExclusionSource,
       ),
       helpText: EXCLUSION_SHRINK_HELP,
     },

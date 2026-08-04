@@ -39,10 +39,32 @@ export interface PendingAttachment {
   uploadedUrl: string | null;
   uploading: boolean;
   error: boolean;
-  fileType: "image" | "pdf";
+  fileType: "image" | "pdf" | "csv" | "docx" | "xlsx";
   fileName: string;
   extractedText?: string;
 }
+
+/** A user message captured while a prior turn was still streaming — held
+ *  here until it's this message's turn to actually be sent. */
+interface QueuedSend {
+  tempId: number;
+  trimmed: string;
+  uploadedAttachmentUrls: string[];
+  uploadedPdfs: Array<{ url: string; name: string; extractedText?: string }>;
+  uploadedDocs: Array<{
+    url: string;
+    name: string;
+    docType: "csv" | "docx" | "xlsx";
+    extractedText?: string;
+  }>;
+}
+
+const DOC_MIME_TO_TYPE: Record<string, "csv" | "docx" | "xlsx"> = {
+  "text/csv": "csv",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+    "docx",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+};
 
 /**
  * Shared conversation/tooling state for Elaine, used identically by the
@@ -98,6 +120,25 @@ export function useElaineChat({
   const [reasoningActive, setReasoningActive] = useState(false);
   const hadReasoningRef = useRef(false);
   const turnStartRef = useRef(0);
+  // Mirrors `streamingContent` state but is readable synchronously from
+  // inside the same in-flight `runSend` call's catch block — a plain closure
+  // over the `streamingContent` state variable would only see whatever it
+  // was when `runSend` started (state updates don't mutate that closure's
+  // captured value), so the accumulated text at the moment of a Stop would
+  // otherwise be lost.
+  const streamingContentRef = useRef("");
+  // Cancels the in-flight `streamElaineMessage` fetch when the user clicks
+  // Stop. Null whenever no turn is streaming.
+  const currentAbortControllerRef = useRef<AbortController | null>(null);
+  // Synchronous "a turn is actively being sent" flag. `isStreaming` state is
+  // not safe to gate on here: React can batch/delay the re-render that would
+  // make it true, so two handleSend calls in the same tick (e.g. queueing
+  // two messages back-to-back) could both see a stale `false` and both try
+  // to start a request instead of the second one queueing.
+  const isSendingRef = useRef(false);
+  // Messages queued while a prior turn is still streaming, sent strictly in
+  // order the instant the in-progress turn finishes or is stopped.
+  const queueRef = useRef<QueuedSend[]>([]);
 
   // Active named conversation ID (null = use the rolling single-thread history)
   const [conversationId, setConversationId] = useState<number | null>(null);
@@ -312,6 +353,7 @@ export function useElaineChat({
         ...(m.reasoningDurationMs != null
           ? { reasoningDurationMs: m.reasoningDurationMs }
           : {}),
+        ...(m.stopped ? { stopped: true } : {}),
         createdAt: m.createdAt,
       }));
       if (older.length > 0) {
@@ -393,6 +435,7 @@ export function useElaineChat({
         ...(m.reasoningDurationMs != null
           ? { reasoningDurationMs: m.reasoningDurationMs }
           : {}),
+        ...(m.stopped ? { stopped: true } : {}),
         createdAt: m.createdAt,
       })) as AssistantMessage[],
     );
@@ -408,8 +451,10 @@ export function useElaineChat({
     }
 
     const previewUrl = URL.createObjectURL(file);
-    const fileType: "image" | "pdf" =
-      file.type === "application/pdf" ? "pdf" : "image";
+    const fileType: PendingAttachment["fileType"] =
+      file.type === "application/pdf"
+        ? "pdf"
+        : (DOC_MIME_TO_TYPE[file.type] ?? "image");
     setPendingAttachments((prev) => [
       ...prev,
       {
@@ -480,70 +525,44 @@ export function useElaineChat({
     qc.invalidateQueries();
   }
 
-  async function handleSend(overrideText?: string) {
-    const trimmed = (overrideText ?? input).trim();
+  /** Cancels the currently-streaming turn. The client immediately finalizes
+   *  whatever had been displayed as a locally-marked "stopped" message; the
+   *  server (which sees the same disconnect) persists the authoritative
+   *  version with `stopped: true` so a later reload shows the real content.
+   *  Any queued messages still send automatically once this turn's `finally`
+   *  block runs. */
+  function handleStop() {
+    currentAbortControllerRef.current?.abort();
+  }
 
-    const readyAttachments = pendingAttachments.filter(
-      (a) => a.uploadedUrl && !a.error,
+  /** Actually sends one message to the server and streams its reply. Called
+   *  either immediately (no turn in flight) or by the queue drain below once
+   *  a prior turn finishes or is stopped — never called directly while
+   *  another call to this function is still running. */
+  async function runSend(item: QueuedSend) {
+    isSendingRef.current = true;
+    // No-op if this message was sent immediately (never queued); clears the
+    // "queued" badge if it was waiting in line.
+    setMessages((prev) =>
+      prev.map((m) => (m.id === item.tempId ? { ...m, queued: false } : m)),
     );
-    const imageAttachments = readyAttachments.filter(
-      (a) => a.fileType === "image",
-    );
-    const pdfAttachments = readyAttachments.filter((a) => a.fileType === "pdf");
-    const uploadedAttachmentUrls = imageAttachments.map((a) => a.uploadedUrl!);
-    const uploadedPdfs = pdfAttachments.map((a) => ({
-      url: a.uploadedUrl!,
-      name: a.fileName,
-      extractedText: a.extractedText,
-    }));
-    const hasAttachments =
-      uploadedAttachmentUrls.length > 0 || uploadedPdfs.length > 0;
-
-    // Must have either a message body or at least one ready attachment
-    if ((!trimmed && !hasAttachments) || isStreaming) return;
-
-    setInput("");
-    clearAttachments();
     setPendingNavigate(null);
     setPendingActions([]);
     setExecutedActions([]);
     setActionDone(false);
     setStreamingContent("");
+    streamingContentRef.current = "";
     setStreamingReasoningSummary("");
     setStatusMessage("");
     setRuntimeTrace(null);
     hadReasoningRef.current = false;
     setReasoningActive(false);
     turnStartRef.current = Date.now();
-    const optimisticAttachmentRefs = [
-      ...imageAttachments.map((a) => ({
-        url: a.uploadedUrl!,
-        type: "image" as const,
-      })),
-      ...pdfAttachments.map((a) => ({
-        url: a.uploadedUrl!,
-        type: "pdf" as const,
-        name: a.fileName,
-      })),
-    ];
-    // Tag the optimistic message with a negative temp id (real message ids
-    // from the server are always positive serials) so the completion handler
-    // below can find and replace *this specific* message wherever it ends up
-    // in the array — a concurrent loadOlderMessages() prepend can land while
-    // this send is in flight, so it is not safe to assume it stays last.
-    const tempId = -++tempIdCounterRef.current;
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: tempId,
-        role: "user",
-        content: trimmed,
-        ...(hasAttachments ? { attachmentUrls: optimisticAttachmentRefs } : {}),
-      },
-    ]);
     setIsStreaming(true);
     // accumulate widgets for the new assistant turn
     const pendingWidgets: ChatWidget[] = [];
+    const abortController = new AbortController();
+    currentAbortControllerRef.current = abortController;
 
     try {
       const pageScreenshotUrl = bgScreenshotUrlRef.current ?? undefined;
@@ -552,14 +571,19 @@ export function useElaineChat({
 
       const result = await streamElaineMessage(
         {
-          message: trimmed,
+          message: item.trimmed,
           pageContext: getPageContext(),
           appId,
           ...(conversationId !== null ? { conversationId } : {}),
-          ...(uploadedAttachmentUrls.length > 0
-            ? { attachmentUrls: uploadedAttachmentUrls }
+          ...(item.uploadedAttachmentUrls.length > 0
+            ? { attachmentUrls: item.uploadedAttachmentUrls }
             : {}),
-          ...(uploadedPdfs.length > 0 ? { attachmentPdfs: uploadedPdfs } : {}),
+          ...(item.uploadedPdfs.length > 0
+            ? { attachmentPdfs: item.uploadedPdfs }
+            : {}),
+          ...(item.uploadedDocs.length > 0
+            ? { attachmentDocs: item.uploadedDocs }
+            : {}),
           ...(pageScreenshotUrl ? { pageScreenshotUrl } : {}),
           ...(geoRef.current
             ? { userLat: geoRef.current.lat, userLng: geoRef.current.lng }
@@ -568,6 +592,7 @@ export function useElaineChat({
         {
           onDelta: (text) => {
             setStatusMessage("");
+            streamingContentRef.current += text;
             setStreamingContent((prev) => prev + text);
           },
           onReasoningSummaryDelta: (delta) => {
@@ -575,7 +600,10 @@ export function useElaineChat({
             setReasoningActive(true);
             setStreamingReasoningSummary((prev) => prev + delta);
           },
-          onResponseReset: () => setStreamingContent(""),
+          onResponseReset: () => {
+            streamingContentRef.current = "";
+            setStreamingContent("");
+          },
           onAction: (action) => setPendingActions((prev) => [...prev, action]),
           onStatus: (msg) => setStatusMessage(msg),
           onWidget: (widget) => pendingWidgets.push(widget as ChatWidget),
@@ -604,7 +632,7 @@ export function useElaineChat({
                 : {}),
             };
             setMessages((prev) => {
-              const optimisticIdx = prev.findIndex((m) => m.id === tempId);
+              const optimisticIdx = prev.findIndex((m) => m.id === item.tempId);
               if (optimisticIdx >= 0) {
                 // Find by `tempId` rather than assuming the optimistic message
                 // is still last: a concurrent loadOlderMessages() prepend can
@@ -670,20 +698,41 @@ export function useElaineChat({
             setRuntimeTrace(null);
           },
         },
+        abortController.signal,
       );
       void result;
     } catch {
-      toast.error(
-        <>
-          <ElaineName /> couldn't respond just now. Please try again.
-        </>,
-      );
-      // Remove by tempId, not position — a concurrent loadOlderMessages()
-      // prepend can land while this send is in flight, so the optimistic
-      // message is not guaranteed to still be last.
-      setMessages((prev) => prev.filter((m) => m.id !== tempId));
-      setPendingActions([]);
-      setRuntimeTrace(null);
+      if (abortController.signal.aborted) {
+        // User-initiated Stop: the server never gets to send `done` over the
+        // now-closed connection, so finalize locally with whatever had
+        // streamed in — the server independently persists the authoritative
+        // `stopped: true` row, which a reload will show in its place.
+        if (hadReasoningRef.current) setReasoningActive(false);
+        const stoppedAssistantId = -++tempIdCounterRef.current;
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: stoppedAssistantId,
+            role: "assistant",
+            content: streamingContentRef.current,
+            stopped: true,
+          },
+        ]);
+        setPendingActions([]);
+        setRuntimeTrace(null);
+      } else {
+        toast.error(
+          <>
+            <ElaineName /> couldn't respond just now. Please try again.
+          </>,
+        );
+        // Remove by tempId, not position — a concurrent loadOlderMessages()
+        // prepend can land while this send is in flight, so the optimistic
+        // message is not guaranteed to still be last.
+        setMessages((prev) => prev.filter((m) => m.id !== item.tempId));
+        setPendingActions([]);
+        setRuntimeTrace(null);
+      }
     } finally {
       // If the live "Thinking" panel was ever shown, give its collapse
       // animation (triggered by `setReasoningActive(false)` in onDone above)
@@ -694,11 +743,109 @@ export function useElaineChat({
         await new Promise((resolve) => setTimeout(resolve, 400));
       }
       setStreamingContent("");
+      streamingContentRef.current = "";
       setStreamingReasoningSummary("");
       setStatusMessage("");
       setRuntimeTrace(null);
       setIsStreaming(false);
+      currentAbortControllerRef.current = null;
+      isSendingRef.current = false;
+
+      // Drain the queue: the moment this turn is done (normally or via
+      // Stop), the next queued message — if any — sends automatically,
+      // strictly in the order it was queued.
+      const next = queueRef.current.shift();
+      if (next) void runSend(next);
     }
+  }
+
+  async function handleSend(overrideText?: string) {
+    const trimmed = (overrideText ?? input).trim();
+
+    const readyAttachments = pendingAttachments.filter(
+      (a) => a.uploadedUrl && !a.error,
+    );
+    const imageAttachments = readyAttachments.filter(
+      (a) => a.fileType === "image",
+    );
+    const pdfAttachments = readyAttachments.filter((a) => a.fileType === "pdf");
+    const docAttachments = readyAttachments.filter(
+      (a) =>
+        a.fileType === "csv" || a.fileType === "docx" || a.fileType === "xlsx",
+    );
+    const uploadedAttachmentUrls = imageAttachments.map((a) => a.uploadedUrl!);
+    const uploadedPdfs = pdfAttachments.map((a) => ({
+      url: a.uploadedUrl!,
+      name: a.fileName,
+      extractedText: a.extractedText,
+    }));
+    const uploadedDocs = docAttachments.map((a) => ({
+      url: a.uploadedUrl!,
+      name: a.fileName,
+      docType: a.fileType as "csv" | "docx" | "xlsx",
+      extractedText: a.extractedText,
+    }));
+    const hasAttachments =
+      uploadedAttachmentUrls.length > 0 ||
+      uploadedPdfs.length > 0 ||
+      uploadedDocs.length > 0;
+
+    // Must have either a message body or at least one ready attachment
+    if (!trimmed && !hasAttachments) return;
+
+    setInput("");
+    clearAttachments();
+    const optimisticAttachmentRefs = [
+      ...imageAttachments.map((a) => ({
+        url: a.uploadedUrl!,
+        type: "image" as const,
+      })),
+      ...pdfAttachments.map((a) => ({
+        url: a.uploadedUrl!,
+        type: "pdf" as const,
+        name: a.fileName,
+      })),
+      ...docAttachments.map((a) => ({
+        url: a.uploadedUrl!,
+        type: a.fileType as "csv" | "docx" | "xlsx",
+        name: a.fileName,
+      })),
+    ];
+    // A turn is already streaming — queue this one instead of blocking the
+    // composer. It's shown right away (marked pending/queued) and will send
+    // automatically, in order, once the in-progress turn finishes or stops.
+    const willQueue = isSendingRef.current;
+    // Tag the optimistic message with a negative temp id (real message ids
+    // from the server are always positive serials) so the completion handler
+    // below can find and replace *this specific* message wherever it ends up
+    // in the array — a concurrent loadOlderMessages() prepend can land while
+    // this send is in flight, so it is not safe to assume it stays last.
+    const tempId = -++tempIdCounterRef.current;
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: tempId,
+        role: "user",
+        content: trimmed,
+        ...(hasAttachments ? { attachmentUrls: optimisticAttachmentRefs } : {}),
+        ...(willQueue ? { queued: true } : {}),
+      },
+    ]);
+
+    const item: QueuedSend = {
+      tempId,
+      trimmed,
+      uploadedAttachmentUrls,
+      uploadedPdfs,
+      uploadedDocs,
+    };
+
+    if (willQueue) {
+      queueRef.current.push(item);
+      return;
+    }
+
+    await runSend(item);
   }
 
   function handleConfirmNavigate(onAfter?: () => void) {
@@ -840,6 +987,7 @@ export function useElaineChat({
     handleNewConversation,
     handleLoadConversation,
     handleSend,
+    handleStop,
     handleConfirmNavigate,
     handleConfirmAction,
     handleSkipAction,

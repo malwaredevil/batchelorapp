@@ -6,7 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, FileSpreadsheet } from "lucide-react";
 import { BarcodeScanButton } from "./BarcodeScanButton";
 import {
   Send,
@@ -151,6 +151,10 @@ function playResponseChime(): void {
 }
 
 const URL_RE = /https?:\/\/[^\s)>"]+/;
+
+// Composer textarea grows with typed content up to this height (px), then
+// scrolls internally. Keeps parity with messenger-ui's composer sizing.
+const COMPOSER_MAX_HEIGHT_PX = 160;
 function extractFirstUrl(text: string | undefined | null): string | null {
   if (!text) return null;
   return text.match(URL_RE)?.[0] ?? null;
@@ -304,6 +308,60 @@ function MessageText({
   );
 }
 
+/** Turns a citation URL into "[N] hostname" — used both inline and collapsed. */
+function CitationLink({ url, index }: { url: string; index: number }) {
+  let host = url;
+  try {
+    host = new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    // keep raw url
+  }
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+    >
+      <span className="font-semibold text-primary">[{index + 1}]</span>
+      <span className="max-w-[180px] truncate">{host}</span>
+    </a>
+  );
+}
+
+/**
+ * Source list shown under a reply that cited web search results. A short
+ * list (a handful of sources) renders inline like before. A heavy
+ * web-search reply can cite dozens of pages, which turned into a wall of
+ * links every user had to scroll past to read the next message — those
+ * collapse behind a "N sources" toggle instead, closed by default.
+ */
+const INLINE_CITATION_LIMIT = 4;
+function CitationsDisclosure({ citations }: { citations: string[] }) {
+  if (citations.length <= INLINE_CITATION_LIMIT) {
+    return (
+      <div className="flex flex-wrap gap-x-3 gap-y-1 px-1">
+        {citations.map((url, ci) => (
+          <CitationLink key={ci} url={url} index={ci} />
+        ))}
+      </div>
+    );
+  }
+  return (
+    <details className="group px-1">
+      <summary className="flex w-fit cursor-pointer list-none items-center gap-1 text-xs text-muted-foreground select-none hover:text-foreground">
+        <ChevronRight className="h-3 w-3 shrink-0 transition-transform group-open:rotate-90" />
+        {citations.length} sources
+      </summary>
+      <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
+        {citations.map((url, ci) => (
+          <CitationLink key={ci} url={url} index={ci} />
+        ))}
+      </div>
+    </details>
+  );
+}
+
 function formatThinkingDuration(ms: number): string {
   const seconds = Math.max(1, Math.round(ms / 1000));
   return `${seconds} second${seconds === 1 ? "" : "s"}`;
@@ -452,6 +510,7 @@ export function ElaineChatPanel({
     handleAddAttachment,
     handleRemoveAttachment,
     handleSend,
+    handleStop,
     handleConfirmNavigate,
     handleConfirmAction,
     handleSkipAction,
@@ -460,6 +519,7 @@ export function ElaineChatPanel({
   } = chat;
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   // ── Infinite scroll-up (load older messages) ──────────────────────────────
@@ -710,19 +770,29 @@ export function ElaineChatPanel({
                           // Older stored messages may still be plain URL strings —
                           // fall back to sniffing the URL when there's no `type`/`name`.
                           const url = typeof ref === "string" ? ref : ref.url;
-                          const isPdf =
+                          const docType =
                             typeof ref === "string"
                               ? /\.pdf([?#]|$)/i.test(ref)
-                              : ref.type === "pdf";
-                          if (isPdf) {
+                                ? "pdf"
+                                : null
+                              : ref.type !== "image"
+                                ? ref.type
+                                : null;
+                          if (docType) {
                             const storedName =
                               typeof ref === "string" ? undefined : ref.name;
-                            const match = url.match(/\/([^/?#]+\.pdf)/i);
+                            const match = url.match(
+                              new RegExp(`/([^/?#]+\\.${docType})`, "i"),
+                            );
                             const filename =
                               storedName ??
                               (match
                                 ? decodeURIComponent(match[1])
-                                : "document.pdf");
+                                : `document.${docType}`);
+                            const DocIcon =
+                              docType === "csv" || docType === "xlsx"
+                                ? FileSpreadsheet
+                                : FileText;
                             return (
                               <a
                                 key={j}
@@ -732,7 +802,7 @@ export function ElaineChatPanel({
                                 className="flex items-center gap-1.5 rounded-lg bg-primary-foreground/15 px-2 py-1 transition-colors hover:bg-primary-foreground/25"
                                 title={`Open ${filename}`}
                               >
-                                <FileText className="h-4 w-4 shrink-0" />
+                                <DocIcon className="h-4 w-4 shrink-0" />
                                 <span className="max-w-[140px] truncate text-xs">
                                   {filename}
                                 </span>
@@ -762,6 +832,11 @@ export function ElaineChatPanel({
                     )}
                   </div>
                 </div>
+                {msg.queued && (
+                  <span className="mr-1 text-[11px] italic text-muted-foreground/60 select-none">
+                    Waiting to send…
+                  </span>
+                )}
                 {showTimestamp && msg.createdAt && (
                   <span className="mr-1 text-[11px] text-muted-foreground/50 select-none tabular-nums">
                     {formatMessageTime(msg.createdAt)}
@@ -799,6 +874,11 @@ export function ElaineChatPanel({
                 <div className="rounded-2xl rounded-tl-sm bg-muted px-3.5 py-2.5 text-sm leading-relaxed text-foreground">
                   <MessageText text={text} citations={citations} />
                 </div>
+                {msg.stopped && (
+                  <span className="ml-1 inline-flex w-fit items-center gap-1 rounded-full bg-muted-foreground/10 px-2 py-0.5 text-[11px] font-medium text-muted-foreground select-none">
+                    Stopped
+                  </span>
+                )}
                 {widgets && widgets.length > 0 && (
                   <div className="flex flex-col gap-2 pl-0.5">
                     {widgets.map((widget, wi) => (
@@ -807,30 +887,7 @@ export function ElaineChatPanel({
                   </div>
                 )}
                 {citations.length > 0 && (
-                  <div className="flex flex-wrap gap-x-3 gap-y-1 px-1">
-                    {citations.map((url, ci) => {
-                      let host = url;
-                      try {
-                        host = new URL(url).hostname.replace(/^www\./, "");
-                      } catch {
-                        // keep raw url
-                      }
-                      return (
-                        <a
-                          key={ci}
-                          href={url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-                        >
-                          <span className="font-semibold text-primary">
-                            [{ci + 1}]
-                          </span>
-                          <span className="max-w-[180px] truncate">{host}</span>
-                        </a>
-                      );
-                    })}
-                  </div>
+                  <CitationsDisclosure citations={citations} />
                 )}
                 {firstAssistantUrl && (
                   <LinkPreviewCard url={firstAssistantUrl} />
@@ -1185,15 +1242,19 @@ export function ElaineChatPanel({
               key={a.previewUrl}
               className="relative h-14 shrink-0 rounded-lg overflow-hidden border border-border/50"
               style={{
-                width: a.fileType === "pdf" ? "auto" : "3.5rem",
+                width: a.fileType !== "image" ? "auto" : "3.5rem",
                 minWidth: "3.5rem",
               }}
             >
-              {a.fileType === "pdf" ? (
+              {a.fileType !== "image" ? (
                 <div className="flex h-14 items-center gap-1.5 rounded-lg bg-muted px-2">
-                  <FileText className="h-5 w-5 shrink-0 text-destructive" />
+                  {a.fileType === "csv" || a.fileType === "xlsx" ? (
+                    <FileSpreadsheet className="h-5 w-5 shrink-0 text-destructive" />
+                  ) : (
+                    <FileText className="h-5 w-5 shrink-0 text-destructive" />
+                  )}
                   <span className="max-w-[120px] truncate text-xs text-foreground/80">
-                    {a.fileName ?? "document.pdf"}
+                    {a.fileName ?? `document.${a.fileType}`}
                   </span>
                 </div>
               ) : (
@@ -1233,7 +1294,7 @@ export function ElaineChatPanel({
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/jpeg,image/png,image/webp,application/pdf"
+          accept="image/jpeg,image/png,image/webp,application/pdf,text/csv,.csv,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx"
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0];
@@ -1244,32 +1305,56 @@ export function ElaineChatPanel({
         {/* Row 1: textarea + send */}
         <div className="flex items-end gap-2">
           <Textarea
+            ref={composerRef}
             value={input}
-            onChange={(e) => handleInputChange(e.target.value)}
+            onChange={(e) => {
+              handleInputChange(e.target.value);
+              // Grow the box as the user types multi-line text, capped at
+              // COMPOSER_MAX_HEIGHT_PX, then it scrolls internally.
+              const ta = e.target;
+              ta.style.height = "auto";
+              ta.style.height = `${Math.min(ta.scrollHeight, COMPOSER_MAX_HEIGHT_PX)}px`;
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 void handleSend();
               }
             }}
-            placeholder="Message Elaine…"
-            className="min-h-[38px] flex-1 resize-none rounded-xl border-border/50 bg-muted/50 py-2 text-sm shadow-none focus-visible:ring-1"
-            rows={1}
-            disabled={isStreaming}
-          />
-          <Button
-            size="sm"
-            className="h-[38px] w-[38px] shrink-0 rounded-xl p-0"
-            onClick={() => void handleSend()}
-            disabled={
-              (!input.trim() &&
-                pendingAttachments.every((a) => !a.uploadedUrl)) ||
-              isStreaming ||
-              hasUploadingAttachments
+            placeholder={
+              isStreaming
+                ? "Message Elaine… (sent when it's her turn)"
+                : "Message Elaine…"
             }
-          >
-            <Send className="h-4 w-4" />
-          </Button>
+            className="min-h-[52px] flex-1 resize-none rounded-xl border-border/50 bg-muted/50 py-2.5 text-sm shadow-none focus-visible:ring-1"
+            rows={2}
+          />
+          {isStreaming ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="h-[38px] w-[38px] shrink-0 rounded-xl p-0"
+              onClick={handleStop}
+              title="Stop responding"
+              aria-label="Stop responding"
+            >
+              <Square className="h-3.5 w-3.5 fill-current" />
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              className="h-[38px] w-[38px] shrink-0 rounded-xl p-0"
+              onClick={() => void handleSend()}
+              disabled={
+                (!input.trim() &&
+                  pendingAttachments.every((a) => !a.uploadedUrl)) ||
+                hasUploadingAttachments
+              }
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          )}
         </div>
         {/* Row 2: utility icons */}
         <div className="flex items-center gap-0.5 pt-1">

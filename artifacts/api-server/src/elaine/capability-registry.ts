@@ -60,6 +60,37 @@ function policies(
   }));
 }
 
+/**
+ * Read tools in the "research", "travels", "ornaments", "pottery", or
+ * "quilting" domains that intentionally use a narrower channel set than
+ * ALL_READ_CHANNELS.
+ *
+ * Every entry must carry a plain-English reason so a reviewer can judge
+ * whether the restriction still makes sense when the tool is later modified.
+ * The CI test in restricted-channel-coverage.test.ts enforces that any read
+ * tool in those five domains either uses ALL_READ_CHANNELS or appears here.
+ *
+ * To add a new narrow-channel read tool in these domains:
+ *   1. Add a row to NARROW_READ_CHANNEL_JUSTIFICATIONS with a reason string.
+ *   2. Set channels to the appropriate subset in the policy row below.
+ * To widen an existing tool back to ALL_READ_CHANNELS:
+ *   1. Remove its entry from NARROW_READ_CHANNEL_JUSTIFICATIONS.
+ *   2. Update its channels in the policy row.
+ */
+export const NARROW_READ_CHANNEL_JUSTIFICATIONS: Readonly<
+  Record<string, string>
+> = {
+  // Task management UIs (progress view, cancel button) only exist on the web;
+  // a structured task-list or task-detail response cannot be rendered usefully
+  // over SMS / voice / email / Slack.
+  list_elaine_tasks:
+    "Task list UI only exists on the web; the structured list response cannot " +
+    "be rendered usefully over SMS/voice/email/Slack.",
+  get_elaine_task:
+    "Task detail UI only exists on the web; the structured detail response " +
+    "cannot be rendered usefully over SMS/voice/email/Slack.",
+};
+
 const WEB_AND_TRUSTED_CHANNELS = ["web", "sms", "voice"] as const;
 // Slack identity is verified by the Slack API OAuth flow: only a workspace
 // member with a real Slack account can send events to the Elaine bot.
@@ -359,7 +390,7 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
     executorPrefix: "collectionRead",
     audit: "runtime_observation",
     retry: "read_only",
-    channels: ["web", "sms", "voice"],
+    channels: ALL_READ_CHANNELS,
   }),
   ...policies(["show_fabric_swatch", "calculate_yardage"], {
     domain: "quilting",
@@ -370,7 +401,7 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
     executorPrefix: "quiltingRead",
     audit: "runtime_observation",
     retry: "read_only",
-    channels: ["web", "sms", "voice", "email"],
+    channels: ALL_READ_CHANNELS,
   }),
   ...policies(
     ["show_ornament_item", "search_hallmark", "lookup_product_barcode"],
@@ -438,7 +469,7 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
     executorPrefix: "memory",
     audit: "runtime_observation",
     retry: "safe",
-    channels: ["web", "sms", "voice"],
+    channels: ALL_READ_CHANNELS,
   }),
   ...policies(["correct_memory", "forget_memory"], {
     ...ACTION_DEFAULTS,
@@ -461,7 +492,7 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
     executorPrefix: "memoryRead",
     audit: "runtime_observation",
     retry: "read_only",
-    channels: ["web"],
+    channels: ALL_READ_CHANNELS,
   }),
   ...policies(["list_elaine_tasks", "get_elaine_task"], {
     domain: "research",
@@ -517,6 +548,17 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
     audit: "runtime_observation",
     retry: "safe",
     channels: ["web"],
+  }),
+  ...policies(["generate_document"], {
+    domain: "office",
+    kind: "utility",
+    risk: "low",
+    auth: "session",
+    confirmation: "never",
+    executorPrefix: "documentGeneration",
+    audit: "runtime_observation",
+    retry: "safe",
+    channels: ALL_READ_CHANNELS,
   }),
   ...policies(["suggest_navigation"], {
     domain: "navigation",

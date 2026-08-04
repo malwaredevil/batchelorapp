@@ -31,13 +31,13 @@ export type ElaineAppId =
   | "hub"
   | "elaine";
 
-/** A single image/PDF attachment on a user message. `name` is the original
- *  upload filename (PDFs only — images are shown as thumbnails and don't
- *  need a name). Older stored messages may still be plain strings; callers
- *  should treat this as `AttachmentRef | string`. */
+/** A single image/document attachment on a user message. `name` is the
+ *  original upload filename (documents only — images are shown as
+ *  thumbnails and don't need a name). Older stored messages may still be
+ *  plain strings; callers should treat this as `AttachmentRef | string`. */
 export interface AttachmentRef {
   url: string;
-  type: "image" | "pdf";
+  type: "image" | "pdf" | "csv" | "docx" | "xlsx";
   name?: string;
 }
 
@@ -194,6 +194,15 @@ export interface AssistantMessage {
   /** ISO timestamp from the server. Present on history-loaded messages;
    *  absent on optimistically-inserted messages (streaming in progress). */
   createdAt?: string;
+  /** True when this assistant turn was interrupted by the user clicking
+   *  Stop before the model finished. Set both on the locally-finalized
+   *  message at the moment of stopping and on the persisted row once the
+   *  conversation is reloaded. Only meaningful for `role: "assistant"`. */
+  stopped?: boolean;
+  /** Client-only: true while this user message is waiting in the send queue
+   *  for a prior turn to finish, before it has actually been sent to the
+   *  server. Never persisted — cleared the instant the message is sent. */
+  queued?: boolean;
 }
 
 export type TravelActionType =
@@ -621,6 +630,13 @@ export async function streamElaineMessage(
     attachmentUrls?: string[];
     /** PDF attachments: signed URL + original filename + extracted text. */
     attachmentPdfs?: Array<{ url: string; name: string; extractedText?: string }>;
+    /** CSV/DOCX/XLSX attachments: signed URL + original filename + doc type + extracted text. */
+    attachmentDocs?: Array<{
+      url: string;
+      name: string;
+      docType: "csv" | "docx" | "xlsx";
+      extractedText?: string;
+    }>;
     /** Auto-captured page screenshot URL — sent to model for visual context but not persisted. */
     pageScreenshotUrl?: string;
     /** User's current latitude (from navigator.geolocation) — enables location-aware queries. */
@@ -1032,6 +1048,9 @@ export interface ConversationMessage {
   /** Server-measured wall-clock duration (ms) of the reasoning phase.
    *  Present only for assistant turns that had reasoning; absent otherwise. */
   reasoningDurationMs?: number | null;
+  /** True when this assistant turn was interrupted by the user clicking
+   *  Stop before it finished. Absent (never true) for user messages. */
+  stopped?: boolean;
   createdAt: string;
 }
 

@@ -15,16 +15,19 @@ import {
   Users,
   FileText,
   ChevronsDown,
+  Smile,
 } from "lucide-react";
 import { useMessengerChat } from "./useMessengerChat";
 import { MessageItem } from "./MessageItem";
 import { useTypingIndicator } from "./useTypingIndicator";
 import { TypingIndicator } from "./TypingIndicator";
+import { useTheme } from "@workspace/elaine-ui";
 import {
   useListHouseholdMembers,
   type MessengerHouseholdMember,
 } from "@workspace/api-client-react";
 import type { MessengerSendMessageBody } from "@workspace/api-client-react";
+import { EmojiGifPicker, type PickerTab } from "./EmojiGifPicker";
 
 type PendingAttachment = NonNullable<
   MessengerSendMessageBody["attachments"]
@@ -94,6 +97,11 @@ interface MentionAnchor {
   query: string;
   selectIdx: number;
 }
+
+// Composer textarea grows with typed content up to this height (px), then
+// scrolls internally. Bumped up from the original 100px so multi-line
+// messages are easier to compose and review before sending.
+const COMPOSER_MAX_HEIGHT = 160;
 
 type MemberEntry = { id: number; displayName: string | null; email: string };
 const ELAINE_ENTRY: MemberEntry = {
@@ -180,6 +188,8 @@ export function MessengerChatPanel({
   const [mentionAnchor, setMentionAnchor] = useState<MentionAnchor | null>(
     null,
   );
+  const [pickerTab, setPickerTab] = useState<PickerTab | null>(null);
+  const { isDark } = useTheme();
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -191,6 +201,12 @@ export function MessengerChatPanel({
   const initialScrollDoneRef = useRef(false);
   // Detects when the active conversation changes so we can reset scroll state.
   const prevConvIdRef = useRef<number | undefined>(undefined);
+  // Set right before we send our own message, so the next messages-length
+  // change force-scrolls to bottom instead of respecting isAtBottom. Sending
+  // a message is always the user's own decision to look at the latest turn —
+  // unlike an incoming message from someone else, it should never leave them
+  // stranded behind a "↓ Latest" pill.
+  const forceScrollOnNextMessageRef = useRef(false);
 
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
@@ -251,7 +267,7 @@ export function MessengerChatPanel({
       const ta = textareaRef.current;
       if (ta) {
         ta.style.height = "auto";
-        ta.style.height = `${Math.min(ta.scrollHeight, 100)}px`;
+        ta.style.height = `${Math.min(ta.scrollHeight, COMPOSER_MAX_HEIGHT)}px`;
         ta.focus();
         ta.setSelectionRange(prefillInput.length, prefillInput.length);
       }
@@ -316,10 +332,14 @@ export function MessengerChatPanel({
     }
 
     // New message while already near the bottom → gentle follow-scroll.
-    // If the user has scrolled up, do nothing — the "↓ Latest" button handles it.
+    // If the user has scrolled up, do nothing — the "↓ Latest" button handles it
+    // — unless this new message is the one we just sent ourselves, in which
+    // case we always jump to it regardless of prior scroll position.
     const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-    if (atBottom) {
+    if (atBottom || forceScrollOnNextMessageRef.current) {
+      forceScrollOnNextMessageRef.current = false;
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+      setIsAtBottom(true);
     }
   }, [convId, messages.length, isOpen, isLoading]);
 
@@ -347,6 +367,7 @@ export function MessengerChatPanel({
     setInput("");
     setPendingAttachments([]);
     setMentionAnchor(null);
+    forceScrollOnNextMessageRef.current = true;
     await sendMessage(body, attachments);
   }, [input, pendingAttachments, sendMessage]);
 
@@ -365,7 +386,7 @@ export function MessengerChatPanel({
         const ta = textareaRef.current;
         if (ta) {
           ta.style.height = "auto";
-          ta.style.height = `${Math.min(ta.scrollHeight, 100)}px`;
+          ta.style.height = `${Math.min(ta.scrollHeight, COMPOSER_MAX_HEIGHT)}px`;
           ta.focus();
           const pos = before.length + name.length + 2;
           ta.setSelectionRange(pos, pos);
@@ -389,6 +410,10 @@ export function MessengerChatPanel({
     } else {
       setMentionAnchor(null);
     }
+    // Grow the box as the user types multi-line text, capped at COMPOSER_MAX_HEIGHT.
+    const ta = e.target;
+    ta.style.height = "auto";
+    ta.style.height = `${Math.min(ta.scrollHeight, COMPOSER_MAX_HEIGHT)}px`;
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -471,6 +496,32 @@ export function MessengerChatPanel({
       setUploadingFiles([]);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
+  };
+
+  const handleEmojiSelect = (emoji: string) => {
+    const ta = textareaRef.current;
+    const cursor = ta?.selectionStart ?? input.length;
+    const newInput = input.slice(0, cursor) + emoji + input.slice(cursor);
+    setInput(newInput);
+    setTimeout(() => {
+      if (ta) {
+        ta.focus();
+        const pos = cursor + emoji.length;
+        ta.setSelectionRange(pos, pos);
+        ta.style.height = "auto";
+        ta.style.height = `${Math.min(ta.scrollHeight, COMPOSER_MAX_HEIGHT)}px`;
+      }
+    }, 0);
+  };
+
+  const handleGifAdded = (attachment: {
+    storagePath: string;
+    mimeType: string;
+    fileName: string;
+    sizeBytes: number;
+    previewUrl?: string;
+  }) => {
+    setPendingAttachments((prev) => [...prev, attachment]);
   };
 
   const dateGroups = groupByDate(messages);
@@ -1111,6 +1162,52 @@ export function MessengerChatPanel({
           accept="image/*,application/pdf"
           multiple
         />
+        <div style={{ position: "relative", display: "flex", flexShrink: 0 }}>
+          {pickerTab && (
+            <EmojiGifPicker
+              initialTab={pickerTab}
+              isDark={isDark}
+              onClose={() => setPickerTab(null)}
+              onEmojiSelect={handleEmojiSelect}
+              onGifAdded={handleGifAdded}
+            />
+          )}
+          <button
+            onClick={() =>
+              setPickerTab((t) => (t === "emoji" ? null : "emoji"))
+            }
+            aria-label="Emoji picker"
+            style={{
+              background: pickerTab === "emoji" ? "hsl(var(--muted))" : "none",
+              border: "none",
+              cursor: "pointer",
+              color: "hsl(var(--muted-foreground))",
+              padding: "6px",
+              borderRadius: 8,
+              display: "flex",
+            }}
+          >
+            <Smile size={18} />
+          </button>
+          <button
+            onClick={() => setPickerTab((t) => (t === "gif" ? null : "gif"))}
+            aria-label="GIF picker"
+            style={{
+              background: pickerTab === "gif" ? "hsl(var(--muted))" : "none",
+              border: "none",
+              cursor: "pointer",
+              color: "hsl(var(--muted-foreground))",
+              padding: "6px 5px",
+              borderRadius: 8,
+              display: "flex",
+              alignItems: "center",
+              fontSize: 11,
+              fontWeight: 700,
+            }}
+          >
+            GIF
+          </button>
+        </div>
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={uploadingFiles.length > 0}
@@ -1144,20 +1241,21 @@ export function MessengerChatPanel({
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           placeholder="Message… (@elaine to ask AI)"
-          rows={1}
+          rows={2}
           style={{
             flex: 1,
             resize: "none",
             border: "1px solid hsl(var(--border))",
             borderRadius: 10,
-            padding: "7px 12px",
+            padding: "10px 12px",
             fontSize: 14,
             lineHeight: 1.5,
             outline: "none",
             fontFamily: "inherit",
             background: "hsl(var(--card))",
             color: "hsl(var(--foreground))",
-            maxHeight: 100,
+            minHeight: 44,
+            maxHeight: COMPOSER_MAX_HEIGHT,
             overflowY: "auto",
           }}
         />

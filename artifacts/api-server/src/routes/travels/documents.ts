@@ -567,7 +567,15 @@ router.post("/trips/:id/documents", upload.single("file"), async (req, res) => {
     return;
   }
 
-  const isPdf = !isImageMimeType(sniffedMime);
+  // sniffAndValidateMime also recognises GIF and office formats for other
+  // upload surfaces (see SupportedDocMimeType) — this route only supports
+  // PDF and JPEG/PNG/WebP images, so anything else must be rejected here
+  // rather than silently falling into the "treat as PDF" branch.
+  const isPdf = sniffedMime === "application/pdf";
+  if (!isPdf && !isImageMimeType(sniffedMime)) {
+    res.status(400).json({ error: "Only PDF and image files are supported" });
+    return;
+  }
 
   let uploadBuffer = buffer;
   if (isImageMimeType(sniffedMime)) {

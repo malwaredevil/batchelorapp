@@ -105,6 +105,12 @@ export const env = {
   // boots in all environments; callers fall back to REPLIT_DOMAINS[0] or
   // reject the request if both are unset in production.
   publicAppUrl: optional("PUBLIC_APP_URL"),
+  // GIPHY API key (plain REST API, not the SDK) for the messenger GIF picker
+  // (trending/search) and converting a chosen GIF into a message attachment.
+  // Optional — the gif routes return 503 until this is set. Get a free key
+  // at https://developers.giphy.com/dashboard (choose "API", not "SDK" —
+  // we render our own picker UI and only need the search/trending endpoints).
+  giphyApiKey: optional("GIPHY_API_KEY"),
   // Comma-separated list of allowed host names for OAuth redirect URIs and
   // password-reset URLs. Validated server-side so a forged Host header
   // cannot shape sensitive redirect targets. Centralised here so every

@@ -84,6 +84,7 @@ export const SUGGEST_CLOTHING_LAYERS_TOOL_NAME = "suggest_clothing_layers";
 export const CALCULATE_YARDAGE_TOOL_NAME = "calculate_yardage";
 export const QUERY_HOUSEHOLD_TOOL_NAME = "query_household_data";
 export const CHECK_INTEGRATIONS_HEALTH_TOOL_NAME = "check_integrations_health";
+export const GENERATE_DOCUMENT_TOOL_NAME = "generate_document";
 
 // ---------------------------------------------------------------------------
 // Tool arrays
@@ -1150,6 +1151,86 @@ export const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           },
         },
         required: ["rows"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: GENERATE_DOCUMENT_TOOL_NAME,
+      description:
+        "Generate a real, downloadable file — PDF, Word (docx), Excel (xlsx), or CSV — and attach it to your reply as a download chip. Applied immediately, no confirmation needed. Use this whenever the user asks you to create, export, write, or make a document, list, report, itinerary, spreadsheet, or table they can download or share — e.g. 'make me a packing list PDF', 'export this as a spreadsheet', 'write this up as a Word doc'. For 'pdf' or 'docx' provide `sections` (headings/paragraphs/bullets/an optional table per section). For 'csv' or 'xlsx' provide `table` (headers + rows) instead — tabular data only, no prose. After calling this, do NOT paste the full document content again in your reply text; just briefly describe what you made (e.g. 'Here's your packing list!') — the file itself is shown as an attachment. If the user didn't specify a format, pick the one that best fits the content (structured/narrative → pdf or docx; tabular/data → csv or xlsx) and mention you can redo it in another format if they'd prefer.",
+      parameters: {
+        type: "object",
+        properties: {
+          format: {
+            type: "string",
+            enum: ["pdf", "docx", "xlsx", "csv"],
+            description: "Which file format to generate",
+          },
+          filename: {
+            type: "string",
+            description:
+              "Short descriptive filename without an extension, e.g. 'Packing List' or 'Trip Budget'",
+          },
+          title: {
+            type: "string",
+            description: "Document title/heading (pdf/docx only, optional)",
+          },
+          sections: {
+            type: "array",
+            description:
+              "Required for pdf/docx. Ordered content blocks that make up the document.",
+            items: {
+              type: "object",
+              properties: {
+                heading: {
+                  type: "string",
+                  description: "Section heading (optional)",
+                },
+                paragraphs: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "Plain-text paragraphs (optional)",
+                },
+                bullets: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "Bullet-list items (optional)",
+                },
+                table: {
+                  type: "object",
+                  description: "An optional table within this section",
+                  properties: {
+                    headers: { type: "array", items: { type: "string" } },
+                    rows: {
+                      type: "array",
+                      items: { type: "array", items: { type: "string" } },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          table: {
+            type: "object",
+            description:
+              "Required for csv/xlsx. Tabular data — column headers plus rows of matching length.",
+            properties: {
+              headers: { type: "array", items: { type: "string" } },
+              rows: {
+                type: "array",
+                items: { type: "array", items: { type: "string" } },
+              },
+            },
+          },
+          sheetName: {
+            type: "string",
+            description:
+              "Worksheet name for xlsx only (optional, max 31 chars)",
+          },
+        },
+        required: ["format", "filename"],
       },
     },
   },

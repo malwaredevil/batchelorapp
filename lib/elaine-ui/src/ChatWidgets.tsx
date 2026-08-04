@@ -7,6 +7,9 @@ import {
   Table2,
   Image as ImageIcon,
   ExternalLink,
+  FileText,
+  FileSpreadsheet,
+  Download,
 } from "lucide-react";
 
 // ── Widget type definitions ─────────────────────────────────────────────────
@@ -109,6 +112,12 @@ export interface DestinationCardData {
   mapsUrl: string;
 }
 
+export interface GeneratedDocumentData {
+  url: string;
+  filename: string;
+  format: "pdf" | "docx" | "csv" | "xlsx";
+}
+
 export type ChatWidget =
   | { type: "weather"; locationName: string; days: WeatherDay[] }
   | { type: "places"; query: string; places: PlaceResult[] }
@@ -126,7 +135,8 @@ export type ChatWidget =
   | { type: "pottery_item"; item: PotteryItemData }
   | { type: "fabric_swatch"; swatch: FabricSwatchData }
   | { type: "ornament_item"; item: OrnamentItemData }
-  | { type: "destination_card"; card: DestinationCardData };
+  | { type: "destination_card"; card: DestinationCardData }
+  | { type: "generated_document"; document: GeneratedDocumentData };
 
 // ── Weather condition → emoji mapping ──────────────────────────────────────
 
@@ -577,6 +587,48 @@ function ExchangeRateWidget({
   );
 }
 
+// ── Generated Document Widget ────────────────────────────────────────────────
+
+const DOCUMENT_FORMAT_LABELS: Record<GeneratedDocumentData["format"], string> =
+  {
+    pdf: "PDF",
+    docx: "Word document",
+    csv: "CSV",
+    xlsx: "Excel spreadsheet",
+  };
+
+function GeneratedDocumentWidget({
+  document,
+}: {
+  document: GeneratedDocumentData;
+}) {
+  const Icon =
+    document.format === "xlsx" || document.format === "csv"
+      ? FileSpreadsheet
+      : FileText;
+  return (
+    <a
+      href={document.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      download={document.filename}
+      className="mt-2 flex items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-2.5 shadow-sm transition-colors hover:bg-muted/60"
+      title={`Download ${document.filename}`}
+    >
+      <Icon className="h-8 w-8 shrink-0 text-primary" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-foreground">
+          {document.filename}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {DOCUMENT_FORMAT_LABELS[document.format]}
+        </p>
+      </div>
+      <Download className="h-4 w-4 shrink-0 text-muted-foreground" />
+    </a>
+  );
+}
+
 // ── Trip Card Widget ─────────────────────────────────────────────────────────
 
 function TripCardWidget({ trip }: { trip: TripCardData }) {
@@ -934,5 +986,7 @@ export function ChatWidget({ widget }: { widget: ChatWidget }) {
       return <OrnamentItemWidget item={widget.item} />;
     case "destination_card":
       return <DestinationCardWidget card={widget.card} />;
+    case "generated_document":
+      return <GeneratedDocumentWidget document={widget.document} />;
   }
 }

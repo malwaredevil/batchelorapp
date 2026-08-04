@@ -6,7 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { BarcodeScanButton } from "./BarcodeScanButton";
 import {
   Send,
@@ -341,6 +341,12 @@ function ThinkingDisclosure({
     wasStreamingRef.current = streaming;
   }, [streaming]);
 
+  const label = streaming
+    ? "Thinking…"
+    : durationMs !== undefined
+      ? `Thought for ${formatThinkingDuration(durationMs)}`
+      : "Thinking";
+
   return (
     <div className="rounded-xl border border-border/50 bg-muted/40 text-xs">
       <button
@@ -352,27 +358,33 @@ function ThinkingDisclosure({
         className="flex w-full items-center gap-1.5 px-3 py-2 text-left text-muted-foreground hover:text-foreground transition-colors"
         aria-expanded={open}
       >
-        {open ? (
-          <ChevronDown className="h-3 w-3 shrink-0" />
-        ) : (
-          <ChevronRight className="h-3 w-3 shrink-0" />
-        )}
-        <span className="font-medium">
-          {streaming
-            ? "Thinking…"
-            : durationMs !== undefined
-              ? `Thought for ${formatThinkingDuration(durationMs)}`
-              : "Thinking"}
+        <ChevronRight
+          className="h-3 w-3 shrink-0 transition-transform duration-200"
+          style={{ transform: open ? "rotate(90deg)" : "rotate(0deg)" }}
+        />
+        <span className="font-medium transition-opacity duration-150">
+          {label}
         </span>
       </button>
-      {open && (
-        <div className="px-3 pb-3 pt-0 text-muted-foreground leading-relaxed whitespace-pre-wrap">
-          {summary}
-          {streaming && (
-            <span className="ml-1 inline-block h-3 w-0.5 animate-pulse bg-muted-foreground" />
-          )}
+      {/* Grid-row height animation: 0fr → 1fr slides the content open/closed
+          without needing external keyframe CSS or JS measurement. The inner
+          div must have overflow:hidden so the 0fr state truly clips content. */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateRows: open ? "1fr" : "0fr",
+          transition: "grid-template-rows 200ms ease-out",
+        }}
+      >
+        <div style={{ overflow: "hidden" }}>
+          <div className="px-3 pb-3 pt-0 text-muted-foreground leading-relaxed whitespace-pre-wrap">
+            {summary}
+            {streaming && (
+              <span className="ml-1 inline-block h-3 w-0.5 animate-pulse bg-muted-foreground" />
+            )}
+          </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

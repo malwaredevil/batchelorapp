@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db, appUsers } from "@workspace/db";
 import { env } from "../lib/env";
+import { deriveAgentScreenshotToken } from "../lib/agent-screenshot-auth";
 
 // Dev-only automation endpoint. Lets the automated screenshot tool (which can
 // navigate to a URL but cannot type into a form or click a button) obtain an
@@ -13,6 +14,12 @@ import { env } from "../lib/env";
 // token compared in constant time, and only ever logs in the single fixed
 // automation account (AGENT_LOGIN_EMAIL) — it can never be pointed at an
 // arbitrary account, so it cannot be used to impersonate a real user.
+//
+// Two-factor by design: the value actually compared here is
+// deriveAgentScreenshotToken(DEV_SCREENSHOT_TOKEN), not the raw secret. The
+// agent only ever handles the derived value (see agent-screenshot-auth.ts),
+// so a leaked derived token is useless without the real secret, and rotating
+// the real secret instantly invalidates every previously-derived token.
 function sanitizeNext(value: unknown): string {
   if (typeof value !== "string" || !value) return "/";
   if (!value.startsWith("/") || value.startsWith("//")) return "/";
@@ -39,11 +46,9 @@ router.get("/dev/screenshot-login", async (req, res) => {
     return;
   }
 
+  const expectedToken = deriveAgentScreenshotToken(env.screenshotAuthToken);
   const token = req.query.token;
-  if (
-    typeof token !== "string" ||
-    !timingSafeTokenMatch(token, env.screenshotAuthToken)
-  ) {
+  if (typeof token !== "string" || !timingSafeTokenMatch(token, expectedToken)) {
     res.status(401).json({ error: "Invalid or missing token." });
     return;
   }
@@ -66,6 +71,7 @@ router.get("/dev/screenshot-login", async (req, res) => {
   // can pick it up and forward it as X-Screenshot-Token on every API call.
   // This is the primary auth path for the screenshot tool, which runs over
   // plain HTTP (container-internal) and can never receive Secure cookies.
+  // The value forwarded here is the derived token, never the raw secret.
   //
   // We intentionally do NOT create an Express session here. The screenshot
   // token middleware (tryScreenshotTokenAuth in auth.ts) authenticates every
@@ -73,7 +79,7 @@ router.get("/dev/screenshot-login", async (req, res) => {
   // session row is redundant — and was the source of ~11K+ spurious app_sessions
   // rows (30-day TTL × every automation invocation = unbounded DB growth).
   const sep = next.includes("?") ? "&" : "?";
-  const redirectTarget = `${next}${sep}screenshotToken=${encodeURIComponent(env.screenshotAuthToken)}`;
+  const redirectTarget = `${next}${sep}screenshotToken=${encodeURIComponent(expectedToken)}`;
   res.redirect(redirectTarget);
 });
 

@@ -29,6 +29,7 @@
     "pii-scan": "tsx ./src/pii-scan.ts",
     "check-public-file-secrets": "tsx ./src/check-public-file-secrets.ts",
     "check-secrets-registry": "tsx ./src/check-secrets-registry.ts",
+    "print-agent-screenshot-token": "tsx ./src/print-agent-screenshot-token.ts",
     "pre-publish": "bash ./src/pre-publish.sh",
     "verify-github-secrets": "tsx --env-file=.env ./src/verify-github-secrets.ts",
     "verify-supabase-prerequisites": "tsx --env-file=.env ./src/verify-supabase-prerequisites.ts",

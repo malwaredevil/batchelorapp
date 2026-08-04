@@ -82,6 +82,62 @@ async function notifySentryRelease(version: string): Promise<void> {
   }
 }
 
+/**
+ * The release-tracking webhook above only CREATES an "unreleased" (open)
+ * Sentry release — it never sets dateReleased. Without that, the release
+ * sits forever with 0% adoption and a "Finalize" button in the Releases UI.
+ * Finalize it ourselves right after creation so releases don't pile up
+ * requiring manual clicks in the Sentry dashboard.
+ */
+async function finalizeSentryRelease(version: string): Promise<void> {
+  const token = process.env.SENTRY_AUTH_TOKEN;
+  const orgSlug = process.env.SENTRY_ORG_SLUG;
+  const projectSlug = process.env.SENTRY_PROJECT_SLUG;
+  if (!token || !orgSlug || !projectSlug) {
+    console.log(
+      "  ⚠  SENTRY_AUTH_TOKEN/SENTRY_ORG_SLUG/SENTRY_PROJECT_SLUG not set — skipping release finalize.",
+    );
+    return;
+  }
+  const url = `https://sentry.io/api/0/organizations/${orgSlug}/releases/${encodeURIComponent(version)}/`;
+  const body = JSON.stringify({
+    dateReleased: new Date().toISOString(),
+    projects: [projectSlug],
+  });
+  // The webhook above may still be processing when we call this, so retry a
+  // couple of times on 404 before giving up.
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const res = await fetch(url, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body,
+      });
+      if (res.ok) {
+        console.log(`  ✓ Sentry release finalized: ${version}`);
+        return;
+      }
+      if (res.status === 404 && attempt < 3) {
+        await new Promise((r) => setTimeout(r, 2000));
+        continue;
+      }
+      const text = await res.text();
+      console.warn(
+        `  ⚠  Sentry release finalize returned ${res.status}: ${text.slice(0, 200)}`,
+      );
+      return;
+    } catch (err) {
+      console.warn(
+        `  ⚠  Sentry release finalize failed (non-fatal): ${(err as Error).message}`,
+      );
+      return;
+    }
+  }
+}
+
 const cmd = process.argv[2];
 
 if (cmd === "write") {
@@ -130,6 +186,7 @@ if (cmd === "write") {
 
   console.log(`Notifying Sentry of release: ${releaseVersion}`);
   await notifySentryRelease(releaseVersion);
+  await finalizeSentryRelease(releaseVersion);
 
   console.log(
     "At the start of the next session, the agent will check for new Sentry issues.",

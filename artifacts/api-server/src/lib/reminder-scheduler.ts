@@ -153,8 +153,15 @@ export async function runReminderAlerts(): Promise<void> {
   const callsEnabled = callsConfigured();
 
   if (!emailEnabled && !smsEnabled && !slackEnabled && !callsEnabled) {
-    logger.debug(
-      "reminder-scheduler: no alert channels configured (email/SMS/Slack/call), skipping",
+    logger.info(
+      {
+        candidatesChecked: 0,
+        attempted: 0,
+        sent: 0,
+        failed: 0,
+        skippedAlreadySent: 0,
+      },
+      "reminder-scheduler: run summary (no alert channels configured)",
     );
     return;
   }
@@ -163,6 +170,8 @@ export async function runReminderAlerts(): Promise<void> {
   // Acquire the pool client only for the synchronous DB-read phase.  All slow
   // network operations (Resend, SMS gateway, Slack API) happen AFTER release.
 
+  let candidatesChecked = 0;
+  let skippedAlreadySent = 0;
   const workItems: WorkItem[] = [];
 
   const client = await pool.connect().catch((err: unknown) => {
@@ -207,7 +216,20 @@ export async function runReminderAlerts(): Promise<void> {
                OR array_length(r.call_recipient_user_ids, 1) > 0)`,
     );
 
-    if (candidates.length === 0) return;
+    candidatesChecked = candidates.length;
+    if (candidates.length === 0) {
+      logger.info(
+        {
+          candidatesChecked: 0,
+          attempted: 0,
+          sent: 0,
+          failed: 0,
+          skippedAlreadySent: 0,
+        },
+        "reminder-scheduler: run summary",
+      );
+      return;
+    }
 
     // Pre-fetch ALL alert-log rows for this run's candidates in one query so
     // the inner loop doesn't need a per-(reminder, type) round-trip.
@@ -370,7 +392,10 @@ export async function runReminderAlerts(): Promise<void> {
               continue;
             }
             const deliveryKey = `${candidate.reminder_id}:${type}:email:${toEmail}`;
-            if (deliveredKeys.has(deliveryKey)) continue;
+            if (deliveredKeys.has(deliveryKey)) {
+              skippedAlreadySent++;
+              continue;
+            }
             workItems.push({
               channel: "email",
               reminderId: candidate.reminder_id,
@@ -402,7 +427,10 @@ export async function runReminderAlerts(): Promise<void> {
               continue;
             }
             const deliveryKey = `${candidate.reminder_id}:${type}:sms:${phone}`;
-            if (deliveredKeys.has(deliveryKey)) continue;
+            if (deliveredKeys.has(deliveryKey)) {
+              skippedAlreadySent++;
+              continue;
+            }
             workItems.push({
               channel: "sms",
               reminderId: candidate.reminder_id,
@@ -424,7 +452,10 @@ export async function runReminderAlerts(): Promise<void> {
             const slackUserId = slackMap.get(userId);
             if (!slackUserId) continue;
             const deliveryKey = `${candidate.reminder_id}:${type}:slack:${slackUserId}`;
-            if (deliveredKeys.has(deliveryKey)) continue;
+            if (deliveredKeys.has(deliveryKey)) {
+              skippedAlreadySent++;
+              continue;
+            }
             workItems.push({
               channel: "slack",
               reminderId: candidate.reminder_id,
@@ -457,7 +488,10 @@ export async function runReminderAlerts(): Promise<void> {
               continue;
             }
             const deliveryKey = `${candidate.reminder_id}:${type}:call:${phone}`;
-            if (deliveredKeys.has(deliveryKey)) continue;
+            if (deliveredKeys.has(deliveryKey)) {
+              skippedAlreadySent++;
+              continue;
+            }
             workItems.push({
               channel: "call",
               reminderId: candidate.reminder_id,
@@ -481,7 +515,13 @@ export async function runReminderAlerts(): Promise<void> {
     client.release();
   }
 
-  if (workItems.length === 0) return;
+  if (workItems.length === 0) {
+    logger.info(
+      { candidatesChecked, skippedAlreadySent },
+      "reminder-scheduler: no new alerts to send this run (all already delivered or no due dates matched)",
+    );
+    return;
+  }
 
   // ── Phase 2: execute sends (no DB connection held) ───────────────────────
 
@@ -567,6 +607,21 @@ export async function runReminderAlerts(): Promise<void> {
   }
 
   const anySucceeded = results.some((r) => r.success);
+  // Emit the run summary here — before the !anySucceeded early-return — so
+  // the log fires for every post-attempt outcome including all-failed runs,
+  // not just runs where recording succeeds.
+  const sentCount = results.filter((r) => r.success).length;
+  const failedCount = results.filter((r) => !r.success).length;
+  logger.info(
+    {
+      candidatesChecked,
+      attempted: workItems.length,
+      sent: sentCount,
+      failed: failedCount,
+      skippedAlreadySent,
+    },
+    "reminder-scheduler: run summary",
+  );
   if (!anySucceeded) return;
 
   // ── Phase 3: record results (short new DB connection) ────────────────────

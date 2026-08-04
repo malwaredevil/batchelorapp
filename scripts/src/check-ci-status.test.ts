@@ -12,19 +12,21 @@
  */
 
 import assert from "node:assert/strict";
-import { evaluateCheckRuns } from "./check-ci-status.js";
+import { dedupeCheckRunsByName, evaluateCheckRuns } from "./check-ci-status.js";
 import type { CheckRunVerdict } from "./check-ci-status.js";
 
 function makeRun(
   name: string,
   status: "completed" | "in_progress" | "queued",
   conclusion: string | null,
+  startedAt?: string,
 ) {
   return {
     name,
     status,
     conclusion,
     html_url: `https://github.com/checks/${name}`,
+    started_at: startedAt,
   };
 }
 
@@ -179,6 +181,64 @@ const skippedAndNeutral = [
   );
   console.log(
     "✓ Mix of skipped and neutral (no success) → fails with reason all-skipped",
+  );
+}
+
+// ── Extra: re-run supersedes its own earlier failed attempt ──────────────────
+// GitHub's check-runs API returns every attempt for a given name. A required
+// check that failed once and was then manually re-run to success must not be
+// reported as "failed" just because the stale failed attempt is still in the
+// list — this is exactly what happened on PR #465 (task #658's merge).
+
+const rerunSupersedesFailure = [
+  makeRun("build", "completed", "success", "2026-08-04T11:00:00Z"),
+  makeRun("PR Validation", "completed", "failure", "2026-08-04T11:12:24Z"),
+  makeRun("PR Validation", "completed", "success", "2026-08-04T11:17:00Z"),
+];
+
+{
+  const deduped = dedupeCheckRunsByName(rerunSupersedesFailure);
+  assert.equal(
+    deduped.length,
+    2,
+    "dedupe: should collapse to one run per name",
+  );
+  const prValidation = deduped.find((r) => r.name === "PR Validation");
+  assert.equal(
+    prValidation?.conclusion,
+    "success",
+    "dedupe: should keep the later (successful) re-run, not the earlier failure",
+  );
+
+  const verdict = evaluateCheckRuns(rerunSupersedesFailure);
+  assert.equal(
+    verdict.ok,
+    true,
+    "rerun: a later successful re-run should make the overall verdict ok",
+  );
+  console.log(
+    "✓ Re-run superseding an earlier failed attempt → passes (uses latest run per name)",
+  );
+}
+
+// ── Extra: dedupe keeps a still-failing check even with an older success ─────
+// (e.g. a flaky pass followed by a genuine later failure must still fail.)
+
+const laterFailureStillFails = [
+  makeRun("build", "completed", "success", "2026-08-04T11:00:00Z"),
+  makeRun("lint", "completed", "success", "2026-08-04T11:00:00Z"),
+  makeRun("lint", "completed", "failure", "2026-08-04T11:05:00Z"),
+];
+
+{
+  const verdict = evaluateCheckRuns(laterFailureStillFails);
+  assert.equal(
+    verdict.ok,
+    false,
+    "later-failure: a later failing re-run must still fail overall",
+  );
+  console.log(
+    "✓ Later failing re-run overriding an earlier success → still fails",
   );
 }
 

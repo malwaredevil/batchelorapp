@@ -79,18 +79,22 @@ export function recordScheduledTaskFailure(_taskName: string): void {
  * Returns true if at least `minIntervalMs` has elapsed since the last
  * successful run for `taskName` (or if this task has never run before).
  * Claiming updates last_run_at immediately, before the caller's work even
- * starts, so two racing instances can't both claim the same run window.
+ * starts, so concurrent instances racing the same INSERT ON CONFLICT cannot
+ * both claim the same window — PostgreSQL's row-level lock on the conflict
+ * target serialises them, and after the first winner sets last_run_at to
+ * now() the loser's WHERE clause evaluates against the updated row and fails.
  *
- * The interval check uses COALESCE(last_success_at, last_run_at) — not
- * last_run_at alone. The distinction matters when a server is killed
- * mid-run: last_run_at stays at the time of the killed claim while
- * last_success_at stays at the previous successful run. With last_run_at
- * alone, a deployment restart during an in-progress run would block the
- * next deployment from running the task for the full minIntervalMs (because
- * the killed claim looks "fresh"). Using last_success_at as the interval
- * anchor instead means a new deployment can claim immediately — the killed
- * run's stale claim is ignored. Both tasks guarded here are idempotent so
- * the tiny concurrent-claim window during a deployment transition is safe.
+ * The WHERE clause uses two arms to handle crash recovery cleanly:
+ *
+ *   Arm 1 (normal cadence):  last_run_at is old enough → claim.
+ *
+ *   Arm 2 (crash recovery):  last_run_at is recent (a deployment restart
+ *     killed the previous run before it could call recordScheduledTaskSuccess)
+ *     but last_success_at is stale.  We allow a fresh claim once the stale
+ *     claim is at least 10 minutes old — well beyond any concurrent-claim
+ *     race window (milliseconds) while still within the normal 60-minute
+ *     interval, so recovery happens within the same hour.  These lightweight
+ *     tasks finish in seconds, so 10 minutes is a safe run-timeout threshold.
  *
  * Also refreshes expected_interval_ms every call (claimed or not) so the
  * shared heartbeat always knows this task's current cadence.
@@ -105,11 +109,66 @@ export async function shouldRunScheduledTask(
       VALUES (${taskName}, now(), ${minIntervalMs})
       ON CONFLICT (name) DO UPDATE
         SET last_run_at = now()
-        WHERE COALESCE(scheduler_runs.last_success_at, scheduler_runs.last_run_at)
-          < now() - (${minIntervalMs}::text || ' milliseconds')::interval
+        WHERE (
+          -- Arm 1: normal cadence — last claim was long enough ago
+          scheduler_runs.last_run_at
+            < now() - (${minIntervalMs}::text || ' milliseconds')::interval
+        ) OR (
+          -- Arm 2: crash recovery — the previous claim never completed
+          -- (last_run_at > last_success_at) and enough time has passed to
+          -- rule out an active concurrent claim (10 min >> any race window).
+          scheduler_runs.last_success_at IS NOT NULL
+          AND scheduler_runs.last_run_at > scheduler_runs.last_success_at
+          AND scheduler_runs.last_success_at
+            < now() - (${minIntervalMs}::text || ' milliseconds')::interval
+          AND scheduler_runs.last_run_at < now() - interval '10 minutes'
+        )
       RETURNING name
     `);
     const claimed = result.rows.length > 0;
+    if (!claimed) {
+      // Log last_run_at and last_success_at separately so operators can see
+      // exactly why the run was denied without querying the DB directly.
+      // Using COALESCE would obscure crash-recovery cases: when a process died
+      // mid-run, last_run_at is fresh but last_success_at is stale — the deny
+      // is driven by last_run_at (Arm 1 cooldown), not by the coalesced value.
+      // Non-fatal if the follow-up SELECT fails — the deny decision is already made.
+      try {
+        const anchorResult = await db.execute<{
+          last_run_at: string;
+          last_success_at: string | null;
+        }>(sql`
+          SELECT last_run_at::text     AS last_run_at,
+                 last_success_at::text AS last_success_at
+            FROM scheduler_runs
+           WHERE name = ${taskName}
+        `);
+        const row = anchorResult.rows[0];
+        if (row) {
+          // When last_run_at > last_success_at the previous claim never
+          // completed (crash recovery scenario).  The 10-minute run-timeout
+          // is still in effect, so the deny reason is different from the
+          // normal cadence case.
+          const isActiveClaim =
+            row.last_success_at != null &&
+            new Date(row.last_run_at) > new Date(row.last_success_at);
+          logger.debug(
+            {
+              taskName,
+              lastRunAt: row.last_run_at,
+              lastSuccessAt: row.last_success_at,
+              intervalMs: minIntervalMs,
+              reason: isActiveClaim
+                ? "crash-recovery timeout not elapsed"
+                : "interval not elapsed since last_run_at",
+            },
+            `scheduler-guard: skipped — last_run_at ${row.last_run_at}, interval ${Math.round(minIntervalMs / 60_000)}min not elapsed`,
+          );
+        }
+      } catch {
+        // Non-fatal: anchor logging failure doesn't affect the deny decision
+      }
+    }
     // Keep expected_interval_ms current even on an unclaimed (too-soon) call
     // — the row is guaranteed to exist by this point (inserted above or
     // pre-existing), so this is a plain, always-run update.

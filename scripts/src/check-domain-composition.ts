@@ -439,6 +439,7 @@ export function hasSentryInit(contents: string): boolean {
 const SENTRY_INIT_ALLOWED = new Set([
   "lib/web-core/src/sentry.ts", // THE shared implementation
   "artifacts/api-server/src/instrument.ts", // server-side Sentry (separate concern)
+  "lib/vite-config/src/index.ts", // only mentions Sentry.init in a comment, no actual call
 ]);
 
 for (const file of allSourceFiles) {

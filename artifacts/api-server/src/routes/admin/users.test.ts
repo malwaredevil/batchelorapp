@@ -254,6 +254,43 @@ describe("PATCH /admin/users/:id", () => {
     expect(db.update).toHaveBeenCalled();
   });
 
+  it("rejects an invalid IANA timezone", async () => {
+    const app = buildApp();
+    const res = await request(app)
+      .patch("/admin/users/2")
+      .send({ timezone: "Not/AZone" });
+    expect(res.status).toBe(400);
+    expect(res.body.error.fieldErrors.timezone).toBeDefined();
+  });
+
+  it("accepts a valid IANA timezone", async () => {
+    mockUpdateRows = [{ ...baseUser, timezone: "America/Denver" }];
+    const app = buildApp();
+    const res = await request(app)
+      .patch("/admin/users/2")
+      .send({ timezone: "America/Denver" });
+    expect(res.status).toBe(200);
+    expect(res.body.user.timezone).toBe("America/Denver");
+  });
+
+  it("rejects a theme preference outside light/dark", async () => {
+    const app = buildApp();
+    const res = await request(app)
+      .patch("/admin/users/2")
+      .send({ themePreference: "blue" });
+    expect(res.status).toBe(400);
+    expect(res.body.error.fieldErrors.themePreference).toBeDefined();
+  });
+
+  it("rejects a birthday with an invalid month/day", async () => {
+    const app = buildApp();
+    const res = await request(app)
+      .patch("/admin/users/2")
+      .send({ birthday: "00-99" });
+    expect(res.status).toBe(400);
+    expect(res.body.error.fieldErrors.birthday).toBeDefined();
+  });
+
   it("rejects owner removing their own isOwner flag", async () => {
     currentUserId = 2; // same as target
     const app = buildApp();

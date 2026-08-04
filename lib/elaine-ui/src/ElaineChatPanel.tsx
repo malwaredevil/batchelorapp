@@ -304,30 +304,51 @@ function MessageText({
   );
 }
 
+function formatThinkingDuration(ms: number): string {
+  const seconds = Math.max(1, Math.round(ms / 1000));
+  return `${seconds} second${seconds === 1 ? "" : "s"}`;
+}
+
 /**
  * Collapsible "Thinking…" disclosure shown above an assistant reply when the
- * model produced a reasoning summary. `streaming` keeps it open while the
- * summary is still arriving; once streaming stops the user controls expansion.
+ * model produced a reasoning summary, mirroring ChatGPT's "Thought for Xs"
+ * pattern. `streaming` keeps it open while the summary is still arriving;
+ * when it flips back to false (turn finished) it auto-collapses on its own,
+ * unless the user already manually toggled it during this turn — after
+ * that, or once collapsed, the user is back in full control of expansion.
  */
 function ThinkingDisclosure({
   summary,
   streaming = false,
+  durationMs,
 }: {
   summary: string;
   streaming?: boolean;
+  durationMs?: number;
 }) {
   const [open, setOpen] = useState(streaming);
+  const userToggledRef = useRef(false);
+  const wasStreamingRef = useRef(streaming);
 
-  // Auto-open while streaming; leave in user-controlled state after done.
   useEffect(() => {
-    if (streaming) setOpen(true);
+    if (streaming) {
+      setOpen(true);
+    } else if (wasStreamingRef.current && !userToggledRef.current) {
+      // Just finished this turn and the user hasn't touched the toggle —
+      // auto-collapse, same as ChatGPT does once the answer is ready.
+      setOpen(false);
+    }
+    wasStreamingRef.current = streaming;
   }, [streaming]);
 
   return (
     <div className="rounded-xl border border-border/50 bg-muted/40 text-xs">
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          userToggledRef.current = true;
+          setOpen((o) => !o);
+        }}
         className="flex w-full items-center gap-1.5 px-3 py-2 text-left text-muted-foreground hover:text-foreground transition-colors"
         aria-expanded={open}
       >
@@ -337,7 +358,11 @@ function ThinkingDisclosure({
           <ChevronRight className="h-3 w-3 shrink-0" />
         )}
         <span className="font-medium">
-          {streaming ? "Thinking…" : "Thinking"}
+          {streaming
+            ? "Thinking…"
+            : durationMs !== undefined
+              ? `Thought for ${formatThinkingDuration(durationMs)}`
+              : "Thinking"}
         </span>
       </button>
       {open && (
@@ -403,6 +428,7 @@ export function ElaineChatPanel({
     isStreaming,
     streamingContent,
     streamingReasoningSummary,
+    reasoningActive,
     statusMessage,
     runtimeTrace,
     endRef,
@@ -753,7 +779,10 @@ export function ElaineChatPanel({
                   <ElainePlanProgress trace={msg.runtimeTrace} />
                 )}
                 {msg.reasoningSummary && (
-                  <ThinkingDisclosure summary={msg.reasoningSummary} />
+                  <ThinkingDisclosure
+                    summary={msg.reasoningSummary}
+                    durationMs={msg.reasoningDurationMs}
+                  />
                 )}
                 <div className="rounded-2xl rounded-tl-sm bg-muted px-3.5 py-2.5 text-sm leading-relaxed text-foreground">
                   <MessageText text={text} citations={citations} />
@@ -816,7 +845,7 @@ export function ElaineChatPanel({
               {streamingReasoningSummary && (
                 <ThinkingDisclosure
                   summary={streamingReasoningSummary}
-                  streaming
+                  streaming={reasoningActive}
                 />
               )}
               {streamingContent ? (

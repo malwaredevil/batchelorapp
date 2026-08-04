@@ -186,6 +186,11 @@ export interface AssistantMessage {
   /** Model-produced reasoning summary for this assistant turn. Absent when
    *  the model emitted no reasoning or the feature is disabled. */
   reasoningSummary?: string | null;
+  /** Client-measured wall-clock time (ms) the turn spent "thinking" before
+   *  the final reply was ready. Computed locally in the chat hook, not
+   *  persisted server-side, so it's only present for the live session that
+   *  produced the message (absent after a reload/history load). */
+  reasoningDurationMs?: number;
   /** ISO timestamp from the server. Present on history-loaded messages;
    *  absent on optimistically-inserted messages (streaming in progress). */
   createdAt?: string;

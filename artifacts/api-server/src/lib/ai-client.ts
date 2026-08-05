@@ -102,6 +102,40 @@ function makeOpenRouterClient(timeoutMs: number): OpenAI {
   });
 }
 
+/**
+ * OpenRouter's "reasoning" request field is not part of the official OpenAI
+ * SDK types (it's an OpenRouter-specific extension forwarded as extra JSON
+ * body), so callers spread this into their params object and cast the call.
+ * `enabled: false` tells OpenRouter to instruct thinking-capable providers
+ * (e.g. Gemini 2.5 Flash) to skip their internal extended-reasoning pass
+ * entirely, rather than generate it and rely on us separating it from the
+ * visible reply afterwards. Use this on any Elaine chat-completion call
+ * where the model's raw `content` is shown directly to the user (main chat
+ * turn, restricted SMS/voice/email turns) — see
+ * .agents/memory/elaine-reasoning-leak-fix.md: a leaked reasoning preamble
+ * has no reliable delimiter from the real answer, so preventing generation
+ * is the only fix that actually works, not stripping it after the fact.
+ */
+// Spread into any OpenRouter chat.completions.create() call whose `content`
+// is shown directly to a user. Gemini's extended "thinking" pass on
+// OpenRouter's plain chat-completions endpoint (unlike the OpenAI Responses
+// path, which cleanly separates response.reasoning_summary_text.* events)
+// does not reliably separate from the visible answer: it has been observed
+// bleeding narrative reasoning prose ("The user is asking... I should...")
+// directly into `content`, run together with the real reply with no
+// delimiter — see .agents/memory/elaine-reasoning-leak-fix.md. `exclude:
+// true` keeps the reasoning pass on (quality benefit for harder questions)
+// but asks OpenRouter to strip it from the response; this reduces the leak
+// rate (verified) but — because the leak is Gemini writing straight into
+// `content`, not OpenRouter mis-routing a separate `reasoning` field — it is
+// NOT guaranteed to eliminate it entirely. This is a deliberate,
+// user-approved quality-over-zero-risk tradeoff; if a leak recurs, that is
+// expected residual risk, not a regression to immediately "fix" by reaching
+// for `enabled: false` without checking in with the product owner first.
+export const HIDDEN_REASONING = {
+  reasoning: { enabled: true, exclude: true },
+} as const;
+
 let _openrouterClient: { client: OpenAI; timeoutMs: number } | null = null;
 
 export async function getOpenRouterClient(): Promise<OpenAI> {

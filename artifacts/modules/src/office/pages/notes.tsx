@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useLocation, useSearch } from "wouter";
 import DOMPurify from "dompurify";
 import { NotebookPen, Plus, Trash2, X, Palette } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -73,6 +74,8 @@ function renderBody(body: string): string {
 // note. createdByUserId is attribution-only (who created it), matching the
 // household-sharing model used across pottery/quilting/travels/ornaments.
 export default function OfficeNotes() {
+  const [, navigate] = useLocation();
+  const locationSearch = useSearch();
   const queryClient = useQueryClient();
   const { data: notes = [], isLoading } = useListNotes({
     query: { queryKey: getListNotesQueryKey() },
@@ -100,6 +103,18 @@ export default function OfficeNotes() {
   const [editTitle, setEditTitle] = useState("");
   const [editBody, setEditBody] = useState("");
   const [editBgColor, setEditBgColor] = useState<string | null>(null);
+
+  // On mount: ?new=1 auto-opens the composer so external links (e.g. the hub's
+  // "Add Item" menu) can jump straight into creating a note. Consumed and
+  // cleaned from the URL immediately.
+  useEffect(() => {
+    const params = new URLSearchParams(locationSearch);
+    if (params.get("new") === "1") {
+      setComposing(true);
+      navigate("/office/notes", { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function startEdit(note: OfficeNote) {
     setEditingId(note.id);

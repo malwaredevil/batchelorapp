@@ -81,6 +81,8 @@ const ADD_ACTIONS = [
   { label: "Fabric", href: `${base}modules/quilting/fabrics/add` },
   { label: "Pattern", href: `${base}modules/quilting/patterns/add` },
   { label: "Quilt", href: `${base}modules/quilting/quilts/add` },
+  { label: "Ornament", href: `${base}modules/ornaments/camera-add` },
+  { label: "Note", href: `${base}modules/office/notes?new=1` },
 ];
 
 const POTTERY_QUICK_LINKS = [
@@ -338,7 +340,7 @@ function AppHeroCard({
     description: string;
     cta?: string;
   };
-  stats: { value: string; label: string; href?: string }[];
+  stats: { value: string; label: string; href?: string; hint?: string }[];
   quickLinks: {
     label: string;
     icon: React.FC<{ className?: string }>;
@@ -407,6 +409,7 @@ function AppHeroCard({
             {stats.map((s) => (
               <div
                 key={s.label}
+                title={s.hint}
                 data-stat={s.href && !arranging ? "true" : undefined}
                 role={s.href && !arranging ? "link" : undefined}
                 tabIndex={s.href && !arranging ? 0 : undefined}
@@ -778,7 +781,7 @@ export function AppLauncher() {
 
   function liveStats(
     appId: string,
-  ): { value: string; label: string; href?: string }[] {
+  ): { value: string; label: string; href?: string; hint?: string }[] {
     if (appId === "pottery") {
       return [
         {
@@ -906,6 +909,7 @@ export function AppLauncher() {
               : "—",
           label: "Nudges",
           href: `${base}elaine/`,
+          hint: "Unread heads-up alerts Elaine has for you — e.g. an upcoming trip with no packing list, bad air quality before you travel, or a connected service that needs attention. Open Elaine to see and clear them.",
         },
         {
           value: Array.isArray(elaineMemoryData)

@@ -53,7 +53,11 @@ import {
 import { requireAuth } from "../middleware/auth";
 import { phoneVerifyLimiter, aiLimiter } from "../middleware/rateLimit";
 import { logger } from "../lib/logger";
-import { callModel, callModelWithSubagent } from "../lib/ai-client";
+import {
+  callModel,
+  callModelWithSubagent,
+  HIDDEN_REASONING,
+} from "../lib/ai-client";
 import { embedText } from "../lib/openai";
 import { getElaineGlobalConfig } from "../lib/elaine-config";
 import {
@@ -3746,7 +3750,9 @@ ${crossChannelContext}
     : ""
 }
 
-THINK → PLAN → ACT (mandatory for every multi-step or trip-related question): This is a private mental checklist you run silently before calling any tool — it must never appear as text anywhere in your visible reply. Do NOT write the words "THINK", "PLAN", or "ACT", do NOT write out a numbered list of your own reasoning steps, and do NOT narrate what you're about to do ("First I'll check...", "Step 1:..."). Your visible reply must start directly with the substantive answer — nothing before it. Privately (never in the output): (1) What is the user really asking? (2) What information do I already have — from the page context, from earlier in this conversation, from a tool result I just received? (3) What am I missing that I genuinely need to look up? (4) What is the right sequence of tool calls, and do any of them depend on the result of a prior call? Only then call tools — in the correct dependency order. Never fire a tool with assumed/default parameters when the user's question implies specific context (e.g. their trip dates, their destination, their hotel) that you don't yet have. Examples of good private planning (never written into the reply):
+SILENT REASONING (applies to every single reply, not just multi-step or trip-related ones): Never write your reasoning about the user's message into the reply — not as labeled steps, not as narration, and not as third-person or first-person prose describing what you're noticing or about to do. This means, among other things, never open a reply with sentences like "The user is asking about...", "The user is once again confirming...", "This is similar to the previous...", "I should acknowledge this and then...", or "Given that, I'll...". These are just as much a leak as writing the literal words THINK/PLAN/ACT or a numbered internal step list — do none of it. Your visible reply must start directly with the substantive answer, greeting, or acknowledgment itself — the first character of your reply is the first character the user should read, with nothing analytical before it. This applies even to short, routine replies (e.g. acknowledging a repeated automated check-in message) — repetitive or low-stakes inputs are not an exception.
+
+THINK → PLAN → ACT (mandatory for every multi-step or trip-related question): This is a private mental checklist you run silently before calling any tool — it must never appear as text anywhere in your visible reply, per SILENT REASONING above. Privately (never in the output): (1) What is the user really asking? (2) What information do I already have — from the page context, from earlier in this conversation, from a tool result I just received? (3) What am I missing that I genuinely need to look up? (4) What is the right sequence of tool calls, and do any of them depend on the result of a prior call? Only then call tools — in the correct dependency order. Never fire a tool with assumed/default parameters when the user's question implies specific context (e.g. their trip dates, their destination, their hotel) that you don't yet have. Examples of good private planning (never written into the reply):
 - User: "What's the weather when we visit?" → Privately: (1) Do I know which trip and its dates? No. → search_household_data for the trip to get destination + dates. (2) Are those dates within 10 days? If yes → get_weather_forecast. If no → web_search for seasonal/historical weather. Never skip step 1. Visible reply: just the weather answer.
 - User: "What flights are available?" on a non-trip page → Privately: (1) Do I know the destination and dates? No → search_household_data for the upcoming trip. (2) Then call search_flights with those dates. Visible reply: just the flight answer.
 - User: "What should I pack?" → Privately: (1) Do I have destination + trip dates? If not, search. (2) Call get_weather_forecast or web_search depending on how far out. (3) Synthesize weather + destination + duration into packing advice. Visible reply: just the packing suggestions.
@@ -4539,6 +4545,7 @@ router.post("/chat", async (req, res) => {
               messages,
               max_tokens: elaineConfig.maxResponseTokens,
               stream: true,
+              ...HIDDEN_REASONING,
               ...(suppressTools
                 ? { tool_choice: "none" as const }
                 : forcedToolName
@@ -8402,7 +8409,8 @@ async function runRestrictedElaineTurn(params: {
         max_tokens: maxTokens,
         messages,
         tools: channelTools,
-      }),
+        ...HIDDEN_REASONING,
+      } as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming),
     );
     const message = completion.choices[0]?.message;
     if (!message) break;
@@ -8801,7 +8809,8 @@ async function runRestrictedElaineTurn(params: {
             max_tokens: maxTokens,
             messages,
             tool_choice: "none",
-          }),
+            ...HIDDEN_REASONING,
+          } as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming),
       );
       replyText = (finalCompletion.choices[0]?.message?.content ?? "").trim();
     } catch (err) {

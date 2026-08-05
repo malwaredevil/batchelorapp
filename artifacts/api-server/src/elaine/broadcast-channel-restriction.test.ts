@@ -387,6 +387,7 @@ vi.mock("./communication-actions", async (importOriginal) => {
 vi.mock("../lib/ai-client", () => ({
   callModel: (...args: unknown[]) => mockCallModel(...args),
   callModelWithSubagent: vi.fn(),
+  HIDDEN_REASONING: { reasoning: { enabled: true, exclude: true } },
 }));
 
 // ---------------------------------------------------------------------------

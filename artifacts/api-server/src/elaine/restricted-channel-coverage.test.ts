@@ -251,20 +251,26 @@ describe("Elaine restricted-channel tool coverage", () => {
     expect(stale).toEqual([]);
   });
 
-  it("every caller-handled soft tool has an explicit dispatch branch in runRestrictedElaineTurn", () => {
+  it("every caller-handled soft tool has an explicit dispatch branch in executeRestrictedToolCall", () => {
     // Static-analysis check: each name in RESTRICTED_SOFT_TOOL_NAMES_CALLER_HANDLED
     // must have an `else if (name === CONST_NAME)` branch in the
-    // runRestrictedElaineTurn dispatch loop — before the fallthrough
+    // executeRestrictedToolCall dispatch — before the fallthrough
     // `RESTRICTED_SOFT_TOOL_NAMES.has(name)` block.  Without this guard, a
     // developer could add a tool to the caller-handled set without ever wiring
     // up the actual runtime dispatch, causing "Unsupported tool." errors on
     // restricted channels.
+    //
+    // This dispatch used to live inline in runRestrictedElaineTurn; it was
+    // extracted into executeRestrictedToolCall so both the OpenRouter loop
+    // and the OpenAI Responses API loop (SMS/Slack/email/messenger vs.
+    // voice) execute tool calls identically regardless of which model
+    // answered.
     const indexPath = fileURLToPath(new URL("./index.ts", import.meta.url));
     const source = readFileSync(indexPath, "utf8");
 
     // Locate the restricted-turn dispatch region: from the start of
-    // runRestrictedElaineTurn up to the fallthrough soft-tool block.
-    const fnMarker = "\nasync function runRestrictedElaineTurn(";
+    // executeRestrictedToolCall up to the fallthrough soft-tool block.
+    const fnMarker = "\nasync function executeRestrictedToolCall(";
     const fallthroughSentinel =
       "} else if (RESTRICTED_SOFT_TOOL_NAMES.has(name)) {";
     const fnStart = source.indexOf(fnMarker);
@@ -275,7 +281,7 @@ describe("Elaine restricted-channel tool coverage", () => {
 
     if (fnStart === -1) {
       expect.fail(
-        "Could not locate `runRestrictedElaineTurn` in index.ts — " +
+        "Could not locate `executeRestrictedToolCall` in index.ts — " +
           "was the function renamed or moved?",
       );
       return;
@@ -319,7 +325,7 @@ describe("Elaine restricted-channel tool coverage", () => {
       failures.push(
         `These caller-handled tools are in RESTRICTED_SOFT_TOOL_NAMES_CALLER_HANDLED ` +
           `but have no explicit \`else if (name === CONST_NAME)\` branch in the ` +
-          `runRestrictedElaineTurn dispatch region of index.ts. ` +
+          `executeRestrictedToolCall dispatch region of index.ts. ` +
           `Add the branch or move the name out of the caller-handled list:\n` +
           `  ${missingBranch.join("\n  ")}`,
       );

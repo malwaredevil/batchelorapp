@@ -139,6 +139,10 @@ export function useElaineChat({
   // Messages queued while a prior turn is still streaming, sent strictly in
   // order the instant the in-progress turn finishes or is stopped.
   const queueRef = useRef<QueuedSend[]>([]);
+  // Retains the original send payload for any message currently marked
+  // `failed`, keyed by its (negative) tempId, so retrySend() can resend the
+  // exact same text/attachments without the user retyping anything.
+  const failedItemsRef = useRef<Map<number, QueuedSend>>(new Map());
 
   // Active named conversation ID (null = use the rolling single-thread history)
   const [conversationId, setConversationId] = useState<number | null>(null);
@@ -272,14 +276,53 @@ export function useElaineChat({
 
   const { data: settings } = useGetElaineSettings();
   const updateSettings = useUpdateElaineSettings();
-  const { data: conversation } = useGetElaineConversation({
-    query: {
-      enabled: active && !initialized,
-      queryKey: getGetElaineConversationQueryKey(),
-    },
-  });
+  const { data: conversation, refetch: refetchConversation } =
+    useGetElaineConversation({
+      query: {
+        enabled: active && !initialized,
+        queryKey: getGetElaineConversationQueryKey(),
+      },
+    });
   const newConversation = useNewElaineConversation();
   const executeAction = useExecuteElaineAction();
+
+  // Synchronous mirror of `messages`, readable from the visibilitychange
+  // handler below without needing to re-subscribe that listener on every
+  // message change.
+  const messagesRef = useRef<AssistantMessage[]>([]);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  // Reconciles against the server whenever the app/tab comes back into the
+  // foreground and there's a message locally marked `failed` (the request
+  // died without ever getting a server response — the leading real-world
+  // cause is the mobile OS killing the connection when the app is
+  // closed/backgrounded mid-request). The connection failing client-side
+  // does NOT mean the server didn't finish the turn — only refetching the
+  // real persisted history can say for sure. Deliberately skipped while a
+  // send is actively in flight (`isSendingRef`): at that point nothing is
+  // stuck (queue draining/finalization already happened for every prior
+  // failure) and reconciling could otherwise race that in-flight turn.
+  useEffect(() => {
+    if (!active) return;
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== "visible") return;
+      if (isSendingRef.current) return;
+      if (!messagesRef.current.some((m) => m.failed)) return;
+      void refetchConversation().then((result) => {
+        const fresh = result.data;
+        if (!fresh) return;
+        setMessages(fresh.messages);
+        setConversationId(fresh.conversationId);
+        setHasOlderMessages(fresh.hasMore);
+        failedItemsRef.current.clear();
+      });
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () =>
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [active, refetchConversation]);
 
   useEffect(() => {
     if (conversation && !initialized) {
@@ -721,15 +764,29 @@ export function useElaineChat({
         setPendingActions([]);
         setRuntimeTrace(null);
       } else {
+        // The request died without a server response — most commonly the
+        // connection was killed outright (mobile OS suspending/closing the
+        // app mid-request is the single most common real-world cause).
+        // Previously this removed the optimistic message entirely, which
+        // made a message the user actually sent just vanish from the chat
+        // with only an easy-to-miss toast — indistinguishable from it never
+        // having been sent, so the natural reaction was to retype and resend
+        // it. Instead, keep it visible and mark it failed so the user can
+        // see exactly what happened and retry with one tap; a background
+        // reconciliation (see the visibilitychange handler below) will
+        // silently clear this if the server actually did finish the turn.
+        failedItemsRef.current.set(item.tempId, item);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === item.tempId ? { ...m, queued: false, failed: true } : m,
+          ),
+        );
         toast.error(
           <>
-            <ElaineName /> couldn't respond just now. Please try again.
+            <ElaineName /> couldn't respond — check your connection and tap the
+            message to retry.
           </>,
         );
-        // Remove by tempId, not position — a concurrent loadOlderMessages()
-        // prepend can land while this send is in flight, so the optimistic
-        // message is not guaranteed to still be last.
-        setMessages((prev) => prev.filter((m) => m.id !== item.tempId));
         setPendingActions([]);
         setRuntimeTrace(null);
       }
@@ -757,6 +814,27 @@ export function useElaineChat({
       const next = queueRef.current.shift();
       if (next) void runSend(next);
     }
+  }
+
+  /** Resends a message that previously failed without ever reaching the
+   *  server (see the `failed` handling in runSend's catch block above).
+   *  Reuses the exact original text/attachments so the user never has to
+   *  retype anything — they just tap the failed message. */
+  function retrySend(tempId: number) {
+    const item = failedItemsRef.current.get(tempId);
+    if (!item) return;
+    failedItemsRef.current.delete(tempId);
+    setMessages((prev) =>
+      prev.map((m) => (m.id === tempId ? { ...m, failed: false } : m)),
+    );
+    if (isSendingRef.current) {
+      // A different turn is already in flight (e.g. a queued message sent
+      // while this one was sitting failed) — rejoin the queue rather than
+      // racing it.
+      queueRef.current.push(item);
+      return;
+    }
+    void runSend(item);
   }
 
   async function handleSend(overrideText?: string) {
@@ -988,6 +1066,7 @@ export function useElaineChat({
     handleLoadConversation,
     handleSend,
     handleStop,
+    retrySend,
     handleConfirmNavigate,
     handleConfirmAction,
     handleSkipAction,

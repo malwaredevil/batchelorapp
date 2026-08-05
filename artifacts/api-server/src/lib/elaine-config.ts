@@ -29,6 +29,14 @@ export interface ExtraModelsConfig {
   openAIReasoning: string;
   openAIBalanced: string;
   openAIFast: string;
+  // OpenRouter model used for restricted-channel text turns (SMS, Slack,
+  // inbound email, group messenger) that are NOT real-time voice. These
+  // channels don't have the sub-second dead-air constraint that keeps voice
+  // pinned to `chatModel`, so they get a stronger reasoning model instead.
+  // Deliberately a separate key from `chatModel`/`expertPanelAlt` so voice's
+  // latency-critical default and the occasional expert-consult panel model
+  // can each be tuned independently of this one.
+  restrictedTextModel: string;
   // Direct-provider specialized services (not OpenRouter) — small fixed
   // catalogs, but still admin-configurable rather than hardcoded.
   rerank: string; // Voyage reranker
@@ -99,6 +107,10 @@ export interface ThresholdsConfig {
   // Responses max_output_tokens includes both hidden reasoning and visible
   // output. Compaction is deliberately below the model context limit so
   // stateful Elaine threads compact before they can fail from context growth.
+  // Kept generous relative to older, lower-reasoning-effort defaults: "high"
+  // reasoning effort can spend a large share of this budget on hidden
+  // reasoning tokens before any visible text is produced, and a too-tight
+  // cap would silently truncate the actual reply.
   openAIResponsesMaxOutputTokens: number;
   openAICompactionThresholdTokens: number;
   // Stored response IDs expire at the provider after 30 days by default.
@@ -129,6 +141,7 @@ export const DEFAULT_MODELS: ExtraModelsConfig = {
   openAIReasoning: "gpt-5.6-sol",
   openAIBalanced: "gpt-5.6-terra",
   openAIFast: "gpt-5.6-luna",
+  restrictedTextModel: "openai/gpt-5.1",
   rerank: "rerank-2.5",
   visualEmbed: "jina-clip-v2",
   fusionModels: ["anthropic/claude-opus-4.8", "openai/gpt-5.1"],
@@ -168,7 +181,7 @@ export const DEFAULT_THRESHOLDS: ThresholdsConfig = {
   potteryZoneAnalysisMaxTokens: 1024,
   potteryBackstampMaxTokens: 512,
   travelDocExtractionMaxTokens: 1000,
-  openAIResponsesMaxOutputTokens: 6_000,
+  openAIResponsesMaxOutputTokens: 12_000,
   openAICompactionThresholdTokens: 80_000,
   openAIStateMaxAgeDays: 29,
 };

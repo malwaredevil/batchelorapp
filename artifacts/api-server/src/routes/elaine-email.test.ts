@@ -684,3 +684,189 @@ describe("POST /api/elaine/email-webhook — secret format edge cases", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Model-routing: email always uses the smart restrictedTextModel
+// ---------------------------------------------------------------------------
+// The email channel calls runElaineEmailTurn, which delegates to
+// runRestrictedElaineTurn WITHOUT useFastModel:true — so the smarter
+// models.restrictedTextModel is selected, not the fast chatModel.
+// Voice (AgentPhone) is the ONLY channel that opts into the fast chatModel.
+// These tests mirror the equivalent assertion in agentphone.test.ts
+// ("passes channel='voice' to runAgentphoneTurn so the fast chatModel is
+// selected") and slack.test.ts ("invokes runElaineSlackTurn (smart
+// restrictedTextModel path, not the fast chatModel)").
+
+describe("POST /api/elaine/email-webhook — model routing (smart tier)", () => {
+  // Helper: push the minimal selectQueue entries needed for a recognized-user
+  // email.received event to complete fully:
+  //   1. appUsers lookup → user row
+  //   2. markCommCheckVerified owner/timezone lookup → empty (falls back to default)
+  //   3. getOrCreateEmailConversation → existing conversation row
+  function pushRecognizedUserQueues() {
+    selectQueue.push([{ id: 7, email: "user@example.com" }]);
+    selectQueue.push([]);
+    selectQueue.push([
+      { id: 1, userId: 7, messages: [], lastMessageId: null, version: 0 },
+    ]);
+  }
+
+  it("invokes runElaineEmailTurn (smart restrictedTextModel path, not the fast chatModel)", async () => {
+    // email.received from a recognized sender must invoke runElaineEmailTurn,
+    // which calls runRestrictedElaineTurn without useFastModel:true.
+    // If a fast-model bypass were ever added to this code path, the mock
+    // used here would switch to a different function and this assertion would
+    // fail, surfacing the regression immediately.
+    pushRecognizedUserQueues();
+    const svixId = "msg_model_smart";
+    const ts = freshTimestamp();
+    const body = JSON.stringify({
+      type: "email.received",
+      data: {
+        from: "user@example.com",
+        subject: "Trip question",
+        text: "When does my Paris trip start?",
+      },
+    });
+    const app = await buildApp();
+
+    const res = await request(app)
+      .post("/api/elaine/email-webhook")
+      .set(buildHeaders(svixId, ts, body))
+      .set("Content-Type", "application/json")
+      .send(body);
+
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    // runElaineEmailTurn must have been called exactly once — confirming the
+    // smart-model path is taken, not a hypothetical fast-model shortcut.
+    expect(runElaineEmailTurn).toHaveBeenCalledOnce();
+    expect(runElaineEmailTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 7,
+        inputText: "When does my Paris trip start?",
+      }),
+    );
+  });
+
+  it("passes the existing conversation history to runElaineEmailTurn", async () => {
+    // Confirms the route hydrates history from the DB and passes it through,
+    // so the model can maintain multi-turn context over email.
+    selectQueue.push([{ id: 7, email: "user@example.com" }]);
+    selectQueue.push([]);
+    selectQueue.push([
+      {
+        id: 2,
+        userId: 7,
+        messages: [
+          { role: "user", content: "What trips do I have?" },
+          { role: "assistant", content: "You have a Paris trip next month." },
+        ],
+        lastMessageId: "prev-msg",
+        version: 1,
+      },
+    ]);
+
+    const svixId = "msg_history";
+    const ts = freshTimestamp();
+    const body = JSON.stringify({
+      type: "email.received",
+      data: {
+        from: "user@example.com",
+        subject: "Re: Trip question",
+        text: "What day does it start?",
+      },
+    });
+    const app = await buildApp();
+
+    await request(app)
+      .post("/api/elaine/email-webhook")
+      .set(buildHeaders(svixId, ts, body))
+      .set("Content-Type", "application/json")
+      .send(body);
+
+    expect(runElaineEmailTurn).toHaveBeenCalledOnce();
+    expect(runElaineEmailTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 7,
+        inputText: "What day does it start?",
+        history: [
+          { role: "user", content: "What trips do I have?" },
+          { role: "assistant", content: "You have a Paris trip next month." },
+        ],
+      }),
+    );
+  });
+
+  it("returns 200 and sends a fallback reply when runElaineEmailTurn throws", async () => {
+    // If the Elaine turn fails (model timeout, config error, etc.) the webhook
+    // must still return 200 so Resend does not keep re-delivering — instead it
+    // gracefully sends a user-visible fallback reply and marks the delivery
+    // processed.  This mirrors the agentphone error-fallback contract.
+    pushRecognizedUserQueues();
+    runElaineEmailTurn.mockRejectedValueOnce(new Error("Model timeout"));
+
+    const svixId = "msg_turn_error";
+    const ts = freshTimestamp();
+    const body = JSON.stringify({
+      type: "email.received",
+      data: {
+        from: "user@example.com",
+        subject: "Question",
+        text: "Help me plan my trip.",
+      },
+    });
+    const app = await buildApp();
+
+    const res = await request(app)
+      .post("/api/elaine/email-webhook")
+      .set(buildHeaders(svixId, ts, body))
+      .set("Content-Type", "application/json")
+      .send(body);
+
+    // Despite the turn failure the webhook must return 200 (not 500) so
+    // Resend stops re-delivering.
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    // A fallback reply must still be sent to the user.
+    expect(sendElaineEmailReply).toHaveBeenCalledOnce();
+    // The fallback message content must mention the failure so the user knows
+    // to retry — it must NOT be the mocked "Mock reply" success response.
+    const [, , replyArg] = sendElaineEmailReply.mock.calls[0] as [
+      string,
+      string,
+      string,
+      ...unknown[],
+    ];
+    expect(replyArg).not.toBe("Mock reply");
+    expect(replyArg.toLowerCase()).toMatch(/sorry|wrong|again|app/);
+  });
+
+  it("does not invoke runElaineEmailTurn when the turn error is a DB claim failure (503 path)", async () => {
+    // A DB error on claimDelivery must fail closed before the Elaine turn
+    // is attempted — the route returns 503 and runElaineEmailTurn is never
+    // called.  Mirrors the equivalent agentphone / elaine-email dedup tests.
+    nextInsertThrowsDbError = true;
+
+    const svixId = "msg_model_dberr";
+    const ts = freshTimestamp();
+    const body = JSON.stringify({
+      type: "email.received",
+      data: {
+        from: "user@example.com",
+        subject: "Hi",
+        text: "Hello",
+      },
+    });
+    const app = await buildApp();
+
+    const res = await request(app)
+      .post("/api/elaine/email-webhook")
+      .set(buildHeaders(svixId, ts, body))
+      .set("Content-Type", "application/json")
+      .send(body);
+
+    expect(res.status).toBe(503);
+    expect(runElaineEmailTurn).not.toHaveBeenCalled();
+  });
+});

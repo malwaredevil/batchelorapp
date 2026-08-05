@@ -370,10 +370,10 @@ function formatThinkingDuration(ms: number): string {
 /**
  * Collapsible "Thinking…" disclosure shown above an assistant reply when the
  * model produced a reasoning summary, mirroring ChatGPT's "Thought for Xs"
- * pattern. `streaming` keeps it open while the summary is still arriving;
- * when it flips back to false (turn finished) it auto-collapses on its own,
- * unless the user already manually toggled it during this turn — after
- * that, or once collapsed, the user is back in full control of expansion.
+ * pattern. Starts collapsed by default — even while actively streaming — so
+ * users aren't shown the reasoning trace unless they choose to expand it.
+ * If a user manually expands it during a turn, it stays open at their
+ * discretion; once collapsed (auto or manual), they're back in full control.
  */
 function ThinkingDisclosure({
   summary,
@@ -384,16 +384,14 @@ function ThinkingDisclosure({
   streaming?: boolean;
   durationMs?: number;
 }) {
-  const [open, setOpen] = useState(streaming);
+  const [open, setOpen] = useState(false);
   const userToggledRef = useRef(false);
   const wasStreamingRef = useRef(streaming);
 
   useEffect(() => {
-    if (streaming) {
-      setOpen(true);
-    } else if (wasStreamingRef.current && !userToggledRef.current) {
+    if (!streaming && wasStreamingRef.current && !userToggledRef.current) {
       // Just finished this turn and the user hasn't touched the toggle —
-      // auto-collapse, same as ChatGPT does once the answer is ready.
+      // stay collapsed, same as it started.
       setOpen(false);
     }
     wasStreamingRef.current = streaming;
@@ -511,6 +509,7 @@ export function ElaineChatPanel({
     handleRemoveAttachment,
     handleSend,
     handleStop,
+    retrySend,
     handleConfirmNavigate,
     handleConfirmAction,
     handleSkipAction,
@@ -762,7 +761,11 @@ export function ElaineChatPanel({
               <div key={i} className="flex flex-col items-end gap-1">
                 <div className="flex gap-2.5 justify-end w-full">
                   <div
-                    className={`${bubbleWidthClass} rounded-2xl rounded-tr-sm bg-primary px-3.5 py-2.5 text-sm leading-relaxed text-primary-foreground`}
+                    className={`${bubbleWidthClass} rounded-2xl rounded-tr-sm px-3.5 py-2.5 text-sm leading-relaxed ${
+                      msg.failed
+                        ? "bg-destructive/10 text-foreground ring-1 ring-destructive/40"
+                        : "bg-primary text-primary-foreground"
+                    }`}
                   >
                     {msg.attachmentUrls && msg.attachmentUrls.length > 0 && (
                       <div className="mb-1.5 flex flex-wrap gap-1.5">
@@ -837,6 +840,15 @@ export function ElaineChatPanel({
                     Waiting to send…
                   </span>
                 )}
+                {msg.failed && (
+                  <button
+                    type="button"
+                    onClick={() => msg.id !== undefined && retrySend(msg.id)}
+                    className="mr-1 flex items-center gap-1 text-[11px] font-medium text-destructive hover:underline"
+                  >
+                    Not sent — tap to retry
+                  </button>
+                )}
                 {showTimestamp && msg.createdAt && (
                   <span className="mr-1 text-[11px] text-muted-foreground/50 select-none tabular-nums">
                     {formatMessageTime(msg.createdAt)}
@@ -872,9 +884,22 @@ export function ElaineChatPanel({
                   />
                 )}
                 <div className="rounded-2xl rounded-tl-sm bg-muted px-3.5 py-2.5 text-sm leading-relaxed text-foreground">
-                  <MessageText text={text} citations={citations} />
+                  {text ? (
+                    <MessageText text={text} citations={citations} />
+                  ) : (
+                    msg.stopped && (
+                      // A turn interrupted before any content streamed back
+                      // (e.g. the connection died while Elaine was still
+                      // planning/looking things up) — an empty bubble here
+                      // would look like a rendering bug rather than what
+                      // actually happened.
+                      <span className="italic text-muted-foreground">
+                        Didn't get a response — please try asking again.
+                      </span>
+                    )
+                  )}
                 </div>
-                {msg.stopped && (
+                {msg.stopped && text && (
                   <span className="ml-1 inline-flex w-fit items-center gap-1 rounded-full bg-muted-foreground/10 px-2 py-0.5 text-[11px] font-medium text-muted-foreground select-none">
                     Stopped
                   </span>

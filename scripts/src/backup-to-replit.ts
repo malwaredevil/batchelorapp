@@ -556,7 +556,7 @@ CREATE TABLE IF NOT EXISTS travels_trips (
 
 CREATE TABLE IF NOT EXISTS travels_trip_documents (
   id                SERIAL PRIMARY KEY,
-  trip_id           INTEGER NOT NULL,
+  trip_id           INTEGER,
   user_id           INTEGER NOT NULL,
   storage_path      TEXT NOT NULL,
   title             TEXT,

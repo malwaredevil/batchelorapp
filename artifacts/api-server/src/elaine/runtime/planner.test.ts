@@ -194,6 +194,127 @@ describe("validateElainePlan", () => {
   });
 });
 
+describe("generateElainePlan recent history", () => {
+  it("includes recent conversation turns in the planner prompt so a referent isn't re-clarified", async () => {
+    let capturedPrompt = "";
+    const generate = vi.fn<(prompt: string) => Promise<string | null>>(
+      async (prompt) => {
+        capturedPrompt = prompt;
+        return JSON.stringify({
+          version: 1,
+          goal: "Answer the follow-up question",
+          assumptions: [],
+          completionCriteria: ["The question is answered"],
+          steps: [
+            {
+              id: "answer",
+              label: "Answer using the already-established place",
+              kind: "respond",
+              toolName: null,
+              dependsOn: [],
+              expectedEvidence: "A grounded answer",
+              required: true,
+            },
+          ],
+        });
+      },
+    );
+
+    const result = await generateElainePlan({
+      message: "Does that have coke and Pepsi, or is it just a bar?",
+      pageContext: null,
+      requestClass,
+      tools: [],
+      recentHistory: [
+        { role: "user", content: "Any snack shops near my hotel?" },
+        {
+          role: "assistant",
+          content: "Marina Blu / Bar La Posada is a short walk away.",
+        },
+      ],
+      generate,
+    });
+
+    expect(capturedPrompt).toContain("Marina Blu / Bar La Posada");
+    expect(capturedPrompt).toContain("Recent conversation");
+    expect(result.plan.steps.some((step) => step.kind === "clarify")).toBe(
+      false,
+    );
+  });
+
+  it("tells the planner this is the first turn when no history is given", async () => {
+    let capturedPrompt = "";
+    await generateElainePlan({
+      message: "What's the weather like?",
+      pageContext: null,
+      requestClass,
+      tools: [],
+      generate: async (prompt) => {
+        capturedPrompt = prompt;
+        return null;
+      },
+    });
+    expect(capturedPrompt).toContain("(none — this is the first turn)");
+  });
+
+  it("includes the long-term conversation summary so a fact from far earlier isn't re-clarified", async () => {
+    let capturedPrompt = "";
+    const generate = vi.fn<(prompt: string) => Promise<string | null>>(
+      async (prompt) => {
+        capturedPrompt = prompt;
+        return JSON.stringify({
+          version: 1,
+          goal: "Answer using the already-established allergy info",
+          assumptions: [],
+          completionCriteria: ["The question is answered"],
+          steps: [
+            {
+              id: "answer",
+              label: "Answer using the established dietary restriction",
+              kind: "respond",
+              toolName: null,
+              dependsOn: [],
+              expectedEvidence: "A grounded answer",
+              required: true,
+            },
+          ],
+        });
+      },
+    );
+
+    const result = await generateElainePlan({
+      message: "Can you double check that restaurant is safe for me?",
+      pageContext: null,
+      requestClass,
+      tools: [],
+      conversationSummary:
+        "User has a shellfish allergy and is planning a trip to Sicily.",
+      generate,
+    });
+
+    expect(capturedPrompt).toContain("shellfish allergy");
+    expect(capturedPrompt).toContain("Earlier conversation");
+    expect(result.plan.steps.some((step) => step.kind === "clarify")).toBe(
+      false,
+    );
+  });
+
+  it("tells the planner there's no summarised history yet when none is given", async () => {
+    let capturedPrompt = "";
+    await generateElainePlan({
+      message: "What's the weather like?",
+      pageContext: null,
+      requestClass,
+      tools: [],
+      generate: async (prompt) => {
+        capturedPrompt = prompt;
+        return null;
+      },
+    });
+    expect(capturedPrompt).toContain("(none — no summarised history yet)");
+  });
+});
+
 describe("generateElainePlan", () => {
   it("repairs one invalid response and returns the validated plan", async () => {
     const generate = vi

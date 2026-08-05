@@ -59,7 +59,10 @@ import {
   HIDDEN_REASONING,
 } from "../lib/ai-client";
 import { embedText } from "../lib/openai";
-import { getElaineGlobalConfig } from "../lib/elaine-config";
+import {
+  getElaineGlobalConfig,
+  type ElaineGlobalConfig,
+} from "../lib/elaine-config";
 import {
   AdminConfigBody,
   applyAdminConfigPatch,
@@ -71,6 +74,7 @@ import {
   getOpenAIResponsesMetrics,
   isOpenAIResponsesConfigured,
   isRecoverableOpenAIStateError,
+  messagesToResponseInput,
   OpenAIResponsesUnavailableError,
   recordOpenAIResponsesFallback,
   resolveOpenAIResponsesModel,
@@ -4239,6 +4243,15 @@ router.post("/chat", async (req, res) => {
       requestClass,
       sourceRoute,
       tools: plannerTools,
+      // Last few turns only — enough to resolve "that"/"there"/an already-
+      // confirmed fact without ballooning the planning prompt. The full
+      // `history` (and any summarised prefix) is still what the final
+      // answer-generation call uses.
+      recentHistory: history.slice(-6).map((m) => ({
+        role: m.role,
+        content: m.content,
+      })),
+      conversationSummary: summaryPrefixBlock,
       generate: async (prompt) => {
         const plannerInstructions =
           "Return concise, user-safe JSON plans only. Never reveal chain-of-thought or private scratch reasoning.";
@@ -4249,7 +4262,11 @@ router.post("/chat", async (req, res) => {
               role: "balanced",
               instructions: plannerInstructions,
               input: prompt,
-              reasoningEffort: "low",
+              // "medium" over the previous "low": better upfront judgment
+              // about what actually needs a step (or a clarifying question)
+              // versus what can be answered directly, using the same
+              // reasoning depth we just gave the main answer call.
+              reasoningEffort: "medium",
               verbosity: "low",
               maxOutputTokens: 2_500,
               safetyIdentifier: createOpenAIStableIdentifier("safety", userId),
@@ -4590,13 +4607,34 @@ router.post("/chat", async (req, res) => {
 
     try {
       if (useOpenAIResponses) {
+        // `forcedToolName` can be WEB_SEARCH_TOOL_NAME from the replan
+        // policy, but `responsesApiTools` excludes that custom function
+        // tool whenever the native built-in web_search tool is active
+        // (see `responsesApiTools` above) — the built-in tool has no
+        // `name` field and can't be targeted by a function tool_choice.
+        // Forcing `{type:"function", name:"web_search"}` in that case
+        // causes OpenAI to 400 with "Tool choice 'web_search' not found
+        // in 'tools' parameter." Fall back to "auto" instead; the replan
+        // instruction already nudges the model, and it reliably picks the
+        // built-in tool on its own (#NODE-EXPRESS-28).
+        const forcedToolAvailableInResponses =
+          forcedToolName !== null &&
+          responsesApiTools.some(
+            (t) => t.type === "function" && t.function.name === forcedToolName,
+          );
         const callDirectRound = () =>
           streamOpenAIResponseRound({
             role: openAIResponsesRole,
             instructions: systemPrompt,
             input: nextOpenAIInput,
             previousResponseId: openAIPreviousResponseId,
-            reasoningEffort: "medium",
+            // "high" over the previous "medium": the household explicitly
+            // wants Elaine to reason through things more carefully (trace
+            // implications, hold more of the conversation in mind, avoid
+            // jumping to a shallow answer) even at the cost of a bit more
+            // latency and cost per turn. She already streams the reply, so
+            // the UI stays responsive while she thinks.
+            reasoningEffort: "high",
             verbosity: "medium",
             safetyIdentifier: createOpenAIStableIdentifier("safety", userId),
             promptCacheKey: createOpenAIStableIdentifier(
@@ -4606,7 +4644,7 @@ router.post("/chat", async (req, res) => {
             tools: responsesApiTools,
             toolChoice: suppressTools
               ? "none"
-              : forcedToolName
+              : forcedToolName && forcedToolAvailableInResponses
                 ? { type: "function", name: forcedToolName }
                 : "auto",
             useBuiltinWebSearch: useBuiltinWS,
@@ -8308,6 +8346,467 @@ async function buildAgentphoneContext(): Promise<string> {
 // Resend (email) bridges. Same tool set, same auto-run semantics, same
 // household-lookup/action-execution glue — only the system prompt, token
 // budget, and reply-channel label differ per caller.
+// Executes one restricted-channel tool call and returns the text to feed back
+// to the model. Pure w.r.t. the calling model API — used identically by both
+// the OpenRouter Chat Completions loop (fallback / voice) and the OpenAI
+// Responses API loop (SMS/Slack/email/messenger), so tool behavior can never
+// drift between the two depending on which model happens to be answering.
+async function executeRestrictedToolCall(
+  name: string,
+  argsJson: string,
+  ctx: {
+    userId: number;
+    channelLabel: string;
+    channelAllowedExtras?: Set<string>;
+    onWidget?: (w: Record<string, unknown>) => void;
+  },
+): Promise<string> {
+  const { userId, channelLabel, channelAllowedExtras, onWidget } = ctx;
+  let resultText = `That action isn't available over ${channelLabel}.`;
+
+  if (name === RESTRICTED_NAVIGATE_TOOL_NAME) {
+    const parsed = RestrictedNavigatePayload.safeParse(
+      JSON.parse(argsJson || "{}"),
+    );
+    resultText = parsed.success
+      ? `Link (share this exactly as-is in your reply): ${getAppBaseUrl()}${resolveModuleLinkPath(parsed.data.path)}`
+      : "Invalid link path — describe it in words instead.";
+  } else if (name === REMEMBER_TOOL_NAME) {
+    const parsed = RememberToolPayload.safeParse(JSON.parse(argsJson || "{}"));
+    if (!parsed.success) {
+      resultText = "Couldn't save that note.";
+    } else {
+      try {
+        const rScope = parsed.data.scope ?? "household";
+        const rExpiresAt = parsed.data.expires_in_days
+          ? new Date(Date.now() + parsed.data.expires_in_days * 86400000)
+          : rScope === "temporary"
+            ? new Date(Date.now() + 30 * 86400000)
+            : undefined;
+        await rememberElaineMemory({
+          userId,
+          content: parsed.data.content,
+          scope: rScope,
+          category: parsed.data.category ?? "fact",
+          sensitivity: parsed.data.sensitivity ?? "low",
+          expiresAt: rExpiresAt,
+          source: "explicit_assistant",
+        });
+        resultText = "Noted and saved for later.";
+      } catch (err) {
+        logger.error({ err }, "restricted-channel remember tool failed");
+        resultText = "Couldn't save that note on our end.";
+      }
+    }
+  } else if (name === SHOW_TRIP_CARD_TOOL_NAME) {
+    const parsed = ShowTripCardToolPayload.safeParse(
+      JSON.parse(argsJson || "{}"),
+    );
+    if (!parsed.success) {
+      resultText = "Invalid trip data.";
+    } else {
+      let resolvedStartDate = parsed.data.startDate;
+      if (!resolvedStartDate && parsed.data.tripId) {
+        const [row] = await db
+          .select({ startDate: travelsTrips.startDate })
+          .from(travelsTrips)
+          .where(eq(travelsTrips.id, parsed.data.tripId))
+          .limit(1);
+        resolvedStartDate = row?.startDate ?? undefined;
+      }
+      let serverCountdownDays: number | undefined = undefined;
+      if (resolvedStartDate) {
+        const tripStart = new Date(resolvedStartDate + "T00:00:00Z");
+        const todayUtc = new Date();
+        todayUtc.setUTCHours(0, 0, 0, 0);
+        serverCountdownDays = Math.round(
+          (tripStart.getTime() - todayUtc.getTime()) / (1000 * 60 * 60 * 24),
+        );
+      }
+      const tripData = {
+        ...parsed.data,
+        ...(serverCountdownDays !== undefined
+          ? { countdownDays: serverCountdownDays }
+          : {}),
+      };
+      if (onWidget) onWidget({ type: "trip_card", trip: tripData });
+      resultText =
+        serverCountdownDays !== undefined
+          ? `Trip card shown. Server-verified countdown: ${serverCountdownDays} days (${serverCountdownDays < 0 ? "trip is in the past" : serverCountdownDays === 0 ? "trip starts today" : `trip starts in ${serverCountdownDays} day${serverCountdownDays === 1 ? "" : "s"}`}). Use this exact number in your reply — do not recalculate.`
+          : "Trip card shown.";
+    }
+  } else if (name === GENERATE_DOCUMENT_TOOL_NAME) {
+    // Restricted channels (SMS/voice/email) are text-only — there's no
+    // widget to render, so return a signed download link as plain text,
+    // same pattern as RESTRICTED_NAVIGATE_TOOL_NAME above.
+    const parsed = GenerateDocumentToolPayload.safeParse(
+      JSON.parse(argsJson || "{}"),
+    );
+    if (!parsed.success) {
+      resultText = "Invalid document spec — couldn't generate the file.";
+    } else {
+      try {
+        const buffer = await buildDocumentBuffer(parsed.data);
+        const ext = DOCUMENT_EXTENSION_BY_FORMAT[parsed.data.format];
+        const mime = DOCUMENT_MIME_BY_FORMAT[parsed.data.format];
+        const storagePath = `${userId}/generated/${randomUUID()}.${ext}`;
+        await ensureAttachmentBucket();
+        const { error: uploadError } = await attachmentStorage.storage
+          .from(ATTACHMENT_BUCKET)
+          .upload(storagePath, buffer, {
+            contentType: mime,
+            upsert: false,
+          });
+        if (uploadError) throw new Error("upload failed");
+        const FIVE_YEARS_SECS = 5 * 365 * 24 * 3600;
+        const { data: signedData, error: signError } =
+          await attachmentStorage.storage
+            .from(ATTACHMENT_BUCKET)
+            .createSignedUrl(storagePath, FIVE_YEARS_SECS);
+        if (signError || !signedData) throw new Error("sign failed");
+        const displayFilename = `${parsed.data.filename}.${ext}`;
+        resultText = `Document generated. Share this download link exactly as-is in your reply, alongside a brief description of what you made: ${signedData.signedUrl} (${displayFilename})`;
+      } catch (err) {
+        logger.error(
+          { err },
+          "restricted-channel generate_document tool failed",
+        );
+        resultText =
+          err instanceof Error &&
+          /requires `(sections|table)`/.test(err.message)
+            ? `Couldn't generate the document: ${err.message}.`
+            : "Couldn't generate that document right now.";
+      }
+    }
+  } else if (name === SHOW_POTTERY_ITEM_TOOL_NAME) {
+    const parsed = ShowPotteryItemToolPayload.safeParse(
+      JSON.parse(argsJson || "{}"),
+    );
+    if (!parsed.success) {
+      resultText = "Invalid pottery item ID.";
+    } else {
+      const [row] = await db
+        .select({
+          id: potteryItems.id,
+          name: potteryItems.name,
+          maker: potteryItems.maker,
+          style: potteryItems.style,
+          imagePath: potteryItems.imagePath,
+          aiDescription: potteryItems.aiDescription,
+          dominantColors: potteryItems.dominantColors,
+        })
+        .from(potteryItems)
+        .where(eq(potteryItems.id, parsed.data.itemId));
+      if (!row) {
+        resultText = `Pottery item #${parsed.data.itemId} not found.`;
+      } else {
+        let imageUrl: string | undefined;
+        try {
+          const sc = createClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
+            auth: { persistSession: false, autoRefreshToken: false },
+          });
+          const { data } = await sc.storage
+            .from("pottery")
+            .createSignedUrl(row.imagePath, 3600);
+          imageUrl = data?.signedUrl ?? undefined;
+        } catch {
+          // non-fatal
+        }
+        if (onWidget)
+          onWidget({
+            type: "pottery_item",
+            item: {
+              itemId: row.id,
+              name: row.name,
+              maker: row.maker ?? undefined,
+              style: row.style ?? undefined,
+              aiDescription: row.aiDescription ?? undefined,
+              dominantColors:
+                row.dominantColors.length > 0 ? row.dominantColors : undefined,
+              imageUrl,
+            },
+          });
+        resultText = `Pottery item card shown for "${row.name}".`;
+      }
+    }
+  } else if (name === SHOW_FABRIC_SWATCH_TOOL_NAME) {
+    const parsed = ShowFabricSwatchToolPayload.safeParse(
+      JSON.parse(argsJson || "{}"),
+    );
+    if (!parsed.success) {
+      resultText = "Invalid fabric ID.";
+    } else {
+      const [row] = await db
+        .select({
+          id: fabrics.id,
+          name: fabrics.name,
+          manufacturer: fabrics.manufacturer,
+          designer: fabrics.designer,
+          dominantColors: fabrics.dominantColors,
+          imagePath: fabrics.imagePath,
+          aiDescription: fabrics.aiDescription,
+        })
+        .from(fabrics)
+        .where(eq(fabrics.id, parsed.data.fabricId));
+      if (!row) {
+        resultText = `Fabric #${parsed.data.fabricId} not found.`;
+      } else {
+        let imageUrl: string | undefined;
+        try {
+          if (row.imagePath) {
+            const sc = createClient(
+              env.supabaseUrl,
+              env.supabaseServiceRoleKey,
+              { auth: { persistSession: false, autoRefreshToken: false } },
+            );
+            const { data } = await sc.storage
+              .from("quilting")
+              .createSignedUrl(row.imagePath, 3600);
+            imageUrl = data?.signedUrl ?? undefined;
+          }
+        } catch {
+          // non-fatal
+        }
+        if (onWidget)
+          onWidget({
+            type: "fabric_swatch",
+            swatch: {
+              fabricId: row.id,
+              name: row.name,
+              manufacturer: row.manufacturer ?? undefined,
+              designer: row.designer ?? undefined,
+              dominantColors:
+                row.dominantColors && row.dominantColors.length > 0
+                  ? row.dominantColors
+                  : undefined,
+              aiDescription: row.aiDescription ?? undefined,
+              imageUrl,
+            },
+          });
+        resultText = `Fabric swatch card shown for "${row.name}".`;
+      }
+    }
+  } else if (name === SHOW_ORNAMENT_ITEM_TOOL_NAME) {
+    const parsed = ShowOrnamentItemToolPayload.safeParse(
+      JSON.parse(argsJson || "{}"),
+    );
+    if (!parsed.success) {
+      resultText = "Invalid ornament item ID.";
+    } else {
+      const [row] = await db
+        .select({
+          id: ornamentsItems.id,
+          name: ornamentsItems.name,
+          seriesOrCollection: ornamentsItems.seriesOrCollection,
+          year: ornamentsItems.year,
+          brand: ornamentsItems.brand,
+          imagePath: ornamentsItems.imagePath,
+          aiDescription: ornamentsItems.aiDescription,
+          dominantColors: ornamentsItems.dominantColors,
+        })
+        .from(ornamentsItems)
+        .where(eq(ornamentsItems.id, parsed.data.itemId));
+      if (!row) {
+        resultText = `Ornament #${parsed.data.itemId} not found.`;
+      } else {
+        let imageUrl: string | undefined;
+        try {
+          const sc = createClient(env.supabaseUrl, env.supabaseServiceRoleKey, {
+            auth: { persistSession: false, autoRefreshToken: false },
+          });
+          const { data } = await sc.storage
+            .from("ornaments")
+            .createSignedUrl(row.imagePath, 3600);
+          imageUrl = data?.signedUrl ?? undefined;
+        } catch {
+          // non-fatal
+        }
+        if (onWidget)
+          onWidget({
+            type: "ornament_item",
+            item: {
+              itemId: row.id,
+              name: row.name,
+              seriesOrCollection: row.seriesOrCollection ?? undefined,
+              year: row.year ?? undefined,
+              brand: row.brand ?? undefined,
+              aiDescription: row.aiDescription ?? undefined,
+              dominantColors:
+                row.dominantColors && row.dominantColors.length > 0
+                  ? row.dominantColors
+                  : undefined,
+              imageUrl,
+            },
+          });
+        resultText = `Ornament card shown for "${row.name}".`;
+      }
+    }
+  } else if (name === SHOW_DATA_CARD_TOOL_NAME) {
+    try {
+      const parsed = ShowDataCardToolPayload.safeParse(
+        JSON.parse(argsJson || "{}"),
+      );
+      if (parsed.success) {
+        if (onWidget) {
+          onWidget({
+            type: "data_card",
+            title: parsed.data.title,
+            rows: parsed.data.rows,
+          });
+          resultText = "Data card shown.";
+        } else {
+          const lines = parsed.data.rows.map((r) => `${r.label}: ${r.value}`);
+          resultText = parsed.data.title
+            ? `${parsed.data.title}\n${lines.join("\n")}`
+            : lines.join("\n");
+        }
+      }
+    } catch {
+      // Malformed JSON — drop it.
+    }
+  } else if (name === LIST_ELAINE_MEMORIES_TOOL_NAME) {
+    resultText =
+      (await executeUniversalReadTool(name, argsJson, userId)) ??
+      "Unsupported app data tool.";
+  } else if (RESTRICTED_SOFT_TOOL_NAMES.has(name)) {
+    resultText = await executeRestrictedSoftTool(name, argsJson);
+  } else if (
+    AGENTPHONE_ACTION_TYPES.has(name) ||
+    channelAllowedExtras?.has(name)
+  ) {
+    try {
+      const finalAction = await tryBuildAction(name, argsJson);
+      if (finalAction) {
+        const executor = ACTION_EXECUTORS[finalAction.type as ActionType];
+        const { status, body } = await executor(
+          finalAction.payload as never,
+          userId,
+        );
+        resultText =
+          status < 400
+            ? `Done: ${finalAction.label}.`
+            : `Failed (${status}): ${JSON.stringify(body)}`;
+      } else {
+        resultText =
+          "Couldn't understand that request clearly enough to act — ask the user to clarify.";
+      }
+    } catch (err) {
+      logger.error(
+        { err, name },
+        `${channelLabel} restricted action execution failed`,
+      );
+      resultText =
+        "That action failed on our end — tell the user to try again or use the app.";
+    }
+  }
+
+  return resultText;
+}
+
+// Runs one restricted-channel turn's tool-calling loop against the direct
+// OpenAI Responses API (gpt-5.6-sol, the same "reasoning" role/model as main
+// web chat) instead of the OpenRouter Chat Completions fallback. Mirrors the
+// round-loop shape of main chat's per-round loop (see the streaming handler
+// above): a bounded number of tool-calling rounds chained via
+// `previousResponseId`, then one forced tool_choice:"none" synthesis call if
+// the model used every round on tool calls without ever producing text.
+// Throws on any Responses API failure so the caller can fall back to the
+// battle-tested OpenRouter loop for this turn.
+async function runRestrictedTurnViaOpenAIResponses(params: {
+  config: ElaineGlobalConfig;
+  systemPrompt: string;
+  history: Array<{ role: "user" | "assistant"; content: string }>;
+  inputText: string;
+  channelTools: OpenAI.Chat.Completions.ChatCompletionTool[];
+  userId: number;
+  channelLabel: string;
+  channelAllowedExtras?: Set<string>;
+  onWidget?: (w: Record<string, unknown>) => void;
+}): Promise<string> {
+  const {
+    config,
+    systemPrompt,
+    history,
+    inputText,
+    channelTools,
+    userId,
+    channelLabel,
+    channelAllowedExtras,
+    onWidget,
+  } = params;
+  const MAX_ROUNDS = 3;
+  const safetyIdentifier = createOpenAIStableIdentifier("safety", userId);
+  const promptCacheKey = createOpenAIStableIdentifier(
+    "cache",
+    `elaine-restricted:${channelLabel}`,
+  );
+  const sharedRoundOptions = {
+    role: "reasoning" as const,
+    instructions: systemPrompt,
+    // A restricted-channel reply should still feel prompt for SMS/email —
+    // "medium" gets the gpt-5.6-sol quality bump without main chat's "high"
+    // reasoning latency, which isn't warranted for these async channels.
+    reasoningEffort: "medium" as const,
+    verbosity: "medium" as const,
+    safetyIdentifier,
+    promptCacheKey,
+    tools: channelTools,
+    config,
+  };
+
+  let previousResponseId: string | undefined;
+  let nextInput: ResponseInput = messagesToResponseInput([
+    ...history.slice(-10),
+    { role: "user", content: inputText },
+  ]);
+  let pendingToolOutputs: ResponseInput | null = null;
+
+  for (let round = 0; round < MAX_ROUNDS; round++) {
+    const result = await streamOpenAIResponseRound({
+      ...sharedRoundOptions,
+      input: nextInput,
+      previousResponseId,
+    });
+    previousResponseId = result.responseId;
+    const replyText = result.text.trim();
+
+    if (result.functionCalls.length === 0) {
+      return replyText;
+    }
+
+    const outputs: ResponseInput = [];
+    for (const call of result.functionCalls) {
+      const resultText = await executeRestrictedToolCall(
+        call.name,
+        call.arguments,
+        { userId, channelLabel, channelAllowedExtras, onWidget },
+      );
+      outputs.push({
+        type: "function_call_output",
+        call_id: call.callId,
+        output: resultText,
+      });
+    }
+    pendingToolOutputs = outputs;
+    nextInput = outputs;
+  }
+
+  // Every round was consumed by tool calls with no text reply — force one
+  // more call with tool_choice:"none" so the model synthesises an answer
+  // from the tool results it already has (mirrors the OpenRouter loop's
+  // final-synthesis fallback below).
+  if (pendingToolOutputs) {
+    const finalResult = await streamOpenAIResponseRound({
+      ...sharedRoundOptions,
+      input: pendingToolOutputs,
+      previousResponseId,
+      toolChoice: "none",
+    });
+    return finalResult.text.trim();
+  }
+  return "";
+}
+
 async function runRestrictedElaineTurn(params: {
   userId: number;
   inputText: string;
@@ -8323,6 +8822,13 @@ async function runRestrictedElaineTurn(params: {
    *  message_contact on SMS/voice and Slack (strong sender identity) while
    *  keeping them excluded for email (spoofable From header). */
   channelAllowedExtras?: Set<string>;
+  /** True only for live voice calls, where every extra second of model
+   *  latency risks AgentPhone re-delivering the webhook and Elaine
+   *  double-replying (see the voice-turn NDJSON comment in agentphone.ts).
+   *  Keeps this channel on the fast `chatModel`. Every other restricted
+   *  channel (SMS, Slack, email, group messenger) is text-based and async
+   *  enough to afford `models.restrictedTextModel`'s stronger reasoning. */
+  useFastModel?: boolean;
 }): Promise<{
   replyText: string;
   history: Array<{ role: "user" | "assistant"; content: string }>;
@@ -8338,11 +8844,15 @@ async function runRestrictedElaineTurn(params: {
     onWidget,
     overrideTools,
     channelAllowedExtras,
+    useFastModel,
   } = params;
   // Group all model calls in this restricted turn under one Sentry AI
   // Conversation keyed by channel + user so threads stay stable over time.
   Sentry.setConversationId(`${channelLabel}-user-${userId}`);
   const config = await getElaineGlobalConfig();
+  const restrictedTurnModel = useFastModel
+    ? config.chatModel
+    : config.models?.restrictedTextModel || config.chatModel;
   const [
     { userName, memoryBlock, memorySummary },
     contextBlock,
@@ -8402,419 +8912,103 @@ async function runRestrictedElaineTurn(params: {
 
   let replyText = "";
   const MAX_ROUNDS = 3;
-  for (let round = 0; round < MAX_ROUNDS; round++) {
-    const completion = await callModel(config.chatModel, (client, model) =>
-      client.chat.completions.create({
-        model,
-        max_tokens: maxTokens,
-        messages,
-        tools: channelTools,
-        ...HIDDEN_REASONING,
-      } as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming),
-    );
-    const message = completion.choices[0]?.message;
-    if (!message) break;
-    replyText = (message.content ?? "").trim();
-    const toolCalls = message.tool_calls ?? [];
-    if (toolCalls.length === 0) break;
 
-    messages.push({
-      role: "assistant",
-      content: message.content ?? null,
-      tool_calls: toolCalls,
-    });
-
-    for (const call of toolCalls) {
-      if (call.type !== "function") continue;
-      const name = call.function.name;
-      let resultText = `That action isn't available over ${channelLabel}.`;
-
-      if (name === RESTRICTED_NAVIGATE_TOOL_NAME) {
-        const parsed = RestrictedNavigatePayload.safeParse(
-          JSON.parse(call.function.arguments || "{}"),
-        );
-        resultText = parsed.success
-          ? `Link (share this exactly as-is in your reply): ${getAppBaseUrl()}${resolveModuleLinkPath(parsed.data.path)}`
-          : "Invalid link path — describe it in words instead.";
-      } else if (name === REMEMBER_TOOL_NAME) {
-        const parsed = RememberToolPayload.safeParse(
-          JSON.parse(call.function.arguments || "{}"),
-        );
-        if (!parsed.success) {
-          resultText = "Couldn't save that note.";
-        } else {
-          try {
-            const rScope = parsed.data.scope ?? "household";
-            const rExpiresAt = parsed.data.expires_in_days
-              ? new Date(Date.now() + parsed.data.expires_in_days * 86400000)
-              : rScope === "temporary"
-                ? new Date(Date.now() + 30 * 86400000)
-                : undefined;
-            await rememberElaineMemory({
-              userId,
-              content: parsed.data.content,
-              scope: rScope,
-              category: parsed.data.category ?? "fact",
-              sensitivity: parsed.data.sensitivity ?? "low",
-              expiresAt: rExpiresAt,
-              source: "explicit_assistant",
-            });
-            resultText = "Noted and saved for later.";
-          } catch (err) {
-            logger.error({ err }, "restricted-channel remember tool failed");
-            resultText = "Couldn't save that note on our end.";
-          }
-        }
-      } else if (name === SHOW_TRIP_CARD_TOOL_NAME) {
-        const parsed = ShowTripCardToolPayload.safeParse(
-          JSON.parse(call.function.arguments || "{}"),
-        );
-        if (!parsed.success) {
-          resultText = "Invalid trip data.";
-        } else {
-          let resolvedStartDate = parsed.data.startDate;
-          if (!resolvedStartDate && parsed.data.tripId) {
-            const [row] = await db
-              .select({ startDate: travelsTrips.startDate })
-              .from(travelsTrips)
-              .where(eq(travelsTrips.id, parsed.data.tripId))
-              .limit(1);
-            resolvedStartDate = row?.startDate ?? undefined;
-          }
-          let serverCountdownDays: number | undefined = undefined;
-          if (resolvedStartDate) {
-            const tripStart = new Date(resolvedStartDate + "T00:00:00Z");
-            const todayUtc = new Date();
-            todayUtc.setUTCHours(0, 0, 0, 0);
-            serverCountdownDays = Math.round(
-              (tripStart.getTime() - todayUtc.getTime()) /
-                (1000 * 60 * 60 * 24),
-            );
-          }
-          const tripData = {
-            ...parsed.data,
-            ...(serverCountdownDays !== undefined
-              ? { countdownDays: serverCountdownDays }
-              : {}),
-          };
-          if (onWidget) onWidget({ type: "trip_card", trip: tripData });
-          resultText =
-            serverCountdownDays !== undefined
-              ? `Trip card shown. Server-verified countdown: ${serverCountdownDays} days (${serverCountdownDays < 0 ? "trip is in the past" : serverCountdownDays === 0 ? "trip starts today" : `trip starts in ${serverCountdownDays} day${serverCountdownDays === 1 ? "" : "s"}`}). Use this exact number in your reply — do not recalculate.`
-              : "Trip card shown.";
-        }
-      } else if (name === GENERATE_DOCUMENT_TOOL_NAME) {
-        // Restricted channels (SMS/voice/email) are text-only — there's no
-        // widget to render, so return a signed download link as plain text,
-        // same pattern as RESTRICTED_NAVIGATE_TOOL_NAME above.
-        const parsed = GenerateDocumentToolPayload.safeParse(
-          JSON.parse(call.function.arguments || "{}"),
-        );
-        if (!parsed.success) {
-          resultText = "Invalid document spec — couldn't generate the file.";
-        } else {
-          try {
-            const buffer = await buildDocumentBuffer(parsed.data);
-            const ext = DOCUMENT_EXTENSION_BY_FORMAT[parsed.data.format];
-            const mime = DOCUMENT_MIME_BY_FORMAT[parsed.data.format];
-            const storagePath = `${userId}/generated/${randomUUID()}.${ext}`;
-            await ensureAttachmentBucket();
-            const { error: uploadError } = await attachmentStorage.storage
-              .from(ATTACHMENT_BUCKET)
-              .upload(storagePath, buffer, {
-                contentType: mime,
-                upsert: false,
-              });
-            if (uploadError) throw new Error("upload failed");
-            const FIVE_YEARS_SECS = 5 * 365 * 24 * 3600;
-            const { data: signedData, error: signError } =
-              await attachmentStorage.storage
-                .from(ATTACHMENT_BUCKET)
-                .createSignedUrl(storagePath, FIVE_YEARS_SECS);
-            if (signError || !signedData) throw new Error("sign failed");
-            const displayFilename = `${parsed.data.filename}.${ext}`;
-            resultText = `Document generated. Share this download link exactly as-is in your reply, alongside a brief description of what you made: ${signedData.signedUrl} (${displayFilename})`;
-          } catch (err) {
-            logger.error(
-              { err },
-              "restricted-channel generate_document tool failed",
-            );
-            resultText =
-              err instanceof Error &&
-              /requires `(sections|table)`/.test(err.message)
-                ? `Couldn't generate the document: ${err.message}.`
-                : "Couldn't generate that document right now.";
-          }
-        }
-      } else if (name === SHOW_POTTERY_ITEM_TOOL_NAME) {
-        const parsed = ShowPotteryItemToolPayload.safeParse(
-          JSON.parse(call.function.arguments || "{}"),
-        );
-        if (!parsed.success) {
-          resultText = "Invalid pottery item ID.";
-        } else {
-          const [row] = await db
-            .select({
-              id: potteryItems.id,
-              name: potteryItems.name,
-              maker: potteryItems.maker,
-              style: potteryItems.style,
-              imagePath: potteryItems.imagePath,
-              aiDescription: potteryItems.aiDescription,
-              dominantColors: potteryItems.dominantColors,
-            })
-            .from(potteryItems)
-            .where(eq(potteryItems.id, parsed.data.itemId));
-          if (!row) {
-            resultText = `Pottery item #${parsed.data.itemId} not found.`;
-          } else {
-            let imageUrl: string | undefined;
-            try {
-              const sc = createClient(
-                env.supabaseUrl,
-                env.supabaseServiceRoleKey,
-                { auth: { persistSession: false, autoRefreshToken: false } },
-              );
-              const { data } = await sc.storage
-                .from("pottery")
-                .createSignedUrl(row.imagePath, 3600);
-              imageUrl = data?.signedUrl ?? undefined;
-            } catch {
-              // non-fatal
-            }
-            if (onWidget)
-              onWidget({
-                type: "pottery_item",
-                item: {
-                  itemId: row.id,
-                  name: row.name,
-                  maker: row.maker ?? undefined,
-                  style: row.style ?? undefined,
-                  aiDescription: row.aiDescription ?? undefined,
-                  dominantColors:
-                    row.dominantColors.length > 0
-                      ? row.dominantColors
-                      : undefined,
-                  imageUrl,
-                },
-              });
-            resultText = `Pottery item card shown for "${row.name}".`;
-          }
-        }
-      } else if (name === SHOW_FABRIC_SWATCH_TOOL_NAME) {
-        const parsed = ShowFabricSwatchToolPayload.safeParse(
-          JSON.parse(call.function.arguments || "{}"),
-        );
-        if (!parsed.success) {
-          resultText = "Invalid fabric ID.";
-        } else {
-          const [row] = await db
-            .select({
-              id: fabrics.id,
-              name: fabrics.name,
-              manufacturer: fabrics.manufacturer,
-              designer: fabrics.designer,
-              dominantColors: fabrics.dominantColors,
-              imagePath: fabrics.imagePath,
-              aiDescription: fabrics.aiDescription,
-            })
-            .from(fabrics)
-            .where(eq(fabrics.id, parsed.data.fabricId));
-          if (!row) {
-            resultText = `Fabric #${parsed.data.fabricId} not found.`;
-          } else {
-            let imageUrl: string | undefined;
-            try {
-              if (row.imagePath) {
-                const sc = createClient(
-                  env.supabaseUrl,
-                  env.supabaseServiceRoleKey,
-                  { auth: { persistSession: false, autoRefreshToken: false } },
-                );
-                const { data } = await sc.storage
-                  .from("quilting")
-                  .createSignedUrl(row.imagePath, 3600);
-                imageUrl = data?.signedUrl ?? undefined;
-              }
-            } catch {
-              // non-fatal
-            }
-            if (onWidget)
-              onWidget({
-                type: "fabric_swatch",
-                swatch: {
-                  fabricId: row.id,
-                  name: row.name,
-                  manufacturer: row.manufacturer ?? undefined,
-                  designer: row.designer ?? undefined,
-                  dominantColors:
-                    row.dominantColors && row.dominantColors.length > 0
-                      ? row.dominantColors
-                      : undefined,
-                  aiDescription: row.aiDescription ?? undefined,
-                  imageUrl,
-                },
-              });
-            resultText = `Fabric swatch card shown for "${row.name}".`;
-          }
-        }
-      } else if (name === SHOW_ORNAMENT_ITEM_TOOL_NAME) {
-        const parsed = ShowOrnamentItemToolPayload.safeParse(
-          JSON.parse(call.function.arguments || "{}"),
-        );
-        if (!parsed.success) {
-          resultText = "Invalid ornament item ID.";
-        } else {
-          const [row] = await db
-            .select({
-              id: ornamentsItems.id,
-              name: ornamentsItems.name,
-              seriesOrCollection: ornamentsItems.seriesOrCollection,
-              year: ornamentsItems.year,
-              brand: ornamentsItems.brand,
-              imagePath: ornamentsItems.imagePath,
-              aiDescription: ornamentsItems.aiDescription,
-              dominantColors: ornamentsItems.dominantColors,
-            })
-            .from(ornamentsItems)
-            .where(eq(ornamentsItems.id, parsed.data.itemId));
-          if (!row) {
-            resultText = `Ornament #${parsed.data.itemId} not found.`;
-          } else {
-            let imageUrl: string | undefined;
-            try {
-              const sc = createClient(
-                env.supabaseUrl,
-                env.supabaseServiceRoleKey,
-                { auth: { persistSession: false, autoRefreshToken: false } },
-              );
-              const { data } = await sc.storage
-                .from("ornaments")
-                .createSignedUrl(row.imagePath, 3600);
-              imageUrl = data?.signedUrl ?? undefined;
-            } catch {
-              // non-fatal
-            }
-            if (onWidget)
-              onWidget({
-                type: "ornament_item",
-                item: {
-                  itemId: row.id,
-                  name: row.name,
-                  seriesOrCollection: row.seriesOrCollection ?? undefined,
-                  year: row.year ?? undefined,
-                  brand: row.brand ?? undefined,
-                  aiDescription: row.aiDescription ?? undefined,
-                  dominantColors:
-                    row.dominantColors && row.dominantColors.length > 0
-                      ? row.dominantColors
-                      : undefined,
-                  imageUrl,
-                },
-              });
-            resultText = `Ornament card shown for "${row.name}".`;
-          }
-        }
-      } else if (name === SHOW_DATA_CARD_TOOL_NAME) {
-        try {
-          const parsed = ShowDataCardToolPayload.safeParse(
-            JSON.parse(call.function.arguments || "{}"),
-          );
-          if (parsed.success) {
-            if (onWidget) {
-              onWidget({
-                type: "data_card",
-                title: parsed.data.title,
-                rows: parsed.data.rows,
-              });
-              resultText = "Data card shown.";
-            } else {
-              const lines = parsed.data.rows.map(
-                (r) => `${r.label}: ${r.value}`,
-              );
-              resultText = parsed.data.title
-                ? `${parsed.data.title}\n${lines.join("\n")}`
-                : lines.join("\n");
-            }
-          }
-        } catch {
-          // Malformed JSON — drop it.
-        }
-      } else if (name === LIST_ELAINE_MEMORIES_TOOL_NAME) {
-        resultText =
-          (await executeUniversalReadTool(
-            name,
-            call.function.arguments,
-            userId,
-          )) ?? "Unsupported app data tool.";
-      } else if (RESTRICTED_SOFT_TOOL_NAMES.has(name)) {
-        resultText = await executeRestrictedSoftTool(
-          name,
-          call.function.arguments,
-        );
-      } else if (
-        AGENTPHONE_ACTION_TYPES.has(name) ||
-        channelAllowedExtras?.has(name)
-      ) {
-        try {
-          const finalAction = await tryBuildAction(
-            name,
-            call.function.arguments,
-          );
-          if (finalAction) {
-            const executor = ACTION_EXECUTORS[finalAction.type as ActionType];
-            const { status, body } = await executor(
-              finalAction.payload as never,
-              userId,
-            );
-            resultText =
-              status < 400
-                ? `Done: ${finalAction.label}.`
-                : `Failed (${status}): ${JSON.stringify(body)}`;
-          } else {
-            resultText =
-              "Couldn't understand that request clearly enough to act — ask the user to clarify.";
-          }
-        } catch (err) {
-          logger.error(
-            { err, name },
-            `${channelLabel} restricted action execution failed`,
-          );
-          resultText =
-            "That action failed on our end — tell the user to try again or use the app.";
-        }
-      }
-
-      messages.push({
-        role: "tool",
-        tool_call_id: call.id,
-        content: resultText,
+  // SMS/Slack/email/messenger (not voice — useFastModel is true there and
+  // deliberately skips this) get a first attempt on the direct OpenAI
+  // Responses API so they run on the same gpt-5.6-sol model as main web
+  // chat. Any failure here — outage, missing key, disabled feature flag —
+  // falls straight through to the existing OpenRouter loop below, which
+  // uses config.models.restrictedTextModel as a silent safety net.
+  let usedOpenAIResponses = false;
+  if (!useFastModel && isOpenAIResponsesConfigured(config)) {
+    try {
+      replyText = await runRestrictedTurnViaOpenAIResponses({
+        config,
+        systemPrompt,
+        history,
+        inputText,
+        channelTools,
+        userId,
+        channelLabel,
+        channelAllowedExtras,
+        onWidget,
       });
+      usedOpenAIResponses = true;
+    } catch (err) {
+      const category =
+        err instanceof OpenAIResponsesUnavailableError
+          ? err.category
+          : "provider_error";
+      recordOpenAIResponsesFallback(category);
+      logger.warn(
+        { err, channelLabel, category },
+        "restricted-channel OpenAI Responses turn failed; falling back to OpenRouter",
+      );
     }
   }
 
-  // If all MAX_ROUNDS were consumed by tool calls and the model never produced
-  // a text reply (e.g. show_trip_card → web_search → fetch_page used all 3
-  // rounds), make one final forced call with tool_choice:"none" so the model
-  // can synthesise the tool results it already has into an actual answer.
-  // Only fires when there are accumulated tool results in context (messages
-  // will have grown beyond the initial system+history+user set).
-  if (!replyText && messages.length > 2 + Math.min(history.length, 10)) {
-    try {
-      const finalCompletion = await callModel(
-        config.chatModel,
-        (client, model) =>
-          client.chat.completions.create({
-            model,
-            max_tokens: maxTokens,
-            messages,
-            tool_choice: "none",
-            ...HIDDEN_REASONING,
-          } as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming),
+  if (!usedOpenAIResponses) {
+    for (let round = 0; round < MAX_ROUNDS; round++) {
+      const completion = await callModel(restrictedTurnModel, (client, model) =>
+        client.chat.completions.create({
+          model,
+          max_tokens: maxTokens,
+          messages,
+          tools: channelTools,
+          ...HIDDEN_REASONING,
+        } as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming),
       );
-      replyText = (finalCompletion.choices[0]?.message?.content ?? "").trim();
-    } catch (err) {
-      logger.warn({ err }, `${channelLabel} final-synthesis call failed`);
+      const message = completion.choices[0]?.message;
+      if (!message) break;
+      replyText = (message.content ?? "").trim();
+      const toolCalls = message.tool_calls ?? [];
+      if (toolCalls.length === 0) break;
+
+      messages.push({
+        role: "assistant",
+        content: message.content ?? null,
+        tool_calls: toolCalls,
+      });
+
+      for (const call of toolCalls) {
+        if (call.type !== "function") continue;
+        const resultText = await executeRestrictedToolCall(
+          call.function.name,
+          call.function.arguments,
+          { userId, channelLabel, channelAllowedExtras, onWidget },
+        );
+        messages.push({
+          role: "tool",
+          tool_call_id: call.id,
+          content: resultText,
+        });
+      }
+    }
+
+    // If all MAX_ROUNDS were consumed by tool calls and the model never
+    // produced a text reply (e.g. show_trip_card → web_search → fetch_page
+    // used all 3 rounds), make one final forced call with tool_choice:"none"
+    // so the model can synthesise the tool results it already has into an
+    // actual answer. Only fires when there are accumulated tool results in
+    // context (messages will have grown beyond the initial
+    // system+history+user set).
+    if (!replyText && messages.length > 2 + Math.min(history.length, 10)) {
+      try {
+        const finalCompletion = await callModel(
+          restrictedTurnModel,
+          (client, model) =>
+            client.chat.completions.create({
+              model,
+              max_tokens: maxTokens,
+              messages,
+              tool_choice: "none",
+              ...HIDDEN_REASONING,
+            } as OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming),
+        );
+        replyText = (finalCompletion.choices[0]?.message?.content ?? "").trim();
+      } catch (err) {
+        logger.warn({ err }, `${channelLabel} final-synthesis call failed`);
+      }
     }
   }
 
@@ -8854,15 +9048,21 @@ export async function runAgentphoneTurn(params: {
   userId: number;
   inputText: string;
   history: AgentphoneChatMessage[];
+  /** "voice" keeps this turn on the fast model (live call, no dead air
+   *  budget); "sms" (the default) is text-based and gets the stronger
+   *  `models.restrictedTextModel` instead. */
+  channel?: "sms" | "voice";
 }): Promise<{ replyText: string; history: AgentphoneChatMessage[] }> {
+  const { channel = "sms", ...turnParams } = params;
   return runRestrictedElaineTurn({
-    ...params,
+    ...turnParams,
     maxTokens: 300,
     channelLabel: "SMS/voice",
     channelAddendum: AGENTPHONE_CHANNEL_ADDENDUM,
     formattingNote:
       "Your replies will be sent as SMS text or read aloud over a phone call. Use plain text only — NO markdown, NO emojis, NO bullet points. Keep it to one to three sentences.",
     channelAllowedExtras: SMS_SLACK_CHANNEL_EXTRAS,
+    useFastModel: channel === "voice",
   });
 }
 

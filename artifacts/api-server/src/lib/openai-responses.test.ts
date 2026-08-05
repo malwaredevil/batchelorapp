@@ -34,6 +34,7 @@ const config: ElaineGlobalConfig = {
     openAIReasoning: "gpt-5.6-sol",
     openAIBalanced: "gpt-5.6-terra",
     openAIFast: "gpt-5.6-luna",
+    restrictedTextModel: "restricted-text",
     rerank: "rerank",
     visualEmbed: "visual-embed",
     fusionModels: ["fusion"],

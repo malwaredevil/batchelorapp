@@ -51,7 +51,6 @@ import {
   useUploadTripDocument,
   useGenerateTripShareToken,
   useRevokeTripShareToken,
-  type TripPhoto,
   type PhotoType,
   type Reminder,
   type TravelsAppUser,
@@ -66,6 +65,7 @@ import { OneThingInput } from "@/travels/components/OneThingInput";
 import { MagnetCheckDialog } from "@/travels/components/MagnetCheckDialog";
 import { ReminderEditDialog } from "@/travels/components/ReminderEditDialog";
 import { AttachmentPickerDialog } from "@/travels/components/AttachmentPickerDialog";
+import { ImageLightbox } from "@/quilting/components/image-lightbox";
 import { usePageAssistantContext } from "@/travels/lib/assistant-context";
 import {
   formatElaineContextList,
@@ -2285,7 +2285,7 @@ function PhotoGridSection({
     },
   });
   const fileRef = useRef<HTMLInputElement>(null);
-  const [lightbox, setLightbox] = useState<TripPhoto | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [bulkUploading, setBulkUploading] = useState<{
     done: number;
     total: number;
@@ -2420,7 +2420,7 @@ function PhotoGridSection({
         </Card>
       ) : (
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
-          {photos.map((photo) => {
+          {photos.map((photo, index) => {
             const isIcon = onSetIcon && iconPhotoId === photo.id;
             return (
               <div key={photo.id} className="relative group aspect-square">
@@ -2428,7 +2428,7 @@ function PhotoGridSection({
                   src={getTripPhotoImageUrl(tripId, photo.id)}
                   alt={photo.caption ?? title}
                   className={`w-full h-full object-cover rounded-lg cursor-pointer hover:opacity-90 transition-opacity ${isIcon ? "ring-2 ring-primary ring-offset-2" : ""}`}
-                  onClick={() => setLightbox(photo)}
+                  onClick={() => setLightboxIndex(index)}
                 />
                 <button
                   className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
@@ -2471,47 +2471,47 @@ function PhotoGridSection({
         </div>
       )}
 
-      {/* Lightbox */}
-      <Dialog
-        open={!!lightbox}
-        onOpenChange={(open) => {
-          if (!open) setLightbox(null);
-        }}
-      >
-        <DialogContent className="max-w-3xl">
-          {lightbox && (
-            <>
-              <img
-                src={getTripPhotoImageUrl(tripId, lightbox.id)}
-                alt={lightbox.caption ?? title}
-                className="w-full rounded-lg max-h-[70vh] object-contain"
-              />
-              {lightbox.caption && (
-                <p className="text-sm text-muted-foreground text-center">
-                  {lightbox.caption}
-                </p>
-              )}
-              {onSetIcon && (
-                <Button
-                  size="sm"
-                  variant={
-                    iconPhotoId === lightbox.id ? "secondary" : "outline"
-                  }
-                  disabled={settingIcon || iconPhotoId === lightbox.id}
-                  onClick={() => onSetIcon(lightbox.id)}
-                >
-                  <Star
-                    className={`w-3.5 h-3.5 mr-1.5 ${iconPhotoId === lightbox.id ? "fill-current" : ""}`}
-                  />
-                  {iconPhotoId === lightbox.id
-                    ? "Current cover photo"
-                    : "Set as cover photo"}
-                </Button>
-              )}
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Lightbox — zoom/pan + prev/next across all photos in this section */}
+      <ImageLightbox
+        src={
+          lightboxIndex !== null && photos[lightboxIndex]
+            ? getTripPhotoImageUrl(tripId, photos[lightboxIndex].id)
+            : ""
+        }
+        alt={
+          lightboxIndex !== null
+            ? (photos[lightboxIndex]?.caption ?? title)
+            : ""
+        }
+        open={lightboxIndex !== null}
+        onClose={() => setLightboxIndex(null)}
+        images={photos.map((photo) => getTripPhotoImageUrl(tripId, photo.id))}
+        labels={photos.map((photo) => photo.caption ?? "")}
+        currentIndex={lightboxIndex ?? 0}
+        onNavigate={setLightboxIndex}
+        extraActions={
+          onSetIcon
+            ? (index: number) => {
+                const photo = photos[index];
+                if (!photo) return null;
+                const isCurrentIcon = iconPhotoId === photo.id;
+                return (
+                  <Button
+                    size="sm"
+                    variant={isCurrentIcon ? "secondary" : "outline"}
+                    disabled={settingIcon || isCurrentIcon}
+                    onClick={() => onSetIcon(photo.id)}
+                  >
+                    <Star
+                      className={`w-3.5 h-3.5 mr-1.5 ${isCurrentIcon ? "fill-current" : ""}`}
+                    />
+                    {isCurrentIcon ? "Current cover photo" : "Set as cover"}
+                  </Button>
+                );
+              }
+            : undefined
+        }
+      />
     </div>
   );
 }

@@ -132,6 +132,7 @@ vi.mock("../lib/elaine-config", () => ({
     plannerModel: "openai/gpt-4o-mini",
     plannerEnabled: false,
     responsesEnabled: false,
+    models: { restrictedTextModel: "restricted-text-model" },
   }),
   invalidateElaineGlobalConfigCache: vi.fn(),
 }));
@@ -162,7 +163,14 @@ vi.mock("../lib/openai-responses", () => ({
   generateOpenAIResponseText: vi.fn(),
   getOpenAIResponsesMetrics: vi.fn().mockReturnValue({}),
   isRecoverableOpenAIStateError: vi.fn().mockReturnValue(false),
-  OpenAIResponsesUnavailableError: class extends Error {},
+  messagesToResponseInput: vi.fn((messages: unknown) => messages),
+  OpenAIResponsesUnavailableError: class extends Error {
+    category: string;
+    constructor(category: string, message: string) {
+      super(message);
+      this.category = category;
+    }
+  },
   recordOpenAIResponsesFallback: vi.fn(),
   resolveOpenAIResponsesModel: vi.fn().mockReturnValue(null),
   streamOpenAIResponseRound: vi.fn(),
@@ -396,6 +404,12 @@ vi.mock("@supabase/supabase-js", () => ({
 // ---------------------------------------------------------------------------
 
 import { runAgentphoneTurn, runElaineEmailTurn } from "./index";
+import {
+  isOpenAIResponsesConfigured,
+  OpenAIResponsesUnavailableError,
+  recordOpenAIResponsesFallback,
+  streamOpenAIResponseRound,
+} from "../lib/openai-responses";
 
 // ---------------------------------------------------------------------------
 // Response builder helpers
@@ -611,6 +625,206 @@ function simulateToolCallRound(
 // ---------------------------------------------------------------------------
 // Tests: SMS channel (runAgentphoneTurn)
 // ---------------------------------------------------------------------------
+
+describe("Channel-based model routing", () => {
+  it("routes SMS to the restricted-text (smart) model, not the fast chatModel", async () => {
+    await runAgentphoneTurn({
+      userId: 1,
+      inputText: "hi",
+      history: [],
+      channel: "sms",
+    });
+    expect(mockCallModel).toHaveBeenCalledWith(
+      "restricted-text-model",
+      expect.any(Function),
+    );
+  });
+
+  it("routes voice to the fast chatModel, not the restricted-text model", async () => {
+    await runAgentphoneTurn({
+      userId: 1,
+      inputText: "hi",
+      history: [],
+      channel: "voice",
+    });
+    expect(mockCallModel).toHaveBeenCalledWith(
+      "openai/gpt-4o-mini",
+      expect.any(Function),
+    );
+  });
+
+  it("defaults AgentPhone turns to the smart model when no channel is given", async () => {
+    await runAgentphoneTurn({ userId: 1, inputText: "hi", history: [] });
+    expect(mockCallModel).toHaveBeenCalledWith(
+      "restricted-text-model",
+      expect.any(Function),
+    );
+  });
+
+  it("routes email to the restricted-text (smart) model", async () => {
+    await runElaineEmailTurn({ userId: 1, inputText: "hi", history: [] });
+    expect(mockCallModel).toHaveBeenCalledWith(
+      "restricted-text-model",
+      expect.any(Function),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: OpenAI Responses API path (SMS/Slack/email/messenger now attempt
+// the same gpt-5.6-sol Responses API as main web chat before ever touching
+// the OpenRouter restricted-text-model fallback).
+// ---------------------------------------------------------------------------
+
+describe("Non-voice restricted channels — OpenAI Responses API path", () => {
+  beforeEach(() => {
+    vi.mocked(isOpenAIResponsesConfigured).mockReturnValue(true);
+  });
+
+  it("answers directly via the Responses API with no tool calls, skipping OpenRouter entirely", async () => {
+    vi.mocked(streamOpenAIResponseRound).mockResolvedValue({
+      responseId: "resp_1",
+      model: "gpt-5.6-sol",
+      text: "Hello from gpt-5.6-sol.",
+      functionCalls: [],
+      usage: { inputTokens: 10, outputTokens: 5 },
+    } as never);
+
+    const result = await runAgentphoneTurn({
+      userId: 1,
+      inputText: "hi",
+      history: [],
+      channel: "sms",
+    });
+
+    expect(result.replyText).toBe("Hello from gpt-5.6-sol.");
+    expect(mockCallModel).not.toHaveBeenCalled();
+  });
+
+  it("does not attempt the Responses API for voice — voice always uses the fast OpenRouter model", async () => {
+    await runAgentphoneTurn({
+      userId: 1,
+      inputText: "hi",
+      history: [],
+      channel: "voice",
+    });
+
+    expect(streamOpenAIResponseRound).not.toHaveBeenCalled();
+    expect(mockCallModel).toHaveBeenCalledWith(
+      "openai/gpt-4o-mini",
+      expect.any(Function),
+    );
+  });
+
+  it("executes a tool call through the Responses API loop and returns the model's final text", async () => {
+    mockDbSelect.mockImplementation(() => makeSelectChain([POTTERY_ROW]));
+
+    let round = 0;
+    vi.mocked(streamOpenAIResponseRound).mockImplementation(async (opts) => {
+      round += 1;
+      if (round === 1) {
+        return {
+          responseId: "resp_round_1",
+          model: "gpt-5.6-sol",
+          text: "",
+          functionCalls: [
+            {
+              callId: "call_1",
+              name: "show_pottery_item",
+              arguments: JSON.stringify({ itemId: POTTERY_ROW.id }),
+            },
+          ],
+          usage: { inputTokens: 10, outputTokens: 5 },
+        } as never;
+      }
+      // Round 2: confirm the tool's output was fed back as this round's input.
+      const input = opts.input as Array<{ output?: string }>;
+      expect(
+        input.some((i) => i.output?.includes("Pottery item card shown for")),
+      ).toBe(true);
+      return {
+        responseId: "resp_round_2",
+        model: "gpt-5.6-sol",
+        text: `Here is your pottery piece: ${POTTERY_ROW.name}.`,
+        functionCalls: [],
+        usage: { inputTokens: 10, outputTokens: 5 },
+      } as never;
+    });
+
+    const result = await runAgentphoneTurn({
+      userId: 1,
+      inputText: "tell me about pottery item 42",
+      history: [],
+      channel: "sms",
+    });
+
+    expect(result.replyText).toContain(POTTERY_ROW.name);
+    expect(mockCallModel).not.toHaveBeenCalled();
+    expect(streamOpenAIResponseRound).toHaveBeenCalledTimes(2);
+  });
+
+  it("forces a final tool_choice:none synthesis call when every round is consumed by tool calls", async () => {
+    mockDbSelect.mockImplementation(() => makeSelectChain([POTTERY_ROW]));
+
+    vi.mocked(streamOpenAIResponseRound).mockImplementation(async (opts) => {
+      if (opts.toolChoice === "none") {
+        return {
+          responseId: "resp_final",
+          model: "gpt-5.6-sol",
+          text: "Synthesized answer from the tool results.",
+          functionCalls: [],
+          usage: { inputTokens: 10, outputTokens: 5 },
+        } as never;
+      }
+      return {
+        responseId: "resp_round",
+        model: "gpt-5.6-sol",
+        text: "",
+        functionCalls: [
+          {
+            callId: "call_x",
+            name: "show_pottery_item",
+            arguments: JSON.stringify({ itemId: POTTERY_ROW.id }),
+          },
+        ],
+        usage: { inputTokens: 10, outputTokens: 5 },
+      } as never;
+    });
+
+    const result = await runAgentphoneTurn({
+      userId: 1,
+      inputText: "tell me about pottery item 42",
+      history: [],
+      channel: "sms",
+    });
+
+    expect(result.replyText).toBe("Synthesized answer from the tool results.");
+    // 3 tool-calling rounds (MAX_ROUNDS) + 1 forced synthesis call.
+    expect(streamOpenAIResponseRound).toHaveBeenCalledTimes(4);
+  });
+
+  it("falls back to the OpenRouter restricted-text-model when the Responses API throws", async () => {
+    vi.mocked(streamOpenAIResponseRound).mockRejectedValue(
+      new OpenAIResponsesUnavailableError("provider_error", "boom"),
+    );
+
+    const result = await runAgentphoneTurn({
+      userId: 1,
+      inputText: "hi",
+      history: [],
+      channel: "sms",
+    });
+
+    expect(mockCallModel).toHaveBeenCalledWith(
+      "restricted-text-model",
+      expect.any(Function),
+    );
+    expect(result.replyText).toBe("OK.");
+    expect(recordOpenAIResponsesFallback).toHaveBeenCalledWith(
+      "provider_error",
+    );
+  });
+});
 
 describe("SMS channel — show_pottery_item", () => {
   it("includes show_pottery_item in the tools offered to the model", async () => {

@@ -339,6 +339,52 @@ describe("Slack webhook — job-queue path (#308)", () => {
     expect(res.body.challenge).toBe("abc123");
     expect(mockEnqueueJob).not.toHaveBeenCalled();
   });
+
+  // ── Error-fallback: DB unavailable during enqueue ─────────────────────────
+  //
+  // Mirrors the pattern in agentphone.test.ts "claimDelivery throws a non-unique
+  // DB error → 503".  If the pool transaction throws (e.g. DB unreachable), the
+  // webhook must return 5xx so Slack retries rather than silently dropping the
+  // event.
+
+  it("returns 503 when the DB transaction throws during delivery claim", async () => {
+    // Simulate a connection-level error on the INSERT INTO slack_webhook_deliveries.
+    mockPoolClientQuery.mockImplementation(async (sql: unknown) => {
+      if (String(sql).includes("INSERT INTO slack_webhook_deliveries")) {
+        throw new Error("ECONNREFUSED: DB unavailable");
+      }
+      return { rows: [] };
+    });
+
+    const app = await getApp();
+    const res = await supertest(app)
+      .post("/slack/webhook")
+      .set("Content-Type", "application/json")
+      .send(dmEvent({ event_id: "Ev-db-error-503" }));
+
+    expect(res.status).toBe(503);
+    expect(res.body).toHaveProperty("error");
+  });
+
+  it("does not invoke any downstream side-effects when the DB transaction throws", async () => {
+    // A DB error during enqueueSlackDelivery must fail closed: the job must
+    // not be enqueued and no Slack message must be posted.
+    mockPoolClientQuery.mockImplementation(async (sql: unknown) => {
+      if (String(sql).includes("INSERT INTO slack_webhook_deliveries")) {
+        throw new Error("ECONNREFUSED: DB unavailable");
+      }
+      return { rows: [] };
+    });
+
+    const app = await getApp();
+    await supertest(app)
+      .post("/slack/webhook")
+      .set("Content-Type", "application/json")
+      .send(dmEvent({ event_id: "Ev-db-error-noside" }));
+
+    expect(mockEnqueueJob).not.toHaveBeenCalled();
+    expect(mockPostSlackMessage).not.toHaveBeenCalled();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -515,6 +561,41 @@ describe("slack.turn job handler — worker execution", () => {
   });
 
   // ── Idempotent retry: Slack reply failure must not duplicate the LLM call ─
+
+  // ── Model-routing: Slack always uses the smart restrictedTextModel ───────
+  //
+  // Equivalent to the agentphone.test.ts assertion that checks channel="voice"
+  // triggers useFastModel. For Slack, the contract is the inverse: the job
+  // handler must call runElaineSlackTurn — which calls runRestrictedElaineTurn
+  // WITHOUT useFastModel:true — so the smarter restrictedTextModel is selected.
+  // Voice (AgentPhone) is the ONLY channel that opts into the fast chatModel.
+
+  it("invokes runElaineSlackTurn (smart restrictedTextModel path, not the fast chatModel)", async () => {
+    selectQueue.push([mockConversationRow]);
+    const handler = await getHandler();
+
+    await handler(
+      {
+        userId: 7,
+        slackEventId: "Ev-model-smart",
+        inputText: "What trips do I have coming up?",
+        channelId: "D456",
+      },
+      makeContext(),
+    );
+
+    // runElaineSlackTurn wraps runRestrictedElaineTurn without useFastModel:true,
+    // so the smarter model tier is selected.  If a fast-model bypass were ever
+    // added, this call would switch to a different mock and this assertion would
+    // fail, surfacing the regression immediately.
+    expect(mockRunElaineSlackTurn).toHaveBeenCalledOnce();
+    expect(mockRunElaineSlackTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 7,
+        inputText: "What trips do I have coming up?",
+      }),
+    );
+  });
 
   it("does NOT re-run Elaine when the same slackEventId was already processed (idempotent retry)", async () => {
     // Simulate state after a first attempt: Elaine ran, history was written

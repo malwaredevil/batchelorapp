@@ -55,7 +55,9 @@ export function ElainePlanProgress({
   trace: ElaineRuntimeTrace;
   live?: boolean;
 }) {
-  const [open, setOpen] = useState(live);
+  // Starts collapsed even while actively running — users can expand it to
+  // watch the plan unfold, but it's opt-in rather than shown by default.
+  const [open, setOpen] = useState(false);
   return (
     <details
       open={open}

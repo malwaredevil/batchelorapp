@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
+import http from "node:http";
+import type { AddressInfo } from "node:net";
 import { createHmac } from "node:crypto";
 import { makeEagerSelectBuilder } from "../test-helpers/db-mock";
 
@@ -711,5 +713,370 @@ describe("POST /api/agentphone/webhook — missing required headers", () => {
       .send(body);
 
     expect(res.status).toBe(200);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Voice channel tests
+//
+// These verify that voice webhook calls:
+//  1. Respond with NDJSON (Content-Type: application/x-ndjson).
+//  2. Include an interim ack as the first line — keeping the call alive so
+//     AgentPhone never re-delivers the same turn and the dedup table never
+//     rejects a legitimate second message.
+//  3. Include the final Elaine reply as the second line.
+//  4. Pass `channel: "voice"` to runAgentphoneTurn so the fast chatModel is
+//     selected (not the smarter/slower restrictedTextModel used for SMS).
+//  5. Gate on phone-number lookup: unrecognized numbers get an immediate
+//     rejection + hangup without invoking Elaine at all.
+//  6. Return a greeting for an empty transcript without invoking Elaine.
+// ---------------------------------------------------------------------------
+
+describe("POST /api/agentphone/webhook — voice channel", () => {
+  const FROM = "+10000000001";
+
+  function voiceBody(
+    transcript: string,
+    from = FROM,
+    deliveryId = `voice-delivery-${Date.now()}`,
+  ) {
+    const raw = JSON.stringify({
+      event: "agent.message",
+      channel: "voice",
+      data: { from, transcript },
+    });
+    return { raw, deliveryId };
+  }
+
+  async function sendVoiceWebhook(
+    app: Awaited<ReturnType<typeof buildApp>>,
+    transcript: string,
+    from = FROM,
+    deliveryId?: string,
+  ) {
+    const { raw, deliveryId: id } = voiceBody(
+      transcript,
+      from,
+      deliveryId ?? `voice-${transcript.slice(0, 8)}-${Date.now()}`,
+    );
+    const ts = freshTimestamp();
+    return request(app)
+      .post("/api/agentphone/webhook")
+      .set(buildHeaders(ts, raw, id))
+      .set("Content-Type", "application/json")
+      .send(raw);
+  }
+
+  /** Build a db.update() mock chain that satisfies `.set().where().returning()`. */
+  function makeVoiceUpdateMock(returnedId: number) {
+    return () => ({
+      set: () => ({
+        where: () => ({
+          returning: () => Promise.resolve([{ id: returnedId }]),
+        }),
+      }),
+    });
+  }
+
+  it("responds with Content-Type application/x-ndjson for a voice turn", async () => {
+    selectQueue.push([{ id: 1 }]); // user lookup
+    selectQueue.push([{ id: 100, messages: [], version: 0, userId: 1 }]); // conversation
+    dbMock.update.mockImplementation(makeVoiceUpdateMock(100));
+
+    const app = await buildApp();
+    const res = await sendVoiceWebhook(app, "What trips do I have coming up?");
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toMatch(/application\/x-ndjson/);
+  });
+
+  it("sends an interim ack as the first NDJSON line before the final reply", async () => {
+    selectQueue.push([{ id: 1 }]);
+    selectQueue.push([{ id: 101, messages: [], version: 0, userId: 1 }]);
+    dbMock.update.mockImplementation(makeVoiceUpdateMock(101));
+
+    runAgentphoneTurn.mockResolvedValue({
+      replyText: "You have a trip to Paris next week.",
+      history: [],
+    });
+
+    const app = await buildApp();
+    const res = await sendVoiceWebhook(app, "Do I have any trips soon?");
+
+    // Parse NDJSON — two newline-delimited JSON objects
+    const lines = (res.text as string)
+      .split("\n")
+      .filter((l) => l.trim().length > 0)
+      .map((l) => JSON.parse(l) as Record<string, unknown>);
+
+    expect(lines.length).toBeGreaterThanOrEqual(2);
+    // First line must be an interim ack (keeps AgentPhone from re-delivering)
+    expect(lines[0]).toMatchObject({ interim: true });
+    expect(typeof lines[0].text).toBe("string");
+    expect((lines[0].text as string).length).toBeGreaterThan(0);
+    // Second line is the final reply — no `interim` flag
+    expect(lines[1].interim).toBeUndefined();
+    expect(lines[1].text).toBe("You have a trip to Paris next week.");
+  });
+
+  it("flushes the interim ack before the model response arrives (streaming delivery verified)", async () => {
+    // Regression guard: a buffered response (one that awaits the model before
+    // writing anything) would fail this test because the first HTTP data chunk
+    // would arrive AFTER modelResolvedAt.  The test uses a real TCP server and
+    // a streaming http.request client so it can observe chunk delivery times
+    // independently of when the full response ends — something Supertest cannot
+    // do because it buffers the entire body before resolving.
+    selectQueue.push([{ id: 1 }]);
+    selectQueue.push([{ id: 104, messages: [], version: 0, userId: 1 }]);
+    dbMock.update.mockImplementation(makeVoiceUpdateMock(104));
+
+    const DELAY_MS = 150;
+    let modelResolvedAt = 0;
+
+    runAgentphoneTurn.mockImplementation(async () => {
+      // Simulate a slow LLM call.
+      await new Promise<void>((resolve) => setTimeout(resolve, DELAY_MS));
+      modelResolvedAt = Date.now();
+      return { replyText: "Your Paris trip is next Tuesday.", history: [] };
+    });
+
+    const app = buildApp();
+
+    // Spin up a real TCP listener so streaming chunks are observable.
+    const server = http.createServer(app);
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    const { port } = server.address() as AddressInfo;
+
+    try {
+      const transcript = "When is my Paris trip?";
+      const bodyStr = JSON.stringify({
+        event: "agent.message",
+        channel: "voice",
+        data: { from: FROM, transcript },
+      });
+      const ts = freshTimestamp();
+      const reqHeaders = buildHeaders(
+        ts,
+        bodyStr,
+        `voice-stream-${Date.now()}`,
+      );
+
+      const { firstChunkAt, allText, statusCode, contentType } =
+        await new Promise<{
+          firstChunkAt: number;
+          allText: string;
+          statusCode: number;
+          contentType: string;
+        }>((resolve, reject) => {
+          const req = http.request(
+            {
+              hostname: "127.0.0.1",
+              port,
+              path: "/api/agentphone/webhook",
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Content-Length": Buffer.byteLength(bodyStr),
+                ...reqHeaders,
+              },
+            },
+            (res) => {
+              let firstChunkAt = 0;
+              const parts: string[] = [];
+
+              res.on("data", (chunk: Buffer) => {
+                if (firstChunkAt === 0) firstChunkAt = Date.now();
+                parts.push(chunk.toString());
+              });
+
+              res.on("end", () => {
+                resolve({
+                  firstChunkAt,
+                  allText: parts.join(""),
+                  statusCode: res.statusCode ?? 0,
+                  contentType: res.headers["content-type"] ?? "",
+                });
+              });
+
+              res.on("error", reject);
+            },
+          );
+
+          req.on("error", reject);
+          req.write(bodyStr);
+          req.end();
+        });
+
+      // ── Streaming-order assertion (the regression this test guards) ────────
+      // The first HTTP data chunk must have arrived BEFORE the model resolved.
+      // A buffered implementation would send nothing until after modelResolvedAt,
+      // making firstChunkAt > modelResolvedAt and failing this assertion.
+      expect(modelResolvedAt).toBeGreaterThan(0); // mock actually ran
+      expect(firstChunkAt).toBeGreaterThan(0); // at least one chunk received
+      expect(firstChunkAt).toBeLessThan(modelResolvedAt);
+
+      // ── Shape assertions ───────────────────────────────────────────────────
+      expect(statusCode).toBe(200);
+      expect(contentType).toMatch(/application\/x-ndjson/);
+
+      const lines = allText
+        .split("\n")
+        .filter((l) => l.trim().length > 0)
+        .map((l) => JSON.parse(l) as Record<string, unknown>);
+
+      // Exactly two lines: interim ack + final reply — no extra error line.
+      expect(lines).toHaveLength(2);
+
+      // Line 1 — interim ack (written synchronously before the model call).
+      expect(lines[0]).toMatchObject({ interim: true });
+      expect(typeof lines[0].text).toBe("string");
+      expect((lines[0].text as string).length).toBeGreaterThan(0);
+      expect(lines[0].hangup).toBeUndefined();
+
+      // Line 2 — final reply (written after the model resolved).
+      expect(lines[1].text).toBe("Your Paris trip is next Tuesday.");
+      expect(lines[1].interim).toBeUndefined();
+      expect(lines[1].hangup).toBeUndefined();
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it("sends the fallback error text as the second NDJSON line when the model throws mid-stream", async () => {
+    // Regression guard: when runRestrictedTurnAndPersist throws AFTER the
+    // interim ack has already been flushed, the caller must still receive a
+    // second NDJSON line with a human-readable error message — not silence or
+    // a broken/truncated stream.
+    selectQueue.push([{ id: 1 }]);
+    selectQueue.push([{ id: 105, messages: [], version: 0, userId: 1 }]);
+    dbMock.update.mockImplementation(makeVoiceUpdateMock(105));
+
+    const DELAY_MS = 50;
+    runAgentphoneTurn.mockImplementation(async () => {
+      // Simulate a model call that starts (interim ack has been sent) then fails.
+      await new Promise<void>((resolve) => setTimeout(resolve, DELAY_MS));
+      throw new Error("Simulated LLM failure mid-stream");
+    });
+
+    const app = await buildApp();
+    const res = await sendVoiceWebhook(app, "What trips do I have?");
+
+    // Status must be 200 — the header was committed before the error occurred.
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toMatch(/application\/x-ndjson/);
+
+    // Parse both NDJSON lines — must be exactly two non-empty lines.
+    const lines = (res.text as string)
+      .split("\n")
+      .filter((l) => l.trim().length > 0)
+      .map((l) => JSON.parse(l) as Record<string, unknown>);
+
+    expect(lines).toHaveLength(2);
+
+    // Line 1 — interim ack written synchronously before the model call.
+    expect(lines[0]).toMatchObject({ interim: true });
+    expect(typeof lines[0].text).toBe("string");
+    expect((lines[0].text as string).length).toBeGreaterThan(0);
+
+    // Line 2 — fallback error text written by the catch block, not silence.
+    expect(lines[1].interim).toBeUndefined();
+    expect(typeof lines[1].text).toBe("string");
+    expect((lines[1].text as string).length).toBeGreaterThan(0);
+    // Must contain an apology / "try again" framing so the caller hears
+    // something useful rather than dead air.
+    expect(lines[1].text as string).toMatch(/sorry|wrong|try again/i);
+  });
+
+  it("passes channel='voice' to runAgentphoneTurn so the fast chatModel is selected", async () => {
+    selectQueue.push([{ id: 1 }]);
+    selectQueue.push([{ id: 102, messages: [], version: 0, userId: 1 }]);
+    dbMock.update.mockImplementation(makeVoiceUpdateMock(102));
+
+    const app = await buildApp();
+    await sendVoiceWebhook(app, "Any packing list updates?");
+
+    expect(runAgentphoneTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ channel: "voice" }),
+    );
+  });
+
+  it("returns a greeting (no Elaine turn) when the transcript is empty", async () => {
+    // AgentPhone's configured beginMessage normally handles the greeting;
+    // an empty transcript arriving here is a defensive fallback path.
+    const app = await buildApp();
+    const res = await sendVoiceWebhook(app, "");
+
+    expect(res.status).toBe(200);
+    expect(runAgentphoneTurn).not.toHaveBeenCalled();
+    // Greeting response must be plain JSON (single object, not NDJSON)
+    // because the handler returns immediately before starting the stream.
+    const body = res.body as Record<string, unknown>;
+    expect(typeof body.text).toBe("string");
+    expect((body.text as string).length).toBeGreaterThan(0);
+    expect(body.hangup).toBeUndefined(); // greeting does not hang up
+  });
+
+  it("returns a rejection + hangup for an unrecognized phone number without invoking Elaine", async () => {
+    selectQueue.push([]); // user lookup returns no match
+    const app = await buildApp();
+    const res = await sendVoiceWebhook(
+      app,
+      "Tell me about my trips",
+      "+19999999999",
+      "voice-unrec-number",
+    );
+
+    expect(res.status).toBe(200);
+    expect(runAgentphoneTurn).not.toHaveBeenCalled();
+    const body = res.body as Record<string, unknown>;
+    expect(typeof body.text).toBe("string");
+    expect(body.hangup).toBe(true);
+  });
+
+  it("does not invoke Elaine for a duplicate voice delivery", async () => {
+    // The same signed body arriving twice must be deduped: second delivery
+    // must return {duplicate:true} and never trigger another Elaine turn.
+    const transcript = "What is the weather in Paris?";
+    const from = FROM;
+    const deliveryId = "voice-dup-001";
+    const raw = JSON.stringify({
+      event: "agent.message",
+      channel: "voice",
+      data: { from, transcript },
+    });
+    const ts = freshTimestamp();
+    const headers = buildHeaders(ts, raw, deliveryId);
+    const app = await buildApp();
+
+    // First delivery: user lookup + conversation + update succeed normally.
+    selectQueue.push([{ id: 1 }]);
+    selectQueue.push([{ id: 103, messages: [], version: 0, userId: 1 }]);
+    dbMock.update.mockImplementation(makeVoiceUpdateMock(103));
+
+    const first = await request(app)
+      .post("/api/agentphone/webhook")
+      .set(headers)
+      .set("Content-Type", "application/json")
+      .send(raw);
+
+    expect(first.status).toBe(200);
+    const firstCallCount = runAgentphoneTurn.mock.calls.length;
+
+    // Second delivery: same signed body → same content hash → claimDelivery
+    // returns false (duplicate).
+    nextInsertThrows = true;
+
+    const second = await request(app)
+      .post("/api/agentphone/webhook")
+      .set(headers)
+      .set("Content-Type", "application/json")
+      .send(raw);
+
+    expect(second.status).toBe(200);
+    expect(second.body.duplicate).toBe(true);
+    // Elaine must NOT have been called again on the duplicate delivery.
+    expect(runAgentphoneTurn.mock.calls.length).toBe(firstCallCount);
   });
 });

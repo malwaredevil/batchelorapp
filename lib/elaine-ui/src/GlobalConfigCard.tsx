@@ -342,6 +342,24 @@ export function GlobalConfigCard() {
             />
           </div>
         </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="space-y-1.5">
+            <Label className="text-sm font-medium text-foreground">
+              Restricted-channel fallback model
+            </Label>
+            <Input
+              value={models.restrictedTextModel}
+              onChange={(e) =>
+                setModels({ ...models, restrictedTextModel: e.target.value })
+              }
+            />
+            <p className="text-xs text-muted-foreground">
+              OpenRouter model used for SMS/Slack/email/messenger turns when the
+              direct OpenAI Responses API above is disabled or unavailable.
+              Voice always uses the fast chat model instead.
+            </p>
+          </div>
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <NumberField
             label="Responses timeout (ms)"

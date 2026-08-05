@@ -156,6 +156,7 @@ async function runRestrictedTurnAndPersist(
   conversation: AgentphoneConversationRow,
   userId: number,
   inputText: string,
+  channel: "sms" | "voice",
 ): Promise<string> {
   let current = conversation;
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -163,7 +164,12 @@ async function runRestrictedTurnAndPersist(
     let replyText: string;
     let updatedHistory: AgentphoneChatMessage[];
     try {
-      const result = await runAgentphoneTurn({ userId, inputText, history });
+      const result = await runAgentphoneTurn({
+        userId,
+        inputText,
+        history,
+        channel,
+      });
       replyText = result.replyText;
       updatedHistory = result.history;
     } catch (err) {
@@ -359,6 +365,7 @@ async function handleSms(
     conversation,
     user.id,
     messageText,
+    "sms",
   );
 
   const replySideEffectKey = `agentphone:sms:${deliveryKey}:assistant-reply`;
@@ -456,6 +463,7 @@ async function handleVoice(req: Request, res: Response): Promise<void> {
       conversation,
       user.id,
       transcript,
+      "voice",
     );
   } catch (err) {
     logger.error(

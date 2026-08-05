@@ -22,6 +22,7 @@ export const AdminConfigBody = z.object({
       openAIReasoning: z.string().min(1).max(200).optional(),
       openAIBalanced: z.string().min(1).max(200).optional(),
       openAIFast: z.string().min(1).max(200).optional(),
+      restrictedTextModel: z.string().min(1).max(200).optional(),
       rerank: z.string().min(1).max(200).optional(),
       visualEmbed: z.string().min(1).max(200).optional(),
       fusionModels: z

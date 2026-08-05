@@ -203,6 +203,14 @@ export interface AssistantMessage {
    *  for a prior turn to finish, before it has actually been sent to the
    *  server. Never persisted — cleared the instant the message is sent. */
   queued?: boolean;
+  /** Client-only: true when the request for this user message failed
+   *  without ever reaching a server response — most commonly because the
+   *  connection died (e.g. the app was closed/backgrounded on mobile mid-
+   *  request). The message is kept visible (never persisted) so the user
+   *  can see it wasn't silently lost and retry it, instead of it vanishing
+   *  and looking like it was never sent. Never true at the same time as
+   *  `stopped`, which covers the distinct case of a user-initiated Stop. */
+  failed?: boolean;
 }
 
 export type TravelActionType =
@@ -1330,6 +1338,7 @@ export interface ElaineExtraModelsConfig {
   visualEmbed: string;
   fusionModels: string[];
   fusionJudge: string;
+  restrictedTextModel: string;
 }
 
 export interface ElaineTimeoutsConfig {

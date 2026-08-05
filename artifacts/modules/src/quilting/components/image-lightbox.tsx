@@ -17,6 +17,8 @@ interface ImageLightboxProps {
   currentIndex?: number;
   onNavigate?: (index: number) => void;
   labels?: string[];
+  /** Optional extra action(s) (e.g. "set as cover photo") shown bottom-left, per current index. */
+  extraActions?: React.ReactNode | ((index: number) => React.ReactNode);
 }
 
 export function ImageLightbox({
@@ -28,6 +30,7 @@ export function ImageLightbox({
   currentIndex,
   onNavigate,
   labels,
+  extraActions,
 }: ImageLightboxProps) {
   const scaleRef = useRef(1);
   const offsetRef = useRef({ x: 0, y: 0 });
@@ -147,6 +150,17 @@ export function ImageLightbox({
             <ChevronRight className="h-6 w-6" />
           </button>
         </>
+      )}
+
+      {extraActions && (
+        <div
+          className="absolute bottom-5 left-4 z-10"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {typeof extraActions === "function"
+            ? extraActions(currentIndex ?? 0)
+            : extraActions}
+        </div>
       )}
 
       <div className="absolute bottom-5 left-1/2 z-10 -translate-x-1/2 flex items-center gap-1 rounded-full bg-white/12 px-2 py-1.5 backdrop-blur-sm">

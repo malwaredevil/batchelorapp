@@ -19,6 +19,11 @@ async function main(): Promise<void> {
     connectionString: resolveDatabaseUrl(),
     ssl: sslConfig,
   });
+  // See lib/db/src/index.ts for why this listener is required: an
+  // unhandled Pool 'error' event becomes an uncaught exception.
+  pool.on("error", (err) => {
+    console.error("[bootstrap] pool error on idle client (non-fatal):", err);
+  });
   try {
     for (const statement of STATEMENTS) {
       const preview = statement.replace(/\s+/g, " ").slice(0, 80);

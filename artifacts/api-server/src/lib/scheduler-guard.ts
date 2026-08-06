@@ -103,8 +103,44 @@ export async function shouldRunScheduledTask(
   taskName: string,
   minIntervalMs: number,
 ): Promise<boolean> {
-  try {
-    const result = await db.execute<{ name: string }>(sql`
+  // One retry after a short delay before giving up. Supabase's pooler
+  // occasionally drops an idle connection mid-claim ("Connection terminated
+  // unexpectedly") — a transient blip lasting well under a second. Without a
+  // retry, a single blip made this function fail closed (skip the run), and
+  // because the heartbeat's stale tolerance is only max(15min, interval/2),
+  // one skipped 30-minute task pushed its next successful run close enough
+  // to the tolerance edge to fire a false "gone silent" alert. Retrying once
+  // absorbs the blip instead of turning it into a missed run.
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      return await claimScheduledTaskRun(taskName, minIntervalMs);
+    } catch (err) {
+      if (attempt === 2) {
+        // Fail closed on the side of NOT running an expensive AI job if the
+        // guard itself is broken (e.g. table missing before bootstrap runs) —
+        // better to skip a scheduled scan than to silently disable the cost
+        // protection it exists for.
+        logger.error(
+          { err, taskName },
+          "scheduler-guard: failed to check/claim run after retry — skipping this run as a precaution",
+        );
+        return false;
+      }
+      logger.warn(
+        { err, taskName },
+        "scheduler-guard: claim attempt failed, retrying once",
+      );
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  }
+  return false;
+}
+
+async function claimScheduledTaskRun(
+  taskName: string,
+  minIntervalMs: number,
+): Promise<boolean> {
+  const result = await db.execute<{ name: string }>(sql`
       INSERT INTO scheduler_runs (name, last_run_at, expected_interval_ms)
       VALUES (${taskName}, now(), ${minIntervalMs})
       ON CONFLICT (name) DO UPDATE
@@ -125,70 +161,59 @@ export async function shouldRunScheduledTask(
         )
       RETURNING name
     `);
-    const claimed = result.rows.length > 0;
-    if (!claimed) {
-      // Log last_run_at and last_success_at separately so operators can see
-      // exactly why the run was denied without querying the DB directly.
-      // Using COALESCE would obscure crash-recovery cases: when a process died
-      // mid-run, last_run_at is fresh but last_success_at is stale — the deny
-      // is driven by last_run_at (Arm 1 cooldown), not by the coalesced value.
-      // Non-fatal if the follow-up SELECT fails — the deny decision is already made.
-      try {
-        const anchorResult = await db.execute<{
-          last_run_at: string;
-          last_success_at: string | null;
-        }>(sql`
+  const claimed = result.rows.length > 0;
+  if (!claimed) {
+    // Log last_run_at and last_success_at separately so operators can see
+    // exactly why the run was denied without querying the DB directly.
+    // Using COALESCE would obscure crash-recovery cases: when a process died
+    // mid-run, last_run_at is fresh but last_success_at is stale — the deny
+    // is driven by last_run_at (Arm 1 cooldown), not by the coalesced value.
+    // Non-fatal if the follow-up SELECT fails — the deny decision is already made.
+    try {
+      const anchorResult = await db.execute<{
+        last_run_at: string;
+        last_success_at: string | null;
+      }>(sql`
           SELECT last_run_at::text     AS last_run_at,
                  last_success_at::text AS last_success_at
             FROM scheduler_runs
            WHERE name = ${taskName}
         `);
-        const row = anchorResult.rows[0];
-        if (row) {
-          // When last_run_at > last_success_at the previous claim never
-          // completed (crash recovery scenario).  The 10-minute run-timeout
-          // is still in effect, so the deny reason is different from the
-          // normal cadence case.
-          const isActiveClaim =
-            row.last_success_at != null &&
-            new Date(row.last_run_at) > new Date(row.last_success_at);
-          logger.debug(
-            {
-              taskName,
-              lastRunAt: row.last_run_at,
-              lastSuccessAt: row.last_success_at,
-              intervalMs: minIntervalMs,
-              reason: isActiveClaim
-                ? "crash-recovery timeout not elapsed"
-                : "interval not elapsed since last_run_at",
-            },
-            `scheduler-guard: skipped — last_run_at ${row.last_run_at}, interval ${Math.round(minIntervalMs / 60_000)}min not elapsed`,
-          );
-        }
-      } catch {
-        // Non-fatal: anchor logging failure doesn't affect the deny decision
+      const row = anchorResult.rows[0];
+      if (row) {
+        // When last_run_at > last_success_at the previous claim never
+        // completed (crash recovery scenario).  The 10-minute run-timeout
+        // is still in effect, so the deny reason is different from the
+        // normal cadence case.
+        const isActiveClaim =
+          row.last_success_at != null &&
+          new Date(row.last_run_at) > new Date(row.last_success_at);
+        logger.debug(
+          {
+            taskName,
+            lastRunAt: row.last_run_at,
+            lastSuccessAt: row.last_success_at,
+            intervalMs: minIntervalMs,
+            reason: isActiveClaim
+              ? "crash-recovery timeout not elapsed"
+              : "interval not elapsed since last_run_at",
+          },
+          `scheduler-guard: skipped — last_run_at ${row.last_run_at}, interval ${Math.round(minIntervalMs / 60_000)}min not elapsed`,
+        );
       }
+    } catch {
+      // Non-fatal: anchor logging failure doesn't affect the deny decision
     }
-    // Keep expected_interval_ms current even on an unclaimed (too-soon) call
-    // — the row is guaranteed to exist by this point (inserted above or
-    // pre-existing), so this is a plain, always-run update.
-    await db.execute(sql`
+  }
+  // Keep expected_interval_ms current even on an unclaimed (too-soon) call
+  // — the row is guaranteed to exist by this point (inserted above or
+  // pre-existing), so this is a plain, always-run update.
+  await db.execute(sql`
       UPDATE scheduler_runs
       SET expected_interval_ms = ${minIntervalMs}
       WHERE name = ${taskName}
     `);
-    return claimed;
-  } catch (err) {
-    // Fail closed on the side of NOT running an expensive AI job if the
-    // guard itself is broken (e.g. table missing before bootstrap runs) —
-    // better to skip a scheduled scan than to silently disable the cost
-    // protection it exists for.
-    logger.error(
-      { err, taskName },
-      "scheduler-guard: failed to check/claim run — skipping this run as a precaution",
-    );
-    return false;
-  }
+  return claimed;
 }
 
 type SchedulerRunRow = {

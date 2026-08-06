@@ -49,6 +49,23 @@ function buildPoolConfig() {
 }
 
 export const pool = new Pool(buildPoolConfig());
+
+// node-postgres emits 'error' on the Pool whenever an *idle* client's
+// underlying socket dies (e.g. the pooler recycles a connection, a network
+// blip, Supabase's transaction pooler closing a slot server-side). With no
+// listener registered, that event has no default handler and Node treats it
+// as an uncaught exception, killing the whole process (confirmed via a
+// Sentry crash: "Error: Connection terminated unexpectedly", mechanism
+// auto.node.onuncaughtexception, culprit pg's Connection2/Client). Since the
+// pool transparently replaces the dead idle client on the next checkout,
+// logging here (not rethrowing) is the correct, non-fatal response.
+pool.on("error", (err) => {
+  console.error(
+    "[db] pool error on idle client (non-fatal, pool recovers automatically):",
+    err,
+  );
+});
+
 export const db = drizzle(pool, { schema });
 
 export * from "./schema";

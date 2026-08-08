@@ -103,7 +103,7 @@
     "@tiptap/starter-kit": "^2.27.2",
     "@types/google.maps": "^3.65.2",
     "@zxing/library": "^0.21.3",
-    "dompurify": "^3.4.11",
+    "dompurify": "^3.4.13",
     "jsdom": "^29.1.1",
     "vitest": "^3.2.6"
   }

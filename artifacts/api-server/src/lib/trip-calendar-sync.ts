@@ -35,6 +35,9 @@ type ItineraryActivity = {
   description?: string;
   proximity?: string;
   tip?: string;
+  /** Not used by calendar sync; kept for type parity with the itinerary shape
+   *  used elsewhere (documents.ts, TripDetail.tsx). */
+  photoId?: number;
 };
 type ItineraryDay = {
   date?: string;

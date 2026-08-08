@@ -38,6 +38,7 @@ import {
   travelsWishlist,
   travelsPackingLists,
   travelsPackingItems,
+  travelsDiaryEntries,
   travelsGoogleCalendarConnections,
   travelsConnectedCalendars,
   travelsCardLayoutPreferences,
@@ -647,6 +648,34 @@ const RemovePackingItemActionPayload = z.object({
   item: z.string().min(1).max(200),
 });
 
+const AddDiaryEntryActionPayload = z.object({
+  tripId: z.number().int().positive(),
+  entryDate: z.string().min(1).max(20),
+  title: z.string().max(200).optional(),
+  body: z.string().min(1).max(20000),
+});
+
+const DeleteDiaryEntryActionPayload = z.object({
+  tripId: z.number().int().positive(),
+  entryId: z.number().int().positive(),
+});
+
+const EditDiaryEntryActionPayload = z
+  .object({
+    tripId: z.number().int().positive(),
+    entryId: z.number().int().positive(),
+    entryDate: z.string().min(1).max(20).optional(),
+    title: z.string().max(200).nullable().optional(),
+    body: z.string().min(1).max(20000).optional(),
+  })
+  .refine(
+    (v) =>
+      v.entryDate !== undefined ||
+      v.title !== undefined ||
+      v.body !== undefined,
+    { message: "At least one of entryDate, title, or body must be provided" },
+  );
+
 const AddReminderActionPayload = z.object({
   tripId: z.number().int().positive(),
   title: z.string().min(1).max(200),
@@ -783,6 +812,7 @@ const CARD_ORDER_IDS = [
   "itinerary",
   "documents",
   "packing-todo",
+  "diary",
   "photos",
   "magnets",
   "weather-nearby",
@@ -794,6 +824,7 @@ const COLLAPSE_CARD_IDS = [
   "documents",
   "packing",
   "todo",
+  "diary",
   "photos",
   "magnets",
   "weather-nearby",
@@ -857,6 +888,18 @@ const ActionBody = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("remove_packing_item"),
     payload: RemovePackingItemActionPayload,
+  }),
+  z.object({
+    type: z.literal("add_diary_entry"),
+    payload: AddDiaryEntryActionPayload,
+  }),
+  z.object({
+    type: z.literal("delete_diary_entry"),
+    payload: DeleteDiaryEntryActionPayload,
+  }),
+  z.object({
+    type: z.literal("edit_diary_entry"),
+    payload: EditDiaryEntryActionPayload,
   }),
   z.object({
     type: z.literal("add_reminder"),
@@ -1076,6 +1119,26 @@ async function buildActionLabel(action: PendingAction): Promise<string> {
     }
     case "remove_packing_item":
       return `Remove "${action.payload.item}" from the packing list`;
+    case "add_diary_entry": {
+      const trip = await getTripLabelInfo(action.payload.tripId);
+      const name = trip ? `"${trip.title || trip.destination}"` : "this trip";
+      return `Add a diary entry for ${action.payload.entryDate}${action.payload.title ? ` — "${action.payload.title}"` : ""} to ${name}`;
+    }
+    case "delete_diary_entry": {
+      const trip = await getTripLabelInfo(action.payload.tripId);
+      const name = trip ? `"${trip.title || trip.destination}"` : "this trip";
+      return `Delete diary entry #${action.payload.entryId} from ${name}`;
+    }
+    case "edit_diary_entry": {
+      const trip = await getTripLabelInfo(action.payload.tripId);
+      const name = trip ? `"${trip.title || trip.destination}"` : "this trip";
+      const changes: string[] = [];
+      if (action.payload.entryDate !== undefined)
+        changes.push(`date to ${action.payload.entryDate}`);
+      if (action.payload.title !== undefined) changes.push(`title`);
+      if (action.payload.body !== undefined) changes.push(`body`);
+      return `Edit diary entry #${action.payload.entryId} in ${name}${changes.length > 0 ? ` (${changes.join(", ")})` : ""}`;
+    }
     case "add_reminder": {
       const trip = await getTripLabelInfo(action.payload.tripId);
       const name = trip ? `"${trip.title || trip.destination}"` : "this trip";
@@ -1548,6 +1611,83 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
       status: 200,
       body: { type: "remove_packing_item", result: { id: match.id } },
     };
+  }) as ActionExecutor,
+
+  add_diary_entry: (async (
+    payload: z.infer<typeof AddDiaryEntryActionPayload>,
+    userId: number,
+  ) => {
+    const [trip] = await db
+      .select({ id: travelsTrips.id })
+      .from(travelsTrips)
+      .where(eq(travelsTrips.id, payload.tripId));
+    if (!trip) return { status: 404, body: { error: "Trip not found" } };
+    const [row] = await db
+      .insert(travelsDiaryEntries)
+      .values({
+        tripId: payload.tripId,
+        entryDate: payload.entryDate,
+        title: payload.title ?? null,
+        body: payload.body,
+        addedByUserId: userId,
+      })
+      .returning();
+    return { status: 201, body: { type: "add_diary_entry", result: row } };
+  }) as ActionExecutor,
+
+  delete_diary_entry: (async (
+    payload: z.infer<typeof DeleteDiaryEntryActionPayload>,
+    _userId: number,
+  ) => {
+    const [trip] = await db
+      .select({ id: travelsTrips.id })
+      .from(travelsTrips)
+      .where(eq(travelsTrips.id, payload.tripId));
+    if (!trip) return { status: 404, body: { error: "Trip not found" } };
+    const result = await db
+      .delete(travelsDiaryEntries)
+      .where(
+        and(
+          eq(travelsDiaryEntries.id, payload.entryId),
+          eq(travelsDiaryEntries.tripId, payload.tripId),
+        ),
+      )
+      .returning({ id: travelsDiaryEntries.id });
+    if (!result[0])
+      return { status: 404, body: { error: "Diary entry not found" } };
+    return {
+      status: 200,
+      body: { type: "delete_diary_entry", result: { id: result[0].id } },
+    };
+  }) as ActionExecutor,
+
+  edit_diary_entry: (async (
+    payload: z.infer<typeof EditDiaryEntryActionPayload>,
+    _userId: number,
+  ) => {
+    const [trip] = await db
+      .select({ id: travelsTrips.id })
+      .from(travelsTrips)
+      .where(eq(travelsTrips.id, payload.tripId));
+    if (!trip) return { status: 404, body: { error: "Trip not found" } };
+
+    const updates: Record<string, unknown> = { updatedAt: new Date() };
+    if (payload.entryDate !== undefined) updates.entryDate = payload.entryDate;
+    if (payload.title !== undefined) updates.title = payload.title;
+    if (payload.body !== undefined) updates.body = payload.body;
+
+    const [row] = await db
+      .update(travelsDiaryEntries)
+      .set(updates)
+      .where(
+        and(
+          eq(travelsDiaryEntries.id, payload.entryId),
+          eq(travelsDiaryEntries.tripId, payload.tripId),
+        ),
+      )
+      .returning();
+    if (!row) return { status: 404, body: { error: "Diary entry not found" } };
+    return { status: 200, body: { type: "edit_diary_entry", result: row } };
   }) as ActionExecutor,
 
   add_reminder: (async (
@@ -3675,7 +3815,7 @@ APP MAP (every page in every app, so you can always explain what a page is for o
 Travels app:
 - Dashboard ("/"): the home screen — trip stats, a countdown to the next upcoming trip, pending reminders, and a status-grouped list of every trip (wishlist/planning/booked/active/completed).
 - Trips ("/trips"): the full trip list with a "New Trip" button/dialog to create one.
-- Trip detail ("/trips/:id"): everything about one specific trip — overview/status, packing list, day-by-day itinerary (AI-generatable), reminders, and uploaded documents (tickets, confirmations, etc.).
+- Trip detail ("/trips/:id"): everything about one specific trip — overview/status, packing list, day-by-day itinerary (AI-generatable), reminders, diary entries, and uploaded documents (tickets, confirmations, etc.).
 - World Map ("/map"): an interactive map plotting every trip and wishlist destination as pins, color-coded by status.
 - Explore ("/explore"): AI-powered destination search/inspiration — search for a place and get an AI overview and suggestions, with the option to add it to the wishlist.
 - Wishlist ("/wishlist"): destinations the household wants to visit someday but hasn't booked yet.
@@ -8256,7 +8396,7 @@ const AGENTPHONE_CHANNEL_ADDENDUM =
 // in for the on-screen state the web widget's tools normally rely on to
 // avoid guessed ids. Household-shared by design (see threat_model.md) — not
 // filtered to the requesting phone number's userId.
-async function buildAgentphoneContext(): Promise<string> {
+export async function buildAgentphoneContext(): Promise<string> {
   const trips = await db
     .select({
       id: travelsTrips.id,
@@ -8334,11 +8474,59 @@ async function buildAgentphoneContext(): Promise<string> {
       }${r.syncToCalendar ? "" : ", not synced to calendar"}`,
   );
 
+  const diaryRows = await db
+    .select({
+      id: travelsDiaryEntries.id,
+      tripId: travelsDiaryEntries.tripId,
+      entryDate: travelsDiaryEntries.entryDate,
+      title: travelsDiaryEntries.title,
+      body: travelsDiaryEntries.body,
+    })
+    .from(travelsDiaryEntries)
+    .where(
+      inArray(
+        travelsDiaryEntries.tripId,
+        trips.map((t) => t.id),
+      ),
+    )
+    .orderBy(desc(travelsDiaryEntries.entryDate), desc(travelsDiaryEntries.id))
+    .limit(50);
+
+  const diaryByTrip = new Map<
+    number,
+    Array<{ id: number; entryDate: string; title: string | null; body: string }>
+  >();
+  for (const row of diaryRows) {
+    const list = diaryByTrip.get(row.tripId) ?? [];
+    list.push({
+      id: row.id,
+      entryDate: row.entryDate,
+      title: row.title,
+      body: row.body,
+    });
+    diaryByTrip.set(row.tripId, list);
+  }
+
+  const diaryLines: string[] = [];
+  for (const t of trips) {
+    const entries = diaryByTrip.get(t.id);
+    if (!entries || entries.length === 0) continue;
+    for (const e of entries) {
+      const snippet = e.body.length > 200 ? `${e.body.slice(0, 200)}…` : e.body;
+      diaryLines.push(
+        `entryId: ${e.id} (tripId: ${t.id}, "${t.title || t.destination}") — ${e.entryDate}${e.title ? ` "${e.title}"` : ""}: ${snippet}`,
+      );
+    }
+  }
+
   return [
     trips.length > 0 ? `Trips:\n${tripLines.join("\n")}` : "No trips yet.",
     reminders.length > 0
       ? `Open reminders:\n${reminderLines.join("\n")}`
       : "No open reminders.",
+    diaryLines.length > 0
+      ? `Diary entries:\n${diaryLines.join("\n")}`
+      : "No diary entries yet.",
   ].join("\n\n");
 }
 
@@ -9082,7 +9270,7 @@ export interface ElaineEmailChatMessage {
 }
 
 const ELAINE_EMAIL_CHANNEL_ADDENDUM =
-  "CHANNEL: You are replying by email. You have full access to household actions — you can create, edit, and delete trips, pottery, packing lists, reminders, and other records just as you would in the web app or over SMS. Actions run immediately — always briefly confirm what you did (or that it failed). Use share_app_link to give the user a direct URL whenever a request needs an actual screen (e.g. uploading a photo, connecting a calendar). Sign off naturally as Elaine; do not repeat a greeting like 'Hi' if the message is a quick reply. CHANNEL SWITCHING: You have the continue_in_channel tool, which sends a message to THE SAME USER (not a household member) on their SMS or Slack. Use it when they say 'text me that', 'send this to my Slack', or 'let's continue on [channel]'. After calling it, confirm in your reply which channel you forwarded to. OUTBOUND CALLS & MESSAGES TO OTHERS: Calling or messaging other household members (call_contact, message_contact) is not available over email — email sender identity cannot be reliably verified. If asked to call or message someone else, explain you can do it from the web app or by sending you an SMS, then use share_app_link to give them a direct link.";
+  "CHANNEL: You are replying by email. You have full access to household actions — you can create, edit, and delete trips, pottery, packing lists, reminders, diary entries, and other records just as you would in the web app or over SMS. Actions run immediately — always briefly confirm what you did (or that it failed). Use share_app_link to give the user a direct URL whenever a request needs an actual screen (e.g. uploading a photo, connecting a calendar). Sign off naturally as Elaine; do not repeat a greeting like 'Hi' if the message is a quick reply. CHANNEL SWITCHING: You have the continue_in_channel tool, which sends a message to THE SAME USER (not a household member) on their SMS or Slack. Use it when they say 'text me that', 'send this to my Slack', or 'let's continue on [channel]'. After calling it, confirm in your reply which channel you forwarded to. OUTBOUND CALLS & MESSAGES TO OTHERS: Calling or messaging other household members (call_contact, message_contact) is not available over email — email sender identity cannot be reliably verified. If asked to call or message someone else, explain you can do it from the web app or by sending you an SMS, then use share_app_link to give them a direct link.";
 
 // Runs one restricted, non-streaming Elaine turn for an inbound email from a
 // known household member. Mirrors runAgentphoneTurn's shape/behavior exactly

@@ -763,6 +763,34 @@ export type TravelsPackingTemplateRow =
 export type InsertTravelsPackingTemplate =
   typeof travelsPackingTemplates.$inferInsert;
 
+// ── Trip Diary ────────────────────────────────────────────────────────────────
+// Dated journal entries per trip. Plain text only (no rich formatting, photo
+// attachments, or tagging/mood fields — see task scope).
+
+export const travelsDiaryEntries = pgTable(
+  "travels_diary_entries",
+  {
+    id: serial("id").primaryKey(),
+    tripId: integer("trip_id")
+      .notNull()
+      .references(() => travelsTrips.id, { onDelete: "cascade" }),
+    entryDate: date("entry_date").notNull(),
+    title: text("title"),
+    body: text("body").notNull(),
+    addedByUserId: integer("added_by_user_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [index("travels_diary_entries_trip_id_idx").on(table.tripId)],
+).enableRLS();
+
+export type TravelsDiaryEntryRow = typeof travelsDiaryEntries.$inferSelect;
+export type InsertTravelsDiaryEntry = typeof travelsDiaryEntries.$inferInsert;
+
 export const travelsDocumentPages = pgTable(
   "travels_document_pages",
   {

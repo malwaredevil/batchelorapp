@@ -782,6 +782,106 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
 
+  /trips/{id}/diary:
+    get:
+      operationId: listDiaryEntries
+      tags: [travels]
+      summary: List a trip's diary entries (newest entry date first)
+      parameters:
+        - $ref: "#/components/parameters/TripId"
+      responses:
+        "200":
+          description: Diary entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DiaryEntry"
+        "404":
+          description: Trip not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      operationId: createDiaryEntry
+      tags: [travels]
+      summary: Add a diary entry to a trip
+      parameters:
+        - $ref: "#/components/parameters/TripId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDiaryEntryBody"
+      responses:
+        "201":
+          description: Entry created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiaryEntry"
+        "404":
+          description: Trip not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /trips/{id}/diary/{entryId}:
+    patch:
+      operationId: updateDiaryEntry
+      tags: [travels]
+      summary: Edit a diary entry
+      parameters:
+        - $ref: "#/components/parameters/TripId"
+        - name: entryId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateDiaryEntryBody"
+      responses:
+        "200":
+          description: Updated entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiaryEntry"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      operationId: deleteDiaryEntry
+      tags: [travels]
+      summary: Remove a diary entry
+      parameters:
+        - $ref: "#/components/parameters/TripId"
+        - name: entryId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
   /trips/{tripId}/reservations:
     get:
       tags: [travels]
@@ -1767,6 +1867,56 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PackingItem"
+
+    DiaryEntry:
+      type: object
+      required: [id, tripId, entryDate, body, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+        tripId:
+          type: integer
+        entryDate:
+          type: string
+          format: date
+        title:
+          type: string
+          nullable: true
+        body:
+          type: string
+        addedByUserId:
+          type: integer
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateDiaryEntryBody:
+      type: object
+      required: [entryDate, body]
+      properties:
+        entryDate:
+          type: string
+          format: date
+        title:
+          type: string
+        body:
+          type: string
+
+    UpdateDiaryEntryBody:
+      type: object
+      properties:
+        entryDate:
+          type: string
+          format: date
+        title:
+          type: string
+          nullable: true
+        body:
+          type: string
 
     GmailMessageAttachment:
       type: object

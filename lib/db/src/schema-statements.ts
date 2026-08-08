@@ -1019,6 +1019,37 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE travels_packing_items ENABLE ROW LEVEL SECURITY`,
   `CREATE INDEX IF NOT EXISTS travels_packing_items_list_id_idx ON travels_packing_items (list_id)`,
 
+  // ── Trip Diary ───────────────────────────────────────────────────────────────
+  // Dated journal entries per trip. Plain text only.
+  `CREATE TABLE IF NOT EXISTS travels_diary_entries (
+    id                SERIAL PRIMARY KEY,
+    trip_id           INTEGER NOT NULL,
+    entry_date        DATE NOT NULL,
+    title             TEXT,
+    body              TEXT NOT NULL,
+    added_by_user_id  INTEGER,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE travels_diary_entries ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS travels_diary_entries_trip_id_idx ON travels_diary_entries (trip_id)`,
+  // FK with cascade so diary entries are removed automatically when their
+  // trip is hard-deleted (e.g. from the admin user-deletion transaction),
+  // in addition to the explicit cleanup in the trip DELETE route. Uses a DO
+  // block since the table may already exist without this constraint from
+  // before it was added.
+  `DO $bootstrap$ BEGIN
+     IF NOT EXISTS (
+       SELECT 1 FROM pg_constraint
+       WHERE conname = 'travels_diary_entries_trip_id_fkey'
+         AND conrelid = 'travels_diary_entries'::regclass
+     ) THEN
+       ALTER TABLE travels_diary_entries
+         ADD CONSTRAINT travels_diary_entries_trip_id_fkey
+         FOREIGN KEY (trip_id) REFERENCES travels_trips(id) ON DELETE CASCADE;
+     END IF;
+   END $bootstrap$`,
+
   // ── Block Templates (reusable block library) ─────────────────────────────
   // Household-shared (no per-user filter on reads). created_by_user_id is
   // attribution metadata only, consistent with the rest of the quilting app.

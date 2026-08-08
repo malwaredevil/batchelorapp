@@ -4111,6 +4111,75 @@ export const DeletePackingTemplateParams = zod.object({
 
 
 /**
+ * @summary List a trip's diary entries (newest entry date first)
+ */
+export const ListDiaryEntriesParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ListDiaryEntriesResponseItem = zod.object({
+  "id": zod.number(),
+  "tripId": zod.number(),
+  "entryDate": zod.coerce.date(),
+  "title": zod.string().nullish(),
+  "body": zod.string(),
+  "addedByUserId": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListDiaryEntriesResponse = zod.array(ListDiaryEntriesResponseItem)
+
+
+/**
+ * @summary Add a diary entry to a trip
+ */
+export const CreateDiaryEntryParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const CreateDiaryEntryBody = zod.object({
+  "entryDate": zod.coerce.date(),
+  "title": zod.string().optional(),
+  "body": zod.string()
+})
+
+
+/**
+ * @summary Edit a diary entry
+ */
+export const UpdateDiaryEntryParams = zod.object({
+  "id": zod.coerce.number(),
+  "entryId": zod.coerce.number()
+})
+
+export const UpdateDiaryEntryBody = zod.object({
+  "entryDate": zod.coerce.date().optional(),
+  "title": zod.string().nullish(),
+  "body": zod.string().optional()
+})
+
+export const UpdateDiaryEntryResponse = zod.object({
+  "id": zod.number(),
+  "tripId": zod.number(),
+  "entryDate": zod.coerce.date(),
+  "title": zod.string().nullish(),
+  "body": zod.string(),
+  "addedByUserId": zod.number().nullish(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Remove a diary entry
+ */
+export const DeleteDiaryEntryParams = zod.object({
+  "id": zod.coerce.number(),
+  "entryId": zod.coerce.number()
+})
+
+
+/**
  * @summary List reservations for a trip
  */
 export const TravelsListReservationsParams = zod.object({

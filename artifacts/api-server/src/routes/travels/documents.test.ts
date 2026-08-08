@@ -57,6 +57,14 @@ vi.mock("../../lib/logger", () => ({
   logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() },
 }));
 
+const sendItinerarySyncEmail = vi.fn().mockResolvedValue(undefined);
+let resendConfiguredMock = true;
+vi.mock("../../lib/email", () => ({
+  sendItinerarySyncEmail: (...args: unknown[]) =>
+    sendItinerarySyncEmail(...args),
+  resendConfigured: () => resendConfiguredMock,
+}));
+
 vi.mock("../../middleware/auth", () => ({
   requireAuth: (
     req: { session: { userId?: number } },
@@ -149,6 +157,8 @@ beforeEach(() => {
   lastReturning.value = [];
   vi.clearAllMocks();
   deleteDocument.mockResolvedValue(undefined);
+  resendConfiguredMock = true;
+  sendItinerarySyncEmail.mockClear();
 });
 
 // ---------------------------------------------------------------------------
@@ -229,6 +239,205 @@ describe("GET /api/travels/documents/unmatched/count", () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ count: 3 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PATCH /api/travels/trips/:id/documents/:docId — itinerary categorization
+// and post-sync notification email
+// ---------------------------------------------------------------------------
+
+describe("PATCH /api/travels/trips/:id/documents/:docId", () => {
+  function findItineraryUpdate() {
+    return updateCalls.find(
+      (c) => c.set && typeof c.set === "object" && "itinerary" in c.set,
+    );
+  }
+
+  it("labels an airport_transfer document as rideshare, not rental car, and emails the household", async () => {
+    const existingDoc = {
+      id: 50,
+      tripId: 16,
+      extractedData: {},
+      lockedFields: [],
+    };
+    selectQueue.push([existingDoc]); // document lookup
+    selectQueue.push([
+      {
+        itinerary: { days: [] },
+        title: "Catania, Sicily — John's 50th",
+        destination: "Catania, Sicily",
+      },
+    ]); // trip lookup inside syncItineraryFromDocument
+    selectQueue.push([{ email: "a@example.com" }, { email: "b@example.com" }]); // household emails for the notification
+    lastReturning.value = [{ ...existingDoc }];
+    const app = buildApp();
+
+    const res = await request(app)
+      .patch("/api/travels/trips/16/documents/50")
+      .send({
+        extractedData: {
+          documentType: "airport_transfer",
+          providerName: "Uber",
+          transferType: "minibus",
+          pickupDateTime: "2026-08-08T18:30:00+02:00",
+          pickupLocation: "Via Antonello da Messina 43",
+          dropoffDateTime: "2026-08-08T18:58:00+02:00",
+          dropoffLocation: "Eurowings, Terminal A, CTA",
+          notes: "Fare €79.30",
+        },
+      });
+
+    expect(res.status).toBe(200);
+    const itineraryUpdate = findItineraryUpdate();
+    expect(itineraryUpdate).toBeDefined();
+    const itinerary = (
+      itineraryUpdate!.set as { itinerary: { days: { activities: any[] }[] } }
+    ).itinerary;
+    const activities = itinerary.days.flatMap((d) => d.activities);
+    expect(activities).toHaveLength(2);
+    expect(activities.map((a) => a.name)).toEqual(
+      expect.arrayContaining([
+        "Rideshare pickup: Uber",
+        "Rideshare drop-off: Uber",
+      ]),
+    );
+    expect(activities.every((a) => a.proximity === "🚕")).toBe(true);
+    expect(activities.some((a) => a.name.includes("Rental car"))).toBe(false);
+
+    expect(sendItinerarySyncEmail).toHaveBeenCalledTimes(1);
+    const [toEmails, tripTitle, tripDestination, changes] =
+      sendItinerarySyncEmail.mock.calls[0];
+    expect(toEmails).toEqual(["a@example.com", "b@example.com"]);
+    expect(tripTitle).toBe("Catania, Sicily — John's 50th");
+    expect(tripDestination).toBe("Catania, Sicily");
+    expect(changes).toHaveLength(2);
+    expect(changes.join(" ")).toMatch(/Rideshare pickup: Uber/);
+    expect(changes.join(" ")).toMatch(/Rideshare drop-off: Uber/);
+  });
+
+  it("still labels a genuine car_rental document as rental car pickup/drop-off (regression guard)", async () => {
+    const existingDoc = {
+      id: 49,
+      tripId: 16,
+      extractedData: {},
+      lockedFields: [],
+    };
+    selectQueue.push([existingDoc]);
+    selectQueue.push([
+      { itinerary: { days: [] }, title: "Sicily Trip", destination: "Sicily" },
+    ]);
+    selectQueue.push([{ email: "a@example.com" }]);
+    lastReturning.value = [{ ...existingDoc }];
+    const app = buildApp();
+
+    const res = await request(app)
+      .patch("/api/travels/trips/16/documents/49")
+      .send({
+        extractedData: {
+          documentType: "car_rental",
+          providerName: "Europcar",
+          pickupDateTime: "2026-08-05T09:00:00",
+          pickupLocation: "Catania Airport",
+          dropoffDateTime: "2026-08-08T09:00:00",
+          dropoffLocation: "Catania Airport",
+        },
+      });
+
+    expect(res.status).toBe(200);
+    const itinerary = (
+      findItineraryUpdate()!.set as {
+        itinerary: { days: { activities: any[] }[] };
+      }
+    ).itinerary;
+    const activities = itinerary.days.flatMap((d) => d.activities);
+    expect(activities.map((a) => a.name)).toEqual(
+      expect.arrayContaining([
+        "Rental car pickup: Europcar",
+        "Rental car drop-off: Europcar",
+      ]),
+    );
+    expect(activities.every((a) => a.proximity === "🚗")).toBe(true);
+  });
+
+  it("skips the notification email when the resync produces no real change", async () => {
+    const flightData = {
+      departureDateTime: "2026-09-01T10:00:00",
+      flightNumber: "BA123",
+      fromLocation: "LHR",
+      toLocation: "JFK",
+      providerName: "British Airways",
+    };
+    const existingDoc = {
+      id: 60,
+      tripId: 16,
+      extractedData: flightData,
+      lockedFields: [],
+    };
+    const existingActivity = {
+      time: "10:00",
+      name: "Flight BA123: LHR → JFK",
+      description: "British Airways",
+      proximity: "✈️",
+      tip: "",
+      status: "tentative" as const,
+      sourceDocumentId: 60,
+      sourceField: "departureDateTime",
+      dataRichness: 5,
+    };
+    selectQueue.push([existingDoc]);
+    selectQueue.push([
+      {
+        itinerary: {
+          days: [
+            {
+              date: "2026-09-01",
+              title: "Travel Day",
+              activities: [existingActivity],
+            },
+          ],
+        },
+        title: "Sicily Trip",
+        destination: "Sicily",
+      },
+    ]);
+    lastReturning.value = [{ ...existingDoc }];
+    const app = buildApp();
+
+    const res = await request(app)
+      .patch("/api/travels/trips/16/documents/60")
+      .send({ extractedData: flightData });
+
+    expect(res.status).toBe(200);
+    expect(sendItinerarySyncEmail).not.toHaveBeenCalled();
+  });
+
+  it("skips the notification email when Resend isn't configured, even with real changes", async () => {
+    resendConfiguredMock = false;
+    const existingDoc = {
+      id: 61,
+      tripId: 16,
+      extractedData: {},
+      lockedFields: [],
+    };
+    selectQueue.push([existingDoc]);
+    selectQueue.push([
+      { itinerary: { days: [] }, title: "Sicily Trip", destination: "Sicily" },
+    ]);
+    lastReturning.value = [{ ...existingDoc }];
+    const app = buildApp();
+
+    const res = await request(app)
+      .patch("/api/travels/trips/16/documents/61")
+      .send({
+        extractedData: {
+          departureDateTime: "2026-09-01T10:00:00",
+          flightNumber: "BA123",
+        },
+      });
+
+    expect(res.status).toBe(200);
+    expect(sendItinerarySyncEmail).not.toHaveBeenCalled();
   });
 });
 

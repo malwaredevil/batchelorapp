@@ -40,6 +40,23 @@ const HEARTBEAT_MONITOR_SLUG = "scheduled-tasks-heartbeat";
 const HEARTBEAT_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
 
 /**
+ * Grace period before the heartbeat's very FIRST staleness check. Every
+ * in-process scheduler (travels-nudges, gmail-scan, calendar-scan, etc.)
+ * fires an unconditional `void run()` on module load, same as the heartbeat
+ * itself. On a cold boot after a long autoscale sleep, last_success_at for
+ * an hourly task can already be >90min old (server was asleep, not just
+ * idle) — so if the heartbeat's own first tick fires before that task's own
+ * first-tick catch-up run has finished (a few hundred ms to a few seconds,
+ * per the logs), it reads stale DB state and reports a false "gone silent"
+ * error, even though the task self-heals a moment later in the same boot.
+ * This was confirmed as the cause of recurring NODE-EXPRESS-25/26 Sentry
+ * cron-failure alerts. Delaying the first check gives every fallback
+ * scheduler's boot-time run room to complete and call
+ * recordScheduledTaskSuccess before we look.
+ */
+const FIRST_CHECK_DELAY_MS = 3 * 60 * 1000; // 3 minutes
+
+/**
  * Records that a scheduled task completed successfully.
  * Call this after the task's work finishes without error so that
  * scheduler_runs.last_success_at is kept up to date for observability.
@@ -244,6 +261,7 @@ type SchedulerRunRow = {
  * ok/error check-in for the whole subsystem.
  */
 export function startSchedulerHeartbeat(): () => void {
+  let startupTimeout: ReturnType<typeof setTimeout> | null = null;
   const run = async (): Promise<void> => {
     const checkInId = Sentry.captureCheckIn(
       { monitorSlug: HEARTBEAT_MONITOR_SLUG, status: "in_progress" },
@@ -310,13 +328,26 @@ export function startSchedulerHeartbeat(): () => void {
     }
   };
 
-  void run();
+  logger.info(
+    {
+      intervalMinutes: HEARTBEAT_INTERVAL_MS / 60_000,
+      firstCheckDelayMs: FIRST_CHECK_DELAY_MS,
+    },
+    "scheduler-heartbeat: started (single shared Sentry Cron Monitor for all schedulers)",
+  );
+  startupTimeout = setTimeout(() => {
+    startupTimeout = null;
+    void run();
+  }, FIRST_CHECK_DELAY_MS);
+
   const interval = setInterval(() => void run(), HEARTBEAT_INTERVAL_MS);
   interval.unref();
 
-  logger.info(
-    { intervalMinutes: HEARTBEAT_INTERVAL_MS / 60_000 },
-    "scheduler-heartbeat: started (single shared Sentry Cron Monitor for all schedulers)",
-  );
-  return () => clearInterval(interval);
+  return () => {
+    if (startupTimeout !== null) {
+      clearTimeout(startupTimeout);
+      startupTimeout = null;
+    }
+    clearInterval(interval);
+  };
 }

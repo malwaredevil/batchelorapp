@@ -10,6 +10,7 @@ import {
   travelsTripPhotos,
   travelsReminders,
   travelsPackingLists,
+  travelsDiaryEntries,
 } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import { fetchJsonSafe } from "../../lib/ssrf-safe-fetch";
@@ -288,6 +289,10 @@ router.delete("/trips/:id", async (req, res) => {
     await tx
       .delete(travelsPackingLists)
       .where(eq(travelsPackingLists.tripId, id));
+    // Diary entries have no deleted_at either — hard-delete them now.
+    await tx
+      .delete(travelsDiaryEntries)
+      .where(eq(travelsDiaryEntries.tripId, id));
     await tx
       .update(travelsTrips)
       .set({ deletedAt: now })

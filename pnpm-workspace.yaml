@@ -78,6 +78,7 @@ overrides:
   drizzle-orm: 0.45.2
   esbuild: 0.28.1
   uuid: ">=11.1.1" # GHSA/Dependabot: missing buffer bounds check in v3/v5/v6 when buf is provided; forces exceljs's transitive uuid dep to the patched version
+  nanoid: "^3.3.17" # GHSA-2v37-7h3g-55p8/CVE-2026-67213: custom generators loop indefinitely when size is zero; patched 3.3.17. Pinned to the 3.x range (not >=) — an unbounded range let pnpm resolve postcss's transitive dep up to nanoid 5.x, an unverified major bump
   "esbuild>@esbuild/aix-ppc64": "-"
   "esbuild>@esbuild/android-arm": "-"
   "esbuild>@esbuild/android-arm64": "-"
@@ -109,7 +110,7 @@ overrides:
   filelist: ">=2.0.2 <3" # GHSA-mh99: transitively pulls minimatch@^10 which has no brace-expansion dep
   jake: ">=12.10.1 <13" # required by ejs; v12 uses filelist@^2, eliminating brace-expansion@^2 chain
   body-parser: ">=2.3.0"
-  js-yaml: 4.3.0
+  js-yaml: 4.3.1 # GHSA-5p4m-2wfm-xmqj/CVE-2026-59870: quadratic CPU consumption in !!omap resolution; patched 4.3.1. Keep EXACT pin (not a range) — an unbounded override previously let js-yaml jump to an ESM-only v5 and broke orval codegen (see orval-codegen-js-yaml-pin memory)
   "lightningcss>lightningcss-android-arm64": "-"
   "lightningcss>lightningcss-darwin-arm64": "-"
   "lightningcss>lightningcss-darwin-x64": "-"

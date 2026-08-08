@@ -2653,5 +2653,45 @@
     "disposition": "direct",
     "mappedTools": ["verify_phone_code"],
     "reason": "Elaine has registered tools that reuse or mirror this website operation."
+  },
+  {
+    "operationId": "listDiaryEntries",
+    "method": "GET",
+    "path": "/travels/trips/{id}/diary",
+    "domain": "travels",
+    "summary": "List a trip's diary entries (newest entry date first)",
+    "disposition": "covered_by_general_tool",
+    "mappedTools": ["query_household_data", "search_household_data"],
+    "reason": "Elaine can answer common questions through household search/summary; the diary list itself renders in the trip detail UI."
+  },
+  {
+    "operationId": "createDiaryEntry",
+    "method": "POST",
+    "path": "/travels/trips/{id}/diary",
+    "domain": "travels",
+    "summary": "Add a diary entry to a trip",
+    "disposition": "direct",
+    "mappedTools": ["add_diary_entry"],
+    "reason": "Elaine has a registered tool that reuses this website operation."
+  },
+  {
+    "operationId": "updateDiaryEntry",
+    "method": "PATCH",
+    "path": "/travels/trips/{id}/diary/{entryId}",
+    "domain": "travels",
+    "summary": "Edit a diary entry",
+    "disposition": "direct",
+    "mappedTools": ["edit_diary_entry"],
+    "reason": "Elaine has a registered tool that reuses this website operation."
+  },
+  {
+    "operationId": "deleteDiaryEntry",
+    "method": "DELETE",
+    "path": "/travels/trips/{id}/diary/{entryId}",
+    "domain": "travels",
+    "summary": "Remove a diary entry",
+    "disposition": "direct",
+    "mappedTools": ["delete_diary_entry"],
+    "reason": "Elaine has a registered tool that reuses this website operation."
   }
 ]

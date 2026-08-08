@@ -155,6 +155,17 @@ const URL_RE = /https?:\/\/[^\s)>"]+/;
 // Composer textarea grows with typed content up to this height (px), then
 // scrolls internally. Keeps parity with messenger-ui's composer sizing.
 const COMPOSER_MAX_HEIGHT_PX = 160;
+/**
+ * True when the primary pointer is touch (phones/tablets), false for
+ * mouse/trackpad. Used to decide whether Enter in the composer should send
+ * the message (desktop) or insert a newline (touch, where there's no
+ * Shift key to combine with Enter and the on-screen return key is easy to
+ * hit by accident).
+ */
+function isCoarsePointerDevice(): boolean {
+  if (typeof window === "undefined" || !window.matchMedia) return false;
+  return window.matchMedia("(pointer: coarse)").matches;
+}
 function extractFirstUrl(text: string | undefined | null): string | null {
   if (!text) return null;
   return text.match(URL_RE)?.[0] ?? null;
@@ -1342,6 +1353,16 @@ export function ElaineChatPanel({
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
+                // On touch devices (phones/tablets) there's no physical
+                // Shift key to combine with Enter for a newline, and the
+                // on-screen keyboard's return key is easy to hit by
+                // accident mid-thought. Let Enter insert a newline there
+                // instead of sending; the Send button remains the way to
+                // submit. Desktop keeps Enter-to-send with Shift+Enter for
+                // a newline.
+                if (isCoarsePointerDevice()) {
+                  return;
+                }
                 e.preventDefault();
                 void handleSend();
               }

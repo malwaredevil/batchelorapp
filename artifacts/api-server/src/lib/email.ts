@@ -111,6 +111,84 @@ export async function sendReminderAlertEmail(
   }
 }
 
+// Notifies a trip's household after a forwarded booking document (flight,
+// hotel, car rental, airport transfer, parking, etc.) is synced into the
+// trip's itinerary — either newly added or updated with richer data. Skipping
+// when there's nothing to report is the caller's responsibility
+// (syncItineraryFromDocument in routes/travels/documents.ts).
+export async function sendItinerarySyncEmail(
+  toEmails: string[],
+  tripTitle: string,
+  tripDestination: string,
+  changes: string[],
+): Promise<void> {
+  if (toEmails.length === 0 || changes.length === 0) return;
+
+  const from = await getConfig(
+    "email",
+    "reminder_from_email",
+    "Batchelor Travels <travel.alert@app.batchelor.app>",
+  );
+
+  const itemsHtml = changes
+    .map(
+      (c) =>
+        `<li style="margin: 0 0 10px; font-size: 14px; color: #333;">${escapeHtml(c)}</li>`,
+    )
+    .join("");
+  const itemsText = changes.map((c) => `• ${c}`).join("\n");
+
+  const { error } = await getResend().emails.send({
+    from,
+    to: toEmails,
+    subject: `New itinerary items added — ${tripTitle}`,
+    html: `
+<!DOCTYPE html>
+<html>
+  <head><meta charset="utf-8" /></head>
+  <body style="font-family: sans-serif; background: #f9f9f9; padding: 40px 0; margin: 0;">
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr>
+        <td align="center">
+          <table width="560" cellpadding="0" cellspacing="0"
+            style="background: #ffffff; border-radius: 8px; padding: 40px;
+                   box-shadow: 0 1px 4px rgba(0,0,0,0.08);">
+            <tr>
+              <td>
+                <p style="margin: 0 0 4px; font-size: 12px; color: #0ea5e9; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
+                  Itinerary updated
+                </p>
+                <h2 style="margin: 0 0 16px; font-size: 20px; color: #111;">
+                  ${escapeHtml(tripTitle)}${tripDestination ? ` — ${escapeHtml(tripDestination)}` : ""}
+                </h2>
+                <p style="margin: 0 0 16px; font-size: 14px; color: #555;">
+                  A forwarded booking document was just processed and added
+                  the following to your itinerary:
+                </p>
+                <ul style="margin: 0 0 24px; padding-left: 20px;">
+                  ${itemsHtml}
+                </ul>
+                <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+                <p style="margin: 0; font-size: 11px; color: #bbb;">
+                  Batchelor Travels &mdash; itinerary sync
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`,
+    text: `New itinerary items added to your ${tripTitle} trip${tripDestination ? ` (${tripDestination})` : ""}:\n\n${itemsText}\n\nBatchelor Travels`,
+  });
+
+  if (error) {
+    logger.error({ err: error }, "resend itinerary sync email send failed");
+    throw new Error(`Failed to send itinerary sync email: ${error.message}`);
+  }
+}
+
 function escapeHtml(input: string): string {
   return input
     .replace(/&/g, "&amp;")

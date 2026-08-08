@@ -37,6 +37,46 @@ function parsePhotoType(raw: unknown): "photo" | "magnet" {
   return value === "magnet" ? "magnet" : "photo";
 }
 
+type LooseItineraryActivity = Record<string, unknown> & { photoId?: number };
+type LooseItineraryDay = { activities?: LooseItineraryActivity[] } & Record<
+  string,
+  unknown
+>;
+type LooseItinerary = { days?: LooseItineraryDay[] } & Record<string, unknown>;
+
+/**
+ * Strips any itinerary activity's `photoId` reference to a deleted trip
+ * photo, so a removed gallery photo never leaves a dangling/broken
+ * thumbnail on an itinerary activity. Returns the updated itinerary object
+ * to persist, or null if nothing referenced this photo (no write needed).
+ */
+function clearActivityPhotoReferences(
+  itinerary: unknown,
+  photoId: number,
+): LooseItinerary | null {
+  if (
+    !itinerary ||
+    typeof itinerary !== "object" ||
+    !Array.isArray((itinerary as LooseItinerary).days)
+  ) {
+    return null;
+  }
+  const typed = itinerary as LooseItinerary;
+  let changed = false;
+  const days = (typed.days ?? []).map((day) => {
+    if (!Array.isArray(day.activities)) return day;
+    const activities = day.activities.map((activity) => {
+      if (activity.photoId !== photoId) return activity;
+      changed = true;
+      const { photoId: _removed, ...rest } = activity;
+      return rest;
+    });
+    return { ...day, activities };
+  });
+  if (!changed) return null;
+  return { ...typed, days };
+}
+
 // GET /trips/:id/photos
 router.get("/trips/:id/photos", async (req, res) => {
   const tripId = parseInt(String(req.params["id"]), 10);
@@ -221,13 +261,27 @@ router.delete("/trips/:id/photos/:photoId", async (req, res) => {
     .where(eq(travelsTripPhotos.id, photoId));
 
   const [trip] = await db
-    .select({ iconPhotoId: travelsTrips.iconPhotoId })
+    .select({
+      iconPhotoId: travelsTrips.iconPhotoId,
+      itinerary: travelsTrips.itinerary,
+    })
     .from(travelsTrips)
     .where(eq(travelsTrips.id, tripId));
   if (trip?.iconPhotoId === photoId) {
     await db
       .update(travelsTrips)
       .set({ iconPhotoId: null })
+      .where(eq(travelsTrips.id, tripId));
+  }
+
+  const clearedItinerary = clearActivityPhotoReferences(
+    trip?.itinerary,
+    photoId,
+  );
+  if (clearedItinerary) {
+    await db
+      .update(travelsTrips)
+      .set({ itinerary: clearedItinerary })
       .where(eq(travelsTrips.id, tripId));
   }
 

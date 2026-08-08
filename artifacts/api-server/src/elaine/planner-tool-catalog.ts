@@ -257,6 +257,63 @@ export const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
+      name: "add_diary_entry",
+      description:
+        'Propose adding a diary entry to a specific trip. Only call this if you can see a specific trip\'s numeric id in the on-screen state you were given (look for "tripId: <number>"); never guess an id. entryDate must be a YYYY-MM-DD date the user specified or that is visible on screen — never invent one. body is the main text of the entry; title is an optional short headline.',
+      parameters: {
+        type: "object",
+        properties: {
+          tripId: { type: "integer" },
+          entryDate: { type: "string", description: "YYYY-MM-DD" },
+          title: { type: "string", description: "Optional short headline" },
+          body: { type: "string", description: "Main text of the diary entry" },
+        },
+        required: ["tripId", "entryDate", "body"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "delete_diary_entry",
+      description:
+        "Propose deleting an existing diary entry. Only call this if the entry's numeric entryId is visible on screen or in the on-screen state you were given; never guess an id.",
+      parameters: {
+        type: "object",
+        properties: {
+          tripId: { type: "integer" },
+          entryId: { type: "integer" },
+        },
+        required: ["tripId", "entryId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "edit_diary_entry",
+      description:
+        'Propose editing an existing diary entry — fix a typo, change the date, update the title, or rewrite the body. Only call this if the entry\'s numeric entryId is visible on screen or in the on-screen state you were given (look for "entryId: <number>" next to the entry); never guess an id. Only include the fields the user actually asked to change; include at least one of entryDate, title, or body.',
+      parameters: {
+        type: "object",
+        properties: {
+          tripId: { type: "integer" },
+          entryId: { type: "integer" },
+          entryDate: { type: "string", description: "YYYY-MM-DD" },
+          title: {
+            type: "string",
+            description:
+              "Updated headline, or null to clear the title entirely",
+          },
+          body: { type: "string", description: "Updated main text" },
+        },
+        required: ["tripId", "entryId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "add_reminder",
       description:
         "Propose creating a new reminder for a trip, e.g. \"remind me to check in for our flight\" or \"remind me to book the hotel by Friday\". Only call this if the trip's numeric id is visible on screen; never guess an id — offer to open the trip instead if you don't have one. If the user gives (or you can see on screen) a specific date the reminder is about, set dueDate to that exact date; never invent a date. If the user asks to also notify/email someone (a connected household member), include their email(s) in recipientEmails; never invent an email address you can't see on screen or that the user didn't give you. syncToCalendar defaults to true (syncs to the Travel Calendar automatically if connected) — only set it to false if the user explicitly asks not to add it to the calendar.",

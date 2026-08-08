@@ -211,10 +211,12 @@ import type {
   TravelsBulkCreatePackingItemsBody,
   TravelsCheckFlightsBody,
   TravelsCheckReservationNow200,
+  TravelsCreateDiaryEntryBody,
   TravelsCreatePackingItemBody,
   TravelsCreatePackingTemplateBody,
   TravelsCreateTripBody,
   TravelsCreateWishlistBody,
+  TravelsDiaryEntry,
   TravelsExploreDestinationBody,
   TravelsExploreDestinationResult,
   TravelsFlightPriceResult,
@@ -240,6 +242,7 @@ import type {
   TravelsTrip,
   TravelsTripDetail,
   TravelsTripDocument,
+  TravelsUpdateDiaryEntryBody,
   TravelsUpdatePackingItemBody,
   TravelsUpdateReservationMonitoringBody,
   TravelsUpdateTripBody,
@@ -13042,6 +13045,301 @@ export const useDeletePackingTemplate = <TError = ErrorType<Error>,
         TContext
       > => {
       return useMutation(getDeletePackingTemplateMutationOptions(options));
+    }
+
+export const getListDiaryEntriesUrl = (id: number,) => {
+
+
+
+
+  return `/api/travels/trips/${id}/diary`
+}
+
+/**
+ * @summary List a trip's diary entries (newest entry date first)
+ */
+export const listDiaryEntries = async (id: number, options?: RequestInit): Promise<TravelsDiaryEntry[]> => {
+
+  return customFetch<TravelsDiaryEntry[]>(getListDiaryEntriesUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListDiaryEntriesQueryKey = (id: number,) => {
+    return [
+    `/api/travels/trips/${id}/diary`
+    ] as const;
+    }
+
+
+export const getListDiaryEntriesQueryOptions = <TData = Awaited<ReturnType<typeof listDiaryEntries>>, TError = ErrorType<Error>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDiaryEntries>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListDiaryEntriesQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDiaryEntries>>> = ({ signal }) => listDiaryEntries(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listDiaryEntries>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListDiaryEntriesQueryResult = NonNullable<Awaited<ReturnType<typeof listDiaryEntries>>>
+export type ListDiaryEntriesQueryError = ErrorType<Error>
+
+
+/**
+ * @summary List a trip's diary entries (newest entry date first)
+ */
+
+export function useListDiaryEntries<TData = Awaited<ReturnType<typeof listDiaryEntries>>, TError = ErrorType<Error>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listDiaryEntries>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListDiaryEntriesQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateDiaryEntryUrl = (id: number,) => {
+
+
+
+
+  return `/api/travels/trips/${id}/diary`
+}
+
+/**
+ * @summary Add a diary entry to a trip
+ */
+export const createDiaryEntry = async (id: number,
+    travelsCreateDiaryEntryBody: TravelsCreateDiaryEntryBody, options?: RequestInit): Promise<TravelsDiaryEntry> => {
+
+  return customFetch<TravelsDiaryEntry>(getCreateDiaryEntryUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      travelsCreateDiaryEntryBody,)
+  }
+);}
+
+
+
+
+export const getCreateDiaryEntryMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDiaryEntry>>, TError,{id: number;data: BodyType<TravelsCreateDiaryEntryBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createDiaryEntry>>, TError,{id: number;data: BodyType<TravelsCreateDiaryEntryBody>}, TContext> => {
+
+const mutationKey = ['createDiaryEntry'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createDiaryEntry>>, {id: number;data: BodyType<TravelsCreateDiaryEntryBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  createDiaryEntry(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateDiaryEntryMutationResult = NonNullable<Awaited<ReturnType<typeof createDiaryEntry>>>
+    export type CreateDiaryEntryMutationBody = BodyType<TravelsCreateDiaryEntryBody>
+    export type CreateDiaryEntryMutationError = ErrorType<Error>
+
+    /**
+ * @summary Add a diary entry to a trip
+ */
+export const useCreateDiaryEntry = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDiaryEntry>>, TError,{id: number;data: BodyType<TravelsCreateDiaryEntryBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createDiaryEntry>>,
+        TError,
+        {id: number;data: BodyType<TravelsCreateDiaryEntryBody>},
+        TContext
+      > => {
+      return useMutation(getCreateDiaryEntryMutationOptions(options));
+    }
+
+export const getUpdateDiaryEntryUrl = (id: number,
+    entryId: number,) => {
+
+
+
+
+  return `/api/travels/trips/${id}/diary/${entryId}`
+}
+
+/**
+ * @summary Edit a diary entry
+ */
+export const updateDiaryEntry = async (id: number,
+    entryId: number,
+    travelsUpdateDiaryEntryBody: TravelsUpdateDiaryEntryBody, options?: RequestInit): Promise<TravelsDiaryEntry> => {
+
+  return customFetch<TravelsDiaryEntry>(getUpdateDiaryEntryUrl(id,entryId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      travelsUpdateDiaryEntryBody,)
+  }
+);}
+
+
+
+
+export const getUpdateDiaryEntryMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateDiaryEntry>>, TError,{id: number;entryId: number;data: BodyType<TravelsUpdateDiaryEntryBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateDiaryEntry>>, TError,{id: number;entryId: number;data: BodyType<TravelsUpdateDiaryEntryBody>}, TContext> => {
+
+const mutationKey = ['updateDiaryEntry'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateDiaryEntry>>, {id: number;entryId: number;data: BodyType<TravelsUpdateDiaryEntryBody>}> = (props) => {
+          const {id,entryId,data} = props ?? {};
+
+          return  updateDiaryEntry(id,entryId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateDiaryEntryMutationResult = NonNullable<Awaited<ReturnType<typeof updateDiaryEntry>>>
+    export type UpdateDiaryEntryMutationBody = BodyType<TravelsUpdateDiaryEntryBody>
+    export type UpdateDiaryEntryMutationError = ErrorType<Error>
+
+    /**
+ * @summary Edit a diary entry
+ */
+export const useUpdateDiaryEntry = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateDiaryEntry>>, TError,{id: number;entryId: number;data: BodyType<TravelsUpdateDiaryEntryBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateDiaryEntry>>,
+        TError,
+        {id: number;entryId: number;data: BodyType<TravelsUpdateDiaryEntryBody>},
+        TContext
+      > => {
+      return useMutation(getUpdateDiaryEntryMutationOptions(options));
+    }
+
+export const getDeleteDiaryEntryUrl = (id: number,
+    entryId: number,) => {
+
+
+
+
+  return `/api/travels/trips/${id}/diary/${entryId}`
+}
+
+/**
+ * @summary Remove a diary entry
+ */
+export const deleteDiaryEntry = async (id: number,
+    entryId: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteDiaryEntryUrl(id,entryId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteDiaryEntryMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteDiaryEntry>>, TError,{id: number;entryId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteDiaryEntry>>, TError,{id: number;entryId: number}, TContext> => {
+
+const mutationKey = ['deleteDiaryEntry'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteDiaryEntry>>, {id: number;entryId: number}> = (props) => {
+          const {id,entryId} = props ?? {};
+
+          return  deleteDiaryEntry(id,entryId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteDiaryEntryMutationResult = NonNullable<Awaited<ReturnType<typeof deleteDiaryEntry>>>
+
+    export type DeleteDiaryEntryMutationError = ErrorType<Error>
+
+    /**
+ * @summary Remove a diary entry
+ */
+export const useDeleteDiaryEntry = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteDiaryEntry>>, TError,{id: number;entryId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteDiaryEntry>>,
+        TError,
+        {id: number;entryId: number},
+        TContext
+      > => {
+      return useMutation(getDeleteDiaryEntryMutationOptions(options));
     }
 
 export const getTravelsListReservationsUrl = (tripId: number,) => {

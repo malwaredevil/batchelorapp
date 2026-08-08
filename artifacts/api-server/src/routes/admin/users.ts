@@ -275,6 +275,10 @@ router.delete("/:id", async (req, res) => {
       p,
     );
     await client.query(
+      "UPDATE travels_diary_entries SET added_by_user_id = NULL WHERE added_by_user_id = $1",
+      p,
+    );
+    await client.query(
       "UPDATE travels_field_conflicts SET deciding_user_id = NULL WHERE deciding_user_id = $1",
       p,
     );

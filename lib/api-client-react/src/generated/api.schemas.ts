@@ -1895,6 +1895,29 @@ export interface TravelsLoadTemplateResult {
   items: TravelsPackingItem[];
 }
 
+export interface TravelsDiaryEntry {
+  id: number;
+  tripId: number;
+  entryDate: string;
+  title?: string | null;
+  body: string;
+  addedByUserId?: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TravelsCreateDiaryEntryBody {
+  entryDate: string;
+  title?: string;
+  body: string;
+}
+
+export interface TravelsUpdateDiaryEntryBody {
+  entryDate?: string;
+  title?: string | null;
+  body?: string;
+}
+
 export interface TravelsGmailMessageAttachment {
   filename: string;
   mimeType: string;

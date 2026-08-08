@@ -15,6 +15,7 @@ import {
   travelsTripDocuments,
   travelsDocChunks,
   travelsGmailScanDecisions,
+  appUsers,
 } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import { tripExists } from "../../lib/travels/db-helpers";
@@ -29,6 +30,7 @@ import {
 } from "../../lib/travel-document-extraction";
 import { embedText } from "../../lib/openai";
 import { logger } from "../../lib/logger";
+import { sendItinerarySyncEmail, resendConfigured } from "../../lib/email";
 
 const CHUNK_SIZE = 500;
 const CHUNK_OVERLAP = 100;
@@ -90,6 +92,11 @@ type ItineraryActivity = {
   sourceField?: string;
   /** Stored alongside each activity so dedup comparisons work across resync calls. */
   dataRichness?: number;
+  /** References a travels_trip_photos row the user manually attached to this
+   *  activity. Only ever set on manually-added activities — document sync
+   *  never sets it, but must preserve it if it replaces a legacy activity
+   *  that already had one attached. */
+  photoId?: number;
 };
 
 type ItineraryDay = {
@@ -242,36 +249,76 @@ function computeDocumentActivities(
     });
   }
 
+  // Airport transfers / rideshare (documentType "airport_transfer", e.g. an
+  // Uber or taxi booking) reuse the same pickupDateTime/dropoffDateTime
+  // fields as car rentals, but must NOT be labeled "Rental car pickup" — that
+  // mislabeling is the bug this branch fixes. Everything else (dedup keying
+  // on sourceField, sorting) stays identical between the two document types.
+  const isAirportTransfer = str(ed.documentType) === "airport_transfer";
+  const transferVehicle = str(ed.transferType) || str(ed.vehicleClass);
+  const referenceNumber = str(ed.referenceNumber);
+  const transferTipParts = [
+    transferVehicle ? `Vehicle: ${transferVehicle}` : "",
+    referenceNumber ? `Ref: ${referenceNumber}` : "",
+    notes,
+  ].filter(Boolean);
+
   const pickup = str(ed.pickupDateTime)
     ? parseDateTime(str(ed.pickupDateTime))
     : null;
   if (pickup) {
-    candidates.push({
-      sourceField: "pickupDateTime",
-      dateStr: pickup.dateStr,
-      time: pickup.timeStr,
-      name: `Rental car pickup${provider ? `: ${provider}` : ""}`,
-      description: str(ed.pickupLocation),
-      proximity: "🚗",
-      tip: notes,
-      dataRichness,
-    });
+    if (isAirportTransfer) {
+      candidates.push({
+        sourceField: "pickupDateTime",
+        dateStr: pickup.dateStr,
+        time: pickup.timeStr,
+        name: `Rideshare pickup${provider ? `: ${provider}` : ""}`,
+        description: str(ed.pickupLocation),
+        proximity: "🚕",
+        tip: transferTipParts.join(" — "),
+        dataRichness,
+      });
+    } else {
+      candidates.push({
+        sourceField: "pickupDateTime",
+        dateStr: pickup.dateStr,
+        time: pickup.timeStr,
+        name: `Rental car pickup${provider ? `: ${provider}` : ""}`,
+        description: str(ed.pickupLocation),
+        proximity: "🚗",
+        tip: notes,
+        dataRichness,
+      });
+    }
   }
 
   const dropoff = str(ed.dropoffDateTime)
     ? parseDateTime(str(ed.dropoffDateTime))
     : null;
   if (dropoff) {
-    candidates.push({
-      sourceField: "dropoffDateTime",
-      dateStr: dropoff.dateStr,
-      time: dropoff.timeStr,
-      name: `Rental car drop-off${provider ? `: ${provider}` : ""}`,
-      description: str(ed.dropoffLocation),
-      proximity: "🚗",
-      tip: notes,
-      dataRichness,
-    });
+    if (isAirportTransfer) {
+      candidates.push({
+        sourceField: "dropoffDateTime",
+        dateStr: dropoff.dateStr,
+        time: dropoff.timeStr,
+        name: `Rideshare drop-off${provider ? `: ${provider}` : ""}`,
+        description: str(ed.dropoffLocation) || to,
+        proximity: "🚕",
+        tip: transferTipParts.join(" — "),
+        dataRichness,
+      });
+    } else {
+      candidates.push({
+        sourceField: "dropoffDateTime",
+        dateStr: dropoff.dateStr,
+        time: dropoff.timeStr,
+        name: `Rental car drop-off${provider ? `: ${provider}` : ""}`,
+        description: str(ed.dropoffLocation),
+        proximity: "🚗",
+        tip: notes,
+        dataRichness,
+      });
+    }
   }
 
   const parkingEntry = str(ed.parkingEntryDateTime)
@@ -369,6 +416,25 @@ function sortActivitiesByTime(
   );
 }
 
+/** Human-readable "date at time" prefix for an itinerary-sync email line. */
+function formatChangeDate(dateStr: string, time: string): string {
+  const formatted = new Date(`${dateStr}T12:00:00Z`).toLocaleDateString(
+    "en-GB",
+    { weekday: "short", day: "numeric", month: "short" },
+  );
+  return time ? `${formatted} at ${time}` : formatted;
+}
+
+/**
+ * Content fields that matter for "did this activity actually change" —
+ * deliberately excludes dataRichness/status/sourceField/sourceDocumentId so a
+ * routine idempotent resync (identical extractedData reprocessed) doesn't
+ * report a false "update" in the notification email.
+ */
+function activityContentKey(a: ItineraryActivity): string {
+  return JSON.stringify([a.time, a.name, a.description, a.proximity, a.tip]);
+}
+
 export async function syncItineraryFromDocument(
   tripId: number,
   docId: number,
@@ -377,7 +443,11 @@ export async function syncItineraryFromDocument(
   const candidates = computeDocumentActivities(extractedData);
 
   const [trip] = await db
-    .select({ itinerary: travelsTrips.itinerary })
+    .select({
+      itinerary: travelsTrips.itinerary,
+      title: travelsTrips.title,
+      destination: travelsTrips.destination,
+    })
     .from(travelsTrips)
     .where(eq(travelsTrips.id, tripId));
   if (!trip) return;
@@ -385,6 +455,22 @@ export async function syncItineraryFromDocument(
   const itinerary: Itinerary = isItinerary(trip.itinerary)
     ? trip.itinerary
     : { days: [] };
+
+  // Snapshot this document's previously-synced activities (by sourceField)
+  // before removing them below, so we can tell after the rebuild whether
+  // anything actually changed — used to decide what goes in the
+  // post-sync notification email and whether to skip it entirely.
+  const previousForDoc = new Map<
+    string,
+    { dateStr: string; activity: ItineraryActivity }
+  >();
+  for (const day of itinerary.days) {
+    for (const a of day.activities) {
+      if (a.sourceDocumentId === docId && a.sourceField) {
+        previousForDoc.set(a.sourceField, { dateStr: day.date, activity: a });
+      }
+    }
+  }
 
   // Remove all activities previously synced from this document so re-syncing
   // is idempotent (existing behaviour, unchanged).
@@ -428,6 +514,15 @@ export async function syncItineraryFromDocument(
     }
   }
 
+  // Tracks every candidate from THIS document that actually ends up written
+  // into the itinerary (added, or won a richness comparison), keyed by
+  // sourceField. Compared against previousForDoc after the rebuild to build
+  // the post-sync notification email's change list.
+  const committedForDoc = new Map<
+    string,
+    { dateStr: string; activity: ItineraryActivity }
+  >();
+
   for (const c of candidates) {
     const key = activityDedupeKey(c.dateStr, c.sourceField);
     const existing = existingByKey.get(key);
@@ -452,10 +547,19 @@ export async function syncItineraryFromDocument(
       // so any newly-synced candidate automatically wins over them.
       if (c.dataRichness > (existing.activity.dataRichness ?? 0)) {
         // New candidate is richer: replace the existing activity in-place.
+        // Carry over any user-attached photo so a resync never silently
+        // detaches it.
+        const replacement: ItineraryActivity = existing.activity.photoId
+          ? { ...newActivity, photoId: existing.activity.photoId }
+          : newActivity;
         existing.day.activities = existing.day.activities.map((a) =>
-          a === existing.activity ? newActivity : a,
+          a === existing.activity ? replacement : a,
         );
-        existingByKey.set(key, { day: existing.day, activity: newActivity });
+        existingByKey.set(key, { day: existing.day, activity: replacement });
+        committedForDoc.set(c.sourceField, {
+          dateStr: c.dateStr,
+          activity: replacement,
+        });
       }
       // Existing is richer (or equal): skip this candidate entirely.
     } else {
@@ -468,16 +572,25 @@ export async function syncItineraryFromDocument(
       if (legacyExisting) {
         if (c.dataRichness >= (legacyExisting.activity.dataRichness ?? 0)) {
           // Replace legacy ghost with the new properly-tracked activity.
+          // Carry over any user-attached photo so a resync never silently
+          // detaches it.
+          const replacement: ItineraryActivity = legacyExisting.activity.photoId
+            ? { ...newActivity, photoId: legacyExisting.activity.photoId }
+            : newActivity;
           legacyExisting.day.activities = legacyExisting.day.activities.map(
-            (a) => (a === legacyExisting.activity ? newActivity : a),
+            (a) => (a === legacyExisting.activity ? replacement : a),
           );
           existingByProximity.set(proxKey, {
             day: legacyExisting.day,
-            activity: newActivity,
+            activity: replacement,
           });
           existingByKey.set(key, {
             day: legacyExisting.day,
-            activity: newActivity,
+            activity: replacement,
+          });
+          committedForDoc.set(c.sourceField, {
+            dateStr: c.dateStr,
+            activity: replacement,
           });
         }
         // Legacy is richer: skip this candidate entirely.
@@ -490,6 +603,10 @@ export async function syncItineraryFromDocument(
         }
         day.activities.push(newActivity);
         existingByKey.set(key, { day, activity: newActivity });
+        committedForDoc.set(c.sourceField, {
+          dateStr: c.dateStr,
+          activity: newActivity,
+        });
       }
     }
   }
@@ -511,6 +628,57 @@ export async function syncItineraryFromDocument(
     .update(travelsTrips)
     .set({ itinerary })
     .where(eq(travelsTrips.id, tripId));
+
+  // Build the "what changed" list for the notification email: every
+  // committed activity whose content differs from (or didn't exist in) the
+  // pre-sync snapshot. A no-op resync (e.g. an unrelated PATCH re-triggering
+  // sync with identical extractedData) produces an empty list, so no email
+  // goes out.
+  const changes: string[] = [];
+  for (const [sourceField, committed] of committedForDoc) {
+    const previous = previousForDoc.get(sourceField);
+    if (
+      previous &&
+      previous.dateStr === committed.dateStr &&
+      activityContentKey(previous.activity) ===
+        activityContentKey(committed.activity)
+    ) {
+      continue; // unchanged
+    }
+    const { activity, dateStr } = committed;
+    changes.push(
+      `${formatChangeDate(dateStr, activity.time)}: ${activity.proximity ? `${activity.proximity} ` : ""}${activity.name}`,
+    );
+  }
+
+  if (changes.length > 0) {
+    await notifyItinerarySync(trip.title, trip.destination, changes);
+  }
+}
+
+/**
+ * Emails the household after an itinerary sync produced real changes.
+ * Deliberately non-fatal — a Resend outage or missing config must never
+ * undo or fail the itinerary sync that already committed above.
+ */
+async function notifyItinerarySync(
+  tripTitle: string,
+  tripDestination: string,
+  changes: string[],
+): Promise<void> {
+  if (!resendConfigured()) return;
+  try {
+    const recipients = await db
+      .select({ email: appUsers.email })
+      .from(appUsers);
+    const toEmails = recipients
+      .map((r) => r.email)
+      .filter((email): email is string => !!email);
+    if (toEmails.length === 0) return;
+    await sendItinerarySyncEmail(toEmails, tripTitle, tripDestination, changes);
+  } catch (err) {
+    logger.warn({ err, tripTitle }, "itinerary sync email failed (non-fatal)");
+  }
 }
 
 router.get("/trips/:id/documents", async (req, res) => {

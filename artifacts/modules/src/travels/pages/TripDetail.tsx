@@ -65,6 +65,10 @@ import { OneThingInput } from "@/travels/components/OneThingInput";
 import { MagnetCheckDialog } from "@/travels/components/MagnetCheckDialog";
 import { ReminderEditDialog } from "@/travels/components/ReminderEditDialog";
 import { AttachmentPickerDialog } from "@/travels/components/AttachmentPickerDialog";
+import {
+  ActivityPhotoThumb,
+  AttachActivityPhotoButton,
+} from "@/travels/components/trip-detail/activity-photo-attach";
 import { ImageLightbox } from "@/quilting/components/image-lightbox";
 import { usePageAssistantContext } from "@/travels/lib/assistant-context";
 import {
@@ -91,6 +95,7 @@ import {
   DragHandle,
 } from "@/travels/components/trip-detail/section-controls";
 import { PackingSection } from "@/travels/components/trip-detail/PackingSection";
+import { DiarySection } from "@/travels/components/trip-detail/DiarySection";
 import { ReservationMonitoringPanel } from "@/travels/components/trip-detail/ReservationMonitoringPanel";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -186,6 +191,7 @@ import {
   CheckCircle2,
   Circle,
   ClipboardList,
+  NotebookPen,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -334,6 +340,9 @@ type ItineraryActivity = {
   status?: "tentative" | "confirmed";
   sourceDocumentId?: number;
   sourceField?: string;
+  /** A trip photo (from the same gallery, not a copy) attached to this
+   *  activity. Only settable on manually-added activities. */
+  photoId?: number;
 };
 
 type ItineraryDay = {
@@ -364,6 +373,7 @@ const DEFAULT_CARD_ORDER = [
   "documents",
   "notes",
   "packing-todo",
+  "diary",
   "monitoring",
   "photos",
   "magnets",
@@ -1858,6 +1868,7 @@ function TripWeatherAndPlaces({
 }
 
 function DayCard({
+  tripId,
   day,
   index,
   dayNumber,
@@ -1867,7 +1878,9 @@ function DayCard({
   onDeleteActivity,
   onDeleteDay,
   onConfirmActivity,
+  onSetActivityPhoto,
 }: {
+  tripId: number;
   day: ItineraryDay;
   index: number;
   dayNumber: number;
@@ -1877,15 +1890,24 @@ function DayCard({
   onDeleteActivity?: (activityIndex: number) => void;
   onDeleteDay?: () => void;
   onConfirmActivity?: (activityIndex: number) => void;
+  onSetActivityPhoto?: (activityIndex: number, photoId: number | null) => void;
 }) {
   const [open, setOpen] = useState(index === 0);
   const [addingActivity, setAddingActivity] = useState(false);
-  const [actForm, setActForm] = useState({
+  const [actForm, setActForm] = useState<{
+    time: string;
+    name: string;
+    description: string;
+    proximity: string;
+    tip: string;
+    photoId?: number;
+  }>({
     time: "",
     name: "",
     description: "",
     proximity: "",
     tip: "",
+    photoId: undefined,
   });
 
   const submitActivity = () => {
@@ -1897,7 +1919,14 @@ function DayCard({
       tip: actForm.tip.trim(),
       proximity: actForm.proximity.trim(),
     });
-    setActForm({ time: "", name: "", description: "", proximity: "", tip: "" });
+    setActForm({
+      time: "",
+      name: "",
+      description: "",
+      proximity: "",
+      tip: "",
+      photoId: undefined,
+    });
     setAddingActivity(false);
   };
 
@@ -1961,12 +1990,16 @@ function DayCard({
       {open && (
         <div className="bg-card/50">
           <div className="divide-y divide-border/50">
-            {[...day.activities]
-              .sort((a, b) =>
-                (a.time || "99:99").localeCompare(b.time || "99:99"),
+            {day.activities
+              .map((a, originalIndex) => ({ a, originalIndex }))
+              .sort((x, y) =>
+                (x.a.time || "99:99").localeCompare(y.a.time || "99:99"),
               )
-              .map((a, ai) => (
-                <div key={ai} className="px-4 py-3 space-y-1 group relative">
+              .map(({ a, originalIndex }) => (
+                <div
+                  key={originalIndex}
+                  className="px-4 py-3 space-y-1 group relative"
+                >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -1989,9 +2022,28 @@ function DayCard({
                       {a.proximity && (
                         <span className="text-sm">{a.proximity}</span>
                       )}
+                      {!a.sourceDocumentId &&
+                        onSetActivityPhoto &&
+                        (a.photoId ? (
+                          <ActivityPhotoThumb
+                            tripId={tripId}
+                            photoId={a.photoId}
+                            onRemove={() =>
+                              onSetActivityPhoto(originalIndex, null)
+                            }
+                          />
+                        ) : (
+                          <AttachActivityPhotoButton
+                            tripId={tripId}
+                            compact
+                            onAttach={(photoId) =>
+                              onSetActivityPhoto(originalIndex, photoId)
+                            }
+                          />
+                        ))}
                       {a.status === "tentative" && onConfirmActivity && (
                         <button
-                          onClick={() => onConfirmActivity(ai)}
+                          onClick={() => onConfirmActivity(originalIndex)}
                           className="text-xs font-medium text-primary hover:underline whitespace-nowrap"
                           title="Mark this as firm/confirmed"
                         >
@@ -2000,7 +2052,7 @@ function DayCard({
                       )}
                       {onDeleteActivity && (
                         <button
-                          onClick={() => onDeleteActivity(ai)}
+                          onClick={() => onDeleteActivity(originalIndex)}
                           className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all"
                           title="Remove activity"
                         >
@@ -2068,6 +2120,29 @@ function DayCard({
                       }
                     />
                   </div>
+                  <div className="flex items-center gap-2">
+                    {actForm.photoId ? (
+                      <div className="flex items-center gap-2">
+                        <ActivityPhotoThumb
+                          tripId={tripId}
+                          photoId={actForm.photoId}
+                          onRemove={() =>
+                            setActForm((f) => ({ ...f, photoId: undefined }))
+                          }
+                        />
+                        <span className="text-xs text-muted-foreground">
+                          Photo attached
+                        </span>
+                      </div>
+                    ) : (
+                      <AttachActivityPhotoButton
+                        tripId={tripId}
+                        onAttach={(photoId) =>
+                          setActForm((f) => ({ ...f, photoId }))
+                        }
+                      />
+                    )}
+                  </div>
                   <div className="flex gap-2">
                     <Button
                       size="sm"
@@ -2088,6 +2163,7 @@ function DayCard({
                           description: "",
                           proximity: "",
                           tip: "",
+                          photoId: undefined,
                         });
                       }}
                     >
@@ -3338,6 +3414,43 @@ export default function TripDetail({ id }: { id: number }) {
     );
   };
 
+  const handleSetActivityPhoto = (
+    dayIndex: number,
+    activityIndex: number,
+    photoId: number | null,
+  ) => {
+    const base = localItinerary ?? (trip?.itinerary as Itinerary | null);
+    if (!base) return;
+    const days = base.days.map((d, i) =>
+      i === dayIndex
+        ? {
+            ...d,
+            activities: d.activities.map((a, ai) => {
+              if (ai !== activityIndex) return a;
+              if (photoId === null) {
+                const { photoId: _dropped, ...rest } = a;
+                return rest;
+              }
+              return { ...a, photoId };
+            }),
+          }
+        : d,
+    );
+    const updated: Itinerary = { days };
+    setLocalItinerary(updated);
+    updateTrip.mutate(
+      { id, data: { itinerary: updated } },
+      {
+        onSuccess: (result) => {
+          qc.setQueryData(getGetTripQueryKey(id), result);
+          invalidate();
+          toast.success(photoId === null ? "Photo removed" : "Photo attached");
+        },
+        onError: () => toast.error("Failed to update activity"),
+      },
+    );
+  };
+
   const toggleInterest = (interest: string) => {
     setItinInterests((prev) =>
       prev.includes(interest)
@@ -4163,6 +4276,7 @@ export default function TripDetail({ id }: { id: number }) {
                                       return (
                                         <DayCard
                                           key={i}
+                                          tripId={trip.id}
                                           day={day}
                                           index={i}
                                           dayNumber={dayNumber}
@@ -4177,6 +4291,13 @@ export default function TripDetail({ id }: { id: number }) {
                                           onDeleteDay={() => handleDeleteDay(i)}
                                           onConfirmActivity={(ai) =>
                                             handleConfirmActivity(i, ai)
+                                          }
+                                          onSetActivityPhoto={(ai, photoId) =>
+                                            handleSetActivityPhoto(
+                                              i,
+                                              ai,
+                                              photoId,
+                                            )
                                           }
                                         />
                                       );
@@ -4560,6 +4681,30 @@ export default function TripDetail({ id }: { id: number }) {
                             </CardShell>
                           </div>
                         </div>
+                      );
+
+                    case "diary":
+                      return (
+                        <CardShell
+                          title="Trip Diary"
+                          icon={<NotebookPen className="w-4 h-4" />}
+                          collapsed={collapsedCards.has("diary")}
+                          onToggleCollapse={() => toggleCardCollapse("diary")}
+                          dragHandleListeners={dragHandleListeners}
+                          dragHandleAttributes={dragHandleAttributes}
+                        >
+                          <div className="space-y-3">
+                            <h2 className="font-serif text-xl text-foreground flex items-center gap-2">
+                              <NotebookPen className="w-5 h-5" />
+                              Trip Diary
+                            </h2>
+                            <Card className="border-border/50">
+                              <CardContent className="py-4">
+                                <DiarySection tripId={id} />
+                              </CardContent>
+                            </Card>
+                          </div>
+                        </CardShell>
                       );
 
                     case "monitoring":

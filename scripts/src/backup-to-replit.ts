@@ -23,7 +23,7 @@
  *             travels_wishlist, travels_reminders, travels_reminder_alert_log,
  *             travels_calendar_settings, travels_google_calendar_connections,
  *             travels_connected_calendars, travels_reminder_calendar_events,
- *             travels_gmail_connections,
+ *             travels_gmail_connections, travels_diary_entries,
  *             travels_gmail_scan_decisions, travels_card_layout_preferences,
  *             travels_trip_card_collapse_state, travels_custom_document_types,
  *             travels_calendar_trip_suggestions,
@@ -964,6 +964,17 @@ CREATE TABLE IF NOT EXISTS travels_monitoring_preferences (
 ALTER TABLE travels_trip_documents ADD COLUMN IF NOT EXISTS title TEXT;
 ALTER TABLE travels_trip_documents ADD COLUMN IF NOT EXISTS gmail_message_id TEXT;
 ALTER TABLE travels_trip_documents ADD COLUMN IF NOT EXISTS icon_override TEXT;
+
+CREATE TABLE IF NOT EXISTS travels_diary_entries (
+  id                SERIAL PRIMARY KEY,
+  trip_id           INTEGER NOT NULL,
+  entry_date        DATE NOT NULL,
+  title             TEXT,
+  body              TEXT NOT NULL,
+  added_by_user_id  INTEGER,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
 ALTER TABLE elaine_settings ADD COLUMN IF NOT EXISTS chat_window_size TEXT NOT NULL DEFAULT 'compact';
 ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS extra_models JSONB NOT NULL DEFAULT '{}'::jsonb;
@@ -2392,6 +2403,22 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "travels_trip_photos", "id");
+
+  summary["travels_diary_entries"] = await copyTable(source, dest, {
+    table: "travels_diary_entries",
+    columns: [
+      "id",
+      "trip_id",
+      "entry_date",
+      "title",
+      "body",
+      "added_by_user_id",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_diary_entries", "id");
 
   summary["travels_wishlist"] = await copyTable(source, dest, {
     table: "travels_wishlist",

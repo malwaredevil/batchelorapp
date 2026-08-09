@@ -69,6 +69,7 @@ vi.mock("../lib/env", () => ({
 const selectQueue: unknown[][] = [];
 let updateReturning: unknown[] = [];
 let deleteReturning: unknown[] = [];
+let insertReturning: unknown[] = [];
 
 function makeUpdateBuilder() {
   const builder = {
@@ -97,15 +98,36 @@ function makeDeleteBuilder() {
   return builder;
 }
 
+function makeInsertBuilder() {
+  const builder = {
+    values(_vals: unknown) {
+      return {
+        returning() {
+          return Promise.resolve(insertReturning);
+        },
+        onConflictDoNothing() {
+          return {
+            returning() {
+              return Promise.resolve(insertReturning);
+            },
+          };
+        },
+      };
+    },
+    onConflictDoNothing() {
+      return {
+        returning() {
+          return Promise.resolve(insertReturning);
+        },
+      };
+    },
+  };
+  return builder;
+}
+
 const dbMock = {
   select: vi.fn(() => makeEagerSelectBuilder(selectQueue)),
-  insert: vi.fn(() => ({
-    values: () => ({
-      returning: () => Promise.resolve([]),
-      onConflictDoNothing: () => ({ returning: () => Promise.resolve([]) }),
-    }),
-    onConflictDoNothing: () => ({ returning: () => Promise.resolve([]) }),
-  })),
+  insert: vi.fn(() => makeInsertBuilder()),
   update: vi.fn(() => makeUpdateBuilder()),
   delete: vi.fn(() => makeDeleteBuilder()),
   execute: vi.fn().mockResolvedValue({ rows: [] }),
@@ -632,9 +654,11 @@ beforeEach(() => {
   selectQueue.length = 0;
   updateReturning = [];
   deleteReturning = [];
+  insertReturning = [];
   vi.clearAllMocks();
   // Restore db mock methods that any test might have replaced.
   dbMock.select = vi.fn(() => makeEagerSelectBuilder(selectQueue));
+  dbMock.insert = vi.fn(() => makeInsertBuilder());
   dbMock.update = vi.fn(() => makeUpdateBuilder());
   dbMock.delete = vi.fn(() => makeDeleteBuilder());
 });
@@ -886,5 +910,107 @@ describe("POST /api/elaine/action — delete_diary_entry", () => {
     expect(res.body.error).toMatch(/trip not found/i);
     // db.delete must never be called when the trip lookup fails
     expect(dbMock.delete).not.toHaveBeenCalled();
+  });
+});
+
+// ============================================================================
+// add_diary_entry
+// ============================================================================
+
+describe("POST /api/elaine/action — add_diary_entry", () => {
+  it("returns 401 when not authenticated", async () => {
+    const app = buildUnauthApp();
+    const res = await request(app)
+      .post("/api/elaine/action")
+      .send({
+        type: "add_diary_entry",
+        payload: {
+          tripId: TRIP_ID,
+          entryDate: "2026-08-01",
+          body: "Arrived safely.",
+        },
+      });
+    expect(res.status).toBe(401);
+  });
+
+  it("creates the entry and returns 201 with the new row", async () => {
+    // Executor: 1st select = trip existence check
+    selectQueue.push([SAMPLE_TRIP_ROW]);
+    const newEntry = {
+      ...SAMPLE_ENTRY,
+      id: 99,
+      body: "Arrived safely.",
+      title: null,
+    };
+    insertReturning = [newEntry];
+
+    const app = buildApp();
+    const res = await request(app)
+      .post("/api/elaine/action")
+      .send({
+        type: "add_diary_entry",
+        payload: {
+          tripId: TRIP_ID,
+          entryDate: "2026-08-01",
+          body: "Arrived safely.",
+        },
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.type).toBe("add_diary_entry");
+    expect(res.body.result.id).toBe(99);
+    expect(res.body.result.body).toBe("Arrived safely.");
+    expect(dbMock.insert).toHaveBeenCalledOnce();
+  });
+
+  it("creates the entry with an optional title when provided", async () => {
+    selectQueue.push([SAMPLE_TRIP_ROW]);
+    const newEntry = {
+      ...SAMPLE_ENTRY,
+      id: 100,
+      title: "Day One",
+      body: "We landed.",
+    };
+    insertReturning = [newEntry];
+
+    const app = buildApp();
+    const res = await request(app)
+      .post("/api/elaine/action")
+      .send({
+        type: "add_diary_entry",
+        payload: {
+          tripId: TRIP_ID,
+          entryDate: "2026-08-01",
+          title: "Day One",
+          body: "We landed.",
+        },
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.type).toBe("add_diary_entry");
+    expect(res.body.result.title).toBe("Day One");
+    expect(res.body.result.body).toBe("We landed.");
+  });
+
+  it("returns 404 when the trip does not exist", async () => {
+    // Trip select returns empty → executor short-circuits before the insert
+    selectQueue.push([]);
+
+    const app = buildApp();
+    const res = await request(app)
+      .post("/api/elaine/action")
+      .send({
+        type: "add_diary_entry",
+        payload: {
+          tripId: 999,
+          entryDate: "2026-08-01",
+          body: "Should not persist.",
+        },
+      });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatch(/trip not found/i);
+    // db.insert must never be called when the trip lookup fails
+    expect(dbMock.insert).not.toHaveBeenCalled();
   });
 });

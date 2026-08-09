@@ -114,6 +114,13 @@ run_bg guardrails pnpm --filter @workspace/scripts run check-guardrails -- --bas
 # matching entry in the sync-github-secrets.ts SECRETS registry.
 run_bg secretsregistry pnpm --filter @workspace/scripts run check-secrets-registry
 
+# Backup-coverage guard: every pgTable() in lib/db/src/schema/*.ts must appear
+# in a copyTable() call in both backup-to-replit.ts and restore-from-replit.ts,
+# or be explicitly listed in INTENTIONAL_SKIPS inside check-backup-coverage.ts.
+# Catches the recurring class of bug where a new feature table is added to the
+# Drizzle schema but the hand-maintained backup/restore scripts are not updated.
+run_bg backupcoverage pnpm --filter @workspace/scripts run check-backup-coverage
+
 # GitHub CI status (network-bound — runs in parallel with the local guards)
 run_bg cistatus pnpm --filter @workspace/scripts run check-ci-status
 
@@ -138,12 +145,13 @@ declare -A LABELS=(
   [composition]="Composition and configuration"
   [guardrails]="Guardrail bans (drizzle-kit push, restricted files, etc.)"
   [secretsregistry]="Secrets registry drift"
+  [backupcoverage]="Backup coverage (schema tables vs backup/restore scripts)"
   [cistatus]="GitHub CI status"
   [githubdrift]="GitHub workflow drift (Dependabot auto-merge guard)"
 )
 
 FAILED=()
-for key in appconfig forbidden secretsscan uploadlimit pgsingleton composition guardrails secretsregistry cistatus githubdrift; do
+for key in appconfig forbidden secretsscan uploadlimit pgsingleton composition guardrails secretsregistry backupcoverage cistatus githubdrift; do
   code=$(cat "$LOGDIR/$key.exit" 2>/dev/null || echo 1)
   if [[ "$code" -eq 0 ]]; then
     echo -e "${GREEN}✓${RESET} ${LABELS[$key]}"

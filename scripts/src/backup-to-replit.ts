@@ -29,7 +29,9 @@
  *             travels_calendar_trip_suggestions,
  *             travels_reservations, travel_monitoring_baselines,
  *             travel_monitoring_observations, travel_change_events,
- *             travels_monitoring_preferences
+ *             travels_monitoring_preferences,
+ *             travels_packing_lists, travels_packing_items,
+ *             travels_packing_templates, travels_trip_calendar_events
  *   Notifications: notification_events, notification_recipients, notification_deliveries,
  *                  notification_preferences
  *   Messenger: messenger_conversations, messenger_messages, messenger_attachments,
@@ -1632,6 +1634,80 @@ CREATE TABLE IF NOT EXISTS app_webhook_side_effects (
 );
 CREATE INDEX IF NOT EXISTS app_webhook_side_effects_status_updated_idx
   ON app_webhook_side_effects (status, updated_at);
+
+-- App configuration (user-editable knobs, key/value pairs keyed by module+key)
+CREATE TABLE IF NOT EXISTS app_config (
+  id            SERIAL PRIMARY KEY,
+  module        TEXT NOT NULL,
+  key           TEXT NOT NULL,
+  value         TEXT NOT NULL,
+  type          TEXT NOT NULL DEFAULT 'string',
+  label         TEXT NOT NULL,
+  description   TEXT,
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  customised_at TIMESTAMPTZ,
+  UNIQUE (module, key)
+);
+
+-- Packing lists (user-authored per-trip packing lists and reusable templates)
+CREATE TABLE IF NOT EXISTS travels_packing_lists (
+  id         SERIAL PRIMARY KEY,
+  trip_id    INTEGER NOT NULL UNIQUE,
+  name       TEXT NOT NULL DEFAULT 'Packing List',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS travels_packing_items (
+  id                SERIAL PRIMARY KEY,
+  list_id           INTEGER NOT NULL,
+  text              TEXT NOT NULL,
+  packed            BOOLEAN NOT NULL DEFAULT false,
+  sort_order        INTEGER NOT NULL DEFAULT 0,
+  added_by_user_id  INTEGER,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS travels_packing_templates (
+  id         SERIAL PRIMARY KEY,
+  user_id    INTEGER NOT NULL,
+  name       TEXT NOT NULL,
+  items      JSONB NOT NULL DEFAULT '[]'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Per-trip Google Calendar event references (needed to update/delete synced events)
+CREATE TABLE IF NOT EXISTS travels_trip_calendar_events (
+  id              SERIAL PRIMARY KEY,
+  trip_id         INTEGER NOT NULL,
+  item_key        TEXT NOT NULL,
+  kind            TEXT NOT NULL,
+  content_hash    TEXT NOT NULL,
+  google_event_id TEXT NOT NULL,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Messenger conversation participants
+CREATE TABLE IF NOT EXISTS messenger_conversation_participants (
+  id              SERIAL PRIMARY KEY,
+  conversation_id INTEGER NOT NULL,
+  user_id         INTEGER NOT NULL,
+  joined_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Elaine scheduled actions (user-configured future tasks)
+CREATE TABLE IF NOT EXISTS elaine_scheduled_actions (
+  id                   SERIAL PRIMARY KEY,
+  scheduled_for        TIMESTAMPTZ NOT NULL,
+  action_type          TEXT NOT NULL,
+  action_payload       JSONB NOT NULL DEFAULT '{}'::jsonb,
+  initiated_by_user_id INTEGER NOT NULL,
+  target_contact_id    INTEGER,
+  status               TEXT NOT NULL DEFAULT 'pending',
+  fired_at             TIMESTAMPTZ,
+  error                TEXT,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 `;
 
 async function copyTable(
@@ -3656,6 +3732,104 @@ async function main() {
     ],
     orderBy: "first_seen_at",
   });
+
+  // ── App configuration ─────────────────────────────────────────────────────
+  summary["app_config"] = await copyTable(source, dest, {
+    table: "app_config",
+    columns: [
+      "id",
+      "module",
+      "key",
+      "value",
+      "type",
+      "label",
+      "description",
+      "updated_at",
+      "customised_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "app_config", "id");
+
+  // ── Packing lists ─────────────────────────────────────────────────────────
+  summary["travels_packing_lists"] = await copyTable(source, dest, {
+    table: "travels_packing_lists",
+    columns: ["id", "trip_id", "name", "created_at"],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_packing_lists", "id");
+
+  summary["travels_packing_items"] = await copyTable(source, dest, {
+    table: "travels_packing_items",
+    columns: [
+      "id",
+      "list_id",
+      "text",
+      "packed",
+      "sort_order",
+      "added_by_user_id",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_packing_items", "id");
+
+  summary["travels_packing_templates"] = await copyTable(source, dest, {
+    table: "travels_packing_templates",
+    columns: ["id", "user_id", "name", "items", "created_at"],
+    orderBy: "id",
+    jsonbColumns: ["items"],
+  });
+  await resetSequence(dest, "travels_packing_templates", "id");
+
+  // ── Trip calendar event references ────────────────────────────────────────
+  summary["travels_trip_calendar_events"] = await copyTable(source, dest, {
+    table: "travels_trip_calendar_events",
+    columns: [
+      "id",
+      "trip_id",
+      "item_key",
+      "kind",
+      "content_hash",
+      "google_event_id",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_trip_calendar_events", "id");
+
+  // ── Messenger conversation participants ───────────────────────────────────
+  summary["messenger_conversation_participants"] = await copyTable(
+    source,
+    dest,
+    {
+      table: "messenger_conversation_participants",
+      columns: ["id", "conversation_id", "user_id", "joined_at"],
+      orderBy: "id",
+    },
+  );
+  await resetSequence(dest, "messenger_conversation_participants", "id");
+
+  // ── Elaine scheduled actions ──────────────────────────────────────────────
+  summary["elaine_scheduled_actions"] = await copyTable(source, dest, {
+    table: "elaine_scheduled_actions",
+    columns: [
+      "id",
+      "scheduled_for",
+      "action_type",
+      "action_payload",
+      "initiated_by_user_id",
+      "target_contact_id",
+      "status",
+      "fired_at",
+      "error",
+      "created_at",
+    ],
+    orderBy: "id",
+    jsonbColumns: ["action_payload"],
+  });
+  await resetSequence(dest, "elaine_scheduled_actions", "id");
 
   // ── Record backup history ─────────────────────────────────────────────────
   const note = Object.entries(summary)

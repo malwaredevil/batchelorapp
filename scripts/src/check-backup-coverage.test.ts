@@ -59,18 +59,6 @@ function makeTables(names: string[]): Set<string> {
   return new Set(names);
 }
 
-function makeSchemaDir(tables: string[]): string {
-  const dir = mkdtempSync(join(tmpdir(), "check-backup-coverage-test-"));
-  const content = tables
-    .map(
-      (t) =>
-        `export const ${t.replace(/_/g, "")} = pgTable(\n  "${t}",\n  { id: serial("id").primaryKey() }\n);`,
-    )
-    .join("\n");
-  writeFileSync(join(dir, "schema.ts"), content);
-  return dir;
-}
-
 // ────────────────────────────────────────────────────────────────────────────
 // Unit tests — extractSchemaTables
 // ────────────────────────────────────────────────────────────────────────────

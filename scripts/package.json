@@ -45,10 +45,11 @@
     "elaine:operation-catalog": "tsx ./src/elaine-app-operation-catalog.ts --check",
     "elaine:operation-catalog-write": "tsx ./src/elaine-app-operation-catalog.ts --write",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx ./src/pii-scan.test.ts && tsx ./src/check-domain-composition.test.ts && tsx ./src/check-workflow-security.test.ts && tsx ./src/check-public-file-secrets.test.ts && tsx ./src/check-secrets-registry.test.ts && tsx ./src/check-guardrails.test.ts && tsx ./src/check-github-drift.test.ts && tsx ./src/check-ci-status.test.ts && tsx ./src/github-sync.test.ts",
+    "test": "tsx ./src/pii-scan.test.ts && tsx ./src/check-domain-composition.test.ts && tsx ./src/check-workflow-security.test.ts && tsx ./src/check-public-file-secrets.test.ts && tsx ./src/check-secrets-registry.test.ts && tsx ./src/check-guardrails.test.ts && tsx ./src/check-github-drift.test.ts && tsx ./src/check-ci-status.test.ts && tsx ./src/github-sync.test.ts && tsx ./src/check-backup-coverage.test.ts",
     "secret-audit": "python3 ../.local/secret-audit.py",
     "docs:test": "tsx ./src/docs/generate.test.ts",
-    "check-stale-overrides": "node --import tsx ./src/check-stale-overrides.ts"
+    "check-stale-overrides": "node --import tsx ./src/check-stale-overrides.ts",
+    "check-backup-coverage": "tsx ./src/check-backup-coverage.ts"
   },
   "dependencies": {
     "@types/libsodium-wrappers": "^0.8.2",

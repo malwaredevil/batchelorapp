@@ -743,7 +743,10 @@ async function main() {
 
   // ── Travels ───────────────────────────────────────────────────────────────
   await dest.query(
-    "TRUNCATE messenger_reactions, messenger_link_previews, messenger_attachments, messenger_messages, messenger_conversations, travels_calendar_trip_suggestions, travels_custom_document_types, travels_trip_card_collapse_state, travels_card_layout_preferences, travels_gmail_scan_decisions, travels_gmail_connections, elaine_history_messages, elaine_history_conversations, elaine_global_config, elaine_nudges, elaine_memory_events, elaine_memory, elaine_settings, elaine_email_webhook_deliveries, elaine_email_conversations, elaine_conversations, travels_reminder_calendar_events, travels_connected_calendars, travels_google_calendar_connections, travels_calendar_settings, travels_reminder_alert_log, travels_reminders, travels_wishlist, travels_diary_entries, travels_trip_photos, travels_trip_documents CASCADE",
+    "TRUNCATE messenger_reactions, messenger_link_previews, messenger_attachments, messenger_messages, messenger_conversation_participants, messenger_conversations, travels_trip_calendar_events, travels_packing_items, travels_packing_lists, travels_packing_templates, travels_calendar_trip_suggestions, travels_custom_document_types, travels_trip_card_collapse_state, travels_card_layout_preferences, travels_gmail_scan_decisions, travels_gmail_connections, elaine_scheduled_actions, elaine_history_messages, elaine_history_conversations, elaine_global_config, elaine_nudges, elaine_memory_events, elaine_memory, elaine_settings, elaine_email_webhook_deliveries, elaine_email_conversations, elaine_conversations, elaine_cross_channel_context, travels_reminder_calendar_events, travels_connected_calendars, travels_google_calendar_connections, travels_calendar_settings, travels_reminder_alert_log, travels_reminders, travels_wishlist, travels_diary_entries, travels_trip_photos, travels_trip_documents CASCADE",
+  );
+  await dest.query(
+    "TRUNCATE travels_monitoring_preferences, travels_reservations, travel_change_events CASCADE",
   );
   await dest.query("TRUNCATE travels_trips CASCADE");
 
@@ -1928,6 +1931,186 @@ async function main() {
     ],
     orderBy: "first_seen_at",
   });
+
+  // ── App configuration ─────────────────────────────────────────────────────
+  await copyTable(source, dest, {
+    table: "app_config",
+    columns: [
+      "id",
+      "module",
+      "key",
+      "value",
+      "type",
+      "label",
+      "description",
+      "updated_at",
+      "customised_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "app_config", "id");
+
+  // ── Packing lists ─────────────────────────────────────────────────────────
+  await copyTable(source, dest, {
+    table: "travels_packing_lists",
+    columns: ["id", "trip_id", "name", "created_at"],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_packing_lists", "id");
+
+  await copyTable(source, dest, {
+    table: "travels_packing_items",
+    columns: [
+      "id",
+      "list_id",
+      "text",
+      "packed",
+      "sort_order",
+      "added_by_user_id",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_packing_items", "id");
+
+  await copyTable(source, dest, {
+    table: "travels_packing_templates",
+    columns: ["id", "user_id", "name", "items", "created_at"],
+    orderBy: "id",
+    jsonbColumns: ["items"],
+  });
+  await resetSequence(dest, "travels_packing_templates", "id");
+
+  // ── Trip calendar event references ────────────────────────────────────────
+  await copyTable(source, dest, {
+    table: "travels_trip_calendar_events",
+    columns: [
+      "id",
+      "trip_id",
+      "item_key",
+      "kind",
+      "content_hash",
+      "google_event_id",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "travels_trip_calendar_events", "id");
+
+  // ── Messenger conversation participants ───────────────────────────────────
+  await copyTable(source, dest, {
+    table: "messenger_conversation_participants",
+    columns: ["id", "conversation_id", "user_id", "joined_at"],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "messenger_conversation_participants", "id");
+
+  // ── Elaine scheduled actions ──────────────────────────────────────────────
+  await copyTable(source, dest, {
+    table: "elaine_scheduled_actions",
+    columns: [
+      "id",
+      "scheduled_for",
+      "action_type",
+      "action_payload",
+      "initiated_by_user_id",
+      "target_contact_id",
+      "status",
+      "fired_at",
+      "error",
+      "created_at",
+    ],
+    orderBy: "id",
+    jsonbColumns: ["action_payload"],
+  });
+  await resetSequence(dest, "elaine_scheduled_actions", "id");
+
+  // ── Elaine cross-channel context ──────────────────────────────────────────
+  await copyTable(source, dest, {
+    table: "elaine_cross_channel_context",
+    columns: ["id", "user_id", "entries", "updated_at"],
+    orderBy: "id",
+    jsonbColumns: ["entries"],
+  });
+  await resetSequence(dest, "elaine_cross_channel_context", "id");
+
+  // ── Travels disruption monitoring (user data) ─────────────────────────────
+  await copyTable(source, dest, {
+    table: "travels_monitoring_preferences",
+    columns: [
+      "id",
+      "user_id",
+      "monitoring_enabled",
+      "weather_alerts",
+      "check_in_reminders",
+      "document_reminders",
+      "min_severity",
+      "notify_channels",
+      "schedule_change_threshold_minutes",
+      "updated_at",
+    ],
+    orderBy: "id",
+    jsonbColumns: ["notify_channels"],
+  });
+  await resetSequence(dest, "travels_monitoring_preferences", "id");
+
+  await copyTable(source, dest, {
+    table: "travels_reservations",
+    columns: [
+      "id",
+      "trip_id",
+      "document_id",
+      "reservation_type",
+      "status",
+      "provider_name",
+      "confirmation_ref",
+      "passenger_names",
+      "segments",
+      "check_in_date",
+      "check_out_date",
+      "destination_iata",
+      "origin_iata",
+      "raw_extracted",
+      "monitoring_enabled",
+      "monitoring_policy",
+      "last_baseline_at",
+      "last_checked_at",
+      "created_by_user_id",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+    jsonbColumns: ["passenger_names", "segments", "raw_extracted"],
+  });
+  await resetSequence(dest, "travels_reservations", "id");
+
+  await copyTable(source, dest, {
+    table: "travel_change_events",
+    columns: [
+      "id",
+      "reservation_id",
+      "baseline_id",
+      "previous_observation_id",
+      "new_observation_id",
+      "change_type",
+      "severity",
+      "field_diffs",
+      "materiality_reason",
+      "downstream_impacts",
+      "state",
+      "decided_by_user_id",
+      "decided_at",
+      "decision_notes",
+      "notification_event_id",
+      "dedup_key",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+    jsonbColumns: ["field_diffs", "downstream_impacts"],
+  });
+  await resetSequence(dest, "travel_change_events", "id");
 
   await dest.query("SET session_replication_role = DEFAULT");
   await dest.query("COMMIT");

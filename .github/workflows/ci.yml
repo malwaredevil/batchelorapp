@@ -118,6 +118,22 @@ jobs:
       - uses: ./.github/actions/setup-workspace
       - run: pnpm --filter @workspace/api-server run lint:config
 
+  backup-coverage-guard:
+    name: Backup coverage guard
+    # Ensures every pgTable() in lib/db/src/schema/*.ts is referenced in a
+    # copyTable() call in both backup-to-replit.ts and restore-from-replit.ts
+    # (or explicitly listed in INTENTIONAL_SKIPS).  Catches the recurring bug
+    # where a new feature table is added to the Drizzle schema but the
+    # hand-maintained backup/restore scripts are not updated.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-workspace
+      - run: pnpm --filter @workspace/scripts run check-backup-coverage
+
   workflow-security:
     name: Workflow security policy
     runs-on: ubuntu-latest

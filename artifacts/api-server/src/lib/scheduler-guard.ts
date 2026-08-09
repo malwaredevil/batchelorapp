@@ -57,6 +57,31 @@ const HEARTBEAT_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
 const FIRST_CHECK_DELAY_MS = 3 * 60 * 1000; // 3 minutes
 
 /**
+ * Every in-process scheduler registers its own `setInterval(fn, N)` with the
+ * SAME N it passes to shouldRunScheduledTask() as minIntervalMs (see e.g.
+ * reminder-scheduler.ts). The JS timer's clock starts ticking the instant
+ * the scheduler module loads, but the DB claim it's compared against
+ * (last_run_at) doesn't get written until an async round trip completes —
+ * which on a cold boot can trail the timer's start by several seconds while
+ * migrations/bucket-provisioning/other schedulers' own startup claims are
+ * still in flight. Because both clocks use the literal same duration, that
+ * one-time startup lag becomes permanent: every Nth-hour timer tick lands a
+ * few seconds BEFORE its claim's `now() - last_run_at > N` becomes true, so
+ * the claim is denied, last_run_at doesn't advance, and the task only
+ * actually gets to run on alternating ticks (~2N apart) forever — which is
+ * both fewer real runs than intended and, once 2N exceeds the shared
+ * heartbeat's tolerance window, a recurring false "gone silent" Sentry
+ * alert even though nothing is actually broken (confirmed against
+ * production logs: a task claimed at T, denied again at T+~(N-12s), then
+ * claimed at T+2N with `overdueMs` matching the alternating-skip math).
+ * Subtracting a small grace period before comparing means a timer firing
+ * essentially on time will always satisfy the claim, restoring the
+ * intended once-per-N-ms cadence. `expected_interval_ms` (used by the
+ * heartbeat's OWN staleness math) still stores the true, ungraced N.
+ */
+const CLAIM_GRACE_MS = 2 * 60 * 1000; // 2 minutes
+
+/**
  * Records that a scheduled task completed successfully.
  * Call this after the task's work finishes without error so that
  * scheduler_runs.last_success_at is kept up to date for observability.
@@ -157,6 +182,12 @@ async function claimScheduledTaskRun(
   taskName: string,
   minIntervalMs: number,
 ): Promise<boolean> {
+  // See CLAIM_GRACE_MS doc comment: compare against a slightly shorter
+  // window than the nominal interval so a same-duration setInterval tick
+  // that lands a few seconds "early" (relative to when the last claim's
+  // now() actually committed) still succeeds. expected_interval_ms below
+  // still records the true, ungraced minIntervalMs for the heartbeat.
+  const claimWindowMs = Math.max(0, minIntervalMs - CLAIM_GRACE_MS);
   const result = await db.execute<{ name: string }>(sql`
       INSERT INTO scheduler_runs (name, last_run_at, expected_interval_ms)
       VALUES (${taskName}, now(), ${minIntervalMs})
@@ -165,7 +196,7 @@ async function claimScheduledTaskRun(
         WHERE (
           -- Arm 1: normal cadence — last claim was long enough ago
           scheduler_runs.last_run_at
-            < now() - (${minIntervalMs}::text || ' milliseconds')::interval
+            < now() - (${claimWindowMs}::text || ' milliseconds')::interval
         ) OR (
           -- Arm 2: crash recovery — the previous claim never completed
           -- (last_run_at > last_success_at) and enough time has passed to
@@ -173,7 +204,7 @@ async function claimScheduledTaskRun(
           scheduler_runs.last_success_at IS NOT NULL
           AND scheduler_runs.last_run_at > scheduler_runs.last_success_at
           AND scheduler_runs.last_success_at
-            < now() - (${minIntervalMs}::text || ' milliseconds')::interval
+            < now() - (${claimWindowMs}::text || ' milliseconds')::interval
           AND scheduler_runs.last_run_at < now() - interval '10 minutes'
         )
       RETURNING name

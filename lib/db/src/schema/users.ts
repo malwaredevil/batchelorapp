@@ -137,6 +137,13 @@ export const schedulerRuns = pgTable("scheduler_runs", {
   // reads this column across all rows to decide whether ANY task has gone
   // silent, and reports one aggregate check-in instead of N.
   expectedIntervalMs: integer("expected_interval_ms"),
+  // Whether the most recent claim attempt was granted. Set by the same CASE
+  // expression that conditionally advances last_run_at, evaluated under
+  // PostgreSQL's ON CONFLICT row lock against the pre-update row values —
+  // the only race-safe way to surface the claim outcome from a single
+  // INSERT ON CONFLICT statement that also unconditionally refreshes
+  // expected_interval_ms.
+  lastClaimGranted: boolean("last_claim_granted").notNull().default(false),
 }).enableRLS();
 
 export type SchedulerRun = typeof schedulerRuns.$inferSelect;

@@ -78,6 +78,7 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE scheduler_runs ENABLE ROW LEVEL SECURITY`,
   `ALTER TABLE scheduler_runs ADD COLUMN IF NOT EXISTS last_success_at timestamptz`,
   `ALTER TABLE scheduler_runs ADD COLUMN IF NOT EXISTS expected_interval_ms integer`,
+  `ALTER TABLE scheduler_runs ADD COLUMN IF NOT EXISTS last_claim_granted boolean NOT NULL DEFAULT false`,
 
   // ── Session stores (owned by connect-pg-simple, never altered by drizzle) ──
   `CREATE TABLE IF NOT EXISTS pottery_sessions (

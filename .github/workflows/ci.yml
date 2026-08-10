@@ -177,6 +177,19 @@ jobs:
       - run: pnpm --filter @workspace/scripts run elaine:capability-parity
       - run: pnpm --filter @workspace/scripts run elaine:operation-catalog
 
+  test-db:
+    name: DB library tests (drizzle-contracts upgrade guard)
+    # Runs the drizzle-contracts test suite so that Dependabot PRs that bump
+    # drizzle-orm are automatically validated against the upgrade guard.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-workspace
+      - run: pnpm --filter @workspace/db run test
+
   test-api-server:
     name: API server tests
     runs-on: ubuntu-latest

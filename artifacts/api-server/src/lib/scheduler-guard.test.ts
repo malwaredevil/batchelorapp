@@ -822,12 +822,56 @@ describe("startSchedulerHeartbeat", () => {
     mockExecute.mockRejectedValue(new Error("DB connection lost"));
 
     stopHeartbeat = startSchedulerHeartbeat();
-    await vi.advanceTimersByTimeAsync(FIRST_CHECK_DELAY_MS + 1);
+    // +500ms beyond the grace period so the one-retry-then-give-up path (see
+    // scheduler-guard.ts) has time to run its internal delay before we assert.
+    await vi.advanceTimersByTimeAsync(FIRST_CHECK_DELAY_MS + 501);
 
     const statuses = (
       Sentry.captureCheckIn as ReturnType<typeof vi.fn>
     ).mock.calls.map((args) => (args[0] as { status: string }).status);
     expect(statuses).toContain("in_progress");
+    expect(statuses).toContain("error");
+    expect(statuses).not.toContain("ok");
+  });
+
+  it("retries once on a transient connection error and still reports ok", async () => {
+    // Regression test for the 2026-08-10 "scheduled-tasks-heartbeat" Sentry
+    // incident: a single transient "Connection terminated unexpectedly" on
+    // this query used to be reported as an "error" check-in immediately,
+    // with no retry, unlike shouldRunScheduledTask's claim path. A one-off
+    // blip that self-heals within milliseconds should not trip a real alert.
+    mockExecute
+      .mockRejectedValueOnce(
+        new Error("Connection terminated due to connection timeout"),
+      )
+      .mockResolvedValueOnce({ rows: [] });
+
+    stopHeartbeat = startSchedulerHeartbeat();
+    // +500ms beyond the grace period so the retry's own internal delay
+    // (see scheduler-guard.ts) has time to fire within this advance window.
+    await vi.advanceTimersByTimeAsync(FIRST_CHECK_DELAY_MS + 501);
+
+    expect(mockExecute).toHaveBeenCalledTimes(2);
+    const statuses = (
+      Sentry.captureCheckIn as ReturnType<typeof vi.fn>
+    ).mock.calls.map((args) => (args[0] as { status: string }).status);
+    expect(statuses).toContain("in_progress");
+    expect(statuses).toContain("ok");
+    expect(statuses).not.toContain("error");
+  });
+
+  it("reports error only after BOTH the initial attempt and the retry fail", async () => {
+    mockExecute.mockRejectedValue(
+      new Error("Connection terminated due to connection timeout"),
+    );
+
+    stopHeartbeat = startSchedulerHeartbeat();
+    await vi.advanceTimersByTimeAsync(FIRST_CHECK_DELAY_MS + 501);
+
+    expect(mockExecute).toHaveBeenCalledTimes(2);
+    const statuses = (
+      Sentry.captureCheckIn as ReturnType<typeof vi.fn>
+    ).mock.calls.map((args) => (args[0] as { status: string }).status);
     expect(statuses).toContain("error");
     expect(statuses).not.toContain("ok");
   });

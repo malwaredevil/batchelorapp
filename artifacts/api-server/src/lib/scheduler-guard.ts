@@ -359,11 +359,39 @@ export function startSchedulerHeartbeat(): () => void {
     );
 
     try {
-      const result = await db.execute<SchedulerRunRow>(sql`
-        SELECT name, last_run_at, last_success_at, expected_interval_ms
-        FROM scheduler_runs
-        WHERE expected_interval_ms IS NOT NULL
-      `);
+      // Same one-retry-after-a-short-delay treatment as claimScheduledTaskRun
+      // (see shouldRunScheduledTask doc comment): Supabase's pooler
+      // occasionally drops an idle connection mid-query with a transient
+      // "Connection terminated unexpectedly" error lasting well under a
+      // second. Every OTHER caller of the DB in this codebase polls often
+      // enough (60s-5min) that a single blip self-heals silently on the next
+      // tick. This heartbeat only runs every 15 minutes, so without a retry
+      // here a single transient blip was immediately reported as an "error"
+      // check-in to Sentry Cron Monitoring — tripping a real alert for a
+      // problem that was already gone by the time anyone looked. Confirmed
+      // as the cause of the 2026-08-10 "scheduled-tasks-heartbeat" incident:
+      // two consecutive production check-ins failed with the identical
+      // "Connection terminated due to connection timeout" error from this
+      // exact query.
+      let result: Awaited<ReturnType<typeof db.execute<SchedulerRunRow>>>;
+      try {
+        result = await db.execute<SchedulerRunRow>(sql`
+          SELECT name, last_run_at, last_success_at, expected_interval_ms
+          FROM scheduler_runs
+          WHERE expected_interval_ms IS NOT NULL
+        `);
+      } catch (err) {
+        logger.warn(
+          { err },
+          "scheduler-heartbeat: health-check query failed, retrying once",
+        );
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        result = await db.execute<SchedulerRunRow>(sql`
+          SELECT name, last_run_at, last_success_at, expected_interval_ms
+          FROM scheduler_runs
+          WHERE expected_interval_ms IS NOT NULL
+        `);
+      }
 
       const now = Date.now();
       const stale: Array<{ name: string; overdueMs: number }> = [];

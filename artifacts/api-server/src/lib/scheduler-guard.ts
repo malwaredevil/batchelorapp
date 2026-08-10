@@ -79,7 +79,7 @@ const FIRST_CHECK_DELAY_MS = 3 * 60 * 1000; // 3 minutes
  * intended once-per-N-ms cadence. `expected_interval_ms` (used by the
  * heartbeat's OWN staleness math) still stores the true, ungraced N.
  */
-const CLAIM_GRACE_MS = 2 * 60 * 1000; // 2 minutes
+export const CLAIM_GRACE_MS = 2 * 60 * 1000; // 2 minutes
 
 /**
  * Records that a scheduled task completed successfully.
@@ -188,79 +188,129 @@ async function claimScheduledTaskRun(
   // now() actually committed) still succeeds. expected_interval_ms below
   // still records the true, ungraced minIntervalMs for the heartbeat.
   const claimWindowMs = Math.max(0, minIntervalMs - CLAIM_GRACE_MS);
-  const result = await db.execute<{ name: string }>(sql`
-      INSERT INTO scheduler_runs (name, last_run_at, expected_interval_ms)
-      VALUES (${taskName}, now(), ${minIntervalMs})
+
+  // Single-statement upsert that atomically records expected_interval_ms AND
+  // conditionally advances last_run_at.  Previously the interval was written
+  // in a separate UPDATE after the claim decision, which meant a scheduler
+  // whose interval changed between two consecutive denied calls could leave
+  // expected_interval_ms out of sync with the interval that drove each
+  // claim's WHERE clause.  Folding both writes into one statement removes
+  // that window: Postgres evaluates the CASE conditions and records the new
+  // interval in the same row-level lock acquisition.
+  //
+  // Race-safe claim detection via the schema-backed last_claim_granted column:
+  //
+  //   Using a DO UPDATE … WHERE clause would make RETURNING emit no rows on
+  //   deny (a convenient claim sentinel), but it also prevents the
+  //   expected_interval_ms column from being refreshed on denied calls.
+  //   Removing the WHERE and inferring the outcome from timestamps instead
+  //   (e.g. last_run_at >= statement_timestamp()) is not race-safe: a
+  //   statement that starts before a concurrent winner can resume after the
+  //   winner's lock-and-commit and read the winner's newer timestamp, falsely
+  //   reporting itself as claimed.
+  //
+  //   The only correct approach is to embed the claim decision as a value
+  //   computed under the ON CONFLICT row lock from the pre-update row state,
+  //   and surface it directly in RETURNING.  last_claim_granted does exactly
+  //   that: its CASE expression is evaluated by PostgreSQL against the
+  //   original row values under the exclusive conflict lock, before any of
+  //   this statement's writes are applied.  This guarantees:
+  //
+  //     • Fresh INSERT (no conflict): VALUES sets last_claim_granted = true.
+  //     • DO UPDATE, claim granted: CASE yields true; last_run_at advances.
+  //     • DO UPDATE, claim denied: CASE yields false; last_run_at unchanged.
+  //
+  //   Concurrent-loser correctness: when statement B loses the row lock to
+  //   statement A, B's ON CONFLICT re-evaluates under READ COMMITTED against
+  //   A's committed row.  A's last_run_at is too recent → CASE yields false
+  //   → last_claim_granted = false → RETURNING sends claimed = false. ✓
+  const result = await db.execute<{
+    name: string;
+    claimed: boolean;
+    last_run_at: string;
+    last_success_at: string | null;
+  }>(sql`
+      INSERT INTO scheduler_runs (name, last_run_at, expected_interval_ms, last_claim_granted)
+      VALUES (${taskName}, now(), ${minIntervalMs}, true)
       ON CONFLICT (name) DO UPDATE
-        SET last_run_at = now()
-        WHERE (
-          -- Arm 1: normal cadence — last claim was long enough ago
-          scheduler_runs.last_run_at
-            < now() - (${claimWindowMs}::text || ' milliseconds')::interval
-        ) OR (
-          -- Arm 2: crash recovery — the previous claim never completed
-          -- (last_run_at > last_success_at) and enough time has passed to
-          -- rule out an active concurrent claim (10 min >> any race window).
-          scheduler_runs.last_success_at IS NOT NULL
-          AND scheduler_runs.last_run_at > scheduler_runs.last_success_at
-          AND scheduler_runs.last_success_at
-            < now() - (${claimWindowMs}::text || ' milliseconds')::interval
-          AND scheduler_runs.last_run_at < now() - interval '10 minutes'
-        )
-      RETURNING name
+        SET
+          -- Always refresh the interval so the heartbeat's tolerance window
+          -- always reflects the interval that drove this claim decision.
+          expected_interval_ms = EXCLUDED.expected_interval_ms,
+          -- Set last_claim_granted first: its CASE is evaluated against the
+          -- pre-update row under the exclusive conflict lock, so it accurately
+          -- records whether THIS call grants the claim regardless of concurrent
+          -- contenders (see race-safety discussion in the comment above).
+          last_claim_granted = CASE
+            WHEN (
+              -- Arm 1: normal cadence — last claim was long enough ago
+              scheduler_runs.last_run_at
+                < now() - (${claimWindowMs}::text || ' milliseconds')::interval
+            ) OR (
+              -- Arm 2: crash recovery — the previous claim never completed
+              -- (last_run_at > last_success_at) and enough time has passed to
+              -- rule out an active concurrent claim (10 min >> any race window).
+              scheduler_runs.last_success_at IS NOT NULL
+              AND scheduler_runs.last_run_at > scheduler_runs.last_success_at
+              AND scheduler_runs.last_success_at
+                < now() - (${claimWindowMs}::text || ' milliseconds')::interval
+              AND scheduler_runs.last_run_at < now() - interval '10 minutes'
+            )
+            THEN true
+            ELSE false
+          END,
+          -- Advance last_run_at iff the claim is granted (same condition).
+          last_run_at = CASE
+            WHEN (
+              scheduler_runs.last_run_at
+                < now() - (${claimWindowMs}::text || ' milliseconds')::interval
+            ) OR (
+              scheduler_runs.last_success_at IS NOT NULL
+              AND scheduler_runs.last_run_at > scheduler_runs.last_success_at
+              AND scheduler_runs.last_success_at
+                < now() - (${claimWindowMs}::text || ' milliseconds')::interval
+              AND scheduler_runs.last_run_at < now() - interval '10 minutes'
+            )
+            THEN now()
+            ELSE scheduler_runs.last_run_at
+          END
+      RETURNING
+        name,
+        last_claim_granted     AS claimed,
+        last_run_at::text      AS last_run_at,
+        last_success_at::text  AS last_success_at
     `);
-  const claimed = result.rows.length > 0;
-  if (!claimed) {
+
+  const row = result.rows[0];
+  // INSERT ON CONFLICT DO UPDATE always touches the target row (either inserts
+  // or updates), so RETURNING always emits exactly one row.  A missing row
+  // would only occur if the DB rejected the statement entirely — which would
+  // have already thrown above.
+  const claimed = row?.claimed ?? false;
+
+  if (!claimed && row) {
     // Log last_run_at and last_success_at separately so operators can see
     // exactly why the run was denied without querying the DB directly.
     // Using COALESCE would obscure crash-recovery cases: when a process died
     // mid-run, last_run_at is fresh but last_success_at is stale — the deny
     // is driven by last_run_at (Arm 1 cooldown), not by the coalesced value.
-    // Non-fatal if the follow-up SELECT fails — the deny decision is already made.
-    try {
-      const anchorResult = await db.execute<{
-        last_run_at: string;
-        last_success_at: string | null;
-      }>(sql`
-          SELECT last_run_at::text     AS last_run_at,
-                 last_success_at::text AS last_success_at
-            FROM scheduler_runs
-           WHERE name = ${taskName}
-        `);
-      const row = anchorResult.rows[0];
-      if (row) {
-        // When last_run_at > last_success_at the previous claim never
-        // completed (crash recovery scenario).  The 10-minute run-timeout
-        // is still in effect, so the deny reason is different from the
-        // normal cadence case.
-        const isActiveClaim =
-          row.last_success_at != null &&
-          new Date(row.last_run_at) > new Date(row.last_success_at);
-        logger.debug(
-          {
-            taskName,
-            lastRunAt: row.last_run_at,
-            lastSuccessAt: row.last_success_at,
-            intervalMs: minIntervalMs,
-            reason: isActiveClaim
-              ? "crash-recovery timeout not elapsed"
-              : "interval not elapsed since last_run_at",
-          },
-          `scheduler-guard: skipped — last_run_at ${row.last_run_at}, interval ${Math.round(minIntervalMs / 60_000)}min not elapsed`,
-        );
-      }
-    } catch {
-      // Non-fatal: anchor logging failure doesn't affect the deny decision
-    }
+    const isActiveClaim =
+      row.last_success_at != null &&
+      new Date(row.last_run_at) > new Date(row.last_success_at);
+    logger.debug(
+      {
+        taskName,
+        lastRunAt: row.last_run_at,
+        lastSuccessAt: row.last_success_at,
+        intervalMs: minIntervalMs,
+        reason: isActiveClaim
+          ? "crash-recovery timeout not elapsed"
+          : "interval not elapsed since last_run_at",
+      },
+      `scheduler-guard: skipped — last_run_at ${row.last_run_at}, interval ${Math.round(minIntervalMs / 60_000)}min not elapsed`,
+    );
   }
-  // Keep expected_interval_ms current even on an unclaimed (too-soon) call
-  // — the row is guaranteed to exist by this point (inserted above or
-  // pre-existing), so this is a plain, always-run update.
-  await db.execute(sql`
-      UPDATE scheduler_runs
-      SET expected_interval_ms = ${minIntervalMs}
-      WHERE name = ${taskName}
-    `);
+
   return claimed;
 }
 

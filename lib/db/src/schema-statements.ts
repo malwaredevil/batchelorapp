@@ -1244,6 +1244,7 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE agentphone_conversations ENABLE ROW LEVEL SECURITY`,
   `CREATE TABLE IF NOT EXISTS agentphone_webhook_deliveries (
     id           TEXT PRIMARY KEY,
+    delivery_id  TEXT,
     received_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     status       TEXT NOT NULL DEFAULT 'processing',
     processed_at TIMESTAMPTZ
@@ -1251,8 +1252,11 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE agentphone_webhook_deliveries ENABLE ROW LEVEL SECURITY`,
   `ALTER TABLE agentphone_webhook_deliveries ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'processing'`,
   `ALTER TABLE agentphone_webhook_deliveries ADD COLUMN IF NOT EXISTS processed_at TIMESTAMPTZ`,
+  `ALTER TABLE agentphone_webhook_deliveries ADD COLUMN IF NOT EXISTS delivery_id TEXT`,
   `CREATE INDEX IF NOT EXISTS agentphone_webhook_deliveries_received_at_idx
      ON agentphone_webhook_deliveries (received_at)`,
+  `CREATE INDEX IF NOT EXISTS agentphone_webhook_deliveries_delivery_id_idx
+     ON agentphone_webhook_deliveries (delivery_id)`,
 
   // ── Elaine inbound email (Resend) ───────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS elaine_email_conversations (

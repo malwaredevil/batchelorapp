@@ -40,18 +40,28 @@ export type AgentphoneConversationRow =
 export type InsertAgentphoneConversation =
   typeof agentphoneConversations.$inferInsert;
 
-// Webhook delivery dedup log, keyed by the SHA-256 of the HMAC-signed
-// material (timestamp + "." + rawBody) — NOT the unsigned X-Webhook-ID header.
-// Using the content hash means a replayer cannot bypass dedup by swapping in
-// a fresh delivery ID; the same authenticated body+timestamp always produces
-// the same hash and hits the primary-key conflict. AgentPhone may redeliver
-// on a slow/ambiguous response; a retry of the exact same message collides on
-// the content hash and is a no-op 200. Rows are pruned on insert (best-effort)
-// since only a short dedup window is ever needed.
+// Webhook delivery dedup log. Primary dedup key is `id`, the SHA-256 of the
+// HMAC-signed material (timestamp + "." + rawBody) — NOT the unsigned
+// X-Webhook-ID header. Using the content hash means a replayer cannot bypass
+// dedup by swapping in a fresh delivery ID; the same authenticated
+// body+timestamp always produces the same hash and hits the primary-key
+// conflict.
+//
+// `deliveryId` (nullable) additionally stores the raw X-Webhook-ID header,
+// checked as a SECOND dedup key in claimDelivery() (agentphone.ts). This
+// closes a gap discovered 2026-08-11: AgentPhone can redeliver the same
+// logical message under the same X-Webhook-ID but with a freshly-signed
+// timestamp, producing a DIFFERENT content hash — so content-hash-only dedup
+// let the retry through as if it were new, and Elaine sent a second SMS reply
+// to the daily comms-check confirmation. The ID is still never trusted alone
+// for authenticity (a request must still pass signature verification before
+// either key is consulted), so this only adds duplicate-detection, not a new
+// way to authenticate.
 export const agentphoneWebhookDeliveries = pgTable(
   "agentphone_webhook_deliveries",
   {
     id: text("id").primaryKey(),
+    deliveryId: text("delivery_id"),
     receivedAt: timestamp("received_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -60,6 +70,7 @@ export const agentphoneWebhookDeliveries = pgTable(
   },
   (table) => [
     index("agentphone_webhook_deliveries_received_at_idx").on(table.receivedAt),
+    index("agentphone_webhook_deliveries_delivery_id_idx").on(table.deliveryId),
   ],
 ).enableRLS();
 

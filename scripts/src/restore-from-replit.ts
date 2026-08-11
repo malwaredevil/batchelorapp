@@ -163,7 +163,7 @@ async function main() {
 
   await copyTable(source, dest, {
     table: "agentphone_webhook_deliveries",
-    columns: ["id", "received_at"],
+    columns: ["id", "delivery_id", "received_at"],
     orderBy: "received_at",
   });
 

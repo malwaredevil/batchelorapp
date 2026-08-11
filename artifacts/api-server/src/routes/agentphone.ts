@@ -96,16 +96,41 @@ function verifySignature(req: Request): string | false {
   return createHash("sha256").update(signedString).digest("hex");
 }
 
-// Records the delivery id with status='processing' before any side effect runs.
-// Uses ON CONFLICT DO UPDATE so a crashed-and-redelivered webhook
-// (status='processing' AND received_at older than 5 minutes) can be retried;
-// a recently-seen or already-processed id is rejected (returns false).
-async function claimDelivery(id: string): Promise<boolean> {
+// Records the delivery with status='processing' before any side effect runs.
+// Dedup uses TWO keys, both checked atomically in this one statement:
+//   1. `id` (the content hash) — the original replay-protection key. A retry
+//      that resends the EXACT same signed body+timestamp collides here.
+//   2. `deliveryId` (the raw X-Webhook-ID header, nullable) — closes a gap
+//      discovered 2026-08-11: AgentPhone can redeliver the same logical
+//      message under the same header ID but with a freshly-signed timestamp,
+//      which produces a DIFFERENT content hash and used to sail through
+//      dedup as if new, causing Elaine to send a second SMS reply to the
+//      daily comms-check. The ID is still never trusted for AUTHENTICITY —
+//      the caller only reaches this function after signature verification
+//      already succeeded — it's used purely as a second duplicate signal.
+// A row only blocks a new attempt if it is NOT a stale (>5 min old) 'processing'
+// row, matching the existing crash-recovery behavior for the id key and
+// extending the same reclaim window to the deliveryId key.
+async function claimDelivery(
+  id: string,
+  deliveryId: string | null,
+): Promise<boolean> {
   const result = await db.execute<{ id: string }>(sql`
-    INSERT INTO agentphone_webhook_deliveries (id, status)
-    VALUES (${id}, 'processing')
+    INSERT INTO agentphone_webhook_deliveries (id, delivery_id, status)
+    SELECT ${id}, ${deliveryId}, 'processing'
+    WHERE NOT EXISTS (
+      SELECT 1 FROM agentphone_webhook_deliveries d
+      WHERE (
+          d.id = ${id}
+          OR (${deliveryId}::text IS NOT NULL AND d.delivery_id = ${deliveryId})
+        )
+        AND NOT (
+          d.status = 'processing'
+          AND d.received_at < NOW() - INTERVAL '5 minutes'
+        )
+    )
     ON CONFLICT (id) DO UPDATE
-      SET status = 'processing', received_at = NOW()
+      SET status = 'processing', received_at = NOW(), delivery_id = EXCLUDED.delivery_id
       WHERE agentphone_webhook_deliveries.status = 'processing'
         AND agentphone_webhook_deliveries.received_at < NOW() - INTERVAL '5 minutes'
     RETURNING id
@@ -484,8 +509,10 @@ async function handleVoice(req: Request, res: Response): Promise<void> {
 
 router.post("/webhook", webhookLimiter, async (req: Request, res: Response) => {
   // verifySignature returns the content hash (SHA-256 of signed material) on
-  // success, or false on failure. We use the hash — not the unsigned
-  // X-Webhook-ID — as the dedup key so replay-with-fresh-ID is blocked.
+  // success, or false on failure. The hash remains the PRIMARY dedup key so
+  // replay-with-fresh-ID is blocked; claimDelivery() below also checks the
+  // (unsigned, logging-only-for-auth-purposes) X-Webhook-ID as a second key
+  // to catch same-ID-different-hash redeliveries — see its doc comment.
   const contentHash = verifySignature(req);
   if (!contentHash) {
     logger.warn("agentphone: webhook signature verification failed");
@@ -493,22 +520,30 @@ router.post("/webhook", webhookLimiter, async (req: Request, res: Response) => {
     return;
   }
 
-  // Keep the original delivery ID for logging/debugging only.
-  const deliveryId = req.get("x-webhook-id") ?? "(missing)";
+  // The raw X-Webhook-ID header. Used both for logging and as a SECOND dedup
+  // key in claimDelivery() (see that function's doc comment) — `null` (not
+  // the string "(missing)") when absent, so two unrelated requests without an
+  // ID header never collide with each other.
+  const deliveryIdHeader = req.get("x-webhook-id") ?? null;
 
   const event = typeof req.body?.event === "string" ? req.body.event : "";
   const channel = typeof req.body?.channel === "string" ? req.body.channel : "";
   logger.info(
-    { deliveryId, contentHash: contentHash.slice(0, 12), event, channel },
+    {
+      deliveryId: deliveryIdHeader ?? "(missing)",
+      contentHash: contentHash.slice(0, 12),
+      event,
+      channel,
+    },
     "agentphone: webhook delivery received",
   );
 
   let claimed: boolean;
   try {
-    claimed = await claimDelivery(contentHash);
+    claimed = await claimDelivery(contentHash, deliveryIdHeader);
   } catch (err) {
     logger.error(
-      { err, deliveryId },
+      { err, deliveryId: deliveryIdHeader ?? "(missing)" },
       "agentphone: dedup DB error — failing closed",
     );
     res.status(503).json({ error: "Service unavailable" });
@@ -516,7 +551,7 @@ router.post("/webhook", webhookLimiter, async (req: Request, res: Response) => {
   }
   if (!claimed) {
     logger.warn(
-      { deliveryId, event, channel },
+      { deliveryId: deliveryIdHeader ?? "(missing)", event, channel },
       "agentphone: duplicate webhook delivery rejected",
     );
     res.status(200).json({ ok: true, duplicate: true });

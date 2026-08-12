@@ -7,7 +7,7 @@ import {
   elaineBroadcastLog,
   elaineHistoryConversations,
   elaineHistoryMessages,
-  elaineScheduledActions,
+  reminders,
 } from "@workspace/db";
 import { isServiceHealthy } from "../routes/admin/integrations-health";
 import {
@@ -762,22 +762,27 @@ export const communicationActionExecutors: Record<
     userId: number,
   ) => {
     if (payload.scheduleAt) {
-      // Deferred — write a row to the scheduler table and return a confirmation.
+      // Deferred — write a row to the generic reminders table (entityType
+      // 'elaine_action') and return a confirmation. The unified reminder
+      // delivery scheduler claims and fires this the same way it fires every
+      // other reminder, calling fireCallContact as the delivery mechanism.
       const contact = await resolveContact(payload.contactName);
       const storedPayload = {
         contactName: payload.contactName,
         message: payload.message,
       };
       const [row] = await db
-        .insert(elaineScheduledActions)
+        .insert(reminders)
         .values({
-          scheduledFor: new Date(payload.scheduleAt),
-          actionType: "call_contact",
-          actionPayload: storedPayload,
-          initiatedByUserId: userId,
-          targetContactId: contact?.id ?? null,
+          entityType: "elaine_action",
+          createdByUserId: userId,
+          title: `Call ${contact?.displayName ?? payload.contactName}`,
+          dueAt: new Date(payload.scheduleAt),
+          leadTimes: [{ value: 0, unit: "minutes" }],
+          elaineActionType: "call_contact",
+          elaineActionPayload: storedPayload,
         })
-        .returning({ id: elaineScheduledActions.id });
+        .returning({ id: reminders.id });
       const formattedTime = formatScheduledTime(payload.scheduleAt);
       logger.info(
         {
@@ -814,7 +819,8 @@ export const communicationActionExecutors: Record<
       : [payload.contactName];
 
     if (payload.scheduleAt) {
-      // Deferred — write one scheduler row per recipient and return a summary.
+      // Deferred — write one reminders row per recipient (entityType
+      // 'elaine_action') and return a summary.
       const formattedTime = formatScheduledTime(payload.scheduleAt);
 
       const rows = await Promise.all(
@@ -826,15 +832,17 @@ export const communicationActionExecutors: Record<
             channel: payload.channel,
           };
           const [row] = await db
-            .insert(elaineScheduledActions)
+            .insert(reminders)
             .values({
-              scheduledFor: new Date(payload.scheduleAt!),
-              actionType: "message_contact",
-              actionPayload: storedPayload,
-              initiatedByUserId: userId,
-              targetContactId: contact?.id ?? null,
+              entityType: "elaine_action",
+              createdByUserId: userId,
+              title: `Message ${contact?.displayName ?? name}`,
+              dueAt: new Date(payload.scheduleAt!),
+              leadTimes: [{ value: 0, unit: "minutes" }],
+              elaineActionType: "message_contact",
+              elaineActionPayload: storedPayload,
             })
-            .returning({ id: elaineScheduledActions.id });
+            .returning({ id: reminders.id });
           logger.info(
             {
               scheduledActionId: row?.id,
@@ -1309,17 +1317,18 @@ export const communicationActionExecutors: Record<
   ) => {
     const [existing] = await db
       .select({
-        id: elaineScheduledActions.id,
-        status: elaineScheduledActions.status,
-        actionType: elaineScheduledActions.actionType,
-        actionPayload: elaineScheduledActions.actionPayload,
-        scheduledFor: elaineScheduledActions.scheduledFor,
+        id: reminders.id,
+        status: reminders.status,
+        elaineActionType: reminders.elaineActionType,
+        elaineActionPayload: reminders.elaineActionPayload,
+        dueAt: reminders.dueAt,
       })
-      .from(elaineScheduledActions)
+      .from(reminders)
       .where(
         and(
-          eq(elaineScheduledActions.id, payload.scheduledActionId),
-          eq(elaineScheduledActions.initiatedByUserId, userId),
+          eq(reminders.id, payload.scheduledActionId),
+          eq(reminders.createdByUserId, userId),
+          eq(reminders.entityType, "elaine_action"),
         ),
       );
 
@@ -1329,29 +1338,30 @@ export const communicationActionExecutors: Record<
         body: { error: "Scheduled contact not found." },
       };
     }
-    if (existing.status !== "pending") {
+    if (existing.status !== "active") {
       return {
         status: 409,
         body: {
-          error: `This scheduled contact has already been ${existing.status} and can't be cancelled.`,
+          error: `This scheduled contact has already been ${existing.status === "done" ? "delivered" : existing.status} and can't be cancelled.`,
         },
       };
     }
 
     // Atomic cancel: include user + status guard in WHERE so that if the
     // scheduler fires the row between our read and our write, we detect the
-    // race instead of silently overwriting "fired" with "cancelled".
+    // race instead of silently overwriting "done" with "cancelled".
     const [cancelled] = await db
-      .update(elaineScheduledActions)
+      .update(reminders)
       .set({ status: "cancelled" })
       .where(
         and(
-          eq(elaineScheduledActions.id, payload.scheduledActionId),
-          eq(elaineScheduledActions.initiatedByUserId, userId),
-          eq(elaineScheduledActions.status, "pending"),
+          eq(reminders.id, payload.scheduledActionId),
+          eq(reminders.createdByUserId, userId),
+          eq(reminders.entityType, "elaine_action"),
+          eq(reminders.status, "active"),
         ),
       )
-      .returning({ id: elaineScheduledActions.id });
+      .returning({ id: reminders.id });
 
     if (!cancelled) {
       return {
@@ -1363,7 +1373,7 @@ export const communicationActionExecutors: Record<
       };
     }
 
-    const p = existing.actionPayload as { contactName?: string } | null;
+    const p = existing.elaineActionPayload as { contactName?: string } | null;
     logger.info(
       { scheduledActionId: payload.scheduledActionId },
       "elaine: cancelled scheduled contact",
@@ -1393,20 +1403,21 @@ export async function executeListScheduledContacts(
 ): Promise<string> {
   const rows = await db
     .select({
-      id: elaineScheduledActions.id,
-      actionType: elaineScheduledActions.actionType,
-      actionPayload: elaineScheduledActions.actionPayload,
-      scheduledFor: elaineScheduledActions.scheduledFor,
-      status: elaineScheduledActions.status,
+      id: reminders.id,
+      actionType: reminders.elaineActionType,
+      actionPayload: reminders.elaineActionPayload,
+      scheduledFor: reminders.dueAt,
+      status: reminders.status,
     })
-    .from(elaineScheduledActions)
+    .from(reminders)
     .where(
       and(
-        eq(elaineScheduledActions.initiatedByUserId, userId),
-        eq(elaineScheduledActions.status, "pending"),
+        eq(reminders.createdByUserId, userId),
+        eq(reminders.entityType, "elaine_action"),
+        eq(reminders.status, "active"),
       ),
     )
-    .orderBy(elaineScheduledActions.scheduledFor);
+    .orderBy(reminders.dueAt);
 
   if (rows.length === 0) {
     return "No pending scheduled calls or messages.";

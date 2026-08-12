@@ -1,6 +1,7 @@
 import { type ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
 import { Skeleton } from "@workspace/ui/skeleton";
+import { ReminderBellButton } from "./create-reminder-dialog";
 
 export interface CollectionDetailLayoutProps {
   /** Back button label */
@@ -12,6 +13,17 @@ export interface CollectionDetailLayoutProps {
   titleSlot: ReactNode;
   /** Right column: action icon buttons (small, outlined) */
   actions?: ReactNode;
+  /**
+   * When set, automatically renders a bell-icon "create reminder" action
+   * (issue #522) scoped to this record — no per-module dialog/mutation code
+   * needed, just these three identifying values. Rendered first, before any
+   * custom `actions`.
+   */
+  reminder?: {
+    entityType: string;
+    entityId: number;
+    defaultTitle: string;
+  };
   /** Optional concise summary that belongs beside the hero image. */
   heroContent?: ReactNode;
   /** Full-width metadata fields rendered below the hero. */
@@ -44,6 +56,7 @@ export function CollectionDetailLayout({
   gallery,
   titleSlot,
   actions,
+  reminder,
   heroContent,
   fields,
   fieldsTitle = "Details",
@@ -75,7 +88,18 @@ export function CollectionDetailLayout({
           {/* Title row + icon action buttons */}
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0">{titleSlot}</div>
-            {actions && <div className="flex shrink-0 gap-1">{actions}</div>}
+            {(reminder || actions) && (
+              <div className="flex shrink-0 gap-1">
+                {reminder && (
+                  <ReminderBellButton
+                    entityType={reminder.entityType}
+                    entityId={reminder.entityId}
+                    defaultTitle={reminder.defaultTitle}
+                  />
+                )}
+                {actions}
+              </div>
+            )}
           </div>
 
           {heroContent}

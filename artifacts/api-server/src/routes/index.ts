@@ -28,6 +28,7 @@ import storageReconcileRouter from "./admin/storage-reconcile";
 import adminUsersRouter from "./admin/users";
 import integrationsHealthRouter from "./admin/integrations-health";
 import richTextRouter from "./rich-text";
+import remindersRouter from "./reminders";
 
 const router: IRouter = Router();
 
@@ -64,6 +65,7 @@ router.use("/admin/storage", storageReconcileRouter);
 router.use("/admin/users", adminUsersRouter);
 router.use("/admin/integrations/health", integrationsHealthRouter);
 router.use("/rich-text", richTextRouter);
+router.use("/reminders", remindersRouter);
 // Must be mounted before elaineRouter: elaineRouter applies a blanket
 // requireAuth middleware to every /elaine/* path, which would otherwise
 // swallow this unauthenticated (signature-gated) webhook route before it's

@@ -32,6 +32,7 @@ const IMPLEMENTED_MAIN_CHAT_HARD_TOOLS = [
   "get_email_detail",
   "list_notes",
   "get_note",
+  "list_reminders",
   "list_notifications",
   "get_notification_counts",
   "get_notification_preferences",

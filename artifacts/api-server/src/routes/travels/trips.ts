@@ -284,7 +284,12 @@ router.delete("/trips/:id", async (req, res) => {
     await tx
       .update(reminders)
       .set({ deletedAt: now })
-      .where(and(eq(reminders.entityType, "travels_trip"), eq(reminders.entityId, id)));
+      .where(
+        and(
+          eq(reminders.entityType, "travels_trip"),
+          eq(reminders.entityId, id),
+        ),
+      );
     // Packing list rows have no deleted_at — hard-delete them now.
     await tx
       .delete(travelsPackingLists)

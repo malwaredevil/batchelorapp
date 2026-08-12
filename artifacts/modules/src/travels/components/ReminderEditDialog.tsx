@@ -424,7 +424,6 @@ export function ReminderEditDialog({
                 </div>
               </div>
             )}
-
           </div>
         ) : (
           <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-0.5">

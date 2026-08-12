@@ -1,7 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
 import { env } from "./env";
-import { ensureBucketWithPolicy, RICH_TEXT_BUCKET_POLICY } from "./storage-core";
+import {
+  ensureBucketWithPolicy,
+  RICH_TEXT_BUCKET_POLICY,
+} from "./storage-core";
 
 const BUCKET = "rich-text";
 // Signed URLs are embedded directly in saved HTML (reminder descriptions /

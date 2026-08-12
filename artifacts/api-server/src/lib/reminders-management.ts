@@ -1,6 +1,9 @@
 import { eq, and, or, sql, isNull } from "drizzle-orm";
 import { db, appUsers, reminders } from "@workspace/db";
-import { computeNextOccurrenceForReminder, occurrenceKeyPrefix } from "./reminders-scheduler";
+import {
+  computeNextOccurrenceForReminder,
+  occurrenceKeyPrefix,
+} from "./reminders-scheduler";
 
 // ---------------------------------------------------------------------------
 // Shared "central Reminders" data layer (issue #524), used by BOTH the REST
@@ -47,7 +50,12 @@ export function buildEntityLink(
   if (!entityType || entityId == null) return null;
   const route = ENTITY_ROUTES[entityType];
   if (!route) return null;
-  return { type: entityType, id: entityId, url: route.path(entityId), label: route.label };
+  return {
+    type: entityType,
+    id: entityId,
+    url: route.path(entityId),
+    label: route.label,
+  };
 }
 
 export function channelsForRow(row: {
@@ -111,7 +119,10 @@ export async function listManageableReminders(
   const status = filter.status ?? "all";
   const when = filter.when ?? "all";
 
-  const conditions = [await scopeConditionFor(userId), isNull(reminders.deletedAt)];
+  const conditions = [
+    await scopeConditionFor(userId),
+    isNull(reminders.deletedAt),
+  ];
   if (status !== "all") {
     conditions.push(eq(reminders.status, status));
   }
@@ -142,7 +153,10 @@ export async function listManageableReminders(
 /** Scoping shared by PATCH/snooze/DELETE: the reminder must exist, not be
  * soft-deleted, and the current user must either have created it or be one
  * of its recipients (same scope listManageableReminders uses). */
-export async function findManageableReminder(reminderId: number, userId: number) {
+export async function findManageableReminder(
+  reminderId: number,
+  userId: number,
+) {
   const [row] = await db
     .select()
     .from(reminders)

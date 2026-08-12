@@ -150,10 +150,7 @@ router.post("/auth/login", loginLimiter, async (req, res) => {
     // single shared function so any future notification channel (SMS, etc.)
     // added to it automatically gets this same trigger for free.
     runReminderDeliveries().catch((err: unknown) =>
-      req.log.error(
-        { err },
-        "reminders-scheduler: login-triggered run failed",
-      ),
+      req.log.error({ err }, "reminders-scheduler: login-triggered run failed"),
     );
   });
 });

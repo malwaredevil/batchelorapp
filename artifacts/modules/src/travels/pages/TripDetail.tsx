@@ -2664,11 +2664,10 @@ function RemindersSection({ tripId }: { tripId: number }) {
   const [newCalendarConnectionId, setNewCalendarConnectionId] = useState<
     number | null
   >(null);
-  const [newGoogleEventId, setNewGoogleEventId] = useState<string | null>(
-    null,
-  );
+  const [newGoogleEventId, setNewGoogleEventId] = useState<string | null>(null);
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
-  const calendarLinked = newCalendarConnectionId != null && newGoogleEventId != null;
+  const calendarLinked =
+    newCalendarConnectionId != null && newGoogleEventId != null;
 
   function toggleRecipient(email: string) {
     setNewRecipients((prev) =>

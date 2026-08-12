@@ -72,7 +72,9 @@ export function CreateReminderDialog({
           // Bare `YYYY-MM-DD` from <input type="date"> — resolve to
           // midnight local-ish (server treats it the same as every other
           // date-only reminder due date in this app).
-          dueAt: dueDate ? new Date(`${dueDate}T09:00:00`).toISOString() : undefined,
+          dueAt: dueDate
+            ? new Date(`${dueDate}T09:00:00`).toISOString()
+            : undefined,
         }),
       });
       if (!res.ok) {
@@ -142,9 +144,9 @@ export function CreateReminderDialog({
                 data-testid="input-reminder-due-date"
               />
               <p className="text-xs text-muted-foreground">
-                Leave blank to just keep this on the record for later —
-                manage timing, channels, and recurrence from the Reminders
-                page in Office.
+                Leave blank to just keep this on the record for later — manage
+                timing, channels, and recurrence from the Reminders page in
+                Office.
               </p>
             </div>
           </div>
@@ -158,7 +160,11 @@ export function CreateReminderDialog({
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={saving} data-testid="button-save-reminder">
+            <Button
+              type="submit"
+              disabled={saving}
+              data-testid="button-save-reminder"
+            >
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Create reminder
             </Button>

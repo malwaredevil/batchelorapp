@@ -123,7 +123,12 @@ export function RichTextEditor({
       editor.chain().focus().extendMarkRange("link").unsetLink().run();
       return;
     }
-    editor.chain().focus().extendMarkRange("link").setLink({ href: url.trim() }).run();
+    editor
+      .chain()
+      .focus()
+      .extendMarkRange("link")
+      .setLink({ href: url.trim() })
+      .run();
   };
 
   const pickImage = () => fileInputRef.current?.click();
@@ -238,7 +243,11 @@ export function RichTextEditor({
 
         <Divider />
 
-        <ToolBtn title="Add link" active={editor.isActive("link")} onClick={setLink}>
+        <ToolBtn
+          title="Add link"
+          active={editor.isActive("link")}
+          onClick={setLink}
+        >
           <LinkIcon className="w-3.5 h-3.5" />
         </ToolBtn>
         <ToolBtn title="Insert image" onClick={pickImage}>

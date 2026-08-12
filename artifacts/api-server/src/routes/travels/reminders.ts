@@ -103,9 +103,7 @@ function alertDaysBeforeToLeadTimes(
   return days.map((value) => ({ value, unit: "days" as const }));
 }
 
-function leadTimesToAlertDaysBefore(
-  leadTimes: unknown,
-): number[] {
+function leadTimesToAlertDaysBefore(leadTimes: unknown): number[] {
   if (!Array.isArray(leadTimes)) return DEFAULT_ALERT_DAYS_BEFORE;
   return leadTimes
     .filter(
@@ -225,7 +223,10 @@ router.get("/reminders", async (req, res) => {
             eq(reminders.status, "active"),
             isNull(reminders.deletedAt),
           )
-        : and(eq(reminders.entityType, ENTITY_TYPE), isNull(reminders.deletedAt)),
+        : and(
+            eq(reminders.entityType, ENTITY_TYPE),
+            isNull(reminders.deletedAt),
+          ),
     )
     .orderBy(asc(reminders.dueAt), asc(reminders.createdAt));
 
@@ -360,7 +361,8 @@ router.patch("/trips/:id/reminders/:reminderId", async (req, res) => {
   if (body.description !== undefined) updateData.description = body.description;
   if (body.dueDate !== undefined)
     updateData.dueAt = dueDateToDueAt(body.dueDate);
-  if (body.done !== undefined) updateData.status = body.done ? "done" : "active";
+  if (body.done !== undefined)
+    updateData.status = body.done ? "done" : "active";
   if (body.recipientEmails !== undefined)
     updateData.emailRecipients = body.recipientEmails;
   if (body.smsRecipientUserIds !== undefined)

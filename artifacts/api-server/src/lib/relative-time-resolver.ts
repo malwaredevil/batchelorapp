@@ -351,12 +351,10 @@ export function resolveRelativeTime(
       // The Sunday that starts "this" local week, plus 7 days.
       const todayWeekday = getLocalWeekday(tz, now);
       const daysBackToThisSunday = -todayWeekday;
-      const thisSunday = addLocalDays(
-        tz,
-        now,
-        daysBackToThisSunday,
-        { hour: 0, minute: 1 },
-      );
+      const thisSunday = addLocalDays(tz, now, daysBackToThisSunday, {
+        hour: 0,
+        minute: 1,
+      });
       return addLocalDays(tz, thisSunday, 7, spec.clockTime);
     }
     case "next-month-start": {

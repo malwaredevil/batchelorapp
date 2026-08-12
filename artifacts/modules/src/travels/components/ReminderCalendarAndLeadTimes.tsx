@@ -84,7 +84,8 @@ export function LeadTimesEditor({
   }
 
   const extraLeadTimes = leadTimes.filter(
-    (l) => !QUICK_LEAD_TIMES.some((q) => leadTimeKey(q.leadTime) === leadTimeKey(l)),
+    (l) =>
+      !QUICK_LEAD_TIMES.some((q) => leadTimeKey(q.leadTime) === leadTimeKey(l)),
   );
 
   return (
@@ -228,7 +229,11 @@ export function CalendarLinkPicker({
       {enabled && (
         <div className="space-y-2 pt-1">
           <Select
-            value={selectedCalendarId != null ? String(selectedCalendarId) : undefined}
+            value={
+              selectedCalendarId != null
+                ? String(selectedCalendarId)
+                : undefined
+            }
             onValueChange={(v) => {
               const id = Number(v);
               setSelectedCalendarId(id);

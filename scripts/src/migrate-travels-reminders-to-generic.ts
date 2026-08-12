@@ -65,7 +65,9 @@ async function main() {
   let calendarUnresolvable = 0;
 
   for (const row of legacyRows) {
-    const dueAt = row.dueDate ? new Date(row.dueDate + DEFAULT_DUE_TIME_UTC) : null;
+    const dueAt = row.dueDate
+      ? new Date(row.dueDate + DEFAULT_DUE_TIME_UTC)
+      : null;
     if (!row.dueDate) noDueDate++;
 
     let calendarConnectionId: number | null = null;
@@ -126,9 +128,12 @@ async function main() {
       continue;
     }
 
-    await db.insert(reminders).values(values).onConflictDoNothing({
-      target: [reminders.legacySourceTable, reminders.legacySourceId],
-    });
+    await db
+      .insert(reminders)
+      .values(values)
+      .onConflictDoNothing({
+        target: [reminders.legacySourceTable, reminders.legacySourceId],
+      });
     inserted++;
   }
 
@@ -137,7 +142,9 @@ async function main() {
   console.log(`Already migrated (skip):  ${skippedExisting}`);
   console.log(`No due date (migrated anyway, dueAt=null): ${noDueDate}`);
   console.log(`Calendar link resolved:   ${calendarLinked}`);
-  console.log(`Calendar link unresolvable (left null): ${calendarUnresolvable}`);
+  console.log(
+    `Calendar link unresolvable (left null): ${calendarUnresolvable}`,
+  );
 }
 
 main()

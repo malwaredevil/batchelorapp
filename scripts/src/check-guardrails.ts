@@ -180,7 +180,15 @@ export const DESTRUCTIVE_SQL_HELP = [
 // Check 6: the restricted-channel exclusion set may only grow, never shrink.
 // ---------------------------------------------------------------------------
 export function countExclusionEntries(source: string): number {
-  const match = source.match(/RESTRICTED_EXCLUDED_ACTION_TYPES[\s\S]{0,2000}/);
+  // Match from the array declaration through to its closing `];`, not a
+  // fixed character window — per-entry explanatory comments (e.g. for
+  // create_reminder/snooze_reminder) can push the array well past a fixed
+  // window, which previously truncated the count and produced a false
+  // "shrink" violation even though no entries were removed. Non-greedy so
+  // this stops at the array's own close bracket rather than a later one.
+  const match = source.match(
+    /RESTRICTED_EXCLUDED_ACTION_TYPES_SOURCE[\s\S]*?\n\];/,
+  );
   if (!match) return 0;
   return (match[0].match(/^\s*"[a-z][a-z_]+"/gm) || []).length;
 }

@@ -53,7 +53,10 @@ import type {
 type StatusFilter = ReminderStatus | "all";
 type WhenFilter = "all" | "upcoming" | "overdue";
 
-const CHANNEL_ICON: Record<ReminderChannel, React.ComponentType<{ className?: string }>> = {
+const CHANNEL_ICON: Record<
+  ReminderChannel,
+  React.ComponentType<{ className?: string }>
+> = {
   email: Mail,
   sms: MessageSquareText,
   call: Phone,
@@ -337,7 +340,8 @@ export default function OfficeReminders() {
                         href={r.entityLink.url}
                         className="text-xs inline-flex items-center gap-1 text-primary hover:underline"
                       >
-                        {r.entityLink.label} <ExternalLink className="w-3 h-3" />
+                        {r.entityLink.label}{" "}
+                        <ExternalLink className="w-3 h-3" />
                       </Link>
                     )}
                     {r.channels.length > 0 && (

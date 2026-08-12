@@ -81,8 +81,7 @@ export function ReminderManageDialog({
   const [weekday, setWeekday] = useState(0);
   const [dayOfMonth, setDayOfMonth] = useState(1);
   const [recurrenceEndDate, setRecurrenceEndDate] = useState("");
-  const [recurrenceMaxOccurrences, setRecurrenceMaxOccurrences] =
-    useState("");
+  const [recurrenceMaxOccurrences, setRecurrenceMaxOccurrences] = useState("");
   const [emailRecipients, setEmailRecipients] = useState<string[]>([]);
   const [customEmail, setCustomEmail] = useState("");
   const [smsRecipients, setSmsRecipients] = useState<number[]>([]);
@@ -127,9 +126,7 @@ export function ReminderManageDialog({
     setList: (next: number[]) => void,
     id: number,
   ) {
-    setList(
-      list.includes(id) ? list.filter((x) => x !== id) : [...list, id],
-    );
+    setList(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
   }
 
   function addCustomEmail() {
@@ -562,8 +559,8 @@ export function ReminderManageDialog({
               ))}
             </div>
             <p className="text-xs text-muted-foreground">
-              Only delivers to a user once they&apos;ve DM&apos;d the Slack
-              bot at least once.
+              Only delivers to a user once they&apos;ve DM&apos;d the Slack bot
+              at least once.
             </p>
           </div>
         </div>

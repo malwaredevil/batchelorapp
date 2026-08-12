@@ -1706,7 +1706,9 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
         createdByUserId: userId,
         title: payload.title,
         description: payload.description ?? null,
-        dueAt: payload.dueDate ? new Date(`${payload.dueDate}T00:01:00.000Z`) : null,
+        dueAt: payload.dueDate
+          ? new Date(`${payload.dueDate}T00:01:00.000Z`)
+          : null,
         status: "active",
         emailRecipients: payload.recipientEmails ?? [],
       })
@@ -1766,7 +1768,9 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
         entityId: reminders.entityId,
       })
       .from(reminders)
-      .where(and(eq(reminders.id, payload.reminderId), isNull(reminders.deletedAt)));
+      .where(
+        and(eq(reminders.id, payload.reminderId), isNull(reminders.deletedAt)),
+      );
     if (
       !existing ||
       existing.entityType !== "travels_trip" ||
@@ -8390,7 +8394,12 @@ export async function buildAgentphoneContext(): Promise<string> {
       dueAt: reminders.dueAt,
     })
     .from(reminders)
-    .where(and(eq(reminders.entityType, "travels_trip"), eq(reminders.status, "active")))
+    .where(
+      and(
+        eq(reminders.entityType, "travels_trip"),
+        eq(reminders.status, "active"),
+      ),
+    )
     .orderBy(desc(reminders.id))
     .limit(50);
 

@@ -341,32 +341,31 @@ export const reminderActionTools: OpenAI.Chat.Completions.ChatCompletionTool[] =
 // reminderActionTools/reminderActionExecutors (which back the
 // confirm-then-write action pipeline) since reads never need confirmation.
 // ---------------------------------------------------------------------------
-export const reminderReadTools: OpenAI.Chat.Completions.ChatCompletionTool[] =
-  [
-    {
-      type: "function",
-      function: {
-        name: LIST_REMINDERS_TOOL_NAME,
-        description:
-          "List every reminder the requesting user can manage — one they created, or one addressed to them on any channel (email/sms/call/slack/messenger) — including exact numeric ids, due dates, recurrence, status, and any linked record. Use this before calling snooze_reminder/edit_reminder/delete_reminder to get the correct id, and whenever the user asks what reminders exist or are upcoming/overdue.",
-        parameters: {
-          type: "object",
-          properties: {
-            status: {
-              type: "string",
-              enum: ["active", "done", "cancelled", "all"],
-              description: "Defaults to active.",
-            },
-            when: {
-              type: "string",
-              enum: ["upcoming", "overdue", "all"],
-              description: "Defaults to all.",
-            },
+export const reminderReadTools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+  {
+    type: "function",
+    function: {
+      name: LIST_REMINDERS_TOOL_NAME,
+      description:
+        "List every reminder the requesting user can manage — one they created, or one addressed to them on any channel (email/sms/call/slack/messenger) — including exact numeric ids, due dates, recurrence, status, and any linked record. Use this before calling snooze_reminder/edit_reminder/delete_reminder to get the correct id, and whenever the user asks what reminders exist or are upcoming/overdue.",
+      parameters: {
+        type: "object",
+        properties: {
+          status: {
+            type: "string",
+            enum: ["active", "done", "cancelled", "all"],
+            description: "Defaults to active.",
+          },
+          when: {
+            type: "string",
+            enum: ["upcoming", "overdue", "all"],
+            description: "Defaults to all.",
           },
         },
       },
     },
-  ];
+  },
+];
 
 export async function executeListRemindersTool(
   name: string,

@@ -11,7 +11,8 @@
  */
 
 const IMG_TAG_RE = /<img\b[^>]*>/gi;
-const ANCHOR_RE = /<a\b[^>]*\bhref\s*=\s*(?:"([^"]*)"|'([^']*)')[^>]*>([\s\S]*?)<\/a>/gi;
+const ANCHOR_RE =
+  /<a\b[^>]*\bhref\s*=\s*(?:"([^"]*)"|'([^']*)')[^>]*>([\s\S]*?)<\/a>/gi;
 
 function decodeEntities(text: string): string {
   return text
@@ -85,6 +86,9 @@ export function richTextToSpeech(html: string | null | undefined): string {
       ? ` There's a link to ${hostname} in the description. `
       : " There's a link in the description. ";
   });
-  const plain = collapseWhitespace(stripRemainingTags(text)).replace(/\n+/g, " ");
+  const plain = collapseWhitespace(stripRemainingTags(text)).replace(
+    /\n+/g,
+    " ",
+  );
   return plain.replace(/\s+/g, " ").trim();
 }

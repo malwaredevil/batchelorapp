@@ -167,7 +167,12 @@ router.get("/search", requireAuth, async (req, res) => {
         tripId: reminders.entityId,
       })
       .from(reminders)
-      .where(and(eq(reminders.entityType, "travels_trip"), ilike(reminders.title, pattern)))
+      .where(
+        and(
+          eq(reminders.entityType, "travels_trip"),
+          ilike(reminders.title, pattern),
+        ),
+      )
       .limit(perSource),
 
     db

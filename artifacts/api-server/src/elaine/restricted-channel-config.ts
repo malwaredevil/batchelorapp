@@ -125,6 +125,9 @@ export const RESTRICTED_SOFT_TOOL_NAMES_CALLER_HANDLED_SOURCE: readonly string[]
     // list_memories: dispatched via executeUniversalReadTool in
     // runRestrictedElaineTurn before the fallthrough to executeRestrictedSoftTool.
     LIST_ELAINE_MEMORIES_TOOL_NAME,
+    // list_reminders: dispatched via executeListRemindersTool in
+    // runRestrictedElaineTurn before the fallthrough to executeRestrictedSoftTool.
+    LIST_REMINDERS_TOOL_NAME,
   ];
 
 /** Runtime Set derived from the source array — use for O(1) membership tests. */

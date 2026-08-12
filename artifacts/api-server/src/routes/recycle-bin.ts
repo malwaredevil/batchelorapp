@@ -233,7 +233,12 @@ router.get("/recycle-bin", async (req, res) => {
         deletedAt: reminders.deletedAt,
       })
       .from(reminders)
-      .where(and(eq(reminders.entityType, "travels_trip"), isNotNull(reminders.deletedAt)))
+      .where(
+        and(
+          eq(reminders.entityType, "travels_trip"),
+          isNotNull(reminders.deletedAt),
+        ),
+      )
       .orderBy(reminders.deletedAt);
     for (const r of rows) {
       items.push({
@@ -432,7 +437,12 @@ router.post("/recycle-bin/:entityType/:id/restore", async (req, res) => {
       await db
         .update(reminders)
         .set({ deletedAt: null })
-        .where(and(eq(reminders.entityType, "travels_trip"), eq(reminders.entityId, id)));
+        .where(
+          and(
+            eq(reminders.entityType, "travels_trip"),
+            eq(reminders.entityId, id),
+          ),
+        );
       await db
         .update(travelsTrips)
         .set({ deletedAt: null })
@@ -614,7 +624,12 @@ router.get("/recycle-bin/count", async (_req, res) => {
     db
       .select({ n: sql<number>`count(*)::int` })
       .from(reminders)
-      .where(and(eq(reminders.entityType, "travels_trip"), isNotNull(reminders.deletedAt))),
+      .where(
+        and(
+          eq(reminders.entityType, "travels_trip"),
+          isNotNull(reminders.deletedAt),
+        ),
+      ),
     db
       .select({ n: sql<number>`count(*)::int` })
       .from(ornamentsItems)

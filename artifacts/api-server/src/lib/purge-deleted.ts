@@ -260,7 +260,12 @@ export async function purgeDeletedItems(): Promise<PurgeSummary> {
         .where(inArray(travelsTripDocuments.tripId, ids));
       await db
         .delete(reminders)
-        .where(and(eq(reminders.entityType, "travels_trip"), inArray(reminders.entityId, ids)));
+        .where(
+          and(
+            eq(reminders.entityType, "travels_trip"),
+            inArray(reminders.entityId, ids),
+          ),
+        );
       await db.delete(travelsTrips).where(inArray(travelsTrips.id, ids));
       summary.travelsTrips = rows.length;
     }

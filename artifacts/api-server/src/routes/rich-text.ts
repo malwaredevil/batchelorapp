@@ -37,11 +37,15 @@ router.post("/upload-image", upload.single("file"), async (req, res) => {
   try {
     sniffedMime = sniffAndValidateMime(buffer, req.file.mimetype);
   } catch {
-    res.status(400).json({ error: "Only JPEG, PNG, and WebP images are supported" });
+    res
+      .status(400)
+      .json({ error: "Only JPEG, PNG, and WebP images are supported" });
     return;
   }
   if (!isImageMimeType(sniffedMime)) {
-    res.status(400).json({ error: "Only JPEG, PNG, and WebP images are supported" });
+    res
+      .status(400)
+      .json({ error: "Only JPEG, PNG, and WebP images are supported" });
     return;
   }
 
@@ -54,7 +58,11 @@ router.post("/upload-image", upload.single("file"), async (req, res) => {
   }
 
   try {
-    const url = await uploadRichTextImage(finalBuffer, sniffedMime, originalname);
+    const url = await uploadRichTextImage(
+      finalBuffer,
+      sniffedMime,
+      originalname,
+    );
     res.status(201).json({ url });
   } catch (err) {
     logger.error(err, "rich-text: image upload failed");

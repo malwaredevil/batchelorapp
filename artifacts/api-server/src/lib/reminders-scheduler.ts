@@ -9,10 +9,7 @@ import {
   elaineHistoryMessages,
 } from "@workspace/db";
 import { inArray, eq, and } from "drizzle-orm";
-import {
-  sendGenericReminderAlertEmail,
-  resendConfigured,
-} from "./email";
+import { sendGenericReminderAlertEmail, resendConfigured } from "./email";
 import { sendGenericReminderAlertSms, smsConfigured } from "./sms";
 import { sendGenericReminderAlertSlack, slackConfigured } from "./slack";
 import {
@@ -128,8 +125,7 @@ function occurrencePrefix(occurrence: number): string {
 
 function alertLabelForLeadTime(lead: LeadTime): string {
   if (lead.value === 0) return "now";
-  const unitLabel =
-    lead.value === 1 ? lead.unit.replace(/s$/, "") : lead.unit;
+  const unitLabel = lead.value === 1 ? lead.unit.replace(/s$/, "") : lead.unit;
   return `${lead.value} ${unitLabel}`;
 }
 
@@ -159,7 +155,10 @@ async function resolveEntityContextLabel(
   if (!entityType || entityId == null) return undefined;
   if (entityType === "travels_trip") {
     const [trip] = await db
-      .select({ title: travelsTrips.title, destination: travelsTrips.destination })
+      .select({
+        title: travelsTrips.title,
+        destination: travelsTrips.destination,
+      })
       .from(travelsTrips)
       .where(inArray(travelsTrips.id, [entityId]));
     if (!trip) return undefined;
@@ -361,11 +360,18 @@ async function dispatchElaineActionReminder(
 ): Promise<{ status: number; body: unknown }> {
   const p = (payload ?? {}) as Record<string, unknown>;
   if (actionType === "call_contact") {
-    return fireCallContact(String(p.contactName ?? ""), String(p.message ?? ""));
+    return fireCallContact(
+      String(p.contactName ?? ""),
+      String(p.message ?? ""),
+    );
   }
   if (actionType === "message_contact") {
-    const channel = (p.channel ??
-      "auto") as "auto" | "sms" | "slack" | "email" | "elaine_chat";
+    const channel = (p.channel ?? "auto") as
+      | "auto"
+      | "sms"
+      | "slack"
+      | "email"
+      | "elaine_chat";
     return fireMessageContact(
       String(p.contactName ?? ""),
       String(p.message ?? ""),
@@ -519,16 +525,17 @@ export async function claimAndSendDueDeliveries(): Promise<{
         // keep that query's shape simple. Also grabs google_event_html_link
         // (issue #519) so calendar-linked reminders can include a direct
         // link to the event.
-        const [{ due_at: dueAtText, google_event_html_link: calendarEventUrl }] =
-          (
-            await pool.query<{
-              due_at: string;
-              google_event_html_link: string | null;
-            }>(
-              `SELECT due_at::text, google_event_html_link FROM reminders WHERE id = $1`,
-              [delivery.reminder_id],
-            )
-          ).rows;
+        const [
+          { due_at: dueAtText, google_event_html_link: calendarEventUrl },
+        ] = (
+          await pool.query<{
+            due_at: string;
+            google_event_html_link: string | null;
+          }>(
+            `SELECT due_at::text, google_event_html_link FROM reminders WHERE id = $1`,
+            [delivery.reminder_id],
+          )
+        ).rows;
         await sendGenericReminderAlertEmail(
           delivery.recipient_ref,
           delivery.reminder_title,
@@ -542,16 +549,17 @@ export async function claimAndSendDueDeliveries(): Promise<{
         if (!smsEnabled) throw new Error("sms channel not configured");
         const phone = phoneMap.get(Number(delivery.recipient_ref));
         if (!phone) throw new Error("no verified phone on file");
-        const [{ due_at: dueAtText, google_event_html_link: calendarEventUrl }] =
-          (
-            await pool.query<{
-              due_at: string;
-              google_event_html_link: string | null;
-            }>(
-              `SELECT due_at::text, google_event_html_link FROM reminders WHERE id = $1`,
-              [delivery.reminder_id],
-            )
-          ).rows;
+        const [
+          { due_at: dueAtText, google_event_html_link: calendarEventUrl },
+        ] = (
+          await pool.query<{
+            due_at: string;
+            google_event_html_link: string | null;
+          }>(
+            `SELECT due_at::text, google_event_html_link FROM reminders WHERE id = $1`,
+            [delivery.reminder_id],
+          )
+        ).rows;
         const formattedDate = new Date(dueAtText).toLocaleDateString("en-GB", {
           day: "numeric",
           month: "long",
@@ -569,16 +577,17 @@ export async function claimAndSendDueDeliveries(): Promise<{
         if (!callsEnabled) throw new Error("call channel not configured");
         const phone = phoneMap.get(Number(delivery.recipient_ref));
         if (!phone) throw new Error("no verified phone on file");
-        const [{ due_at: dueAtText, google_event_html_link: calendarEventUrl }] =
-          (
-            await pool.query<{
-              due_at: string;
-              google_event_html_link: string | null;
-            }>(
-              `SELECT due_at::text, google_event_html_link FROM reminders WHERE id = $1`,
-              [delivery.reminder_id],
-            )
-          ).rows;
+        const [
+          { due_at: dueAtText, google_event_html_link: calendarEventUrl },
+        ] = (
+          await pool.query<{
+            due_at: string;
+            google_event_html_link: string | null;
+          }>(
+            `SELECT due_at::text, google_event_html_link FROM reminders WHERE id = $1`,
+            [delivery.reminder_id],
+          )
+        ).rows;
         const formattedDate = new Date(dueAtText).toLocaleDateString("en-GB", {
           day: "numeric",
           month: "long",
@@ -634,16 +643,17 @@ export async function claimAndSendDueDeliveries(): Promise<{
         if (!slackEnabled) throw new Error("slack channel not configured");
         const slackUserId = slackMap.get(Number(delivery.recipient_ref));
         if (!slackUserId) throw new Error("no slack user id on file");
-        const [{ due_at: dueAtText, google_event_html_link: calendarEventUrl }] =
-          (
-            await pool.query<{
-              due_at: string;
-              google_event_html_link: string | null;
-            }>(
-              `SELECT due_at::text, google_event_html_link FROM reminders WHERE id = $1`,
-              [delivery.reminder_id],
-            )
-          ).rows;
+        const [
+          { due_at: dueAtText, google_event_html_link: calendarEventUrl },
+        ] = (
+          await pool.query<{
+            due_at: string;
+            google_event_html_link: string | null;
+          }>(
+            `SELECT due_at::text, google_event_html_link FROM reminders WHERE id = $1`,
+            [delivery.reminder_id],
+          )
+        ).rows;
         const formattedDate = new Date(dueAtText).toLocaleDateString("en-GB", {
           day: "numeric",
           month: "long",
@@ -682,24 +692,23 @@ export async function claimAndSendDueDeliveries(): Promise<{
         // the same executors the immediate (non-scheduled) path uses, so
         // scheduled and immediate call_contact/message_contact behave
         // identically.
-        const [{ elaine_action_type: actionType, elaine_action_payload: payload }] =
-          (
-            await pool.query<{
-              elaine_action_type: string | null;
-              elaine_action_payload: unknown;
-            }>(
-              `SELECT elaine_action_type, elaine_action_payload FROM reminders WHERE id = $1`,
-              [delivery.reminder_id],
-            )
-          ).rows;
-        const result = await dispatchElaineActionReminder(
-          actionType,
-          payload,
-        );
+        const [
+          { elaine_action_type: actionType, elaine_action_payload: payload },
+        ] = (
+          await pool.query<{
+            elaine_action_type: string | null;
+            elaine_action_payload: unknown;
+          }>(
+            `SELECT elaine_action_type, elaine_action_payload FROM reminders WHERE id = $1`,
+            [delivery.reminder_id],
+          )
+        ).rows;
+        const result = await dispatchElaineActionReminder(actionType, payload);
         if (result.status >= 400) {
           const errBody = result.body as { error?: string } | null;
           throw new Error(
-            errBody?.error ?? `elaine_action dispatch failed (${result.status})`,
+            errBody?.error ??
+              `elaine_action dispatch failed (${result.status})`,
           );
         }
       } else {

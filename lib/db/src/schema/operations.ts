@@ -284,3 +284,20 @@ export const commChecks = pgTable("comm_checks", {
 });
 
 export type CommCheckRow = typeof commChecks.$inferSelect;
+
+// ── Integrations health state ─────────────────────────────────────────────────
+// Persists per-service consecutive-error counts across scheduled cron runs so
+// the stateless scheduled-deployment path can apply the same two-strike alert
+// gate as the in-process scheduler. No RLS: admin/ops data, not user-scoped.
+export const integrationsHealthState = pgTable("integrations_health_state", {
+  service: text("service").primaryKey(),
+  consecutiveErrorCount: integer("consecutive_error_count")
+    .notNull()
+    .default(0),
+  lastUpdatedAt: timestamp("last_updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export type IntegrationsHealthStateRow =
+  typeof integrationsHealthState.$inferSelect;

@@ -8,6 +8,7 @@ import {
   type ConfigAppConfigRow,
   type ConfigAppConfigListResponse,
 } from "@workspace/api-client-react";
+import { usePersistedDismiss } from "@workspace/web-core";
 import { toast } from "sonner";
 import {
   AlertTriangle,
@@ -424,7 +425,6 @@ function DbReconnectingBanner({
 
 export function ControlPanelContent() {
   const { user } = useAuth();
-  const [bannerDismissed, setBannerDismissed] = useState(false);
   const { data, isLoading, isError, isFetching } = useGetAppConfig({
     query: {
       queryKey: getGetAppConfigQueryKey(),
@@ -433,6 +433,18 @@ export function ControlPanelContent() {
   });
 
   const bootstrapStatus = data?.bootstrapStatus;
+  // Session-scoped: stays dismissed for this tab while the same incident is
+  // ongoing (keyed by its retry time), but a genuinely new incident — or a
+  // fresh visit next session — shows the banner again rather than hiding a
+  // real DB problem forever.
+  const dismissKey =
+    bootstrapStatus === "warn"
+      ? `db-reconnect-banner-dismissed:${data?.bootstrapRetryAt ?? "unknown"}`
+      : null;
+  const [bannerDismissed, dismissBanner] = usePersistedDismiss(
+    dismissKey,
+    "session",
+  );
   const showReconnectBanner = !bannerDismissed && bootstrapStatus === "warn";
 
   const configContextText = isLoading
@@ -497,7 +509,7 @@ export function ControlPanelContent() {
       {showReconnectBanner && (
         <DbReconnectingBanner
           bootstrapRetryAt={data?.bootstrapRetryAt}
-          onDismiss={() => setBannerDismissed(true)}
+          onDismiss={dismissBanner}
         />
       )}
 

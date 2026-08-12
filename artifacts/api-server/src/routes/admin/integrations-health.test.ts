@@ -5,7 +5,7 @@
  * external API calls). It should return cached data when a valid cache entry
  * exists and 204 No Content otherwise.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
 
@@ -74,7 +74,10 @@ vi.mock("../../middleware/owner", () => ({
 
 // ── Router import (must come after all vi.mock calls) ────────────────────────
 
-import integrationsHealthRouter, { _setTestCache } from "./integrations-health";
+import integrationsHealthRouter, {
+  _setTestCache,
+  _runCheckForTest,
+} from "./integrations-health";
 
 // ── App builder ───────────────────────────────────────────────────────────────
 
@@ -154,5 +157,135 @@ describe("GET /admin/integrations/health/cached", () => {
     await request(app).get("/admin/integrations/health/cached");
     expect(fetchSpy).not.toHaveBeenCalled();
     fetchSpy.mockRestore();
+  });
+});
+
+// ── runCheck retry / no-retry behaviour ───────────────────────────────────────
+//
+// These tests use fake timers to control the 2-second retry delay and the
+// 15-second outer timeout without actually waiting in real time.
+
+describe("_runCheckForTest retry behaviour", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  // Helper: make a trivial fn that throws on the first N calls then succeeds.
+  function fnThrowsThenSucceeds(throwCount: number) {
+    let calls = 0;
+    return async (_key: string) => {
+      calls++;
+      if (calls <= throwCount) {
+        throw new Error("network error");
+      }
+      return { ok: true as const };
+    };
+  }
+
+  it("returns ok when a thrown exception is followed by a successful retry", async () => {
+    const fn = fnThrowsThenSucceeds(1);
+    const resultPromise = _runCheckForTest("TestSvc", "key", fn);
+    // Advance past the retry delay (2 s) so the second attempt can run.
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
+    expect(result.status).toBe("ok");
+    expect(result.service).toBe("TestSvc");
+  });
+
+  it("returns error after all attempts fail with thrown exceptions", async () => {
+    const fn = fnThrowsThenSucceeds(99); // always throws
+    const resultPromise = _runCheckForTest("TestSvc", "key", fn);
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
+    expect(result.status).toBe("error");
+    expect(result.detail).toMatch(/network error/);
+  });
+
+  it("returns ok when a 5xx response is followed by a successful retry", async () => {
+    let calls = 0;
+    const fn = async (_key: string) => {
+      calls++;
+      if (calls === 1) {
+        return {
+          ok: false as const,
+          retryable: true,
+          detail: "HTTP 503: Service Unavailable",
+        };
+      }
+      return { ok: true as const };
+    };
+    const resultPromise = _runCheckForTest("TestSvc", "key", fn);
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
+    expect(result.status).toBe("ok");
+    expect(calls).toBe(2);
+  });
+
+  it("returns ok when a 429 response is followed by a successful retry", async () => {
+    let calls = 0;
+    const fn = async (_key: string) => {
+      calls++;
+      if (calls === 1) {
+        return {
+          ok: false as const,
+          retryable: true,
+          detail: "HTTP 429: Too Many Requests",
+        };
+      }
+      return { ok: true as const };
+    };
+    const resultPromise = _runCheckForTest("TestSvc", "key", fn);
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
+    expect(result.status).toBe("ok");
+    expect(calls).toBe(2);
+  });
+
+  it("does NOT retry on a 401 (permanent auth failure) — returns error immediately with one call", async () => {
+    let calls = 0;
+    const fn = async (_key: string) => {
+      calls++;
+      return {
+        ok: false as const,
+        retryable: false,
+        detail: "HTTP 401: Unauthorized",
+      };
+    };
+    const resultPromise = _runCheckForTest("TestSvc", "key", fn);
+    // Even after advancing timers there should be no second call.
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
+    expect(result.status).toBe("error");
+    expect(result.detail).toBe("HTTP 401: Unauthorized");
+    expect(calls).toBe(1);
+  });
+
+  it("does NOT retry on a 403 (forbidden) — returns error immediately with one call", async () => {
+    let calls = 0;
+    const fn = async (_key: string) => {
+      calls++;
+      return {
+        ok: false as const,
+        retryable: false,
+        detail: "HTTP 403: Forbidden",
+      };
+    };
+    const resultPromise = _runCheckForTest("TestSvc", "key", fn);
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
+    expect(result.status).toBe("error");
+    expect(calls).toBe(1);
+  });
+
+  it("returns missing_key immediately when key is undefined", async () => {
+    const fn = vi.fn().mockResolvedValue({ ok: true });
+    const result = await _runCheckForTest("TestSvc", undefined, fn);
+    expect(result.status).toBe("missing_key");
+    expect(fn).not.toHaveBeenCalled();
   });
 });

@@ -1932,6 +1932,12 @@ async function main() {
     orderBy: "first_seen_at",
   });
 
+  await copyTable(source, dest, {
+    table: "integrations_health_state",
+    columns: ["service", "consecutive_error_count", "last_updated_at"],
+    orderBy: "service",
+  });
+
   // ── App configuration ─────────────────────────────────────────────────────
   await copyTable(source, dest, {
     table: "app_config",

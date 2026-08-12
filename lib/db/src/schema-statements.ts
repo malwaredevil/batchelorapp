@@ -3123,4 +3123,14 @@ END $$`,
   `ALTER TABLE elaine_broadcast_log ENABLE ROW LEVEL SECURITY`,
   `CREATE INDEX IF NOT EXISTS elaine_broadcast_log_user_created_idx
      ON elaine_broadcast_log (user_id, created_at)`,
+
+  // ── Integrations health state (Task #745) ────────────────────────────────
+  // Persists per-service consecutive-error counts across cron runs so the
+  // scheduled-deployment path can apply the same two-strike alert gate as the
+  // in-process scheduler. No RLS: admin/ops data, not user-scoped.
+  `CREATE TABLE IF NOT EXISTS integrations_health_state (
+     service                 TEXT PRIMARY KEY,
+     consecutive_error_count INTEGER NOT NULL DEFAULT 0,
+     last_updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
 ];

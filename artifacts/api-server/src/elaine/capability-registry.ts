@@ -244,6 +244,30 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
     executorPrefix: "reminderAction",
     channels: WEB_TRUSTED_AND_SLACK_CHANNELS,
   }),
+  // snooze_reminder (issue #524 Elaine parity): reschedules ANY reminder the
+  // requesting user can manage (creator or recipient on any channel), same
+  // trust boundary as create_reminder — safe on the same channel set.
+  ...policies(["snooze_reminder"], {
+    ...ACTION_DEFAULTS,
+    domain: "office",
+    executorPrefix: "reminderAction",
+    channels: WEB_TRUSTED_AND_SLACK_CHANNELS,
+  }),
+  // list_reminders: read-only, mirrors the central Reminders page's own
+  // GET /api/reminders scope. Same channel set as list_contact_channels
+  // below — useful anywhere Elaine might need to find a reminder's id
+  // before acting on it.
+  ...policies(["list_reminders"], {
+    domain: "office",
+    kind: "read",
+    risk: "none",
+    auth: "session",
+    confirmation: "never",
+    executorPrefix: "reminderRead",
+    audit: "runtime_observation",
+    retry: "read_only",
+    channels: WEB_TRUSTED_AND_SLACK_CHANNELS,
+  }),
   // list_contact_channels: read-only — returns which channels are reachable for
   // a given household member. Available on web/SMS/voice/Slack so Elaine can
   // ask for clarification before picking a delivery channel.

@@ -47,6 +47,7 @@ import {
   LIST_SCHEDULED_CONTACTS_TOOL_NAME,
 } from "./communication-actions";
 import { LIST_ELAINE_MEMORIES_TOOL_NAME } from "./universal-read-tools";
+import { LIST_REMINDERS_TOOL_NAME } from "./reminder-actions";
 
 /**
  * Source array for the read/utility "soft" tools offered to the restricted
@@ -93,6 +94,7 @@ export const RESTRICTED_SOFT_TOOL_NAMES_SOURCE: readonly string[] = [
   LIST_CONTACT_CHANNELS_TOOL_NAME,
   GENERATE_DOCUMENT_TOOL_NAME,
   SUGGEST_CLOTHING_LAYERS_TOOL_NAME,
+  LIST_REMINDERS_TOOL_NAME,
 ];
 
 /** Runtime Set derived from the source array — use for O(1) membership tests. */
@@ -181,6 +183,11 @@ export const RESTRICTED_EXCLUDED_ACTION_TYPES_SOURCE: readonly string[] = [
   // re-allow it via channelAllowedExtras because sender identity is strongly
   // verified there before the turn runs.
   "create_reminder",
+  // snooze_reminder: same reasoning as create_reminder above — it can
+  // reschedule/skip a reminder belonging to whichever household member the
+  // (spoofable) email From address is matched to. SMS/voice and Slack
+  // re-allow it via channelAllowedExtras for the same strong-identity reason.
+  "snooze_reminder",
   // Notification management actions: these are web-only because managing
   // notification preferences is an in-app settings action that is not
   // meaningful or safe to trigger from an async channel without the settings

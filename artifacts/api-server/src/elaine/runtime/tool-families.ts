@@ -9,6 +9,8 @@ export const ELAINE_TOOL_FAMILY_SENTINELS = {
     "list_notes",
     "create_note",
     "create_reminder",
+    "list_reminders",
+    "snooze_reminder",
   ],
   notifications: [
     "list_notifications",

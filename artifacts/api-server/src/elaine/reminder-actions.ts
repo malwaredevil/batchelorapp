@@ -12,6 +12,10 @@ import {
   type RelativeTimeSpec,
 } from "../lib/relative-time-resolver";
 import { formatScheduledTime } from "./communication-actions";
+import {
+  listManageableReminders,
+  snoozeReminder,
+} from "../lib/reminders-management";
 
 // ---------------------------------------------------------------------------
 // Natural-language reminder creation (issue #526).
@@ -48,14 +52,46 @@ const CreateReminderPayload = z.object({
   channels: z.array(ReminderChannel).max(4).optional(),
 });
 
+// ---------------------------------------------------------------------------
+// snooze_reminder (issue #524 Elaine parity): reschedules ANY reminder the
+// requesting user can manage (one they created, or one addressed to them on
+// any channel) — not just ones create_reminder itself made. Shares its
+// scoping and recurrence math with the central Reminders page's own
+// POST /:id/snooze route via lib/reminders-management.ts, so the two
+// surfaces can never disagree on what "skip the next occurrence" means.
+// list_reminders is a read-only "soft" tool (no confirmation) that exposes
+// the same list the central Reminders page shows, so the model can find a
+// reminder's exact numeric id before calling edit_reminder/delete_reminder/
+// snooze_reminder — never guess one.
+// ---------------------------------------------------------------------------
+export const LIST_REMINDERS_TOOL_NAME = "list_reminders";
+
+const ListRemindersPayload = z.object({
+  status: z.enum(["active", "done", "cancelled", "all"]).optional(),
+  when: z.enum(["upcoming", "overdue", "all"]).optional(),
+});
+
+const SnoozeReminderPayload = z.object({
+  reminderId: z.number().int().positive(),
+  when: RelativeTimeSpecZod.optional(),
+  skipNext: z.literal(true).optional(),
+});
+
 export const reminderActionSchemas = [
   z.object({
     type: z.literal("create_reminder"),
     payload: CreateReminderPayload,
   }),
+  z.object({
+    type: z.literal("snooze_reminder"),
+    payload: SnoozeReminderPayload,
+  }),
 ] as const;
 
-export const REMINDER_ACTION_TYPES = ["create_reminder"] as const;
+export const REMINDER_ACTION_TYPES = [
+  "create_reminder",
+  "snooze_reminder",
+] as const;
 export type ReminderActionType = (typeof REMINDER_ACTION_TYPES)[number];
 
 type ActionExecutor = (
@@ -140,6 +176,71 @@ export const reminderActionExecutors: Record<
       },
     };
   }) as ActionExecutor,
+
+  snooze_reminder: (async (
+    payload: z.infer<typeof SnoozeReminderPayload>,
+    userId: number,
+  ) => {
+    let result;
+    if (payload.skipNext) {
+      result = await snoozeReminder(payload.reminderId, userId, {
+        skipNext: true,
+      });
+    } else if (payload.when) {
+      const tz = await getUserTimezone(userId);
+      let dueAt: Date;
+      try {
+        dueAt = resolveRelativeTime(payload.when as RelativeTimeSpec, tz);
+      } catch (err) {
+        if (err instanceof RelativeTimeResolutionError) {
+          return {
+            status: 400,
+            body: {
+              error: `I couldn't work out exactly when you mean (${err.message}). Could you give me a specific day and time?`,
+            },
+          };
+        }
+        throw err;
+      }
+      result = await snoozeReminder(payload.reminderId, userId, {
+        dueAt: dueAt.toISOString(),
+      });
+    } else {
+      return {
+        status: 400,
+        body: { error: "Provide either `when` or `skipNext`." },
+      };
+    }
+
+    if (!result.ok) {
+      return { status: result.status, body: { error: result.error } };
+    }
+
+    logger.info(
+      { reminderId: payload.reminderId, userId, skipNext: !!payload.skipNext },
+      "elaine: snoozed a reminder",
+    );
+
+    const newDueAt = result.reminder.dueAt
+      ? formatScheduledTime(result.reminder.dueAt.toISOString())
+      : "no due date";
+    return {
+      status: 200,
+      body: {
+        type: "snooze_reminder",
+        result: {
+          id: result.reminder.id,
+          dueAt: result.reminder.dueAt,
+          status: result.reminder.status,
+          confirmationMessage: payload.skipNext
+            ? result.reminder.status === "done"
+              ? `Done — that reminder had reached its last occurrence, so I marked it done.`
+              : `Skipped — the next occurrence is now ${newDueAt}.`
+            : `Snoozed — it'll now remind at ${newDueAt}.`,
+        },
+      },
+    };
+  }) as ActionExecutor,
 };
 
 export async function buildReminderActionLabel(action: {
@@ -150,6 +251,12 @@ export async function buildReminderActionLabel(action: {
     case "create_reminder": {
       const payload = CreateReminderPayload.parse(action.payload);
       return `Create a reminder: "${payload.title}"`;
+    }
+    case "snooze_reminder": {
+      const payload = SnoozeReminderPayload.parse(action.payload);
+      return payload.skipNext
+        ? `Skip the next occurrence of reminder #${payload.reminderId}`
+        : `Snooze reminder #${payload.reminderId}`;
     }
     default: {
       const _exhaustive: never = action.type;
@@ -197,4 +304,98 @@ export const reminderActionTools: OpenAI.Chat.Completions.ChatCompletionTool[] =
         },
       },
     },
+    {
+      type: "function",
+      function: {
+        name: "snooze_reminder",
+        description:
+          "Reschedule an existing reminder the requesting user can manage (one they created OR are a recipient of on any channel) — works for reminders from create_reminder, the bell-icon feature on any collection item, and the central Reminders page, not just trip reminders. " +
+          "Never guess a reminderId; get it from list_reminders, on-screen context, or a prior tool result first. " +
+          "Provide `when` to move it to a new specific time (resolve relative phrasing into the structured spec yourself, same as create_reminder). " +
+          "Provide `skipNext: true` instead to advance a RECURRING reminder past just its next occurrence without changing the recurrence rule (if it has no more occurrences left, it's marked done). " +
+          "Provide exactly one of `when` or `skipNext`, never both.",
+        parameters: {
+          type: "object",
+          properties: {
+            reminderId: {
+              type: "integer",
+              description: "Exact numeric reminder id, never guessed.",
+            },
+            when: RELATIVE_TIME_SPEC_JSON_SCHEMA,
+            skipNext: {
+              type: "boolean",
+              description:
+                "Set true to skip just the next occurrence of a recurring reminder. Omit when providing `when` instead.",
+            },
+          },
+          required: ["reminderId"],
+        },
+      },
+    },
   ];
+
+// ---------------------------------------------------------------------------
+// list_reminders: a read-only "soft" tool (no confirmation card) mirroring
+// the central Reminders page's GET /api/reminders — same
+// creator-or-recipient scope, same status/when filters. Kept separate from
+// reminderActionTools/reminderActionExecutors (which back the
+// confirm-then-write action pipeline) since reads never need confirmation.
+// ---------------------------------------------------------------------------
+export const reminderReadTools: OpenAI.Chat.Completions.ChatCompletionTool[] =
+  [
+    {
+      type: "function",
+      function: {
+        name: LIST_REMINDERS_TOOL_NAME,
+        description:
+          "List every reminder the requesting user can manage — one they created, or one addressed to them on any channel (email/sms/call/slack/messenger) — including exact numeric ids, due dates, recurrence, status, and any linked record. Use this before calling snooze_reminder/edit_reminder/delete_reminder to get the correct id, and whenever the user asks what reminders exist or are upcoming/overdue.",
+        parameters: {
+          type: "object",
+          properties: {
+            status: {
+              type: "string",
+              enum: ["active", "done", "cancelled", "all"],
+              description: "Defaults to active.",
+            },
+            when: {
+              type: "string",
+              enum: ["upcoming", "overdue", "all"],
+              description: "Defaults to all.",
+            },
+          },
+        },
+      },
+    },
+  ];
+
+export async function executeListRemindersTool(
+  name: string,
+  args: string,
+  userId: number,
+): Promise<string | null> {
+  if (name !== LIST_REMINDERS_TOOL_NAME) return null;
+  const input = JSON.parse(args || "{}") as unknown;
+  const parsed = ListRemindersPayload.safeParse(input);
+  if (!parsed.success) return "Invalid reminder list request.";
+  const rows = await listManageableReminders(userId, {
+    status: parsed.data.status ?? "active",
+    when: parsed.data.when ?? "all",
+  });
+  return JSON.stringify(
+    {
+      reminders: rows.map((row) => ({
+        id: row.id,
+        title: row.title,
+        description: row.description,
+        dueAt: row.dueAt,
+        status: row.status,
+        isRecurring: row.isRecurring,
+        channels: row.channels,
+        entityLink: row.entityLink,
+      })),
+      returned: rows.length,
+    },
+    null,
+    2,
+  );
+}

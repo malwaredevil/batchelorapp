@@ -186,6 +186,9 @@ import {
   buildReminderActionLabel,
   reminderActionExecutors,
   reminderActionSchemas,
+  reminderReadTools,
+  LIST_REMINDERS_TOOL_NAME,
+  executeListRemindersTool,
   type ReminderActionType,
 } from "./reminder-actions";
 import {
@@ -3850,7 +3853,7 @@ In both cases, make this your FIRST tool call — before writing any reply text 
 
 ${confirmationModeSection}
 
-REMINDERS: Use add_reminder for requests like "remind me to check in for our flight" or "remind me to book the hotel by Friday" — include recipientEmails only if the user asked to also notify someone. Use edit_reminder for changes to an existing reminder (title, description, due date, done state, or recipients) — only include the fields the user asked to change, and never guess a reminder id. Use delete_reminder to permanently remove an existing reminder; never guess a reminder id for either. These three are all trip-scoped — only usable when the user is talking about a specific trip. For a general-purpose "remind me..." with no trip involved (e.g. "remind me tomorrow to call the vet", "email and slack me next Tuesday at 9am about the dentist"), use create_reminder instead — it always targets the requesting user's own account and never a household member. For scheduling a call or message TO another household member at a future time, use call_contact/message_contact's own scheduleAt field, not create_reminder. All three of create_reminder's when field and call_contact/message_contact's scheduleAt field accept a structured relative-time spec — always translate the user's relative phrasing ("tomorrow", "in 3 days", "next Tuesday") into that spec's fields yourself; never compute or write out an ISO datetime from a relative phrase, the resolver does that math deterministically.
+REMINDERS: Use add_reminder for requests like "remind me to check in for our flight" or "remind me to book the hotel by Friday" — include recipientEmails only if the user asked to also notify someone. Use edit_reminder for changes to an existing reminder (title, description, due date, done state, or recipients) — only include the fields the user asked to change, and never guess a reminder id. Use delete_reminder to permanently remove an existing reminder; never guess a reminder id for either. These three are all trip-scoped — only usable when the user is talking about a specific trip. For a general-purpose "remind me..." with no trip involved (e.g. "remind me tomorrow to call the vet", "email and slack me next Tuesday at 9am about the dentist"), use create_reminder instead — it always targets the requesting user's own account and never a household member. For scheduling a call or message TO another household member at a future time, use call_contact/message_contact's own scheduleAt field, not create_reminder. All three of create_reminder's when field and call_contact/message_contact's scheduleAt field accept a structured relative-time spec — always translate the user's relative phrasing ("tomorrow", "in 3 days", "next Tuesday") into that spec's fields yourself; never compute or write out an ISO datetime from a relative phrase, the resolver does that math deterministically. Use list_reminders to see every reminder the user can manage — from create_reminder, any collection item's bell icon, or trip reminders — with exact numeric ids, due dates, recurrence, and status; call it first whenever the user asks what's upcoming/overdue or you need a reminder's id before acting on it (never guess one). Use snooze_reminder to move any reminder the user can manage to a new time (the when field, same relative-time spec) or to skip just the next occurrence of a recurring one (skipNext: true) without changing its recurrence rule — this works across all reminder sources, not just create_reminder's.
 
 ITINERARY: Use add_itinerary_day for requests like "add a day trip to Kyoto on the 14th" — it appends a brand-new day to the trip's itinerary. Use regenerate_itinerary_day for requests like "regenerate day 3" or "come up with a new plan for that day" — it re-runs AI planning for ONE existing day and replaces its activities, using balanced-pace, general-interest defaults since it can't see any per-session style/interest picks the user made in the UI. Only use regenerate_itinerary_day on a day number you can see listed on screen (e.g. "Day 3"); never guess a day number, and never use it to create a new day (use add_itinerary_day for that). Use generate_itinerary for requests like "plan my whole trip" or "generate an itinerary" — it replaces ALL days with a fresh AI-generated plan; if the trip already has itinerary days shown on screen, say so and confirm the user wants to overwrite them before calling it. Each activity you can see on screen has a 1-based day/activity number and a status (tentative or confirmed); tentative activities synced from a document are flagged as such. Use confirm_itinerary_activity to mark a tentative activity firm (or back to tentative) once the user has verified it, and remove_itinerary_activity to delete an activity outright (e.g. a wrong or duplicate document-derived entry) — both require the exact day and activity numbers shown on screen, never guessed.
 
@@ -6284,6 +6287,10 @@ router.post("/chat", async (req, res) => {
             resultText =
               (await executeUniversalReadTool(call.name, call.args, userId)) ??
               "Unsupported app data tool.";
+          } else if (call.name === LIST_REMINDERS_TOOL_NAME) {
+            resultText =
+              (await executeListRemindersTool(call.name, call.args, userId)) ??
+              "Unsupported app data tool.";
           } else if (call.name === LIST_SCHEDULED_CONTACTS_TOOL_NAME) {
             resultText = await executeListScheduledContacts(userId);
           } else if (call.name === LIST_CONTACT_CHANNELS_TOOL_NAME) {
@@ -7659,6 +7666,7 @@ export const SMS_SLACK_CHANNEL_EXTRAS = new Set<string>([
   "call_contact",
   "message_contact",
   "create_reminder",
+  "snooze_reminder",
 ]);
 
 const SMS_SLACK_CHANNEL_EXTRA_TOOLS = ACTION_TOOLS.filter(
@@ -8791,6 +8799,10 @@ async function executeRestrictedToolCall(
   } else if (name === LIST_ELAINE_MEMORIES_TOOL_NAME) {
     resultText =
       (await executeUniversalReadTool(name, argsJson, userId)) ??
+      "Unsupported app data tool.";
+  } else if (name === LIST_REMINDERS_TOOL_NAME) {
+    resultText =
+      (await executeListRemindersTool(name, argsJson, userId)) ??
       "Unsupported app data tool.";
   } else if (RESTRICTED_SOFT_TOOL_NAMES.has(name)) {
     resultText = await executeRestrictedSoftTool(name, argsJson);

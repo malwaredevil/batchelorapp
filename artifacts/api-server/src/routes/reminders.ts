@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
-import { eq, and, or, sql, isNull } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { z } from "zod/v4";
-import { db, appUsers, reminders } from "@workspace/db";
+import { db, reminders } from "@workspace/db";
 import { requireAuth } from "../middleware/auth";
 import { logger } from "../lib/logger";
 import {
@@ -9,9 +9,13 @@ import {
   filterSlackLinkedUserIds,
 } from "../lib/reminder-recipients";
 import {
-  computeNextOccurrenceForReminder,
-  occurrenceKeyPrefix,
-} from "../lib/reminders-scheduler";
+  buildEntityLink,
+  channelsForRow,
+  isRecurring,
+  listManageableReminders,
+  findManageableReminder,
+  snoozeReminder,
+} from "../lib/reminders-management";
 
 // ---------------------------------------------------------------------------
 // Generic, entity-agnostic reminder system (EPIC #511).
@@ -73,82 +77,17 @@ router.post("/", async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// entityType -> frontend route resolver, for the central page's "linked
-// record" link. Deliberately a static per-type map (not a live title
-// lookup across 7+ different tables) — good enough to link back to the
-// record; the page shows the reminder's own title as the primary label.
-// Extend with one entry per entityType as new modules start creating
-// reminders (mirrors the TODO list in reminders-scheduler.ts's
-// resolveEntityContextLabel).
-// ---------------------------------------------------------------------------
-const ENTITY_ROUTES: Record<
-  string,
-  { path: (id: number) => string; label: string }
-> = {
-  pottery_item: { path: (id) => `/pottery/piece/${id}`, label: "Pottery item" },
-  quilting_fabric: {
-    path: (id) => `/quilting/fabrics/${id}`,
-    label: "Fabric",
-  },
-  quilting_pattern: {
-    path: (id) => `/quilting/patterns/${id}`,
-    label: "Pattern",
-  },
-  quilting_quilt: { path: (id) => `/quilting/quilts/${id}`, label: "Quilt" },
-  ornament: { path: (id) => `/ornaments/ornament/${id}`, label: "Ornament" },
-  travels_trip: { path: (id) => `/travels/trips/${id}`, label: "Trip" },
-  office_note: { path: () => `/office/notes`, label: "Note" },
-  travels_wishlist_item: {
-    path: () => `/travels/wishlist`,
-    label: "Wishlist item",
-  },
-};
-
-function buildEntityLink(
-  entityType: string | null,
-  entityId: number | null,
-): { type: string; id: number; url: string; label: string } | null {
-  if (!entityType || entityId == null) return null;
-  const route = ENTITY_ROUTES[entityType];
-  if (!route) return null;
-  return { type: entityType, id: entityId, url: route.path(entityId), label: route.label };
-}
-
-function channelsForRow(row: {
-  emailRecipients: string[];
-  smsRecipientUserIds: number[];
-  callRecipientUserIds: number[];
-  slackRecipientUserIds: number[];
-  messengerRecipientUserIds: number[];
-}): string[] {
-  const channels: string[] = [];
-  if (row.emailRecipients.length > 0) channels.push("email");
-  if (row.smsRecipientUserIds.length > 0) channels.push("sms");
-  if (row.callRecipientUserIds.length > 0) channels.push("call");
-  if (row.slackRecipientUserIds.length > 0) channels.push("slack");
-  if (row.messengerRecipientUserIds.length > 0) channels.push("messenger");
-  return channels;
-}
-
-function isRecurring(row: {
-  recurrenceIntervalValue: number | null;
-  recurrenceWeekday: number | null;
-  recurrenceDayOfMonth: number | null;
-}): boolean {
-  return (
-    row.recurrenceIntervalValue != null ||
-    row.recurrenceWeekday != null ||
-    row.recurrenceDayOfMonth != null
-  );
-}
-
-// ---------------------------------------------------------------------------
 // GET / — list every reminder the current user can manage: one they
 // created, or one addressed to them on any channel (they may not be the
 // creator — e.g. a household member added them as an SMS recipient). This
 // is intentionally broader than "reminders I created" so a reminder fired
 // over a channel with no reply-back UI (SMS/voice/Slack/email) can still be
 // found and managed here by the person it was actually sent to.
+//
+// Scoping/annotation logic (and the PATCH/snooze/DELETE scoping helper) is
+// shared with Elaine's list_reminders/snooze_reminder tools via
+// lib/reminders-management.ts — see that module for the single source of
+// truth.
 // ---------------------------------------------------------------------------
 const ListQuery = z.object({
   status: z.enum(["active", "done", "cancelled", "all"]).default("all"),
@@ -160,83 +99,10 @@ router.get("/", async (req, res) => {
   if (!parsed.success) {
     return res.status(400).json({ error: z.prettifyError(parsed.error) });
   }
-  const { status, when } = parsed.data;
   const userId = req.session.userId!;
-
-  const [user] = await db
-    .select({ email: appUsers.email })
-    .from(appUsers)
-    .where(eq(appUsers.id, userId));
-  const userEmail = user?.email ?? "";
-
-  const scopeCondition = or(
-    eq(reminders.createdByUserId, userId),
-    sql`${userId} = ANY(${reminders.smsRecipientUserIds})`,
-    sql`${userId} = ANY(${reminders.callRecipientUserIds})`,
-    sql`${userId} = ANY(${reminders.slackRecipientUserIds})`,
-    sql`${userId} = ANY(${reminders.messengerRecipientUserIds})`,
-    sql`${userEmail} = ANY(${reminders.emailRecipients})`,
-  );
-
-  const conditions = [scopeCondition, isNull(reminders.deletedAt)];
-  if (status !== "all") {
-    conditions.push(eq(reminders.status, status));
-  }
-  if (when === "upcoming") {
-    conditions.push(sql`${reminders.dueAt} IS NOT NULL`);
-    conditions.push(sql`${reminders.dueAt} >= NOW()`);
-  } else if (when === "overdue") {
-    conditions.push(sql`${reminders.dueAt} IS NOT NULL`);
-    conditions.push(sql`${reminders.dueAt} < NOW()`);
-  }
-
-  const rows = await db
-    .select()
-    .from(reminders)
-    .where(and(...conditions))
-    .orderBy(
-      sql`${reminders.dueAt} IS NULL, ${reminders.dueAt} ASC, ${reminders.id} DESC`,
-    );
-
-  const result = rows.map((row) => ({
-    ...row,
-    entityLink: buildEntityLink(row.entityType, row.entityId),
-    channels: channelsForRow(row),
-    isRecurring: isRecurring(row),
-  }));
-
+  const result = await listManageableReminders(userId, parsed.data);
   return res.json({ reminders: result });
 });
-
-// Scoping shared by PATCH/snooze/DELETE: the reminder must exist,
-// not be soft-deleted, and the current user must either have created it or
-// be one of its recipients (same scope GET / uses).
-async function findManageableReminder(reminderId: number, userId: number) {
-  const [user] = await db
-    .select({ email: appUsers.email })
-    .from(appUsers)
-    .where(eq(appUsers.id, userId));
-  const userEmail = user?.email ?? "";
-
-  const [row] = await db
-    .select()
-    .from(reminders)
-    .where(
-      and(
-        eq(reminders.id, reminderId),
-        isNull(reminders.deletedAt),
-        or(
-          eq(reminders.createdByUserId, userId),
-          sql`${userId} = ANY(${reminders.smsRecipientUserIds})`,
-          sql`${userId} = ANY(${reminders.callRecipientUserIds})`,
-          sql`${userId} = ANY(${reminders.slackRecipientUserIds})`,
-          sql`${userId} = ANY(${reminders.messengerRecipientUserIds})`,
-          sql`${userEmail} = ANY(${reminders.emailRecipients})`,
-        ),
-      ),
-    );
-  return row ?? null;
-}
 
 const LEAD_TIME_UNITS = ["minutes", "hours", "days", "weeks"] as const;
 const LeadTimeInput = z.object({
@@ -355,12 +221,9 @@ router.patch("/:id", async (req, res) => {
 
 // POST /:id/snooze — either move a plain reminder's due date (`dueAt`), or
 // skip just the next occurrence of a recurring one (`skipNext`) without
-// touching its title/recipients/recurrence rule. Skipping cancels any
-// already-scheduled pending/sending delivery rows for the occurrence being
-// skipped so it never fires, then advances due_at + recurrence_fired_count
-// the same way the scheduler's own Phase C does for a *completed*
-// occurrence — the "skip" is simply treating the current occurrence as
-// resolved without ever sending it.
+// touching its title/recipients/recurrence rule. See
+// lib/reminders-management.ts's snoozeReminder for the shared
+// implementation (also used by Elaine's snooze_reminder tool).
 const SnoozeBody = z.union([
   z.object({ dueAt: z.string().datetime() }),
   z.object({ skipNext: z.literal(true) }),
@@ -377,82 +240,15 @@ router.post("/:id/snooze", async (req, res) => {
   }
   const userId = req.session.userId!;
 
-  const existing = await findManageableReminder(reminderId, userId);
-  if (!existing) {
-    return res.status(404).json({ error: "reminder not found" });
+  const result = await snoozeReminder(reminderId, userId, parsed.data);
+  if (!result.ok) {
+    return res.status(result.status).json({ error: result.error });
   }
-
-  if ("dueAt" in parsed.data) {
-    const [row] = await db
-      .update(reminders)
-      .set({ dueAt: new Date(parsed.data.dueAt), updatedAt: new Date() })
-      .where(eq(reminders.id, reminderId))
-      .returning();
-    logger.info(
-      { reminderId, userId, newDueAt: parsed.data.dueAt },
-      "reminders: snoozed to a specific date",
-    );
-    return res.json({ reminder: row });
-  }
-
-  // skipNext: only meaningful for a recurring reminder with a due date.
-  if (!isRecurring(existing) || !existing.dueAt) {
-    return res
-      .status(400)
-      .json({ error: "skipNext requires a recurring reminder with a due date" });
-  }
-
-  const nextDueAt = computeNextOccurrenceForReminder({
-    dueAt: existing.dueAt,
-    recurrenceIntervalValue: existing.recurrenceIntervalValue,
-    recurrenceIntervalUnit: existing.recurrenceIntervalUnit,
-    recurrenceWeekday: existing.recurrenceWeekday,
-    recurrenceDayOfMonth: existing.recurrenceDayOfMonth,
-    recurrenceEndDate: existing.recurrenceEndDate,
-    recurrenceMaxOccurrences: existing.recurrenceMaxOccurrences,
-    recurrenceFiredCount: existing.recurrenceFiredCount,
-  });
-
-  // Cancel any pending/sending delivery rows already scheduled for the
-  // occurrence being skipped so it never actually fires.
-  await db.execute(sql`
-    UPDATE reminder_deliveries
-       SET status = 'failed', error = 'skipped via central Reminders page'
-     WHERE reminder_id = ${reminderId}
-       AND occurrence_key LIKE ${occurrenceKeyPrefix(existing.recurrenceFiredCount) + "%"}
-       AND status IN ('pending', 'sending')
-  `);
-
-  if (!nextDueAt) {
-    // Reached its end condition — same outcome the scheduler's Phase C
-    // would reach on its own, just triggered manually here.
-    const [row] = await db
-      .update(reminders)
-      .set({ status: "done", updatedAt: new Date() })
-      .where(eq(reminders.id, reminderId))
-      .returning();
-    logger.info(
-      { reminderId, userId },
-      "reminders: skipNext reached recurrence end, marked done",
-    );
-    return res.json({ reminder: row });
-  }
-
-  const [row] = await db
-    .update(reminders)
-    .set({
-      dueAt: nextDueAt,
-      recurrenceFiredCount: existing.recurrenceFiredCount + 1,
-      updatedAt: new Date(),
-    })
-    .where(eq(reminders.id, reminderId))
-    .returning();
-
   logger.info(
-    { reminderId, userId, nextDueAt },
-    "reminders: skipped next occurrence",
+    { reminderId, userId, input: parsed.data },
+    "reminders: snoozed via central Reminders page",
   );
-  return res.json({ reminder: row });
+  return res.json({ reminder: result.reminder });
 });
 
 // DELETE /:id — soft-delete, matching the rest of the app's convention

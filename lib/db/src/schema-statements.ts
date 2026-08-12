@@ -2960,6 +2960,11 @@ export const STATEMENTS: string[] = [
      ON household_activity_log (occurred_at DESC)`,
   `CREATE INDEX IF NOT EXISTS household_activity_log_entity_idx
      ON household_activity_log (entity_type, entity_id)`,
+  // Architecture hardening (#754): actor_user_id FK had no covering index —
+  // every "activity by this user" lookup and delete-cascade check on
+  // app_users did a seq scan of the whole log. Additive only.
+  `CREATE INDEX IF NOT EXISTS household_activity_log_actor_user_id_idx
+     ON household_activity_log (actor_user_id)`,
 
   // ── RLS deny-all policies for the anon role ───────────────────────────────
   // The server connects exclusively via service_role, which has the PostgreSQL
@@ -3004,6 +3009,11 @@ END $$`,
   `ALTER TABLE slack_webhook_deliveries ADD COLUMN IF NOT EXISTS processed_at TIMESTAMPTZ`,
   `CREATE INDEX IF NOT EXISTS slack_webhook_deliveries_status_received_idx
      ON slack_webhook_deliveries (status, received_at)`,
+  // Architecture hardening (#754): job_id FK had no covering index — every
+  // ON DELETE SET NULL cascade check and any job_id lookup did a seq scan.
+  // Additive only.
+  `CREATE INDEX IF NOT EXISTS slack_webhook_deliveries_job_id_idx
+     ON slack_webhook_deliveries (job_id)`,
   `CREATE TABLE IF NOT EXISTS app_webhook_side_effects (
      effect_key TEXT PRIMARY KEY,
      provider TEXT NOT NULL,

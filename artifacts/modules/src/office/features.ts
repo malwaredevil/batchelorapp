@@ -1,5 +1,11 @@
 import { registerFeature } from "@/features/registry";
-import { Mail, CalendarDays, NotebookPen, MessageSquare } from "lucide-react";
+import {
+  Mail,
+  CalendarDays,
+  NotebookPen,
+  MessageSquare,
+  Bell,
+} from "lucide-react";
 
 registerFeature({
   id: "office-inbox",
@@ -31,6 +37,17 @@ registerFeature({
     label: "Notes",
     icon: NotebookPen,
     order: 62,
+  },
+});
+
+registerFeature({
+  id: "office-reminders",
+  nav: {
+    group: "reminders",
+    href: "/office/reminders",
+    label: "Reminders",
+    icon: Bell,
+    order: 62.5,
   },
 });
 

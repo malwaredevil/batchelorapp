@@ -25,6 +25,7 @@ import {
   NotebookPen,
   MessageSquare,
   Menu,
+  Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -91,6 +92,7 @@ const GROUP_META: Record<
     inbox: { label: "Inbox", icon: Mail },
     calendar: { label: "Calendar", icon: CalendarDays },
     notes: { label: "Notes", icon: NotebookPen },
+    reminders: { label: "Reminders", icon: Bell },
     messenger: { label: "Messenger", icon: MessageSquare },
   },
 };
@@ -98,7 +100,7 @@ const GROUP_META: Record<
 const GROUP_ORDER: Record<string, string[]> = {
   pottery: ["collection", "add", "compare", "scan", "settings"],
   quilting: ["collection", "shopping", "design", "settings"],
-  office: ["inbox", "calendar", "notes", "messenger"],
+  office: ["inbox", "calendar", "notes", "reminders", "messenger"],
   ornaments: ["collection", "add", "scan", "hallmark-events", "settings"],
   travels: ["home", "trips", "discover", "plan", "settings"],
 };

@@ -776,33 +776,53 @@ type RecurrenceRow = {
   recurrence_fired_count: number;
 };
 
+// camelCase shape shared with callers outside this file (e.g. the central
+// Reminders page's snooze/skip-next-occurrence endpoint in routes/
+// reminders.ts) that need the exact same "what's the next occurrence"
+// math the scheduler itself uses, without depending on this file's raw-SQL
+// row shape.
+export type RecurrenceInput = {
+  dueAt: Date | string;
+  recurrenceIntervalValue: number | null;
+  recurrenceIntervalUnit: string | null;
+  recurrenceWeekday: number | null;
+  recurrenceDayOfMonth: number | null;
+  recurrenceEndDate: string | null;
+  recurrenceMaxOccurrences: number | null;
+  recurrenceFiredCount: number;
+};
+
 /**
  * Computes the next `dueAt` for a recurring reminder, given the occurrence
- * that just completed. Returns null if the reminder isn't recurring, or has
- * reached its end condition (recurrenceEndDate / recurrenceMaxOccurrences)
- * — either case means the reminder should be marked `done` instead of
- * advanced. Only one of interval/weekday/day-of-month is expected to be set
- * per reminder (enforced at creation time, not here); if more than one is
- * present, interval wins, then weekday, then day-of-month.
+ * that just completed (or, for the snooze/skip-next-occurrence action, the
+ * occurrence being skipped). Returns null if the reminder isn't recurring,
+ * or has reached its end condition (recurrenceEndDate /
+ * recurrenceMaxOccurrences) — either case means the reminder should be
+ * marked `done` instead of advanced. Only one of interval/weekday/
+ * day-of-month is expected to be set per reminder (enforced at creation
+ * time, not here); if more than one is present, interval wins, then
+ * weekday, then day-of-month.
  */
-function computeNextOccurrence(reminder: RecurrenceRow): Date | null {
-  const firedCount = reminder.recurrence_fired_count + 1; // this occurrence, about to complete
+export function computeNextOccurrenceForReminder(
+  reminder: RecurrenceInput,
+): Date | null {
+  const firedCount = reminder.recurrenceFiredCount + 1; // this occurrence, about to complete
   if (
-    reminder.recurrence_max_occurrences != null &&
-    firedCount >= reminder.recurrence_max_occurrences
+    reminder.recurrenceMaxOccurrences != null &&
+    firedCount >= reminder.recurrenceMaxOccurrences
   ) {
     return null;
   }
 
-  const currentDue = new Date(reminder.due_at);
+  const currentDue = new Date(reminder.dueAt);
   let next: Date | null = null;
 
   if (
-    reminder.recurrence_interval_value != null &&
-    reminder.recurrence_interval_unit
+    reminder.recurrenceIntervalValue != null &&
+    reminder.recurrenceIntervalUnit
   ) {
-    const unit = reminder.recurrence_interval_unit;
-    const value = reminder.recurrence_interval_value;
+    const unit = reminder.recurrenceIntervalUnit;
+    const value = reminder.recurrenceIntervalValue;
     next = new Date(currentDue);
     switch (unit) {
       case "minutes":
@@ -826,15 +846,15 @@ function computeNextOccurrence(reminder: RecurrenceRow): Date | null {
       default:
         next = null;
     }
-  } else if (reminder.recurrence_weekday != null) {
+  } else if (reminder.recurrenceWeekday != null) {
     // Next occurrence of the given weekday, always strictly in the future
     // relative to the current due date (adds 7 days if today already
     // matches, so a weekly reminder never re-fires the same day).
     next = new Date(currentDue);
     do {
       next.setDate(next.getDate() + 1);
-    } while (next.getDay() !== reminder.recurrence_weekday);
-  } else if (reminder.recurrence_day_of_month != null) {
+    } while (next.getDay() !== reminder.recurrenceWeekday);
+  } else if (reminder.recurrenceDayOfMonth != null) {
     // Next month's occurrence of the given day-of-month. Clamps to the
     // month's last day if the target day doesn't exist (e.g. day 31 in
     // February) rather than overflowing into the following month.
@@ -845,17 +865,38 @@ function computeNextOccurrence(reminder: RecurrenceRow): Date | null {
       next.getMonth() + 1,
       0,
     ).getDate();
-    next.setDate(Math.min(reminder.recurrence_day_of_month, daysInTargetMonth));
+    next.setDate(Math.min(reminder.recurrenceDayOfMonth, daysInTargetMonth));
   }
 
   if (!next) return null;
 
-  if (reminder.recurrence_end_date) {
-    const end = new Date(`${reminder.recurrence_end_date}T23:59:59.999Z`);
+  if (reminder.recurrenceEndDate) {
+    const end = new Date(`${reminder.recurrenceEndDate}T23:59:59.999Z`);
     if (next.getTime() > end.getTime()) return null;
   }
 
   return next;
+}
+
+function computeNextOccurrence(reminder: RecurrenceRow): Date | null {
+  return computeNextOccurrenceForReminder({
+    dueAt: reminder.due_at,
+    recurrenceIntervalValue: reminder.recurrence_interval_value,
+    recurrenceIntervalUnit: reminder.recurrence_interval_unit,
+    recurrenceWeekday: reminder.recurrence_weekday,
+    recurrenceDayOfMonth: reminder.recurrence_day_of_month,
+    recurrenceEndDate: reminder.recurrence_end_date,
+    recurrenceMaxOccurrences: reminder.recurrence_max_occurrences,
+    recurrenceFiredCount: reminder.recurrence_fired_count,
+  });
+}
+
+// Exposed for the snooze/skip-next-occurrence action (routes/reminders.ts)
+// so it can find and cancel any already-scheduled pending/sending delivery
+// rows for the occurrence being skipped, using the exact same key format
+// Phase A/C use — never duplicate the "occN:" prefix format independently.
+export function occurrenceKeyPrefix(occurrence: number): string {
+  return occurrencePrefix(occurrence);
 }
 
 /**

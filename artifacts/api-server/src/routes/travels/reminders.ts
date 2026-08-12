@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, inArray, asc, isNull } from "drizzle-orm";
+import { and, eq, asc, isNull } from "drizzle-orm";
 import { logActivity } from "../../lib/soft-delete";
 import { z } from "zod/v4";
 import {
@@ -7,13 +7,13 @@ import {
   travelsTrips,
   travelsConnectedCalendars,
   reminders,
-  appUsers,
 } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import { tripExists } from "../../lib/travels/db-helpers";
 import { getValidAccessToken } from "../../lib/google-calendar-tokens";
 import { getCalendarEvent } from "../../lib/google-calendar";
 import { logger } from "../../lib/logger";
+import { filterVerifiedPhoneUserIds } from "../../lib/reminder-recipients";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -85,23 +85,6 @@ const UpdateReminderBody = z.object({
   calendarConnectionId: z.number().int().positive().nullable().optional(),
   googleEventId: z.string().min(1).nullable().optional(),
 });
-
-// Only household members with a verified phone number can be selected as SMS
-// recipients — silently drops any id that isn't verified rather than
-// rejecting the whole request, since the set may include a user who
-// unverified their phone between selection and save.
-async function filterVerifiedPhoneUserIds(
-  userIds: number[],
-): Promise<number[]> {
-  if (userIds.length === 0) return [];
-  const rows = await db
-    .select({ id: appUsers.id })
-    .from(appUsers)
-    .where(
-      and(inArray(appUsers.id, userIds), eq(appUsers.phoneVerified, true)),
-    );
-  return rows.map((r) => r.id);
-}
 
 function dueDateToDueAt(dueDate: string | null | undefined): Date | null {
   if (!dueDate) return null;

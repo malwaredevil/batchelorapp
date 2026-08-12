@@ -145,6 +145,33 @@ describe("resolveRelativeTime", () => {
     ).toThrow(RelativeTimeResolutionError);
   });
 
+  it('"in 20 minutes" -> now + 20 minutes exactly, timezone-independent', () => {
+    const result = resolveRelativeTime(
+      { kind: "minutes-from-now", count: 20 },
+      TZ,
+      NOW,
+    );
+    expect(result.getTime()).toBe(NOW.getTime() + 20 * 60_000);
+  });
+
+  it('"in 2 hours" -> now + 2 hours exactly', () => {
+    const result = resolveRelativeTime(
+      { kind: "hours-from-now", count: 2 },
+      TZ,
+      NOW,
+    );
+    expect(result.getTime()).toBe(NOW.getTime() + 2 * 3_600_000);
+  });
+
+  it("rejects a non-positive count for minutes-from-now/hours-from-now", () => {
+    expect(() =>
+      resolveRelativeTime({ kind: "minutes-from-now", count: 0 }, TZ, NOW),
+    ).toThrow(RelativeTimeResolutionError);
+    expect(() =>
+      resolveRelativeTime({ kind: "hours-from-now", count: -1 }, TZ, NOW),
+    ).toThrow(RelativeTimeResolutionError);
+  });
+
   it("falls back to the default timezone for an invalid IANA name", () => {
     // Should not throw — falls back to Europe/Berlin rather than crashing.
     const result = resolveRelativeTime(

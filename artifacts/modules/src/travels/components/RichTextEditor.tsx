@@ -1,10 +1,12 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import UnderlineExt from "@tiptap/extension-underline";
 import Placeholder from "@tiptap/extension-placeholder";
 import Highlight from "@tiptap/extension-highlight";
 import TextAlign from "@tiptap/extension-text-align";
+import LinkExt from "@tiptap/extension-link";
+import ImageExt from "@tiptap/extension-image";
 import {
   Bold,
   Italic,
@@ -15,6 +17,9 @@ import {
   AlignLeft,
   AlignCenter,
   AlignRight,
+  Link as LinkIcon,
+  Image as ImageIcon,
+  Loader2,
 } from "lucide-react";
 
 function ToolBtn({
@@ -66,6 +71,9 @@ export function RichTextEditor({
   placeholder?: string;
   autoFocus?: boolean;
 }) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -78,6 +86,12 @@ export function RichTextEditor({
       Highlight.configure({ multicolor: false }),
       TextAlign.configure({ types: ["paragraph", "listItem"] }),
       Placeholder.configure({ placeholder }),
+      LinkExt.configure({
+        openOnClick: false,
+        autolink: true,
+        HTMLAttributes: { rel: "noopener noreferrer", target: "_blank" },
+      }),
+      ImageExt.configure({ HTMLAttributes: { class: "rounded-md" } }),
     ],
     content: value || "",
     autofocus: autoFocus ? "end" : false,
@@ -100,10 +114,57 @@ export function RichTextEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, editor]);
 
+  const setLink = () => {
+    if (!editor) return;
+    const previous = editor.getAttributes("link").href as string | undefined;
+    const url = window.prompt("Link URL", previous || "https://");
+    if (url === null) return; // cancelled
+    if (url.trim() === "") {
+      editor.chain().focus().extendMarkRange("link").unsetLink().run();
+      return;
+    }
+    editor.chain().focus().extendMarkRange("link").setLink({ href: url.trim() }).run();
+  };
+
+  const pickImage = () => fileInputRef.current?.click();
+
+  const handleImageFile = async (file: File | undefined) => {
+    if (!file || !editor) return;
+    setUploadingImage(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      // raw-fetch-ok: shared cross-module image upload has no generated hook
+      const res = await fetch("/api/rich-text/upload-image", {
+        method: "POST",
+        body: form,
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+      const { url } = (await res.json()) as { url: string };
+      editor.chain().focus().setImage({ src: url }).run();
+    } catch {
+      window.alert("Image upload failed. Please try again.");
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
   if (!editor) return null;
 
   return (
     <div className="tiptap-rich rounded-lg border border-input bg-background shadow-sm overflow-hidden">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          void handleImageFile(file);
+          e.target.value = "";
+        }}
+      />
       <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-border/50 bg-muted/30 flex-wrap">
         <ToolBtn
           title="Bold"
@@ -173,6 +234,19 @@ export function RichTextEditor({
           onClick={() => editor.chain().focus().setTextAlign("right").run()}
         >
           <AlignRight className="w-3.5 h-3.5" />
+        </ToolBtn>
+
+        <Divider />
+
+        <ToolBtn title="Add link" active={editor.isActive("link")} onClick={setLink}>
+          <LinkIcon className="w-3.5 h-3.5" />
+        </ToolBtn>
+        <ToolBtn title="Insert image" onClick={pickImage}>
+          {uploadingImage ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <ImageIcon className="w-3.5 h-3.5" />
+          )}
         </ToolBtn>
       </div>
 

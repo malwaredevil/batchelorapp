@@ -4,7 +4,19 @@ import request from "supertest";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { createHmac } from "node:crypto";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { makeEagerSelectBuilder } from "../test-helpers/db-mock";
+
+// Uses PgDialect.sqlToQuery() — drizzle-orm's own public SQL-compilation
+// method — to recover the interpolated parameter values passed to
+// db.execute(sql`...`), mirroring the pattern in scheduler-guard.test.ts.
+function getSqlParamValues(sqlObj: unknown): unknown[] {
+  const dialect = new PgDialect();
+  const compiled = dialect.sqlToQuery(
+    sqlObj as Parameters<typeof dialect.sqlToQuery>[0],
+  );
+  return compiled.params;
+}
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -373,6 +385,55 @@ describe("POST /api/agentphone/webhook — replay / dedup protection", () => {
 
     expect(second.status).toBe(200);
     expect(second.body.duplicate).toBe(true);
+  });
+
+  it("passes both the content hash and the raw X-Webhook-ID as dedup keys to claimDelivery's query", async () => {
+    // Pins the fix for the 2026-08-11 duplicate-SMS bug: AgentPhone can
+    // redeliver the same logical message under the same X-Webhook-ID but
+    // re-signed with a fresh timestamp (different content hash). The dedup
+    // INSERT must include the delivery id as a second key, not just the hash.
+    const body = JSON.stringify({ event: "other.event", channel: "sms" });
+    const ts = freshTimestamp();
+    const deliveryId = "delivery-dualkey-001";
+    const app = await buildApp();
+
+    const res = await request(app)
+      .post("/api/agentphone/webhook")
+      .set(buildHeaders(ts, body, deliveryId))
+      .set("Content-Type", "application/json")
+      .send(body);
+
+    expect(res.status).toBe(200);
+    const claimCall = (
+      dbMock.execute.mock.calls[0] as unknown[] | undefined
+    )?.[0];
+    const params = getSqlParamValues(claimCall);
+    expect(params).toContain(deliveryId);
+  });
+
+  it("passes null (not the string '(missing)') as the delivery id when the header is absent", async () => {
+    // A missing header must never collide with another missing-header
+    // request via a shared sentinel string.
+    const body = JSON.stringify({ event: "other.event", channel: "sms" });
+    const ts = freshTimestamp();
+    const app = await buildApp();
+
+    const res = await request(app)
+      .post("/api/agentphone/webhook")
+      .set({
+        "x-webhook-timestamp": ts,
+        "x-webhook-signature": signPayload(ts, body),
+      })
+      .set("Content-Type", "application/json")
+      .send(body);
+
+    expect(res.status).toBe(200);
+    const claimCall = (
+      dbMock.execute.mock.calls[0] as unknown[] | undefined
+    )?.[0];
+    const params = getSqlParamValues(claimCall);
+    expect(params).not.toContain("(missing)");
+    expect(params).toContain(null);
   });
 
   it("does not invoke any downstream side-effects on a replayed delivery", async () => {

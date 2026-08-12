@@ -45,7 +45,24 @@ interface CachedResult {
 // ---------------------------------------------------------------------------
 
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-const CHECK_TIMEOUT_MS = 5_000; // 5 seconds per service
+
+// Timeout raised from 5 s to 15 s: production logs show OpenAI Responses
+// latencies of 2.8–6 s, so the old 5 s threshold caused false "down" alerts
+// for normal-latency calls. 15 s gives plenty of headroom while still catching
+// genuinely unresponsive services.
+const CHECK_TIMEOUT_MS = 15_000; // 15 seconds per service
+
+// Two attempts (one retry) for transient failures before a service is marked
+// "error". Retryable failures include: network timeouts, DNS errors, and HTTP
+// 429/5xx responses (temporary rate-limit or upstream overload). Permanent
+// credential/config errors (4xx except 429) are never retried.
+const CHECK_MAX_ATTEMPTS = 2;
+const CHECK_RETRY_DELAY_MS = 2_000; // 2-second pause between attempts
+
+/** HTTP status codes that warrant a retry (temporary upstream failure). */
+function isRetryableStatus(status: number): boolean {
+  return status === 429 || status >= 500;
+}
 
 let _cache: { data: CachedResult; expiresAt: number } | null = null;
 
@@ -53,37 +70,76 @@ let _cache: { data: CachedResult; expiresAt: number } | null = null;
 // Per-service check helpers
 // ---------------------------------------------------------------------------
 
-/** Wrap a fetch-based check: records latency, catches errors, handles missing keys. */
-async function runCheck(
+/**
+ * Wrap a fetch-based check: records latency, catches errors, handles missing keys.
+ *
+ * Retried once (CHECK_MAX_ATTEMPTS total) for:
+ *   • Thrown exceptions — timeouts, DNS/network errors (transient infrastructure).
+ *   • HTTP 429 and 5xx responses — temporary rate-limit or upstream overload.
+ *
+ * NOT retried for permanent credential/config errors:
+ *   • HTTP 4xx (except 429) — 401/403/400 indicate a real key/scope problem.
+ *
+ * The `fn` callback signals retryability via the `retryable` field on its result
+ * when it receives a non-ok HTTP response.
+ *
+ * Exported for unit testing (`_runCheckForTest`).
+ */
+export async function runCheck(
   service: string,
   key: string | undefined,
-  fn: (key: string) => Promise<{ ok: boolean; detail?: string }>,
+  fn: (
+    key: string,
+  ) => Promise<{ ok: boolean; retryable?: boolean; detail?: string }>,
 ): Promise<ServiceCheckResult> {
   if (!key) {
     return { service, status: "missing_key" };
   }
   const start = Date.now();
-  try {
-    const result = await Promise.race([
-      fn(key),
-      new Promise<never>((_, reject) =>
-        setTimeout(
-          () => reject(new Error(`timeout after ${CHECK_TIMEOUT_MS}ms`)),
-          CHECK_TIMEOUT_MS,
+  let lastDetail: string | undefined;
+
+  for (let attempt = 1; attempt <= CHECK_MAX_ATTEMPTS; attempt++) {
+    try {
+      const result = await Promise.race([
+        fn(key),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error(`timeout after ${CHECK_TIMEOUT_MS}ms`)),
+            CHECK_TIMEOUT_MS,
+          ),
         ),
-      ),
-    ]);
-    const latencyMs = Date.now() - start;
-    if (result.ok) {
-      return { service, status: "ok", latencyMs };
+      ]);
+      const latencyMs = Date.now() - start;
+      if (result.ok) {
+        return { service, status: "ok", latencyMs };
+      }
+      // Non-ok HTTP response — retry only if the service itself says it's transient.
+      if (result.retryable && attempt < CHECK_MAX_ATTEMPTS) {
+        lastDetail = result.detail;
+        await new Promise<void>((r) => setTimeout(r, CHECK_RETRY_DELAY_MS));
+        continue;
+      }
+      return { service, status: "error", latencyMs, detail: result.detail };
+    } catch (err) {
+      // Thrown exception (timeout, DNS, network) — always retryable.
+      lastDetail = err instanceof Error ? err.message : String(err);
+      if (attempt < CHECK_MAX_ATTEMPTS) {
+        await new Promise<void>((r) => setTimeout(r, CHECK_RETRY_DELAY_MS));
+      }
     }
-    return { service, status: "error", latencyMs, detail: result.detail };
-  } catch (err) {
-    const latencyMs = Date.now() - start;
-    const detail = err instanceof Error ? err.message : String(err);
-    return { service, status: "error", latencyMs, detail };
   }
+
+  const latencyMs = Date.now() - start;
+  return {
+    service,
+    status: "error",
+    latencyMs,
+    detail: lastDetail ?? "unknown error",
+  };
 }
+
+/** @internal Exported alias for unit tests. */
+export { runCheck as _runCheckForTest };
 
 /** Config-only check: just verify the key(s) are present and optionally well-formed. */
 function configCheck(
@@ -117,26 +173,41 @@ function configCheck(
 // ---------------------------------------------------------------------------
 
 async function checkSupabase(): Promise<ServiceCheckResult> {
+  // Uses the same retry/timeout pattern as runCheck: one retry for transient
+  // network or pool-exhaustion errors before marking Supabase as "down".
   const start = Date.now();
-  try {
-    await Promise.race([
-      db.execute(sql`SELECT 1`),
-      new Promise<never>((_, reject) =>
-        setTimeout(
-          () => reject(new Error(`timeout after ${CHECK_TIMEOUT_MS}ms`)),
-          CHECK_TIMEOUT_MS,
+  let lastDetail: string | undefined;
+
+  for (let attempt = 1; attempt <= CHECK_MAX_ATTEMPTS; attempt++) {
+    try {
+      await Promise.race([
+        db.execute(sql`SELECT 1`),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error(`timeout after ${CHECK_TIMEOUT_MS}ms`)),
+            CHECK_TIMEOUT_MS,
+          ),
         ),
-      ),
-    ]);
-    return { service: "Supabase", status: "ok", latencyMs: Date.now() - start };
-  } catch (err) {
-    return {
-      service: "Supabase",
-      status: "error",
-      latencyMs: Date.now() - start,
-      detail: err instanceof Error ? err.message : String(err),
-    };
+      ]);
+      return {
+        service: "Supabase",
+        status: "ok",
+        latencyMs: Date.now() - start,
+      };
+    } catch (err) {
+      lastDetail = err instanceof Error ? err.message : String(err);
+      if (attempt < CHECK_MAX_ATTEMPTS) {
+        await new Promise<void>((r) => setTimeout(r, CHECK_RETRY_DELAY_MS));
+      }
+    }
   }
+
+  return {
+    service: "Supabase",
+    status: "error",
+    latencyMs: Date.now() - start,
+    detail: lastDetail ?? "unknown error",
+  };
 }
 
 async function checkOpenRouter(): Promise<ServiceCheckResult> {
@@ -151,6 +222,7 @@ async function checkOpenRouter(): Promise<ServiceCheckResult> {
       };
       return {
         ok: false,
+        retryable: isRetryableStatus(resp.status),
         detail: `HTTP ${resp.status}: ${body?.error?.message ?? resp.statusText}`,
       };
     }
@@ -170,6 +242,7 @@ async function checkOpenAI(): Promise<ServiceCheckResult> {
       };
       return {
         ok: false,
+        retryable: isRetryableStatus(resp.status),
         detail: `HTTP ${resp.status}: ${body?.error?.message ?? resp.statusText}`,
       };
     }
@@ -197,6 +270,7 @@ async function checkJinaAI(): Promise<ServiceCheckResult> {
       const body = (await resp.json().catch(() => ({}))) as { detail?: string };
       return {
         ok: false,
+        retryable: isRetryableStatus(resp.status),
         detail: `HTTP ${resp.status}: ${body?.detail ?? resp.statusText}`,
       };
     }
@@ -225,6 +299,7 @@ async function checkVoyageAI(): Promise<ServiceCheckResult> {
       const body = (await resp.json().catch(() => ({}))) as { detail?: string };
       return {
         ok: false,
+        retryable: isRetryableStatus(resp.status),
         detail: `HTTP ${resp.status}: ${body?.detail ?? resp.statusText}`,
       };
     }
@@ -244,6 +319,7 @@ async function checkResend(): Promise<ServiceCheckResult> {
       };
       return {
         ok: false,
+        retryable: isRetryableStatus(resp.status),
         detail: `HTTP ${resp.status}: ${body?.message ?? resp.statusText}`,
       };
     }
@@ -265,6 +341,7 @@ async function checkAgentPhone(): Promise<ServiceCheckResult> {
       };
       return {
         ok: false,
+        retryable: isRetryableStatus(resp.status),
         detail: `HTTP ${resp.status}: ${body?.message ?? body?.error ?? resp.statusText}`,
       };
     }
@@ -286,6 +363,7 @@ async function checkApify(): Promise<ServiceCheckResult> {
       };
       return {
         ok: false,
+        retryable: isRetryableStatus(resp.status),
         detail: `HTTP ${resp.status}: ${body?.error?.message ?? resp.statusText}`,
       };
     }
@@ -304,7 +382,11 @@ async function checkSlack(): Promise<ServiceCheckResult> {
       signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
     });
     if (!resp.ok) {
-      return { ok: false, detail: `HTTP ${resp.status}: ${resp.statusText}` };
+      return {
+        ok: false,
+        retryable: isRetryableStatus(resp.status),
+        detail: `HTTP ${resp.status}: ${resp.statusText}`,
+      };
     }
     const body = (await resp.json()) as { ok: boolean; error?: string };
     if (!body.ok) {
@@ -329,7 +411,11 @@ async function checkGoogleMaps(): Promise<ServiceCheckResult> {
       { signal: AbortSignal.timeout(CHECK_TIMEOUT_MS) },
     );
     if (!resp.ok) {
-      return { ok: false, detail: `HTTP ${resp.status}: ${resp.statusText}` };
+      return {
+        ok: false,
+        retryable: isRetryableStatus(resp.status),
+        detail: `HTTP ${resp.status}: ${resp.statusText}`,
+      };
     }
     const body = (await resp.json()) as {
       status: string;
@@ -375,6 +461,7 @@ async function checkReplicate(): Promise<ServiceCheckResult> {
       const body = (await resp.json().catch(() => ({}))) as { detail?: string };
       return {
         ok: false,
+        retryable: isRetryableStatus(resp.status),
         detail: `HTTP ${resp.status}: ${body?.detail ?? resp.statusText}`,
       };
     }
@@ -387,41 +474,33 @@ async function checkEbay(): Promise<ServiceCheckResult> {
   if (!ebayAppId || !ebayCertId) {
     return { service: "eBay", status: "missing_key" };
   }
-  const start = Date.now();
-  try {
-    const credentials = Buffer.from(`${ebayAppId}:${ebayCertId}`).toString(
-      "base64",
-    );
+  // Pass the base64-encoded credentials as the "key" so runCheck handles
+  // the missing-key guard, retry, timeout, and latency tracking uniformly.
+  const credentials = Buffer.from(`${ebayAppId}:${ebayCertId}`).toString(
+    "base64",
+  );
+  return runCheck("eBay", credentials, async (creds) => {
     const resp = await fetch("https://api.ebay.com/identity/v1/oauth2/token", {
       method: "POST",
       headers: {
-        Authorization: `Basic ${credentials}`,
+        Authorization: `Basic ${creds}`,
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body: "grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope",
       signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
     });
-    const latencyMs = Date.now() - start;
     if (!resp.ok) {
       const body = (await resp.json().catch(() => ({}))) as {
         error_description?: string;
       };
       return {
-        service: "eBay",
-        status: "error",
-        latencyMs,
+        ok: false,
+        retryable: isRetryableStatus(resp.status),
         detail: `HTTP ${resp.status}: ${body?.error_description ?? resp.statusText}`,
       };
     }
-    return { service: "eBay", status: "ok", latencyMs };
-  } catch (err) {
-    return {
-      service: "eBay",
-      status: "error",
-      latencyMs: Date.now() - start,
-      detail: err instanceof Error ? err.message : String(err),
-    };
-  }
+    return { ok: true };
+  });
 }
 
 /** Sentry: config-only — validate DSN format. */

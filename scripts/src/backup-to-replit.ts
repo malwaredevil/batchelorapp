@@ -111,6 +111,7 @@ CREATE TABLE IF NOT EXISTS agentphone_webhook_deliveries (
   id           TEXT PRIMARY KEY,
   received_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE agentphone_webhook_deliveries ADD COLUMN IF NOT EXISTS delivery_id TEXT;
 
 CREATE TABLE IF NOT EXISTS app_gmail_connections (
   id                      SERIAL PRIMARY KEY,
@@ -3731,6 +3732,12 @@ async function main() {
       "last_error",
     ],
     orderBy: "first_seen_at",
+  });
+
+  summary["integrations_health_state"] = await copyTable(source, dest, {
+    table: "integrations_health_state",
+    columns: ["service", "consecutive_error_count", "last_updated_at"],
+    orderBy: "service",
   });
 
   // ── App configuration ─────────────────────────────────────────────────────

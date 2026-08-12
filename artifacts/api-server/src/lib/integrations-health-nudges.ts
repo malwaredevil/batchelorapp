@@ -5,19 +5,21 @@
  *
  * ┌─ In-process scheduler (startIntegrationsHealthNudgeScheduler) ─────────┐
  * │  Runs every 30 minutes within the live web-server process.              │
- * │  Maintains _lastKnownStatus across runs for transition detection.       │
- * │  On startup: primes the map from a live health check (no nudges), then  │
+ * │  Maintains _lastKnownStatus and _consecutiveErrorCount in memory.       │
+ * │  A failure nudge fires only after 2 consecutive "error" readings (~30   │
+ * │  minutes) so a single-interval network blip never triggers an alert.    │
+ * │  On startup: primes the maps from a live health check (no nudges), then │
  * │  waits STARTUP_DELAY_MS before the first nudge-generating run so cold-  │
  * │  start timeouts don't look like genuine new failures.                   │
  * └────────────────────────────────────────────────────────────────────────┘
  *
  * ┌─ Scheduled deployment (runScheduledIntegrationsHealthNudges) ──────────┐
- * │  One-shot cron run in a fresh process (no in-memory state).            │
- * │  Stateless: runs health checks, inserts failure nudges for every        │
- * │  currently-failing service using stable per-error nudge keys.           │
- * │  ON CONFLICT DO NOTHING deduplicates nudges for already-known failures, │
- * │  and only fires for genuinely new ones. Recovery nudges are omitted     │
- * │  (the in-process scheduler handles error→ok transitions when warm).     │
+ * │  One-shot cron run in a fresh process.                                  │
+ * │  Persists per-service consecutive-error counts in the                   │
+ * │  `integrations_health_state` DB table so the same two-strike gate       │
+ * │  applies even across cold-start cron invocations.                       │
+ * │  Failure nudge: fires on the 2nd consecutive error run.                 │
+ * │  Recovery nudge: fires on the first ok run after a confirmed failure.   │
  * └────────────────────────────────────────────────────────────────────────┘
  *
  * De-duplication strategy:
@@ -46,6 +48,26 @@ import type { ServiceCheckStatus } from "../routes/admin/integrations-health";
 // ---------------------------------------------------------------------------
 const _lastKnownStatus = new Map<string, ServiceCheckStatus>();
 
+/**
+ * Consecutive error count per service (in-process path only).
+ *
+ * A failure nudge is only emitted on the 2nd consecutive "error" reading so
+ * that a single-interval network blip (all services timeout at once and
+ * recover by the next run) never generates an alert. The counter is reset to
+ * zero on any non-error result.
+ *
+ * Recovery nudges are only emitted when the count was ≥ 2 (i.e. a confirmed
+ * failure that already generated a nudge) to avoid spurious "recovered" noise
+ * for transient blips that were never reported as failures.
+ */
+const _consecutiveErrorCount = new Map<string, number>();
+
+/** @internal Reset in-process state maps between tests. */
+export function _resetTestState(): void {
+  _lastKnownStatus.clear();
+  _consecutiveErrorCount.clear();
+}
+
 // Max individual failure nudges before switching to a consolidated message.
 const MAX_FAILURE_NUDGES_PER_RUN = 3;
 
@@ -60,6 +82,20 @@ const STARTUP_DELAY_MS = 90_000; // 90 seconds
 function errorSlug(detail: string | undefined): string {
   if (!detail) return "unknown";
   return detail.trim().toLowerCase().slice(0, 60).replace(/\s+/g, "_");
+}
+
+/**
+ * Normalise a service name for safe embedding in a comma-separated list.
+ * Trims whitespace and replaces commas, newlines, and carriage returns with a
+ * single space so a name like "Google, Maps" doesn't split the list or garble
+ * the reader's count.
+ */
+function sanitiseServiceName(name: string): string {
+  return name
+    .trim()
+    .replace(/[,\r\n]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /** Today as YYYY-MM-DD (UTC). */
@@ -80,7 +116,7 @@ function capFailureNudges(
     return failureCandidates;
   }
   const count = failureCandidates.length;
-  const names = failureCandidates.map((c) => c.service);
+  const names = failureCandidates.map((c) => sanitiseServiceName(c.service));
   const consolidatedKey = `integration_failure_batch:${todayUtc()}`;
   logger.info(
     { count, names, consolidatedKey },
@@ -114,11 +150,13 @@ async function resolveOwnerId(): Promise<number | null> {
 // ---------------------------------------------------------------------------
 // SCHEDULED-DEPLOYMENT PATH
 //
-// Stateless — safe to call from a fresh process that has no in-memory status
-// history. Inserts failure nudges for all currently-failing services using
-// stable per-error slug keys. ON CONFLICT DO NOTHING deduplicates nudges for
-// failures the owner already knows about. Recovery nudges are omitted; the
-// in-process scheduler handles error→ok transitions when the server is warm.
+// One-shot cron run in a fresh process. Persists per-service consecutive-error
+// counts in `integrations_health_state` so the two-strike alert gate (≥ 2
+// consecutive errors before a nudge) applies even across cold-start runs.
+//
+// Failure nudge:  fires on the 2nd consecutive error run for a service.
+// Recovery nudge: fires on the first ok run after a confirmed failure
+//                 (count ≥ 2), so the owner learns when things clear up.
 // ---------------------------------------------------------------------------
 
 export async function runScheduledIntegrationsHealthNudges(): Promise<void> {
@@ -132,25 +170,70 @@ export async function runScheduledIntegrationsHealthNudges(): Promise<void> {
     const ownerId = await resolveOwnerId();
     if (ownerId === null) return;
 
+    // Load persisted consecutive-error counts from the DB.
+    const stateResult = await client.query<{
+      service: string;
+      consecutive_error_count: number;
+    }>(
+      `SELECT service, consecutive_error_count FROM integrations_health_state`,
+    );
+    const dbCounts = new Map(
+      stateResult.rows.map((r) => [r.service, r.consecutive_error_count]),
+    );
+
     const { checks } = await runAllChecks();
 
-    // Build failure candidates for every currently-failing service.
-    // No transition tracking — ON CONFLICT DO NOTHING handles dedup.
-    const rawCandidates = checks
-      .filter((c) => c.status === "error")
-      .map((c) => ({
-        nudgeKey: `integration_failure:${c.service}:${errorSlug(c.detail)}`,
-        message: `⚠️ ${c.service} is returning errors. Detail: ${c.detail ?? "unknown error"}. You may want to check the Services panel.`,
-        service: c.service,
-      }));
+    const rawFailureCandidates: {
+      nudgeKey: string;
+      message: string;
+      service: string;
+    }[] = [];
+    const otherCandidates: { nudgeKey: string; message: string }[] = [];
+    const updatedCounts = new Map<string, number>();
 
-    const candidates = capFailureNudges(rawCandidates);
-    if (candidates.length === 0) {
-      logger.info(
-        "integrations-health-nudges (scheduled): no failing services, nothing to insert",
-      );
-      return;
+    for (const check of checks) {
+      const prevCount = dbCounts.get(check.service) ?? 0;
+
+      if (check.status === "error") {
+        const newCount = prevCount + 1;
+        updatedCounts.set(check.service, newCount);
+
+        // Fire a failure nudge only on the 2nd consecutive error reading so
+        // a transient single-interval blip never generates an alert.
+        if (newCount === 2) {
+          const safeName = sanitiseServiceName(check.service);
+          rawFailureCandidates.push({
+            nudgeKey: `integration_failure:${check.service}:${errorSlug(check.detail)}`,
+            message: `⚠️ ${safeName} is returning errors. Detail: ${check.detail ?? "unknown error"}. You may want to check the Services panel.`,
+            service: check.service,
+          });
+        }
+      } else {
+        // Service is ok or missing_key.
+        //
+        // Recovery nudge: only when status is explicitly "ok" AND a confirmed
+        // failure (prevCount ≥ 2) has cleared. "missing_key" means the secret
+        // is absent — the service is not being monitored, not that it is healthy.
+        // Emitting a recovery nudge for missing_key would misinform the owner.
+        if (check.status === "ok" && prevCount >= 2) {
+          const safeName = sanitiseServiceName(check.service);
+          otherCandidates.push({
+            nudgeKey: `integration_recovery:${check.service}:${todayUtc()}`,
+            message: `✅ ${safeName} has recovered and is responding normally again.`,
+          });
+        }
+        // Reset the consecutive-error counter regardless of whether the status is
+        // "ok" or "missing_key": in both cases no error is being observed, so the
+        // streak is broken. This avoids accumulating a stale count for a service
+        // whose key is removed and later re-added.
+        updatedCounts.set(check.service, 0);
+      }
     }
+
+    const candidates = [
+      ...capFailureNudges(rawFailureCandidates),
+      ...otherCandidates,
+    ];
 
     let inserted = 0;
     for (const { nudgeKey, message } of candidates) {
@@ -162,8 +245,26 @@ export async function runScheduledIntegrationsHealthNudges(): Promise<void> {
       );
       inserted += result.rowCount ?? 0;
     }
+
+    // Persist updated consecutive-error counts so the next cron run can apply
+    // the same two-strike gate without in-memory state.
+    for (const [service, count] of updatedCounts) {
+      await client.query(
+        `INSERT INTO integrations_health_state (service, consecutive_error_count, last_updated_at)
+         VALUES ($1, $2, NOW())
+         ON CONFLICT (service) DO UPDATE SET
+           consecutive_error_count = EXCLUDED.consecutive_error_count,
+           last_updated_at         = NOW()`,
+        [service, count],
+      );
+    }
+
     logger.info(
-      { candidates: candidates.length, inserted },
+      {
+        candidates: candidates.length,
+        inserted,
+        servicesChecked: checks.length,
+      },
       "integrations-health-nudges (scheduled): run complete",
     );
   } finally {
@@ -179,22 +280,62 @@ export async function runScheduledIntegrationsHealthNudges(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 /**
- * Run all health checks and store results in _lastKnownStatus WITHOUT
- * generating any nudges. Primes the transition-detection map so the next
- * nudge run only fires for genuinely new transitions (not every service that
- * happens to be in error when the server starts).
+ * Run all health checks and store results in the in-process state maps WITHOUT
+ * generating any nudges. Primes _lastKnownStatus and _consecutiveErrorCount so
+ * the next nudge run only fires for genuinely new transitions.
+ *
+ * Loads persisted consecutive-error counts from `integrations_health_state` so
+ * a server restart inherits the accumulated outage state:
+ *   - Error service with DB count ≥ 2  → primed to DB count (confirmed failure
+ *     preserved; the next run may immediately emit a recovery nudge if the
+ *     service clears, and will not re-emit a duplicate failure alert).
+ *   - Error service with DB count 0–1  → primed to max(1, dbCount) (one error
+ *     reading already seen; the next error run reaches 2 and fires the alert).
+ *   - Ok/missing service               → primed to 0.
  *
  * Safe to call fire-and-forget — never throws.
  */
 export async function primeLastKnownStatus(): Promise<void> {
   try {
+    // Load persisted consecutive-error counts from DB. If the DB is unavailable
+    // or the table is empty the counts stay at their defaults (0 or 1 below),
+    // which is safe — just slightly less accurate on the first post-restart run.
+    let dbCounts = new Map<string, number>();
+    const stateClient = await pool.connect().catch(() => null);
+    if (stateClient) {
+      try {
+        const stateResult = await stateClient.query<{
+          service: string;
+          consecutive_error_count: number;
+        }>(
+          `SELECT service, consecutive_error_count FROM integrations_health_state`,
+        );
+        dbCounts = new Map(
+          stateResult.rows.map((r) => [r.service, r.consecutive_error_count]),
+        );
+      } catch {
+        // DB read failure is non-fatal — fallback to defaults.
+      } finally {
+        stateClient.release();
+      }
+    }
+
     const { checks } = await runAllChecks();
     for (const check of checks) {
       _lastKnownStatus.set(check.service, check.status);
+      if (check.status === "error") {
+        const dbCount = dbCounts.get(check.service) ?? 0;
+        // Inherit DB count to preserve confirmed-failure state (count ≥ 2)
+        // across restarts; ensure at least 1 so the very next error reading
+        // reaches count 2 and fires the alert.
+        _consecutiveErrorCount.set(check.service, Math.max(1, dbCount));
+      } else {
+        _consecutiveErrorCount.set(check.service, 0);
+      }
     }
     logger.info(
       { services: checks.length },
-      "integrations-health-nudges: _lastKnownStatus primed from live health checks",
+      "integrations-health-nudges: state maps primed from live health checks",
     );
   } catch (err) {
     logger.warn(
@@ -223,24 +364,50 @@ export async function computeAndStoreIntegrationsHealthNudges(): Promise<void> {
       service: string;
     }[] = [];
     const otherCandidates: { nudgeKey: string; message: string }[] = [];
+    // Track the new count for every service so we can persist it to DB below.
+    const updatedCounts = new Map<string, number>();
 
     for (const check of checks) {
-      const prev = _lastKnownStatus.get(check.service);
       const curr = check.status;
+      const prevCount = _consecutiveErrorCount.get(check.service) ?? 0;
 
-      if (curr === "error" && prev !== "error") {
-        rawFailureCandidates.push({
-          nudgeKey: `integration_failure:${check.service}:${errorSlug(check.detail)}`,
-          message: `⚠️ ${check.service} is returning errors. Detail: ${check.detail ?? "unknown error"}. You may want to check the Services panel.`,
-          service: check.service,
-        });
-      }
+      if (curr === "error") {
+        const newCount = prevCount + 1;
+        _consecutiveErrorCount.set(check.service, newCount);
+        updatedCounts.set(check.service, newCount);
 
-      if (curr === "ok" && prev === "error") {
-        otherCandidates.push({
-          nudgeKey: `integration_recovery:${check.service}:${todayUtc()}`,
-          message: `✅ ${check.service} has recovered and is responding normally again.`,
-        });
+        // Only fire a failure nudge on the 2nd consecutive error reading.
+        // A single-interval blip (count reaches 1 then recovers) produces no
+        // alert; a genuine sustained outage (count reaches 2) does.
+        if (newCount === 2) {
+          const safeName = sanitiseServiceName(check.service);
+          rawFailureCandidates.push({
+            nudgeKey: `integration_failure:${check.service}:${errorSlug(check.detail)}`,
+            message: `⚠️ ${safeName} is returning errors. Detail: ${check.detail ?? "unknown error"}. You may want to check the Services panel.`,
+            service: check.service,
+          });
+        }
+      } else {
+        // Service is ok or missing_key.
+        //
+        // Recovery nudge: only when status is explicitly "ok" AND a confirmed
+        // failure (prevCount ≥ 2) has cleared. "missing_key" means the required
+        // secret is absent — the service is not being monitored, not that it is
+        // healthy. Emitting a recovery nudge for missing_key would misinform the
+        // owner and discard confirmed-outage state when configuration is broken.
+        if (check.status === "ok" && prevCount >= 2) {
+          const safeName = sanitiseServiceName(check.service);
+          otherCandidates.push({
+            nudgeKey: `integration_recovery:${check.service}:${todayUtc()}`,
+            message: `✅ ${safeName} has recovered and is responding normally again.`,
+          });
+        }
+        // Reset the consecutive-error counter regardless of "ok" vs "missing_key":
+        // in both cases no error is observed, so the streak is broken. This avoids
+        // accumulating a stale count for a service whose key is removed and later
+        // re-added.
+        _consecutiveErrorCount.set(check.service, 0);
+        updatedCounts.set(check.service, 0);
       }
 
       _lastKnownStatus.set(check.service, curr);
@@ -250,11 +417,6 @@ export async function computeAndStoreIntegrationsHealthNudges(): Promise<void> {
       ...capFailureNudges(rawFailureCandidates),
       ...otherCandidates,
     ];
-
-    if (candidates.length === 0) {
-      logger.info("integrations-health-nudges: no nudge candidates this run");
-      return;
-    }
 
     let inserted = 0;
     for (const { nudgeKey, message } of candidates) {
@@ -266,10 +428,33 @@ export async function computeAndStoreIntegrationsHealthNudges(): Promise<void> {
       );
       inserted += result.rowCount ?? 0;
     }
-    logger.info(
-      { candidates: candidates.length, inserted },
-      "integrations-health-nudges: run complete",
-    );
+
+    // Persist updated consecutive-error counts to DB so they survive a server
+    // restart. Both the in-process and scheduled paths share the same
+    // `integrations_health_state` table as the authoritative state source;
+    // primeLastKnownStatus() reads it on startup to inherit accumulated counts.
+    // Concurrent in-process / scheduled writes are last-write-wins; the overlap
+    // window is small and both paths derive counts from the same DB snapshot, so
+    // this is acceptable.
+    for (const [service, count] of updatedCounts) {
+      await client.query(
+        `INSERT INTO integrations_health_state (service, consecutive_error_count, last_updated_at)
+         VALUES ($1, $2, NOW())
+         ON CONFLICT (service) DO UPDATE SET
+           consecutive_error_count = EXCLUDED.consecutive_error_count,
+           last_updated_at         = NOW()`,
+        [service, count],
+      );
+    }
+
+    if (candidates.length === 0) {
+      logger.info("integrations-health-nudges: no nudge candidates this run");
+    } else {
+      logger.info(
+        { candidates: candidates.length, inserted },
+        "integrations-health-nudges: run complete",
+      );
+    }
   } finally {
     client.release();
   }

@@ -1,6 +1,6 @@
-import { useState } from "react";
 import { X } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { usePersistedDismiss } from "@workspace/web-core";
 
 function todayMMDD(): string {
   const now = new Date();
@@ -11,11 +11,17 @@ function todayMMDD(): string {
 
 export function BirthdayBanner() {
   const { user } = useAuth();
-  const [dismissed, setDismissed] = useState(false);
+  const today = todayMMDD();
+  const isBirthdayToday = !!user?.birthday && user.birthday === today;
+  // Key includes the year so this year's dismissal doesn't suppress next year's banner.
+  const dismissKey =
+    user && isBirthdayToday
+      ? `birthday-banner-dismissed:${user.id}:${new Date().getFullYear()}`
+      : null;
+  const [dismissed, dismiss] = usePersistedDismiss(dismissKey);
 
-  if (!user?.birthday) return null;
+  if (!isBirthdayToday) return null;
   if (dismissed) return null;
-  if (user.birthday !== todayMMDD()) return null;
 
   const name = user.displayName ?? user.email.split("@")[0];
 
@@ -51,7 +57,7 @@ export function BirthdayBanner() {
         Happy Birthday, {name}! Wishing you a wonderful day! 🎉
       </span>
       <button
-        onClick={() => setDismissed(true)}
+        onClick={dismiss}
         aria-label="Dismiss birthday banner"
         style={{
           position: "absolute",

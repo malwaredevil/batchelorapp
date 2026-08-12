@@ -7,7 +7,7 @@ import {
   quiltPatterns,
   finishedQuilts,
   travelsTrips,
-  travelsReminders,
+  reminders,
   elaineHistoryConversations,
   elaineHistoryMessages,
 } from "@workspace/db";
@@ -162,12 +162,12 @@ router.get("/search", requireAuth, async (req, res) => {
 
     db
       .select({
-        id: travelsReminders.id,
-        title: travelsReminders.title,
-        tripId: travelsReminders.tripId,
+        id: reminders.id,
+        title: reminders.title,
+        tripId: reminders.entityId,
       })
-      .from(travelsReminders)
-      .where(ilike(travelsReminders.title, pattern))
+      .from(reminders)
+      .where(and(eq(reminders.entityType, "travels_trip"), ilike(reminders.title, pattern)))
       .limit(perSource),
 
     db

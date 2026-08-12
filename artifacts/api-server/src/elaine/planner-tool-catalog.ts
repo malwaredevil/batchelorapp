@@ -316,7 +316,7 @@ export const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: "add_reminder",
       description:
-        "Propose creating a new reminder for a trip, e.g. \"remind me to check in for our flight\" or \"remind me to book the hotel by Friday\". Only call this if the trip's numeric id is visible on screen; never guess an id — offer to open the trip instead if you don't have one. If the user gives (or you can see on screen) a specific date the reminder is about, set dueDate to that exact date; never invent a date. If the user asks to also notify/email someone (a connected household member), include their email(s) in recipientEmails; never invent an email address you can't see on screen or that the user didn't give you. syncToCalendar defaults to true (syncs to the Travel Calendar automatically if connected) — only set it to false if the user explicitly asks not to add it to the calendar.",
+        "Propose creating a new reminder for a trip, e.g. \"remind me to check in for our flight\" or \"remind me to book the hotel by Friday\". Only call this if the trip's numeric id is visible on screen; never guess an id — offer to open the trip instead if you don't have one. If the user gives (or you can see on screen) a specific date the reminder is about, set dueDate to that exact date; never invent a date. If the user asks to also notify/email someone (a connected household member), include their email(s) in recipientEmails; never invent an email address you can't see on screen or that the user didn't give you.",
       parameters: {
         type: "object",
         properties: {
@@ -330,26 +330,8 @@ export const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
             description:
               "Email addresses to also notify, if the user asked for that",
           },
-          syncToCalendar: { type: "boolean" },
         },
         required: ["tripId", "title"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "sync_reminder_to_calendar",
-      description:
-        'Propose turning calendar sync on (or off, if syncToCalendar is explicitly false) for an EXISTING reminder, e.g. "sync this to the calendar" or "stop syncing that reminder". Only call this if the reminder\'s numeric id is visible on screen (look for "reminderId: <number>" in the reminders listed for this trip); never guess an id — if you can\'t see the reminder\'s id, ask which reminder they mean or offer to open the trip. Do not use this for creating a brand-new reminder (use add_reminder for that, which already defaults to syncing).',
-      parameters: {
-        type: "object",
-        properties: {
-          tripId: { type: "integer" },
-          reminderId: { type: "integer" },
-          syncToCalendar: { type: "boolean" },
-        },
-        required: ["tripId", "reminderId"],
       },
     },
   },
@@ -373,7 +355,6 @@ export const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
             items: { type: "string" },
             description: "Full replacement list of emails to notify",
           },
-          syncToCalendar: { type: "boolean" },
         },
         required: ["tripId", "reminderId"],
       },

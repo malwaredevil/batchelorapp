@@ -129,7 +129,6 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
       "delete_diary_entry",
       "edit_diary_entry",
       "add_reminder",
-      "sync_reminder_to_calendar",
       "edit_reminder",
       "delete_reminder",
       "add_itinerary_day",

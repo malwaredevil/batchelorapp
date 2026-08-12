@@ -5,7 +5,6 @@ import {
   useUpdateReminder,
   useDeleteReminder,
   useListTravelsAppUsers,
-  useGetCalendarStatus,
   useSendPhoneVerificationCode,
   useVerifyPhoneCode,
   useSendTestSms,
@@ -66,8 +65,6 @@ export function ReminderEditDialog({
   const qc = useQueryClient();
   const { user } = useAuth();
   const { data: appUsers = [] } = useListTravelsAppUsers();
-  const { data: calendarStatus } = useGetCalendarStatus();
-  const travelCalendarConnected = !!calendarStatus?.connected;
 
   const [mode, setMode] = useState<"view" | "edit">(initialMode);
   const [title, setTitle] = useState("");
@@ -77,7 +74,6 @@ export function ReminderEditDialog({
   const [customEmail, setCustomEmail] = useState("");
   const [smsRecipients, setSmsRecipients] = useState<number[]>([]);
   const [callRecipients, setCallRecipients] = useState<number[]>([]);
-  const [sync, setSync] = useState(true);
   const [alertDays, setAlertDays] = useState<number[]>([0]);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
@@ -96,7 +92,6 @@ export function ReminderEditDialog({
       setRecipients(reminder.recipientEmails);
       setSmsRecipients(reminder.smsRecipientUserIds ?? []);
       setCallRecipients(reminder.callRecipientUserIds ?? []);
-      setSync(reminder.syncToCalendar);
       setAlertDays(
         reminder.alertDaysBefore && reminder.alertDaysBefore.length > 0
           ? reminder.alertDaysBefore
@@ -266,7 +261,6 @@ export function ReminderEditDialog({
         recipientEmails: recipients,
         smsRecipientUserIds: smsRecipients,
         callRecipientUserIds: callRecipients,
-        syncToCalendar: sync,
         alertDaysBefore: alertDays,
       },
     });
@@ -403,11 +397,6 @@ export function ReminderEditDialog({
               </div>
             )}
 
-            {reminder.syncToCalendar && (
-              <p className="text-xs text-muted-foreground">
-                Synced to Travel Calendar
-              </p>
-            )}
           </div>
         ) : (
           <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-0.5">
@@ -682,42 +671,29 @@ export function ReminderEditDialog({
               </p>
             </div>
 
-            {travelCalendarConnected && (
-              <div className="space-y-1.5 pt-1">
-                <label className="flex items-center gap-2 text-sm cursor-pointer">
-                  <Checkbox
-                    checked={sync}
-                    onCheckedChange={(v) => setSync(!!v)}
-                  />
-                  Sync to Travel Calendar
-                </label>
-                {sync && (
-                  <div className="pl-6 space-y-1">
-                    <Label className="text-xs text-muted-foreground">
-                      Remind me
-                    </Label>
-                    <div className="flex flex-wrap gap-1.5">
-                      {ALERT_DAY_OPTIONS.map((day) => (
-                        <button
-                          key={day}
-                          type="button"
-                          onClick={() => toggleAlertDay(day)}
-                          className={`text-xs rounded-full px-2.5 py-1 border transition-colors ${
-                            alertDays.includes(day)
-                              ? "bg-primary text-primary-foreground border-primary"
-                              : "bg-background text-muted-foreground border-card-border hover:border-primary/50"
-                          }`}
-                        >
-                          {day === 0
-                            ? "On the day"
-                            : `${day} day${day > 1 ? "s" : ""} before`}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+            <div className="space-y-1.5 pt-1">
+              <Label className="text-xs text-muted-foreground">
+                Remind me
+              </Label>
+              <div className="flex flex-wrap gap-1.5">
+                {ALERT_DAY_OPTIONS.map((day) => (
+                  <button
+                    key={day}
+                    type="button"
+                    onClick={() => toggleAlertDay(day)}
+                    className={`text-xs rounded-full px-2.5 py-1 border transition-colors ${
+                      alertDays.includes(day)
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-background text-muted-foreground border-card-border hover:border-primary/50"
+                    }`}
+                  >
+                    {day === 0
+                      ? "On the day"
+                      : `${day} day${day > 1 ? "s" : ""} before`}
+                  </button>
+                ))}
               </div>
-            )}
+            </div>
           </div>
         )}
 

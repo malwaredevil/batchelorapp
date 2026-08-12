@@ -615,6 +615,61 @@ CREATE TABLE IF NOT EXISTS travels_reminder_alert_log (
   sent_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Generic cross-app reminder system (see lib/db/src/schema/reminders.ts).
+CREATE TABLE IF NOT EXISTS reminders (
+  id                          SERIAL PRIMARY KEY,
+  entity_type                 TEXT,
+  entity_id                   INTEGER,
+  created_by_user_id          INTEGER NOT NULL,
+  title                       TEXT NOT NULL,
+  description                 TEXT,
+  due_at                      TIMESTAMPTZ,
+  lead_times                  JSONB NOT NULL DEFAULT '[]'::jsonb,
+  recurrence_interval_value   INTEGER,
+  recurrence_interval_unit    TEXT,
+  recurrence_weekday          INTEGER,
+  recurrence_day_of_month     INTEGER,
+  recurrence_end_date         DATE,
+  recurrence_max_occurrences  INTEGER,
+  recurrence_fired_count      INTEGER NOT NULL DEFAULT 0,
+  calendar_connection_id      INTEGER,
+  google_event_id             TEXT,
+  email_recipients            TEXT[] NOT NULL DEFAULT '{}',
+  sms_recipient_user_ids      INTEGER[] NOT NULL DEFAULT '{}',
+  call_recipient_user_ids     INTEGER[] NOT NULL DEFAULT '{}',
+  slack_recipient_user_ids    INTEGER[] NOT NULL DEFAULT '{}',
+  messenger_recipient_user_ids INTEGER[] NOT NULL DEFAULT '{}',
+  status                      TEXT NOT NULL DEFAULT 'active',
+  elaine_action_type          TEXT,
+  elaine_action_payload       JSONB,
+  legacy_source_table         TEXT,
+  legacy_source_id            INTEGER,
+  deleted_at                  TIMESTAMPTZ,
+  created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS reminder_deliveries (
+  id             SERIAL PRIMARY KEY,
+  reminder_id    INTEGER NOT NULL,
+  occurrence_key TEXT NOT NULL,
+  channel        TEXT NOT NULL,
+  recipient_ref  TEXT NOT NULL,
+  scheduled_for  TIMESTAMPTZ NOT NULL,
+  status         TEXT NOT NULL DEFAULT 'pending',
+  fired_at       TIMESTAMPTZ,
+  error          TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS reminder_calendar_sync_state (
+  id                       SERIAL PRIMARY KEY,
+  reminder_id              INTEGER NOT NULL UNIQUE,
+  last_synced_event_title  TEXT,
+  last_synced_event_start  TIMESTAMPTZ,
+  last_checked_at          TIMESTAMPTZ
+);
+
 CREATE TABLE IF NOT EXISTS travels_calendar_settings (
   id               INTEGER PRIMARY KEY DEFAULT 1,
   calendar_id      TEXT,
@@ -2538,6 +2593,75 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "travels_reminder_alert_log", "id");
+
+  summary["reminders"] = await copyTable(source, dest, {
+    table: "reminders",
+    columns: [
+      "id",
+      "entity_type",
+      "entity_id",
+      "created_by_user_id",
+      "title",
+      "description",
+      "due_at",
+      "lead_times",
+      "recurrence_interval_value",
+      "recurrence_interval_unit",
+      "recurrence_weekday",
+      "recurrence_day_of_month",
+      "recurrence_end_date",
+      "recurrence_max_occurrences",
+      "recurrence_fired_count",
+      "calendar_connection_id",
+      "google_event_id",
+      "email_recipients",
+      "sms_recipient_user_ids",
+      "call_recipient_user_ids",
+      "slack_recipient_user_ids",
+      "messenger_recipient_user_ids",
+      "status",
+      "elaine_action_type",
+      "elaine_action_payload",
+      "legacy_source_table",
+      "legacy_source_id",
+      "deleted_at",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "reminders", "id");
+
+  summary["reminder_deliveries"] = await copyTable(source, dest, {
+    table: "reminder_deliveries",
+    columns: [
+      "id",
+      "reminder_id",
+      "occurrence_key",
+      "channel",
+      "recipient_ref",
+      "scheduled_for",
+      "status",
+      "fired_at",
+      "error",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "reminder_deliveries", "id");
+
+  summary["reminder_calendar_sync_state"] = await copyTable(source, dest, {
+    table: "reminder_calendar_sync_state",
+    columns: [
+      "id",
+      "reminder_id",
+      "last_synced_event_title",
+      "last_synced_event_start",
+      "last_checked_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "reminder_calendar_sync_state", "id");
 
   summary["travels_calendar_settings"] = await copyTable(source, dest, {
     table: "travels_calendar_settings",

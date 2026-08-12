@@ -2,29 +2,35 @@ import { Router, type IRouter } from "express";
 import { and, eq, inArray, asc, isNull } from "drizzle-orm";
 import { logActivity } from "../../lib/soft-delete";
 import { z } from "zod/v4";
-import {
-  db,
-  travelsTrips,
-  travelsReminders,
-  travelsReminderCalendarEvents,
-  appUsers,
-} from "@workspace/db";
+import { db, travelsTrips, reminders, appUsers } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import { tripExists } from "../../lib/travels/db-helpers";
-import {
-  createReminderEvent,
-  updateReminderEvent,
-  deleteReminderEvent,
-  getReminderEventAlertDays,
-} from "../../lib/google-calendar";
-import {
-  getValidAccessToken,
-  getTravelCalendarConnection,
-} from "../../lib/google-calendar-tokens";
-import { logger } from "../../lib/logger";
 
 const router: IRouter = Router();
 router.use(requireAuth);
+
+// Travels reminders are one entity type ('travels_trip') within the generic
+// cross-app `reminders` table (see lib/db/src/schema/reminders.ts and the
+// reminder-system programme). This route intentionally keeps its external
+// wire shape stable (`dueDate` as a plain date string, `alertDaysBefore` as
+// a number array) so the frontend and lib/api-client-react/src/travels.ts
+// never needed to change — only the storage underneath did.
+//
+// Google Calendar sync (create/update/delete an event) was retired along
+// with the migration: the generic system never writes a new calendar event
+// for a reminder — see reminders.calendarConnectionId/googleEventId, which
+// only ever store a read-only *link* to an already-existing event (issue
+// #518/#519, not yet surfaced on this route).
+const ENTITY_TYPE = "travels_trip" as const;
+
+// Same default day-offsets the old travels_reminders.alert_days_before
+// column used.
+const DEFAULT_ALERT_DAYS_BEFORE = [14, 7, 3];
+
+// Fixed time-of-day for a bare due-date with no explicit time, matching the
+// convention used by the one-time travels_reminders backfill and (later)
+// issue #525's relative-time resolver.
+const DEFAULT_DUE_TIME_UTC = "T00:01:00.000Z";
 
 const CreateReminderBody = z.object({
   title: z.string().min(1),
@@ -33,7 +39,6 @@ const CreateReminderBody = z.object({
   recipientEmails: z.array(z.email()).optional(),
   smsRecipientUserIds: z.array(z.number().int()).optional(),
   callRecipientUserIds: z.array(z.number().int()).optional(),
-  syncToCalendar: z.boolean().optional(),
   alertDaysBefore: z.array(z.number().int().min(0)).min(1).optional(),
 });
 
@@ -45,7 +50,6 @@ const UpdateReminderBody = z.object({
   recipientEmails: z.array(z.email()).optional(),
   smsRecipientUserIds: z.array(z.number().int()).optional(),
   callRecipientUserIds: z.array(z.number().int()).optional(),
-  syncToCalendar: z.boolean().optional(),
   alertDaysBefore: z.array(z.number().int().min(0)).min(1).optional(),
 });
 
@@ -66,185 +70,54 @@ async function filterVerifiedPhoneUserIds(
   return rows.map((r) => r.id);
 }
 
-// Reminder events live on the single shared Travel calendar (not on each
-// recipient's own personal calendar), so every recipient sees the same
-// event when they view the Travel Calendar overlay. Writes are always
-// proxied through the Travel calendar owner's Google token. Returns null
-// when no Travel calendar is configured, in which case reminders simply
-// don't sync to Google.
-export async function getReminderSyncTarget(): Promise<{
-  userId: number;
-  calendarId: string;
-} | null> {
-  const connection = await getTravelCalendarConnection();
-  if (!connection) return null;
-  return { userId: connection.userId, calendarId: connection.googleCalendarId };
+function dueDateToDueAt(dueDate: string | null | undefined): Date | null {
+  if (!dueDate) return null;
+  return new Date(dueDate + DEFAULT_DUE_TIME_UTC);
 }
 
-// Syncs the single Travel-calendar event for this reminder: creates it if
-// missing, updates it in place, and deletes it (or any stale copy left over
-// from a since-changed Travel calendar owner) when sync is off, there's no
-// due date, or no Travel calendar is configured. Throws on GCal write
-// failure so callers surface the error rather than silently swallowing it.
-export async function syncReminderCalendarEvents(
-  reminderId: number,
-  tripTitle: string,
-  title: string,
-  dueDate: string | null,
-  target: { userId: number; calendarId: string } | null,
-  alertDaysBefore: number[],
-): Promise<void> {
-  const existing = await db
-    .select()
-    .from(travelsReminderCalendarEvents)
-    .where(eq(travelsReminderCalendarEvents.reminderId, reminderId));
-
-  if (!target || !dueDate) {
-    for (const row of existing) {
-      const accessToken = await getValidAccessToken(row.userId);
-      if (accessToken) {
-        await deleteReminderEvent(
-          accessToken,
-          row.calendarId,
-          row.googleEventId,
-        );
-      }
-    }
-    if (existing.length > 0) {
-      await db
-        .delete(travelsReminderCalendarEvents)
-        .where(eq(travelsReminderCalendarEvents.reminderId, reminderId));
-    }
-    return;
-  }
-
-  // If the Travel calendar was reassigned to a different owner/calendar
-  // since the last sync, drop any stale event(s) tied to the old one first.
-  const stale = existing.filter(
-    (row) =>
-      row.userId !== target.userId || row.calendarId !== target.calendarId,
-  );
-  for (const row of stale) {
-    const staleToken = await getValidAccessToken(row.userId);
-    if (staleToken) {
-      await deleteReminderEvent(staleToken, row.calendarId, row.googleEventId);
-    }
-  }
-  if (stale.length > 0) {
-    await db.delete(travelsReminderCalendarEvents).where(
-      inArray(
-        travelsReminderCalendarEvents.id,
-        stale.map((row) => row.id),
-      ),
-    );
-  }
-
-  const accessToken = await getValidAccessToken(target.userId);
-  if (!accessToken) return;
-
-  const current = existing.find(
-    (row) =>
-      row.userId === target.userId && row.calendarId === target.calendarId,
-  );
-
-  if (current) {
-    await updateReminderEvent(
-      accessToken,
-      current.calendarId,
-      current.googleEventId,
-      {
-        title,
-        dueDate,
-        description: `Trip reminder: ${tripTitle}`,
-        alertDaysBefore,
-      },
-    );
-  } else {
-    const event = await createReminderEvent(accessToken, {
-      calendarId: target.calendarId,
-      title,
-      dueDate,
-      description: `Trip reminder: ${tripTitle}`,
-      alertDaysBefore,
-    });
-    await db.insert(travelsReminderCalendarEvents).values({
-      reminderId,
-      userId: target.userId,
-      calendarId: target.calendarId,
-      googleEventId: event.id,
-    });
-  }
+function dueAtToDueDate(dueAt: Date | string | null): string | null {
+  if (!dueAt) return null;
+  const iso = dueAt instanceof Date ? dueAt.toISOString() : dueAt;
+  return iso.slice(0, 10);
 }
 
-export async function deleteAllReminderCalendarEvents(
-  reminderId: number,
-): Promise<void> {
-  const existing = await db
-    .select()
-    .from(travelsReminderCalendarEvents)
-    .where(eq(travelsReminderCalendarEvents.reminderId, reminderId));
-
-  for (const row of existing) {
-    const accessToken = await getValidAccessToken(row.userId);
-    if (accessToken) {
-      await deleteReminderEvent(accessToken, row.calendarId, row.googleEventId);
-    }
-  }
-
-  await db
-    .delete(travelsReminderCalendarEvents)
-    .where(eq(travelsReminderCalendarEvents.reminderId, reminderId));
+function alertDaysBeforeToLeadTimes(
+  days: number[],
+): { value: number; unit: "days" }[] {
+  return days.map((value) => ({ value, unit: "days" as const }));
 }
 
-/**
- * Pull-side of the bidirectional reminder-interval sync: reads the
- * creator's own copy of the reminder's calendar event and, if its popup
- * overrides imply a different set of day-offsets than what's stored, treats
- * Google as the source of truth and updates travels_reminders. Called
- * lazily whenever a reminder's events are read/listed, and periodically
- * from the reminder scheduler. Best-effort — never throws.
- */
-export async function pullReminderAlertDaysFromCalendar(
-  reminderId: number,
-  currentAlertDaysBefore: number[],
-): Promise<number[]> {
-  try {
-    const [row] = await db
-      .select()
-      .from(travelsReminderCalendarEvents)
-      .where(eq(travelsReminderCalendarEvents.reminderId, reminderId));
-    if (!row) return currentAlertDaysBefore;
+function leadTimesToAlertDaysBefore(
+  leadTimes: unknown,
+): number[] {
+  if (!Array.isArray(leadTimes)) return DEFAULT_ALERT_DAYS_BEFORE;
+  return leadTimes
+    .filter(
+      (lt): lt is { value: number; unit: string } =>
+        lt && typeof lt === "object" && lt.unit === "days",
+    )
+    .map((lt) => lt.value);
+}
 
-    const accessToken = await getValidAccessToken(row.userId);
-    if (!accessToken) return currentAlertDaysBefore;
-
-    const googleDays = await getReminderEventAlertDays(
-      accessToken,
-      row.calendarId,
-      row.googleEventId,
-    );
-    if (!googleDays || googleDays.length === 0) return currentAlertDaysBefore;
-
-    const sameSet =
-      googleDays.length === currentAlertDaysBefore.length &&
-      [...googleDays]
-        .sort()
-        .every((d, i) => d === [...currentAlertDaysBefore].sort()[i]);
-    if (sameSet) return currentAlertDaysBefore;
-
-    await db
-      .update(travelsReminders)
-      .set({ alertDaysBefore: googleDays })
-      .where(eq(travelsReminders.id, reminderId));
-    logger.info(
-      { reminderId, googleDays },
-      "reminders: pulled alert-day overrides from Google Calendar edit",
-    );
-    return googleDays;
-  } catch (err) {
-    logger.warn({ err, reminderId }, "reminders: pull-alert-days failed");
-    return currentAlertDaysBefore;
-  }
+// Maps a generic `reminders` row (for a travels_trip entity) back to the
+// travels_reminders-shaped object the frontend expects.
+function toWireShape(row: typeof reminders.$inferSelect) {
+  return {
+    id: row.id,
+    tripId: row.entityId,
+    userId: row.createdByUserId,
+    title: row.title,
+    description: row.description,
+    dueDate: dueAtToDueDate(row.dueAt),
+    done: row.status === "done",
+    recipientEmails: row.emailRecipients,
+    smsRecipientUserIds: row.smsRecipientUserIds,
+    callRecipientUserIds: row.callRecipientUserIds,
+    alertDaysBefore: leadTimesToAlertDaysBefore(row.leadTimes),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    deletedAt: row.deletedAt,
+  };
 }
 
 // GET /reminders — all pending (or all) reminders across all trips (for Dashboard)
@@ -253,18 +126,19 @@ router.get("/reminders", async (req, res) => {
 
   const rows = await db
     .select()
-    .from(travelsReminders)
+    .from(reminders)
     .where(
       pending
         ? and(
-            eq(travelsReminders.done, false),
-            isNull(travelsReminders.deletedAt),
+            eq(reminders.entityType, ENTITY_TYPE),
+            eq(reminders.status, "active"),
+            isNull(reminders.deletedAt),
           )
-        : isNull(travelsReminders.deletedAt),
+        : and(eq(reminders.entityType, ENTITY_TYPE), isNull(reminders.deletedAt)),
     )
-    .orderBy(asc(travelsReminders.dueDate), asc(travelsReminders.createdAt));
+    .orderBy(asc(reminders.dueAt), asc(reminders.createdAt));
 
-  res.json(rows);
+  res.json(rows.map(toWireShape));
 });
 
 // GET /trips/:id/reminders
@@ -281,16 +155,17 @@ router.get("/trips/:id/reminders", async (req, res) => {
 
   const rows = await db
     .select()
-    .from(travelsReminders)
+    .from(reminders)
     .where(
       and(
-        eq(travelsReminders.tripId, tripId),
-        isNull(travelsReminders.deletedAt),
+        eq(reminders.entityType, ENTITY_TYPE),
+        eq(reminders.entityId, tripId),
+        isNull(reminders.deletedAt),
       ),
     )
-    .orderBy(asc(travelsReminders.dueDate), asc(travelsReminders.createdAt));
+    .orderBy(asc(reminders.dueAt), asc(reminders.createdAt));
 
-  res.json(rows);
+  res.json(rows.map(toWireShape));
 });
 
 // POST /trips/:id/reminders
@@ -302,7 +177,7 @@ router.post("/trips/:id/reminders", async (req, res) => {
     return;
   }
   const [trip] = await db
-    .select({ id: travelsTrips.id, title: travelsTrips.title })
+    .select({ id: travelsTrips.id })
     .from(travelsTrips)
     .where(eq(travelsTrips.id, tripId));
   if (!trip) {
@@ -311,7 +186,6 @@ router.post("/trips/:id/reminders", async (req, res) => {
   }
 
   const body = CreateReminderBody.parse(req.body);
-  const syncToCalendar = body.syncToCalendar ?? true;
   const smsRecipientUserIds = body.smsRecipientUserIds
     ? await filterVerifiedPhoneUserIds(body.smsRecipientUserIds)
     : [];
@@ -319,37 +193,25 @@ router.post("/trips/:id/reminders", async (req, res) => {
     ? await filterVerifiedPhoneUserIds(body.callRecipientUserIds)
     : [];
   const [row] = await db
-    .insert(travelsReminders)
+    .insert(reminders)
     .values({
-      tripId,
-      userId,
+      entityType: ENTITY_TYPE,
+      entityId: tripId,
+      createdByUserId: userId,
       title: body.title,
       description: body.description ?? null,
-      dueDate: body.dueDate ?? null,
-      done: false,
-      recipientEmails: body.recipientEmails ?? [],
+      dueAt: dueDateToDueAt(body.dueDate),
+      status: "active",
+      emailRecipients: body.recipientEmails ?? [],
       smsRecipientUserIds,
       callRecipientUserIds,
-      syncToCalendar,
-      ...(body.alertDaysBefore !== undefined
-        ? { alertDaysBefore: body.alertDaysBefore }
-        : {}),
+      leadTimes: alertDaysBeforeToLeadTimes(
+        body.alertDaysBefore ?? DEFAULT_ALERT_DAYS_BEFORE,
+      ),
     })
     .returning();
 
-  if (syncToCalendar && row.dueDate) {
-    const target = await getReminderSyncTarget();
-    await syncReminderCalendarEvents(
-      row.id,
-      trip.title,
-      row.title,
-      row.dueDate,
-      target,
-      row.alertDaysBefore,
-    );
-  }
-
-  res.status(201).json(row);
+  res.status(201).json(toWireShape(row));
 });
 
 // PATCH /trips/:id/reminders/:reminderId
@@ -365,10 +227,11 @@ router.patch("/trips/:id/reminders/:reminderId", async (req, res) => {
   const updateData: Record<string, unknown> = {};
   if (body.title !== undefined) updateData.title = body.title;
   if (body.description !== undefined) updateData.description = body.description;
-  if (body.dueDate !== undefined) updateData.dueDate = body.dueDate;
-  if (body.done !== undefined) updateData.done = body.done;
+  if (body.dueDate !== undefined)
+    updateData.dueAt = dueDateToDueAt(body.dueDate);
+  if (body.done !== undefined) updateData.status = body.done ? "done" : "active";
   if (body.recipientEmails !== undefined)
-    updateData.recipientEmails = body.recipientEmails;
+    updateData.emailRecipients = body.recipientEmails;
   if (body.smsRecipientUserIds !== undefined)
     updateData.smsRecipientUserIds = await filterVerifiedPhoneUserIds(
       body.smsRecipientUserIds,
@@ -377,18 +240,18 @@ router.patch("/trips/:id/reminders/:reminderId", async (req, res) => {
     updateData.callRecipientUserIds = await filterVerifiedPhoneUserIds(
       body.callRecipientUserIds,
     );
-  if (body.syncToCalendar !== undefined)
-    updateData.syncToCalendar = body.syncToCalendar;
   if (body.alertDaysBefore !== undefined)
-    updateData.alertDaysBefore = body.alertDaysBefore;
+    updateData.leadTimes = alertDaysBeforeToLeadTimes(body.alertDaysBefore);
+  updateData.updatedAt = new Date();
 
   const [updated] = await db
-    .update(travelsReminders)
+    .update(reminders)
     .set(updateData)
     .where(
       and(
-        eq(travelsReminders.id, reminderId),
-        eq(travelsReminders.tripId, tripId),
+        eq(reminders.id, reminderId),
+        eq(reminders.entityType, ENTITY_TYPE),
+        eq(reminders.entityId, tripId),
       ),
     )
     .returning();
@@ -398,34 +261,7 @@ router.patch("/trips/:id/reminders/:reminderId", async (req, res) => {
     return;
   }
 
-  if (
-    body.title !== undefined ||
-    body.dueDate !== undefined ||
-    body.done !== undefined ||
-    body.recipientEmails !== undefined ||
-    body.syncToCalendar !== undefined ||
-    body.alertDaysBefore !== undefined
-  ) {
-    const [trip] = await db
-      .select({ title: travelsTrips.title })
-      .from(travelsTrips)
-      .where(eq(travelsTrips.id, tripId));
-    const tripTitle = trip?.title ?? "Trip";
-
-    const target = updated.syncToCalendar
-      ? await getReminderSyncTarget()
-      : null;
-    await syncReminderCalendarEvents(
-      updated.id,
-      tripTitle,
-      updated.title,
-      updated.dueDate,
-      target,
-      updated.alertDaysBefore,
-    );
-  }
-
-  res.json(updated);
+  res.json(toWireShape(updated));
 });
 
 // DELETE /trips/:id/reminders/:reminderId
@@ -438,12 +274,13 @@ router.delete("/trips/:id/reminders/:reminderId", async (req, res) => {
   }
 
   const [existing] = await db
-    .select({ id: travelsReminders.id, title: travelsReminders.title })
-    .from(travelsReminders)
+    .select({ id: reminders.id, title: reminders.title })
+    .from(reminders)
     .where(
       and(
-        eq(travelsReminders.id, reminderId),
-        eq(travelsReminders.tripId, tripId),
+        eq(reminders.id, reminderId),
+        eq(reminders.entityType, ENTITY_TYPE),
+        eq(reminders.entityId, tripId),
       ),
     );
 
@@ -452,15 +289,14 @@ router.delete("/trips/:id/reminders/:reminderId", async (req, res) => {
     return;
   }
 
-  await deleteAllReminderCalendarEvents(existing.id);
-
   await db
-    .update(travelsReminders)
+    .update(reminders)
     .set({ deletedAt: new Date() })
     .where(
       and(
-        eq(travelsReminders.id, reminderId),
-        eq(travelsReminders.tripId, tripId),
+        eq(reminders.id, reminderId),
+        eq(reminders.entityType, ENTITY_TYPE),
+        eq(reminders.entityId, tripId),
       ),
     );
   res.status(200).json({ ok: true });

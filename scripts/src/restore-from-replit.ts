@@ -870,6 +870,75 @@ async function main() {
   await resetSequence(dest, "travels_reminders", "id");
 
   await copyTable(source, dest, {
+    table: "reminders",
+    columns: [
+      "id",
+      "entity_type",
+      "entity_id",
+      "created_by_user_id",
+      "title",
+      "description",
+      "due_at",
+      "lead_times",
+      "recurrence_interval_value",
+      "recurrence_interval_unit",
+      "recurrence_weekday",
+      "recurrence_day_of_month",
+      "recurrence_end_date",
+      "recurrence_max_occurrences",
+      "recurrence_fired_count",
+      "calendar_connection_id",
+      "google_event_id",
+      "email_recipients",
+      "sms_recipient_user_ids",
+      "call_recipient_user_ids",
+      "slack_recipient_user_ids",
+      "messenger_recipient_user_ids",
+      "status",
+      "elaine_action_type",
+      "elaine_action_payload",
+      "legacy_source_table",
+      "legacy_source_id",
+      "deleted_at",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "reminders", "id");
+
+  await copyTable(source, dest, {
+    table: "reminder_deliveries",
+    columns: [
+      "id",
+      "reminder_id",
+      "occurrence_key",
+      "channel",
+      "recipient_ref",
+      "scheduled_for",
+      "status",
+      "fired_at",
+      "error",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "reminder_deliveries", "id");
+
+  await copyTable(source, dest, {
+    table: "reminder_calendar_sync_state",
+    columns: [
+      "id",
+      "reminder_id",
+      "last_synced_event_title",
+      "last_synced_event_start",
+      "last_checked_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "reminder_calendar_sync_state", "id");
+
+  await copyTable(source, dest, {
     table: "travels_reminder_alert_log",
     columns: ["id", "reminder_id", "user_id", "alert_type", "sent_at"],
     orderBy: "id",

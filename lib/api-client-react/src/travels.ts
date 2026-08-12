@@ -864,8 +864,6 @@ export interface Reminder {
   recipientEmails: string[];
   smsRecipientUserIds?: number[];
   callRecipientUserIds?: number[];
-  syncToCalendar: boolean;
-  googleEventId?: string | null;
   alertDaysBefore?: number[];
   createdAt: string;
 }
@@ -877,7 +875,6 @@ export interface CreateReminderBody {
   recipientEmails?: string[];
   smsRecipientUserIds?: number[];
   callRecipientUserIds?: number[];
-  syncToCalendar?: boolean;
   alertDaysBefore?: number[];
 }
 
@@ -889,7 +886,6 @@ export interface UpdateReminderBody {
   recipientEmails?: string[];
   smsRecipientUserIds?: number[];
   callRecipientUserIds?: number[];
-  syncToCalendar?: boolean;
   alertDaysBefore?: number[];
 }
 

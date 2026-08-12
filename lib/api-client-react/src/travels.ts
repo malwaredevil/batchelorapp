@@ -879,6 +879,10 @@ export interface Reminder {
   // the user's own connected calendars. Both are null/undefined together.
   calendarConnectionId?: number | null;
   googleEventId?: string | null;
+  // New (issue #519): the linked Google Calendar event's own page URL,
+  // server-populated whenever the calendar link is set/re-set. Read-only —
+  // never sent by the client.
+  googleEventHtmlLink?: string | null;
   createdAt: string;
 }
 

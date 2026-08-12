@@ -167,6 +167,7 @@ import {
   Star,
   CalendarCheck,
   CalendarPlus,
+  CalendarDays,
   Cloud,
   Search,
   Globe,
@@ -2998,6 +2999,17 @@ function ReminderRow({
           title="Add to my own Google Calendar"
         >
           <CalendarPlus className="w-3.5 h-3.5" />
+        </a>
+      )}
+      {reminder.googleEventHtmlLink && (
+        <a
+          href={reminder.googleEventHtmlLink}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 text-muted-foreground/70 hover:text-foreground"
+          title="View calendar event"
+        >
+          <CalendarDays className="w-3.5 h-3.5" />
         </a>
       )}
       <button

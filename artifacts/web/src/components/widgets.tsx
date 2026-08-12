@@ -27,6 +27,7 @@ import {
   X,
   NotebookPen,
   Send,
+  CalendarDays,
 } from "lucide-react";
 import {
   useGetCollectionStats,
@@ -1384,6 +1385,18 @@ export function TripRemindersWidget() {
               <span className="text-[10px] text-muted-foreground flex-shrink-0 whitespace-nowrap">
                 {dateStr}
               </span>
+            )}
+            {r.googleEventHtmlLink && (
+              <a
+                href={r.googleEventHtmlLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="View calendar event"
+                className="shrink-0 text-muted-foreground/70 hover:text-sky-600 dark:hover:text-sky-400"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <CalendarDays className="w-3 h-3" />
+              </a>
             )}
           </div>
         );

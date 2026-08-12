@@ -27,6 +27,7 @@ import {
   Square,
   Pencil,
   X,
+  CalendarDays,
 } from "lucide-react";
 import TripTimeline from "@/travels/components/TripTimeline";
 import { ReminderEditDialog } from "@/travels/components/ReminderEditDialog";
@@ -331,6 +332,18 @@ export default function Dashboard() {
                         month: "short",
                       })}
                     </span>
+                  )}
+                  {r.googleEventHtmlLink && (
+                    <a
+                      href={r.googleEventHtmlLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="View calendar event"
+                      className="shrink-0 text-yellow-700/60 hover:text-primary dark:text-yellow-400/60"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <CalendarDays className="w-3.5 h-3.5" />
+                    </a>
                   )}
                   <button
                     className="shrink-0 text-yellow-700/60 hover:text-destructive dark:text-yellow-400/60"

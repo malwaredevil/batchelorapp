@@ -3182,6 +3182,7 @@ END $$`,
      recurrence_fired_count      INTEGER NOT NULL DEFAULT 0,
      calendar_connection_id      INTEGER REFERENCES travels_connected_calendars(id),
      google_event_id             TEXT,
+     google_event_html_link      TEXT,
      email_recipients            TEXT[] NOT NULL DEFAULT '{}',
      sms_recipient_user_ids      INTEGER[] NOT NULL DEFAULT '{}',
      call_recipient_user_ids     INTEGER[] NOT NULL DEFAULT '{}',
@@ -3202,6 +3203,11 @@ END $$`,
   // already includes them for a fresh database.
   `ALTER TABLE reminders ADD COLUMN IF NOT EXISTS legacy_source_table TEXT`,
   `ALTER TABLE reminders ADD COLUMN IF NOT EXISTS legacy_source_id INTEGER`,
+  // Additive column for issue #519 — the table already existed in every
+  // real environment by the time this was added, so the CREATE TABLE IF NOT
+  // EXISTS above (which now also lists it) is a no-op there; this explicit
+  // ALTER is what actually creates it (see schema-field-missing-ddl memory).
+  `ALTER TABLE reminders ADD COLUMN IF NOT EXISTS google_event_html_link TEXT`,
   // due_at was briefly NOT NULL when this table was first created (#513);
   // loosened before any real writes existed once #514's backfill found
   // real travels_reminders rows with no due date at all (a legitimate

@@ -142,16 +142,25 @@ function normalizeLeadTimes(leadTimes: unknown): LeadTimeInput[] {
 
 class CalendarLinkError extends Error {}
 
+interface ResolvedCalendarLink {
+  dueAt: Date;
+  // Google Calendar's own event.htmlLink — denormalized onto the reminder
+  // row so every reminder UI surface can render a "view event" link without
+  // a live Calendar API call per render (issue #519). null if Google didn't
+  // return one (shouldn't normally happen, but the schema tolerates it).
+  htmlLink: string | null;
+}
+
 // Resolves and validates a calendarConnectionId/googleEventId pair: the
 // calendar must belong to the requesting user (never another household
 // member's), and the event must still exist. Returns the event's start time
-// to use as the reminder's dueAt. Throws CalendarLinkError with a
-// user-facing message on any failure — callers turn that into a 400/404/502.
+// to use as the reminder's dueAt, plus its htmlLink. Throws CalendarLinkError
+// with a user-facing message on any failure — callers turn that into a 400.
 async function resolveCalendarLink(
   userId: number,
   calendarConnectionId: number,
   googleEventId: string,
-): Promise<Date> {
+): Promise<ResolvedCalendarLink> {
   const [calendar] = await db
     .select()
     .from(travelsConnectedCalendars)
@@ -190,7 +199,7 @@ async function resolveCalendarLink(
       "That calendar event no longer exists. Pick another one.",
     );
   }
-  return new Date(event.start);
+  return { dueAt: new Date(event.start), htmlLink: event.htmlLink ?? null };
 }
 
 // Maps a generic `reminders` row (for a travels_trip entity) back to the
@@ -212,6 +221,7 @@ function toWireShape(row: typeof reminders.$inferSelect) {
     leadTimes: normalizeLeadTimes(row.leadTimes),
     calendarConnectionId: row.calendarConnectionId,
     googleEventId: row.googleEventId,
+    googleEventHtmlLink: row.googleEventHtmlLink,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     deletedAt: row.deletedAt,
@@ -294,13 +304,16 @@ router.post("/trips/:id/reminders", async (req, res) => {
   // Calendar-linked reminders (issue #518): the event's own start time wins
   // over any dueDate the client also sent.
   let dueAt = dueDateToDueAt(body.dueDate);
+  let googleEventHtmlLink: string | null = null;
   if (body.calendarConnectionId && body.googleEventId) {
     try {
-      dueAt = await resolveCalendarLink(
+      const resolved = await resolveCalendarLink(
         userId,
         body.calendarConnectionId,
         body.googleEventId,
       );
+      dueAt = resolved.dueAt;
+      googleEventHtmlLink = resolved.htmlLink;
     } catch (err) {
       if (err instanceof CalendarLinkError) {
         res.status(400).json({ error: err.message });
@@ -337,6 +350,10 @@ router.post("/trips/:id/reminders", async (req, res) => {
       googleEventId:
         body.calendarConnectionId && body.googleEventId
           ? body.googleEventId
+          : null,
+      googleEventHtmlLink:
+        body.calendarConnectionId && body.googleEventId
+          ? googleEventHtmlLink
           : null,
     })
     .returning();
@@ -387,11 +404,13 @@ router.patch("/trips/:id/reminders/:reminderId", async (req, res) => {
   ) {
     if (body.calendarConnectionId && body.googleEventId) {
       try {
-        updateData.dueAt = await resolveCalendarLink(
+        const resolved = await resolveCalendarLink(
           userId,
           body.calendarConnectionId,
           body.googleEventId,
         );
+        updateData.dueAt = resolved.dueAt;
+        updateData.googleEventHtmlLink = resolved.htmlLink;
       } catch (err) {
         if (err instanceof CalendarLinkError) {
           res.status(400).json({ error: err.message });
@@ -404,6 +423,7 @@ router.patch("/trips/:id/reminders/:reminderId", async (req, res) => {
     } else {
       updateData.calendarConnectionId = null;
       updateData.googleEventId = null;
+      updateData.googleEventHtmlLink = null;
     }
   }
   updateData.updatedAt = new Date();

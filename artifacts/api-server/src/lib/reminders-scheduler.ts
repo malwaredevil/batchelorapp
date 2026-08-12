@@ -305,6 +305,10 @@ async function deliverGenericMessengerReminder(
   userId: number,
   message: string,
 ): Promise<void> {
+  // Note: `message` is prebuilt by the caller (see the "messenger" branch
+  // below), which already appends the calendar link line (issue #519) when
+  // present — kept here rather than as a separate param since messenger
+  // delivery has no fixed template, just a free-text body.
   let [conv] = await db
     .select({ id: elaineHistoryConversations.id })
     .from(elaineHistoryConversations)
@@ -510,13 +514,19 @@ export async function claimAndSendDueDeliveries(): Promise<{
         if (!emailEnabled) throw new Error("email channel not configured");
         // Need dueAt for the email body's formatted date — re-select it
         // rather than threading it through the claim query's RETURNING to
-        // keep that query's shape simple.
-        const [{ due_at: dueAtText }] = (
-          await pool.query<{ due_at: string }>(
-            `SELECT due_at::text FROM reminders WHERE id = $1`,
-            [delivery.reminder_id],
-          )
-        ).rows;
+        // keep that query's shape simple. Also grabs google_event_html_link
+        // (issue #519) so calendar-linked reminders can include a direct
+        // link to the event.
+        const [{ due_at: dueAtText, google_event_html_link: calendarEventUrl }] =
+          (
+            await pool.query<{
+              due_at: string;
+              google_event_html_link: string | null;
+            }>(
+              `SELECT due_at::text, google_event_html_link FROM reminders WHERE id = $1`,
+              [delivery.reminder_id],
+            )
+          ).rows;
         await sendGenericReminderAlertEmail(
           delivery.recipient_ref,
           delivery.reminder_title,
@@ -524,17 +534,22 @@ export async function claimAndSendDueDeliveries(): Promise<{
           new Date(dueAtText),
           label,
           contextLabel,
+          calendarEventUrl,
         );
       } else if (delivery.channel === "sms") {
         if (!smsEnabled) throw new Error("sms channel not configured");
         const phone = phoneMap.get(Number(delivery.recipient_ref));
         if (!phone) throw new Error("no verified phone on file");
-        const [{ due_at: dueAtText }] = (
-          await pool.query<{ due_at: string }>(
-            `SELECT due_at::text FROM reminders WHERE id = $1`,
-            [delivery.reminder_id],
-          )
-        ).rows;
+        const [{ due_at: dueAtText, google_event_html_link: calendarEventUrl }] =
+          (
+            await pool.query<{
+              due_at: string;
+              google_event_html_link: string | null;
+            }>(
+              `SELECT due_at::text, google_event_html_link FROM reminders WHERE id = $1`,
+              [delivery.reminder_id],
+            )
+          ).rows;
         const formattedDate = new Date(dueAtText).toLocaleDateString("en-GB", {
           day: "numeric",
           month: "long",
@@ -546,17 +561,22 @@ export async function claimAndSendDueDeliveries(): Promise<{
           label,
           formattedDate,
           contextLabel,
+          calendarEventUrl,
         );
       } else if (delivery.channel === "call") {
         if (!callsEnabled) throw new Error("call channel not configured");
         const phone = phoneMap.get(Number(delivery.recipient_ref));
         if (!phone) throw new Error("no verified phone on file");
-        const [{ due_at: dueAtText }] = (
-          await pool.query<{ due_at: string }>(
-            `SELECT due_at::text FROM reminders WHERE id = $1`,
-            [delivery.reminder_id],
-          )
-        ).rows;
+        const [{ due_at: dueAtText, google_event_html_link: calendarEventUrl }] =
+          (
+            await pool.query<{
+              due_at: string;
+              google_event_html_link: string | null;
+            }>(
+              `SELECT due_at::text, google_event_html_link FROM reminders WHERE id = $1`,
+              [delivery.reminder_id],
+            )
+          ).rows;
         const formattedDate = new Date(dueAtText).toLocaleDateString("en-GB", {
           day: "numeric",
           month: "long",
@@ -568,6 +588,8 @@ export async function claimAndSendDueDeliveries(): Promise<{
             label,
             formattedDate,
             contextLabel ? `, for your ${contextLabel.toLowerCase()}` : "",
+            // Issue #519: mention the linked event exists, never speak its URL.
+            !!calendarEventUrl,
           );
           await initiateOutboundCall({
             toNumber: phone,
@@ -585,18 +607,23 @@ export async function claimAndSendDueDeliveries(): Promise<{
             label,
             formattedDate,
             contextLabel,
+            calendarEventUrl,
           );
         }
       } else if (delivery.channel === "slack") {
         if (!slackEnabled) throw new Error("slack channel not configured");
         const slackUserId = slackMap.get(Number(delivery.recipient_ref));
         if (!slackUserId) throw new Error("no slack user id on file");
-        const [{ due_at: dueAtText }] = (
-          await pool.query<{ due_at: string }>(
-            `SELECT due_at::text FROM reminders WHERE id = $1`,
-            [delivery.reminder_id],
-          )
-        ).rows;
+        const [{ due_at: dueAtText, google_event_html_link: calendarEventUrl }] =
+          (
+            await pool.query<{
+              due_at: string;
+              google_event_html_link: string | null;
+            }>(
+              `SELECT due_at::text, google_event_html_link FROM reminders WHERE id = $1`,
+              [delivery.reminder_id],
+            )
+          ).rows;
         const formattedDate = new Date(dueAtText).toLocaleDateString("en-GB", {
           day: "numeric",
           month: "long",
@@ -608,13 +635,23 @@ export async function claimAndSendDueDeliveries(): Promise<{
           label,
           formattedDate,
           contextLabel,
+          calendarEventUrl,
         );
       } else if (delivery.channel === "messenger") {
         const userId = Number(delivery.recipient_ref);
+        const [{ google_event_html_link: calendarEventUrl }] = (
+          await pool.query<{ google_event_html_link: string | null }>(
+            `SELECT google_event_html_link FROM reminders WHERE id = $1`,
+            [delivery.reminder_id],
+          )
+        ).rows;
         const body = delivery.reminder_description
           ? `${delivery.reminder_title}\n\n${delivery.reminder_description}`
           : delivery.reminder_title;
-        const message = contextLabel ? `${body}\n\n${contextLabel}` : body;
+        const withContext = contextLabel ? `${body}\n\n${contextLabel}` : body;
+        const message = calendarEventUrl
+          ? `${withContext}\n\nCalendar event: ${calendarEventUrl}`
+          : withContext;
         await deliverGenericMessengerReminder(userId, message);
       } else if (delivery.channel === "elaine_action") {
         // entity_type is always 'elaine_action' here (see the synthetic

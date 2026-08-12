@@ -326,7 +326,22 @@ export function ReminderEditDialog({
                 >
                   {isOverdue ? "Overdue · " : "Due "}
                   {formattedDueDate}
-                  {calendarLinked && " · linked to a calendar event"}
+                  {calendarLinked &&
+                    (reminder.googleEventHtmlLink ? (
+                      <>
+                        {" · "}
+                        <a
+                          href={reminder.googleEventHtmlLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="underline hover:text-foreground"
+                        >
+                          view calendar event
+                        </a>
+                      </>
+                    ) : (
+                      " · linked to a calendar event"
+                    ))}
                 </p>
               )}
             </div>

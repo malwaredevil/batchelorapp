@@ -75,6 +75,12 @@ export const reminders = pgTable(
       () => travelsConnectedCalendars.id,
     ),
     googleEventId: text("google_event_id"),
+    // Denormalized from the Google Calendar API's event.htmlLink at
+    // link/re-link time (see resolveCalendarLink in routes/travels/
+    // reminders.ts). Lets every reminder UI surface (bell popover, central
+    // Reminders page, per-module lists) render a direct "view event" link
+    // without an extra live Calendar API call per render (issue #519).
+    googleEventHtmlLink: text("google_event_html_link"),
     emailRecipients: text("email_recipients")
       .array()
       .notNull()

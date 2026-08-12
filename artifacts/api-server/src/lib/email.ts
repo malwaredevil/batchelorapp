@@ -124,6 +124,9 @@ export async function sendGenericReminderAlertEmail(
   dueAt: Date,
   label: string,
   contextLabel?: string,
+  // Issue #519: the linked Google Calendar event's own link, rendered as a
+  // real hyperlink in the HTML body and a plain URL in the text fallback.
+  calendarEventUrl?: string | null,
 ): Promise<void> {
   const from = await getConfig(
     "email",
@@ -164,6 +167,7 @@ export async function sendGenericReminderAlertEmail(
                   This reminder is due on <strong>${formatted}</strong>, which is
                   <strong>${label}</strong> away.${contextLabel ? ` ${contextLabel}.` : ""}
                   ${description ? `<br /><br />${description}` : ""}
+                  ${calendarEventUrl ? `<br /><br /><a href="${calendarEventUrl}" style="color: #0ea5e9;">View calendar event</a>` : ""}
                 </p>
                 <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
                 <p style="margin: 0; font-size: 11px; color: #bbb;">
@@ -177,7 +181,7 @@ export async function sendGenericReminderAlertEmail(
     </table>
   </body>
 </html>`,
-    text: `Reminder — ${label} to go\n\n${reminderTitle}\n\nDue: ${formatted}${contextLabel ? `\n${contextLabel}` : ""}${description ? `\n\n${description}` : ""}\n\nBatchelor`,
+    text: `Reminder — ${label} to go\n\n${reminderTitle}\n\nDue: ${formatted}${contextLabel ? `\n${contextLabel}` : ""}${description ? `\n\n${description}` : ""}${calendarEventUrl ? `\n\nCalendar event: ${calendarEventUrl}` : ""}\n\nBatchelor`,
   });
 
   if (error) {

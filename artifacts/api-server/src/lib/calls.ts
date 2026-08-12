@@ -171,14 +171,23 @@ export function buildReminderCallScript(
  * describing what the reminder is attached to (e.g. `, for your trip "Paris"`
  * — include any leading punctuation/wording); omit it for reminders with no
  * parent entity.
+ *
+ * `hasCalendarEvent` (issue #519): when the reminder is linked to a Google
+ * Calendar event, the script mentions that fact so the listener knows to
+ * check their calendar — it must NEVER speak the raw URL itself, since a
+ * spoken link is useless and TTS engines mangle long tokenized strings.
  */
 export function buildGenericReminderCallScript(
   reminderTitle: string,
   label: string,
   formattedDueDate: string,
   contextPhrase?: string,
+  hasCalendarEvent?: boolean,
 ): string {
-  return `Hi! I'm calling with a Batchelor reminder. Your reminder "${reminderTitle}" is due in ${label} on ${formattedDueDate}${contextPhrase ?? ""}. Have a great day!`;
+  const calendarPhrase = hasCalendarEvent
+    ? " This is linked to an event on your calendar."
+    : "";
+  return `Hi! I'm calling with a Batchelor reminder. Your reminder "${reminderTitle}" is due in ${label} on ${formattedDueDate}${contextPhrase ?? ""}.${calendarPhrase} Have a great day!`;
 }
 
 // AgentPhone outbound calls are available whenever the connector proxy can

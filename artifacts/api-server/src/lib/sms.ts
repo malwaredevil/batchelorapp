@@ -80,17 +80,20 @@ export async function sendReminderAlertSms(
 // Entity-agnostic version of sendReminderAlertSms, used by the generic
 // cross-app reminders-scheduler. `contextLabel` is an optional short suffix
 // describing what the reminder is attached to (e.g. `trip "Paris"`); omit it
-// for reminders with no parent entity.
+// for reminders with no parent entity. `calendarEventUrl` (issue #519) is the
+// linked Google Calendar event's own link, included as a plain-text URL when
+// present — SMS has no rich-text option.
 export async function sendGenericReminderAlertSms(
   toNumber: string,
   reminderTitle: string,
   label: string,
   formattedDueDate: string,
   contextLabel?: string,
+  calendarEventUrl?: string | null,
 ): Promise<void> {
   await sendSms(
     toNumber,
-    `Reminder: "${reminderTitle}" is due in ${label} (${formattedDueDate})${contextLabel ? ` — ${contextLabel}` : ""}.`,
+    `Reminder: "${reminderTitle}" is due in ${label} (${formattedDueDate})${contextLabel ? ` — ${contextLabel}` : ""}.${calendarEventUrl ? ` Calendar event: ${calendarEventUrl}` : ""}`,
   );
 }
 

@@ -56,6 +56,7 @@ import {
   CollectionDetailHero,
   CollectionDetailPanelStack,
   CollectionDetailSection,
+  ReminderBellButton,
 } from "@workspace/collection-ui";
 
 type Fabric = {
@@ -818,6 +819,11 @@ export default function FabricDetail() {
                     </>
                   ) : (
                     <>
+                      <ReminderBellButton
+                        entityType="quilting_fabric"
+                        entityId={f.id}
+                        defaultTitle={`Reminder: ${f.name}`}
+                      />
                       <Button
                         variant="outline"
                         size="icon"

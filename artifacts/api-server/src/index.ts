@@ -2,7 +2,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { runStartupMigration } from "./lib/startup-migrate";
 import { provisionAllBuckets } from "./lib/bucket-provisioning";
-import { startReminderScheduler } from "./lib/reminder-scheduler";
+import { startRemindersScheduler } from "./lib/reminders-scheduler";
 import { startNudgeScheduler } from "./lib/travels-nudges";
 import { startIntegrationsHealthNudgeScheduler } from "./lib/integrations-health-nudges";
 import { startCalendarTripScanScheduler } from "./lib/travels-calendar-scan";
@@ -13,7 +13,6 @@ import { startMonitoringScheduler } from "./lib/monitoring-scheduler";
 import { startCommCheckScheduler } from "./lib/comm-check-scheduler";
 import { startWebhookSideEffectCleanupScheduler } from "./lib/webhook-side-effect-idempotency";
 import { startSchedulerHeartbeat } from "./lib/scheduler-guard";
-import { startScheduledActionsRunner } from "./lib/elaine-scheduled-actions-runner";
 import { startJobWorker, stopAllJobWorkers } from "./lib/jobs/worker";
 import {
   markBucketsReady,
@@ -72,7 +71,7 @@ async function initializeRuntime(): Promise<void> {
 
   markStartupReady();
   stopSchedulers.push(
-    startReminderScheduler(),
+    startRemindersScheduler(),
     startNudgeScheduler(),
     startCalendarTripScanScheduler(),
     startGmailScanScheduler(),
@@ -81,7 +80,6 @@ async function initializeRuntime(): Promise<void> {
     startMonitoringScheduler(),
     startCommCheckScheduler(),
     startWebhookSideEffectCleanupScheduler(),
-    startScheduledActionsRunner(),
     startIntegrationsHealthNudgeScheduler(),
     startSchedulerHeartbeat(),
   );

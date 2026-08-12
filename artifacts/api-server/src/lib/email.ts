@@ -111,6 +111,85 @@ export async function sendReminderAlertEmail(
   }
 }
 
+// Entity-agnostic version of sendReminderAlertEmail, used by the generic
+// cross-app reminders-scheduler (reminders/reminder_deliveries tables) so any
+// reminder — Travels trip, Elaine scheduled action, Office note, etc. — can
+// send an alert without a hardcoded trip title/destination. `contextLabel`
+// is an optional short line describing what the reminder is attached to
+// (e.g. "Trip: Paris"); omit it for reminders with no parent entity.
+export async function sendGenericReminderAlertEmail(
+  toEmail: string,
+  reminderTitle: string,
+  description: string | null,
+  dueAt: Date,
+  label: string,
+  contextLabel?: string,
+  // Issue #519: the linked Google Calendar event's own link, rendered as a
+  // real hyperlink in the HTML body and a plain URL in the text fallback.
+  calendarEventUrl?: string | null,
+): Promise<void> {
+  const from = await getConfig(
+    "email",
+    "reminder_from_email",
+    "Batchelor Reminders <reminders@app.batchelor.app>",
+  );
+
+  const formatted = dueAt.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+
+  const { error } = await getResend().emails.send({
+    from,
+    to: toEmail,
+    subject: `Reminder in ${label}: ${reminderTitle}`,
+    html: `
+<!DOCTYPE html>
+<html>
+  <head><meta charset="utf-8" /></head>
+  <body style="font-family: sans-serif; background: #f9f9f9; padding: 40px 0; margin: 0;">
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr>
+        <td align="center">
+          <table width="480" cellpadding="0" cellspacing="0"
+            style="background: #ffffff; border-radius: 8px; padding: 40px;
+                   box-shadow: 0 1px 4px rgba(0,0,0,0.08);">
+            <tr>
+              <td>
+                <p style="margin: 0 0 4px; font-size: 12px; color: #0ea5e9; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
+                  Reminder — ${label} to go
+                </p>
+                <h2 style="margin: 0 0 8px; font-size: 22px; color: #111;">
+                  ${reminderTitle}
+                </h2>
+                <p style="margin: 0 0 24px; font-size: 14px; color: #555;">
+                  This reminder is due on <strong>${formatted}</strong>, which is
+                  <strong>${label}</strong> away.${contextLabel ? ` ${contextLabel}.` : ""}
+                  ${description ? `<br /><br />${description}` : ""}
+                  ${calendarEventUrl ? `<br /><br /><a href="${calendarEventUrl}" style="color: #0ea5e9;">View calendar event</a>` : ""}
+                </p>
+                <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+                <p style="margin: 0; font-size: 11px; color: #bbb;">
+                  Batchelor &mdash; reminder alerts
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`,
+    text: `Reminder — ${label} to go\n\n${reminderTitle}\n\nDue: ${formatted}${contextLabel ? `\n${contextLabel}` : ""}${description ? `\n\n${description}` : ""}${calendarEventUrl ? `\n\nCalendar event: ${calendarEventUrl}` : ""}\n\nBatchelor`,
+  });
+
+  if (error) {
+    logger.error({ err: error }, "resend generic reminder alert send failed");
+    throw new Error(`Failed to send reminder alert: ${error.message}`);
+  }
+}
+
 // Notifies a trip's household after a forwarded booking document (flight,
 // hotel, car rental, airport transfer, parking, etc.) is synced into the
 // trip's itinerary — either newly added or updated with richer data. Skipping

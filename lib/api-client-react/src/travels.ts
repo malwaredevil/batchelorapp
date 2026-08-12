@@ -853,6 +853,13 @@ export function useUpdateTripPhoto<TError = unknown, TContext = unknown>(
 // Reminders
 // ---------------------------------------------------------------------------
 
+export type ReminderLeadTimeUnit = "minutes" | "hours" | "days" | "weeks";
+
+export interface ReminderLeadTime {
+  value: number;
+  unit: ReminderLeadTimeUnit;
+}
+
 export interface Reminder {
   id: number;
   tripId: number;
@@ -864,9 +871,18 @@ export interface Reminder {
   recipientEmails: string[];
   smsRecipientUserIds?: number[];
   callRecipientUserIds?: number[];
-  syncToCalendar: boolean;
-  googleEventId?: string | null;
   alertDaysBefore?: number[];
+  // New (issue #518): the full lead-time list (arbitrary units/count) behind
+  // alertDaysBefore, which only ever reflects the day-unit subset.
+  leadTimes?: ReminderLeadTime[];
+  // New (issue #518): set when this reminder is linked to an event on one of
+  // the user's own connected calendars. Both are null/undefined together.
+  calendarConnectionId?: number | null;
+  googleEventId?: string | null;
+  // New (issue #519): the linked Google Calendar event's own page URL,
+  // server-populated whenever the calendar link is set/re-set. Read-only —
+  // never sent by the client.
+  googleEventHtmlLink?: string | null;
   createdAt: string;
 }
 
@@ -877,8 +893,10 @@ export interface CreateReminderBody {
   recipientEmails?: string[];
   smsRecipientUserIds?: number[];
   callRecipientUserIds?: number[];
-  syncToCalendar?: boolean;
   alertDaysBefore?: number[];
+  leadTimes?: ReminderLeadTime[];
+  calendarConnectionId?: number | null;
+  googleEventId?: string | null;
 }
 
 export interface UpdateReminderBody {
@@ -889,8 +907,10 @@ export interface UpdateReminderBody {
   recipientEmails?: string[];
   smsRecipientUserIds?: number[];
   callRecipientUserIds?: number[];
-  syncToCalendar?: boolean;
   alertDaysBefore?: number[];
+  leadTimes?: ReminderLeadTime[];
+  calendarConnectionId?: number | null;
+  googleEventId?: string | null;
 }
 
 const listReminders = (tripId: number, options?: RequestInit): Promise<Reminder[]> =>

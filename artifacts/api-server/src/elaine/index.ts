@@ -34,7 +34,7 @@ import {
   travelsTripDocuments,
   travelsDocChunks,
   travelsTripPhotos,
-  travelsReminders,
+  reminders,
   travelsWishlist,
   travelsPackingLists,
   travelsPackingItems,
@@ -93,11 +93,6 @@ import { deleteDocument } from "../lib/travels-storage";
 import { getValidAccessToken } from "../lib/google-calendar-tokens";
 import { rescanTripDocument } from "../routes/travels/documents";
 import { getCachedHealthChecks } from "../routes/admin/integrations-health";
-import {
-  getReminderSyncTarget,
-  syncReminderCalendarEvents,
-  deleteAllReminderCalendarEvents,
-} from "../routes/travels/reminders";
 import {
   generateItineraryForTrip,
   ItineraryActionError,
@@ -187,6 +182,14 @@ import {
   LIST_SCHEDULED_CONTACTS_TOOL_NAME,
   type CommunicationActionType,
 } from "./communication-actions";
+import {
+  buildReminderActionLabel,
+  reminderActionExecutors,
+  reminderActionSchemas,
+  LIST_REMINDERS_TOOL_NAME,
+  executeListRemindersTool,
+  type ReminderActionType,
+} from "./reminder-actions";
 import {
   loadCrossChannelContext,
   appendCrossChannelEntry,
@@ -535,9 +538,9 @@ async function getReminderLabelInfo(
   reminderId: number,
 ): Promise<{ title: string } | null> {
   const [item] = await db
-    .select({ title: travelsReminders.title })
-    .from(travelsReminders)
-    .where(eq(travelsReminders.id, reminderId));
+    .select({ title: reminders.title })
+    .from(reminders)
+    .where(eq(reminders.id, reminderId));
   return item ?? null;
 }
 
@@ -682,13 +685,6 @@ const AddReminderActionPayload = z.object({
   description: z.string().max(2000).optional(),
   dueDate: z.string().max(20).optional(),
   recipientEmails: z.array(z.email()).max(20).optional(),
-  syncToCalendar: z.boolean().optional(),
-});
-
-const SyncReminderToCalendarActionPayload = z.object({
-  tripId: z.number().int().positive(),
-  reminderId: z.number().int().positive(),
-  syncToCalendar: z.boolean().optional(),
 });
 
 const EditReminderActionPayload = z.object({
@@ -699,7 +695,6 @@ const EditReminderActionPayload = z.object({
   dueDate: z.string().max(20).nullable().optional(),
   done: z.boolean().optional(),
   recipientEmails: z.array(z.email()).max(20).optional(),
-  syncToCalendar: z.boolean().optional(),
 });
 
 const DeleteReminderActionPayload = z.object({
@@ -906,10 +901,6 @@ const ActionBody = z.discriminatedUnion("type", [
     payload: AddReminderActionPayload,
   }),
   z.object({
-    type: z.literal("sync_reminder_to_calendar"),
-    payload: SyncReminderToCalendarActionPayload,
-  }),
-  z.object({
     type: z.literal("edit_reminder"),
     payload: EditReminderActionPayload,
   }),
@@ -1001,6 +992,7 @@ const ActionBody = z.discriminatedUnion("type", [
   ...adaptiveActionSchemas,
   ...appOperationActionSchemas,
   ...communicationActionSchemas,
+  ...reminderActionSchemas,
 ]);
 
 type PendingAction = z.infer<typeof ActionBody>;
@@ -1142,17 +1134,9 @@ async function buildActionLabel(action: PendingAction): Promise<string> {
     case "add_reminder": {
       const trip = await getTripLabelInfo(action.payload.tripId);
       const name = trip ? `"${trip.title || trip.destination}"` : "this trip";
-      const sync = action.payload.syncToCalendar ?? true;
       return `Add a reminder "${action.payload.title}"${
         action.payload.dueDate ? ` due ${action.payload.dueDate}` : ""
-      } for ${name}${sync ? " and sync it to the calendar" : ""}`;
-    }
-    case "sync_reminder_to_calendar": {
-      const reminder = await getReminderLabelInfo(action.payload.reminderId);
-      const name = reminder ? `"${reminder.title}"` : "this reminder";
-      return action.payload.syncToCalendar === false
-        ? `Stop syncing ${name} to the calendar`
-        : `Sync ${name} to the calendar`;
+      } for ${name}`;
     }
     case "edit_reminder": {
       const reminder = await getReminderLabelInfo(action.payload.reminderId);
@@ -1171,12 +1155,6 @@ async function buildActionLabel(action: PendingAction): Promise<string> {
         changes.push(action.payload.done ? "mark as done" : "mark as not done");
       if (action.payload.recipientEmails !== undefined)
         changes.push(`recipients`);
-      if (action.payload.syncToCalendar !== undefined)
-        changes.push(
-          action.payload.syncToCalendar
-            ? "sync to the calendar"
-            : "stop syncing to the calendar",
-        );
       return `Update ${name}${changes.length ? `: ${changes.join(", ")}` : ""}`;
     }
     case "delete_reminder": {
@@ -1326,6 +1304,19 @@ async function buildActionLabel(action: PendingAction): Promise<string> {
           action as { type: CommunicationActionType; payload: unknown },
         );
       }
+      if (
+        reminderActionSchemas.some(
+          (schema) =>
+            schema.safeParse({
+              type: action.type,
+              payload: action.payload,
+            }).success,
+        )
+      ) {
+        return buildReminderActionLabel(
+          action as { type: ReminderActionType; payload: unknown },
+        );
+      }
       return "Perform this action";
   }
 }
@@ -1358,6 +1349,7 @@ type TravelActionType = Exclude<
   | AdaptiveActionType
   | AppOperationActionType
   | CommunicationActionType
+  | ReminderActionType
 >;
 
 const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
@@ -1514,8 +1506,13 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
       .delete(travelsTripDocuments)
       .where(eq(travelsTripDocuments.tripId, payload.tripId));
     await db
-      .delete(travelsReminders)
-      .where(eq(travelsReminders.tripId, payload.tripId));
+      .delete(reminders)
+      .where(
+        and(
+          eq(reminders.entityType, "travels_trip"),
+          eq(reminders.entityId, payload.tripId),
+        ),
+      );
     await db.delete(travelsTrips).where(eq(travelsTrips.id, payload.tripId));
 
     return {
@@ -1700,122 +1697,61 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
       .where(eq(travelsTrips.id, payload.tripId));
     if (!trip) return { status: 404, body: { error: "Trip not found" } };
 
-    const syncToCalendar = payload.syncToCalendar ?? true;
     const [row] = await db
-      .insert(travelsReminders)
+      .insert(reminders)
       .values({
-        tripId: payload.tripId,
-        userId,
+        entityType: "travels_trip",
+        entityId: payload.tripId,
+        createdByUserId: userId,
         title: payload.title,
         description: payload.description ?? null,
-        dueDate: payload.dueDate ?? null,
-        done: false,
-        recipientEmails: payload.recipientEmails ?? [],
-        syncToCalendar,
+        dueAt: payload.dueDate
+          ? new Date(`${payload.dueDate}T00:01:00.000Z`)
+          : null,
+        status: "active",
+        emailRecipients: payload.recipientEmails ?? [],
       })
       .returning();
-
-    if (syncToCalendar && row.dueDate) {
-      const target = await getReminderSyncTarget();
-      await syncReminderCalendarEvents(
-        row.id,
-        trip.title,
-        row.title,
-        row.dueDate,
-        target,
-        row.alertDaysBefore,
-      );
-    }
 
     return { status: 201, body: { type: "add_reminder", result: row } };
   }) as ActionExecutor,
 
-  sync_reminder_to_calendar: (async (
-    payload: z.infer<typeof SyncReminderToCalendarActionPayload>,
-    userId: number,
-  ) => {
-    const [existing] = await db
-      .select()
-      .from(travelsReminders)
-      .where(eq(travelsReminders.id, payload.reminderId));
-    if (!existing || existing.tripId !== payload.tripId) {
-      return { status: 404, body: { error: "Reminder not found" } };
-    }
-    const syncToCalendar = payload.syncToCalendar ?? true;
-
-    const [row] = await db
-      .update(travelsReminders)
-      .set({ syncToCalendar })
-      .where(eq(travelsReminders.id, payload.reminderId))
-      .returning();
-
-    const [trip] = await db
-      .select({ title: travelsTrips.title })
-      .from(travelsTrips)
-      .where(eq(travelsTrips.id, row.tripId));
-    const target = syncToCalendar ? await getReminderSyncTarget() : null;
-    await syncReminderCalendarEvents(
-      row.id,
-      trip?.title ?? "Trip",
-      row.title,
-      row.dueDate,
-      target,
-      row.alertDaysBefore,
-    );
-
-    return {
-      status: 200,
-      body: { type: "sync_reminder_to_calendar", result: row },
-    };
-  }) as ActionExecutor,
-
   edit_reminder: (async (
     payload: z.infer<typeof EditReminderActionPayload>,
-    userId: number,
+    _userId: number,
   ) => {
     const [existing] = await db
       .select()
-      .from(travelsReminders)
-      .where(eq(travelsReminders.id, payload.reminderId));
-    if (!existing || existing.tripId !== payload.tripId) {
+      .from(reminders)
+      .where(eq(reminders.id, payload.reminderId));
+    if (
+      !existing ||
+      existing.entityType !== "travels_trip" ||
+      existing.entityId !== payload.tripId
+    ) {
       return { status: 404, body: { error: "Reminder not found" } };
     }
 
-    const updates: Partial<typeof travelsReminders.$inferInsert> = {};
+    const updates: Partial<typeof reminders.$inferInsert> = {
+      updatedAt: new Date(),
+    };
     if (payload.title !== undefined) updates.title = payload.title;
     if (payload.description !== undefined)
       updates.description = payload.description;
-    if (payload.dueDate !== undefined) updates.dueDate = payload.dueDate;
-    if (payload.done !== undefined) updates.done = payload.done;
+    if (payload.dueDate !== undefined)
+      updates.dueAt = payload.dueDate
+        ? new Date(`${payload.dueDate}T00:01:00.000Z`)
+        : null;
+    if (payload.done !== undefined)
+      updates.status = payload.done ? "done" : "active";
     if (payload.recipientEmails !== undefined)
-      updates.recipientEmails = payload.recipientEmails;
-    if (payload.syncToCalendar !== undefined)
-      updates.syncToCalendar = payload.syncToCalendar;
+      updates.emailRecipients = payload.recipientEmails;
 
     const [row] = await db
-      .update(travelsReminders)
+      .update(reminders)
       .set(updates)
-      .where(eq(travelsReminders.id, payload.reminderId))
+      .where(eq(reminders.id, payload.reminderId))
       .returning();
-
-    const [trip] = await db
-      .select({ title: travelsTrips.title })
-      .from(travelsTrips)
-      .where(eq(travelsTrips.id, row.tripId));
-
-    if (row.syncToCalendar && row.dueDate) {
-      const target = await getReminderSyncTarget();
-      await syncReminderCalendarEvents(
-        row.id,
-        trip?.title ?? "Trip",
-        row.title,
-        row.dueDate,
-        target,
-        row.alertDaysBefore,
-      );
-    } else {
-      await deleteAllReminderCalendarEvents(row.id);
-    }
 
     return { status: 200, body: { type: "edit_reminder", result: row } };
   }) as ActionExecutor,
@@ -1825,23 +1761,27 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
     userId: number,
   ) => {
     const [existing] = await db
-      .select({ id: travelsReminders.id, tripId: travelsReminders.tripId })
-      .from(travelsReminders)
+      .select({
+        id: reminders.id,
+        entityType: reminders.entityType,
+        entityId: reminders.entityId,
+      })
+      .from(reminders)
       .where(
-        and(
-          eq(travelsReminders.id, payload.reminderId),
-          isNull(travelsReminders.deletedAt),
-        ),
+        and(eq(reminders.id, payload.reminderId), isNull(reminders.deletedAt)),
       );
-    if (!existing || existing.tripId !== payload.tripId) {
+    if (
+      !existing ||
+      existing.entityType !== "travels_trip" ||
+      existing.entityId !== payload.tripId
+    ) {
       return { status: 404, body: { error: "Reminder not found" } };
     }
 
-    await deleteAllReminderCalendarEvents(payload.reminderId);
     await db
-      .update(travelsReminders)
+      .update(reminders)
       .set({ deletedAt: new Date() })
-      .where(eq(travelsReminders.id, payload.reminderId));
+      .where(eq(reminders.id, payload.reminderId));
     void logActivity({
       actorUserId: userId,
       actorChannel: "elaine",
@@ -2616,6 +2556,7 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
   ...universalActionExecutors,
   ...adaptiveActionExecutors,
   ...communicationActionExecutors,
+  ...reminderActionExecutors,
   [EXECUTE_APP_OPERATION_TOOL_NAME]:
     executeAppOperationAction as ActionExecutor,
 };
@@ -3915,7 +3856,7 @@ In both cases, make this your FIRST tool call — before writing any reply text 
 
 ${confirmationModeSection}
 
-REMINDERS: Use add_reminder for requests like "remind me to check in for our flight" or "remind me to book the hotel by Friday" — it creates a new reminder and syncs it to the calendar by default; include recipientEmails only if the user asked to also notify someone. Use sync_reminder_to_calendar only to toggle calendar sync on or off for a reminder that already exists and whose numeric id you can see on screen (look for "reminderId: <number>" in the reminders listed for the current trip); never use it to create a reminder. Use edit_reminder for changes to an existing reminder (title, description, due date, done state, recipients, or calendar sync) — only include the fields the user asked to change, and never guess a reminder id. Use delete_reminder to permanently remove an existing reminder (also removes its calendar events); never guess a reminder id for either.
+REMINDERS: Use add_reminder for requests like "remind me to check in for our flight" or "remind me to book the hotel by Friday" — include recipientEmails only if the user asked to also notify someone. Use edit_reminder for changes to an existing reminder (title, description, due date, done state, or recipients) — only include the fields the user asked to change, and never guess a reminder id. Use delete_reminder to permanently remove an existing reminder; never guess a reminder id for either. These three are all trip-scoped — only usable when the user is talking about a specific trip. For a general-purpose "remind me..." with no trip involved (e.g. "remind me tomorrow to call the vet", "email and slack me next Tuesday at 9am about the dentist"), use create_reminder instead — it always targets the requesting user's own account and never a household member. For scheduling a call or message TO another household member at a future time, use call_contact/message_contact's own scheduleAt field, not create_reminder. All three of create_reminder's when field and call_contact/message_contact's scheduleAt field accept a structured relative-time spec — always translate the user's relative phrasing ("tomorrow", "in 3 days", "next Tuesday") into that spec's fields yourself; never compute or write out an ISO datetime from a relative phrase, the resolver does that math deterministically. Use list_reminders to see every reminder the user can manage — from create_reminder, any collection item's bell icon, or trip reminders — with exact numeric ids, due dates, recurrence, and status; call it first whenever the user asks what's upcoming/overdue or you need a reminder's id before acting on it (never guess one). Use snooze_reminder to move any reminder the user can manage to a new time (the when field, same relative-time spec) or to skip just the next occurrence of a recurring one (skipNext: true) without changing its recurrence rule — this works across all reminder sources, not just create_reminder's.
 
 ITINERARY: Use add_itinerary_day for requests like "add a day trip to Kyoto on the 14th" — it appends a brand-new day to the trip's itinerary. Use regenerate_itinerary_day for requests like "regenerate day 3" or "come up with a new plan for that day" — it re-runs AI planning for ONE existing day and replaces its activities, using balanced-pace, general-interest defaults since it can't see any per-session style/interest picks the user made in the UI. Only use regenerate_itinerary_day on a day number you can see listed on screen (e.g. "Day 3"); never guess a day number, and never use it to create a new day (use add_itinerary_day for that). Use generate_itinerary for requests like "plan my whole trip" or "generate an itinerary" — it replaces ALL days with a fresh AI-generated plan; if the trip already has itinerary days shown on screen, say so and confirm the user wants to overwrite them before calling it. Each activity you can see on screen has a 1-based day/activity number and a status (tentative or confirmed); tentative activities synced from a document are flagged as such. Use confirm_itinerary_activity to mark a tentative activity firm (or back to tentative) once the user has verified it, and remove_itinerary_activity to delete an activity outright (e.g. a wrong or duplicate document-derived entry) — both require the exact day and activity numbers shown on screen, never guessed.
 
@@ -6349,6 +6290,10 @@ router.post("/chat", async (req, res) => {
             resultText =
               (await executeUniversalReadTool(call.name, call.args, userId)) ??
               "Unsupported app data tool.";
+          } else if (call.name === LIST_REMINDERS_TOOL_NAME) {
+            resultText =
+              (await executeListRemindersTool(call.name, call.args, userId)) ??
+              "Unsupported app data tool.";
           } else if (call.name === LIST_SCHEDULED_CONTACTS_TOOL_NAME) {
             resultText = await executeListScheduledContacts(userId);
           } else if (call.name === LIST_CONTACT_CHANNELS_TOOL_NAME) {
@@ -6999,22 +6944,23 @@ async function generateDailyBriefContent(userId: number): Promise<string> {
   // 2. Overdue reminders
   const overdueReminders = await db
     .select({
-      title: travelsReminders.title,
-      dueDate: travelsReminders.dueDate,
+      title: reminders.title,
+      dueAt: reminders.dueAt,
     })
-    .from(travelsReminders)
+    .from(reminders)
     .where(
       and(
-        sql`${travelsReminders.dueDate} < ${todayDateStr}::date`,
-        eq(travelsReminders.done, false),
+        eq(reminders.entityType, "travels_trip"),
+        sql`${reminders.dueAt} < now()`,
+        eq(reminders.status, "active"),
       ),
     )
-    .orderBy(travelsReminders.dueDate)
+    .orderBy(reminders.dueAt)
     .limit(5);
 
   if (overdueReminders.length > 0) {
     const list = overdueReminders
-      .map((r) => `"${r.title}" (due ${r.dueDate})`)
+      .map((r) => `"${r.title}" (due ${r.dueAt?.toISOString().slice(0, 10)})`)
       .join(", ");
     contextParts.push(`Overdue reminders: ${list}`);
   } else {
@@ -7722,6 +7668,8 @@ const AGENTPHONE_ACTION_TOOLS = ACTION_TOOLS.filter(
 export const SMS_SLACK_CHANNEL_EXTRAS = new Set<string>([
   "call_contact",
   "message_contact",
+  "create_reminder",
+  "snooze_reminder",
 ]);
 
 const SMS_SLACK_CHANNEL_EXTRA_TOOLS = ACTION_TOOLS.filter(
@@ -8437,17 +8385,21 @@ export async function buildAgentphoneContext(): Promise<string> {
     packingByTrip.set(row.tripId, list);
   }
 
-  const reminders = await db
+  const tripReminderRows = await db
     .select({
-      id: travelsReminders.id,
-      tripId: travelsReminders.tripId,
-      title: travelsReminders.title,
-      dueDate: travelsReminders.dueDate,
-      syncToCalendar: travelsReminders.syncToCalendar,
+      id: reminders.id,
+      tripId: reminders.entityId,
+      title: reminders.title,
+      dueAt: reminders.dueAt,
     })
-    .from(travelsReminders)
-    .where(eq(travelsReminders.done, false))
-    .orderBy(desc(travelsReminders.id))
+    .from(reminders)
+    .where(
+      and(
+        eq(reminders.entityType, "travels_trip"),
+        eq(reminders.status, "active"),
+      ),
+    )
+    .orderBy(desc(reminders.id))
     .limit(50);
 
   const tripLines = trips.map((t) => {
@@ -8467,11 +8419,11 @@ export async function buildAgentphoneContext(): Promise<string> {
     return `tripId: ${t.id} — "${t.title || t.destination}" (${t.destination}), status: ${t.status}, dates: ${dates}${packingText}`;
   });
 
-  const reminderLines = reminders.map(
+  const reminderLines = tripReminderRows.map(
     (r) =>
       `reminderId: ${r.id} (tripId: ${r.tripId}) — "${r.title}"${
-        r.dueDate ? `, due ${r.dueDate}` : ""
-      }${r.syncToCalendar ? "" : ", not synced to calendar"}`,
+        r.dueAt ? `, due ${r.dueAt.toISOString().slice(0, 10)}` : ""
+      }`,
   );
 
   const diaryRows = await db
@@ -8521,7 +8473,7 @@ export async function buildAgentphoneContext(): Promise<string> {
 
   return [
     trips.length > 0 ? `Trips:\n${tripLines.join("\n")}` : "No trips yet.",
-    reminders.length > 0
+    tripReminderRows.length > 0
       ? `Open reminders:\n${reminderLines.join("\n")}`
       : "No open reminders.",
     diaryLines.length > 0
@@ -8855,6 +8807,10 @@ async function executeRestrictedToolCall(
   } else if (name === LIST_ELAINE_MEMORIES_TOOL_NAME) {
     resultText =
       (await executeUniversalReadTool(name, argsJson, userId)) ??
+      "Unsupported app data tool.";
+  } else if (name === LIST_REMINDERS_TOOL_NAME) {
+    resultText =
+      (await executeListRemindersTool(name, argsJson, userId)) ??
       "Unsupported app data tool.";
   } else if (RESTRICTED_SOFT_TOOL_NAMES.has(name)) {
     resultText = await executeRestrictedSoftTool(name, argsJson);

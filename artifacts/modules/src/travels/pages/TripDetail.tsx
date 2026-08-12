@@ -19,7 +19,6 @@ import {
   useUpdateReminder,
   useDeleteReminder,
   useListTravelsAppUsers,
-  useGetCalendarStatus,
   useGetTravelCalendarStatus,
   useCreateTravelCalendarEvent,
   useListConnectedCalendars,
@@ -53,10 +52,15 @@ import {
   useRevokeTripShareToken,
   type PhotoType,
   type Reminder,
+  type ReminderLeadTime,
   type TravelsAppUser,
   type CustomDocumentType,
   getUploadErrorMessage,
 } from "@workspace/api-client-react";
+import {
+  CalendarLinkPicker,
+  LeadTimesEditor,
+} from "../components/ReminderCalendarAndLeadTimes";
 import {
   LARGE_IMAGE_UPLOAD,
   validateClientUpload,
@@ -163,6 +167,7 @@ import {
   Star,
   CalendarCheck,
   CalendarPlus,
+  CalendarDays,
   Cloud,
   Search,
   Globe,
@@ -2611,6 +2616,9 @@ function RemindersSection({ tripId }: { tripId: number }) {
         setNewDue("");
         setNewRecipients([]);
         setCustomEmail("");
+        setNewLeadTimes([{ value: 0, unit: "days" }]);
+        setNewCalendarConnectionId(null);
+        setNewGoogleEventId(null);
         setAdding(false);
         toast.success("Reminder added");
       },
@@ -2650,21 +2658,16 @@ function RemindersSection({ tripId }: { tripId: number }) {
   const [newDue, setNewDue] = useState("");
   const [newRecipients, setNewRecipients] = useState<string[]>([]);
   const [customEmail, setCustomEmail] = useState("");
-  const [newSync, setNewSync] = useState(true);
-  const [newAlertDays, setNewAlertDays] = useState<number[]>([0]);
+  const [newLeadTimes, setNewLeadTimes] = useState<ReminderLeadTime[]>([
+    { value: 0, unit: "days" },
+  ]);
+  const [newCalendarConnectionId, setNewCalendarConnectionId] = useState<
+    number | null
+  >(null);
+  const [newGoogleEventId, setNewGoogleEventId] = useState<string | null>(null);
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
-  const { data: calendarStatus } = useGetCalendarStatus();
-  const travelCalendarConnected = !!calendarStatus?.connected;
-  const ALERT_DAY_OPTIONS = [0, 1, 3, 7];
-
-  function toggleNewAlertDay(day: number) {
-    setNewAlertDays((prev) => {
-      const next = prev.includes(day)
-        ? prev.filter((d) => d !== day)
-        : [...prev, day];
-      return next.length > 0 ? next : [0];
-    });
-  }
+  const calendarLinked =
+    newCalendarConnectionId != null && newGoogleEventId != null;
 
   function toggleRecipient(email: string) {
     setNewRecipients((prev) =>
@@ -2717,11 +2720,22 @@ function RemindersSection({ tripId }: { tripId: number }) {
               onChange={(e) => setNewTitle(e.target.value)}
               autoFocus
             />
-            <Input
-              type="date"
-              value={newDue}
-              onChange={(e) => setNewDue(e.target.value)}
-              placeholder="Due date (optional)"
+            {!calendarLinked && (
+              <Input
+                type="date"
+                value={newDue}
+                onChange={(e) => setNewDue(e.target.value)}
+                placeholder="Due date (optional)"
+              />
+            )}
+
+            <CalendarLinkPicker
+              calendarConnectionId={newCalendarConnectionId}
+              googleEventId={newGoogleEventId}
+              onChange={(calendarConnectionId, googleEventId) => {
+                setNewCalendarConnectionId(calendarConnectionId);
+                setNewGoogleEventId(googleEventId);
+              }}
             />
 
             <div className="space-y-1.5 pt-1">
@@ -2803,37 +2817,10 @@ function RemindersSection({ tripId }: { tripId: number }) {
               )}
             </div>
 
-            {travelCalendarConnected && (
-              <div className="space-y-1.5 pt-1">
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
-                  <Checkbox
-                    checked={newSync}
-                    onCheckedChange={(v) => setNewSync(!!v)}
-                  />
-                  Add to the Travel Calendar
-                </label>
-                {newSync && (
-                  <div className="pl-6 flex flex-wrap gap-1.5">
-                    {ALERT_DAY_OPTIONS.map((day) => (
-                      <button
-                        key={day}
-                        type="button"
-                        onClick={() => toggleNewAlertDay(day)}
-                        className={`text-xs rounded-full px-2.5 py-1 border transition-colors ${
-                          newAlertDays.includes(day)
-                            ? "bg-primary text-primary-foreground border-primary"
-                            : "bg-background text-muted-foreground border-card-border hover:border-primary/50"
-                        }`}
-                      >
-                        {day === 0
-                          ? "On the day"
-                          : `${day} day${day > 1 ? "s" : ""} before`}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+            <LeadTimesEditor
+              leadTimes={newLeadTimes}
+              onChange={setNewLeadTimes}
+            />
 
             <div className="flex gap-2 pt-1">
               <Button
@@ -2844,10 +2831,11 @@ function RemindersSection({ tripId }: { tripId: number }) {
                     tripId,
                     body: {
                       title: newTitle.trim(),
-                      dueDate: newDue || undefined,
+                      dueDate: calendarLinked ? undefined : newDue || undefined,
                       recipientEmails: newRecipients,
-                      syncToCalendar: newSync,
-                      alertDaysBefore: newAlertDays,
+                      leadTimes: newLeadTimes,
+                      calendarConnectionId: newCalendarConnectionId,
+                      googleEventId: newGoogleEventId,
                     },
                   });
                 }}
@@ -2976,14 +2964,6 @@ function ReminderRow({
       >
         {reminder.title}
       </button>
-      {reminder.syncToCalendar && reminder.googleEventId && (
-        <span
-          className="flex items-center gap-1 text-xs text-muted-foreground shrink-0"
-          title="Synced to the Travel Calendar"
-        >
-          <CalendarCheck className="w-3 h-3" />
-        </span>
-      )}
       {reminder.recipientEmails.length > 0 && (
         <span
           className="flex items-center gap-1 text-xs text-muted-foreground shrink-0"
@@ -3018,6 +2998,17 @@ function ReminderRow({
           title="Add to my own Google Calendar"
         >
           <CalendarPlus className="w-3.5 h-3.5" />
+        </a>
+      )}
+      {reminder.googleEventHtmlLink && (
+        <a
+          href={reminder.googleEventHtmlLink}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="shrink-0 text-muted-foreground/70 hover:text-foreground"
+          title="View calendar event"
+        >
+          <CalendarDays className="w-3.5 h-3.5" />
         </a>
       )}
       <button
@@ -3517,7 +3508,7 @@ export default function TripDetail({ id }: { id: number }) {
             : "No documents attached to this trip yet.") +
           "\n" +
           (reminders.length > 0
-            ? `${formatElaineContextList(reminders, { label: "Reminders", formatItem: (r) => formatElaineContextEntity({ entity: "reminder", id: r.id, label: r.title, details: [r.dueDate ? `due ${r.dueDate}` : "no due date", r.done ? "done" : "not done", r.syncToCalendar ? "synced to calendar" : "NOT synced to calendar", `recipients: ${r.recipientEmails && r.recipientEmails.length > 0 ? r.recipientEmails.join(", ") : "none"}`] }), limit: 20 })}.`
+            ? `${formatElaineContextList(reminders, { label: "Reminders", formatItem: (r) => formatElaineContextEntity({ entity: "reminder", id: r.id, label: r.title, details: [r.dueDate ? `due ${r.dueDate}` : "no due date", r.done ? "done" : "not done", `recipients: ${r.recipientEmails && r.recipientEmails.length > 0 ? r.recipientEmails.join(", ") : "none"}`] }), limit: 20 })}.`
             : "No reminders yet for this trip.") +
           "\n" +
           (localItinerary?.days && localItinerary.days.length > 0

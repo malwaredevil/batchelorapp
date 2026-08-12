@@ -18,7 +18,7 @@ import {
   travelsTrips,
   travelsTripPhotos,
   travelsTripDocuments,
-  travelsReminders,
+  reminders,
   ornamentsItems,
   ornamentsImages,
 } from "@workspace/db";
@@ -259,8 +259,13 @@ export async function purgeDeletedItems(): Promise<PurgeSummary> {
         .delete(travelsTripDocuments)
         .where(inArray(travelsTripDocuments.tripId, ids));
       await db
-        .delete(travelsReminders)
-        .where(inArray(travelsReminders.tripId, ids));
+        .delete(reminders)
+        .where(
+          and(
+            eq(reminders.entityType, "travels_trip"),
+            inArray(reminders.entityId, ids),
+          ),
+        );
       await db.delete(travelsTrips).where(inArray(travelsTrips.id, ids));
       summary.travelsTrips = rows.length;
     }
@@ -339,18 +344,19 @@ export async function purgeDeletedItems(): Promise<PurgeSummary> {
   // --- Reminders (standalone) ---
   try {
     const rows = await db
-      .select({ id: travelsReminders.id })
-      .from(travelsReminders)
+      .select({ id: reminders.id })
+      .from(reminders)
       .where(
         and(
-          isNotNull(travelsReminders.deletedAt),
-          lt(travelsReminders.deletedAt, cutoff),
+          eq(reminders.entityType, "travels_trip"),
+          isNotNull(reminders.deletedAt),
+          lt(reminders.deletedAt, cutoff),
         ),
       );
     if (rows.length > 0) {
-      await db.delete(travelsReminders).where(
+      await db.delete(reminders).where(
         inArray(
-          travelsReminders.id,
+          reminders.id,
           rows.map((r) => r.id),
         ),
       );

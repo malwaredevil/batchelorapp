@@ -8,7 +8,7 @@ import {
   travelsTripDocuments,
   travelsDocChunks,
   travelsTripPhotos,
-  travelsReminders,
+  reminders,
   travelsPackingLists,
   travelsDiaryEntries,
 } from "@workspace/db";
@@ -282,9 +282,14 @@ router.delete("/trips/:id", async (req, res) => {
       .set({ deletedAt: now })
       .where(eq(travelsTripDocuments.tripId, id));
     await tx
-      .update(travelsReminders)
+      .update(reminders)
       .set({ deletedAt: now })
-      .where(eq(travelsReminders.tripId, id));
+      .where(
+        and(
+          eq(reminders.entityType, "travels_trip"),
+          eq(reminders.entityId, id),
+        ),
+      );
     // Packing list rows have no deleted_at — hard-delete them now.
     await tx
       .delete(travelsPackingLists)

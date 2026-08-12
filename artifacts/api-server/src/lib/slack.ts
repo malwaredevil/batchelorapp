@@ -150,3 +150,25 @@ export async function sendReminderAlertSlack(
   ].join("\n");
   await postSlackMessage(channelId, text);
 }
+
+// Entity-agnostic version of sendReminderAlertSlack, used by the generic
+// cross-app reminders-scheduler. `contextLabel` is an optional line
+// describing what the reminder is attached to (e.g. "Trip: Paris"); omit it
+// for reminders with no parent entity. `calendarEventUrl` (issue #519) is the
+// linked Google Calendar event's own link; Slack renders `<url|text>` as a
+// clickable link.
+export async function sendGenericReminderAlertSlack(
+  slackUserId: string,
+  reminderTitle: string,
+  label: string,
+  formattedDate: string,
+  contextLabel?: string,
+  calendarEventUrl?: string | null,
+): Promise<void> {
+  const channelId = await openDmChannel(slackUserId);
+  const lines = [`*Reminder: ${reminderTitle}*`];
+  if (contextLabel) lines.push(contextLabel);
+  lines.push(`Due: ${formattedDate} _(${label})_`);
+  if (calendarEventUrl) lines.push(`<${calendarEventUrl}|View calendar event>`);
+  await postSlackMessage(channelId, lines.join("\n"));
+}

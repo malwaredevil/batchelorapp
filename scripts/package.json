@@ -6,6 +6,7 @@
   "scripts": {
     "backup-to-replit": "tsx ./src/backup-to-replit.ts",
     "migrate-production": "tsx ./src/migrate-production.ts",
+    "migrate-travels-reminders": "tsx ./src/migrate-travels-reminders-to-generic.ts",
     "bootstrap-dev-db": "tsx ./src/bootstrap-dev-db.ts",
     "encrypt-oauth-tokens": "tsx ./src/encrypt-oauth-tokens.ts",
     "ingest-hooh-now": "tsx ./src/ingest-hooh-now.ts",

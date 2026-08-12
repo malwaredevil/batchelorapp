@@ -126,19 +126,21 @@ assert.deepEqual(
 
 // --- exclusion set shrink ---
 const baseSource = `
-export const RESTRICTED_EXCLUDED_ACTION_TYPES = [
+export const RESTRICTED_EXCLUDED_ACTION_TYPES_SOURCE = [
   "delete_pottery_item",
+  // A per-entry explanatory comment, like the real file has for several
+  // entries — must not push later entries out of the counted window.
   "delete_trip",
   "delete_ornament",
 ];
 `;
 const shrunkSource = `
-export const RESTRICTED_EXCLUDED_ACTION_TYPES = [
+export const RESTRICTED_EXCLUDED_ACTION_TYPES_SOURCE = [
   "delete_pottery_item",
 ];
 `;
 const grownSource = `
-export const RESTRICTED_EXCLUDED_ACTION_TYPES = [
+export const RESTRICTED_EXCLUDED_ACTION_TYPES_SOURCE = [
   "delete_pottery_item",
   "delete_trip",
   "delete_ornament",

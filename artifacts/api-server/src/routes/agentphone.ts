@@ -2,12 +2,7 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { webhookLimiter } from "../middleware/rateLimit";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
-import {
-  db,
-  appUsers,
-  agentphoneConversations,
-  type AgentphoneConversationRow,
-} from "@workspace/db";
+import { db, appUsers, agentphoneConversations } from "@workspace/db";
 import { env } from "../lib/env";
 import { logger } from "../lib/logger";
 import { sendSms, SmsOptedOutError } from "../lib/sms";
@@ -18,6 +13,7 @@ import {
 } from "../lib/webhook-side-effect-idempotency";
 import { runAgentphoneTurn, type AgentphoneChatMessage } from "../elaine";
 import { markCommCheckVerified } from "../lib/comm-check-scheduler";
+import { getOrCreateAgentphoneConversation } from "../lib/agentphone-conversation";
 
 // ---------------------------------------------------------------------------
 // AgentPhone SMS/voice webhook (task #105). Handles three things:
@@ -152,33 +148,8 @@ async function markDeliveryProcessed(id: string): Promise<void> {
   }
 }
 
-async function getOrCreateAgentphoneConversation(
-  phoneNumber: string,
-  userId: number,
-): Promise<AgentphoneConversationRow> {
-  const [existing] = await db
-    .select()
-    .from(agentphoneConversations)
-    .where(eq(agentphoneConversations.phoneNumber, phoneNumber));
-  if (existing) return existing;
-
-  const [created] = await db
-    .insert(agentphoneConversations)
-    .values({ phoneNumber, userId, messages: [] })
-    .onConflictDoNothing()
-    .returning();
-  if (created) return created;
-
-  // Lost a race with another delivery for the same number.
-  const [row] = await db
-    .select()
-    .from(agentphoneConversations)
-    .where(eq(agentphoneConversations.phoneNumber, phoneNumber));
-  return row;
-}
-
 async function runRestrictedTurnAndPersist(
-  conversation: AgentphoneConversationRow,
+  conversation: Awaited<ReturnType<typeof getOrCreateAgentphoneConversation>>,
   userId: number,
   inputText: string,
   channel: "sms" | "voice",

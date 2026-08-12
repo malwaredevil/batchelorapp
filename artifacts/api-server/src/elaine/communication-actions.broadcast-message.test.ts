@@ -108,7 +108,7 @@ vi.mock("@workspace/db", () => ({
   },
   appUsers: {},
   elaineBroadcastLog: {},
-  elaineScheduledActions: {},
+  reminders: {},
 }));
 
 vi.mock("../lib/sms", () => ({

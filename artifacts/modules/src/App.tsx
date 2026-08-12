@@ -147,6 +147,7 @@ const MessengerPage = lazy(() => import("@/office/pages/messenger"));
 const OfficeGmail = lazy(() => import("@/office/pages/gmail"));
 const OfficeCalendar = lazy(() => import("@/office/pages/calendar"));
 const OfficeNotes = lazy(() => import("@/office/pages/notes"));
+const OfficeReminders = lazy(() => import("@/office/pages/reminders"));
 
 // Shared
 const NotFound = lazy(() => import("@/pages/not-found"));
@@ -435,6 +436,11 @@ function Routes() {
                 <Route path="/office/notes">
                   <OfficeLayout>
                     <OfficeNotes />
+                  </OfficeLayout>
+                </Route>
+                <Route path="/office/reminders">
+                  <OfficeLayout>
+                    <OfficeReminders />
                   </OfficeLayout>
                 </Route>
                 <Route path="/office/messenger" component={MessengerPage} />

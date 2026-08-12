@@ -54,6 +54,15 @@ export type { QuickEditSheetFrameProps } from "./quick-edit-sheet";
 export { CollectionErrorState } from "./collection-error-state";
 export type { CollectionErrorStateProps } from "./collection-error-state";
 
+export {
+  CreateReminderDialog,
+  ReminderBellButton,
+} from "./create-reminder-dialog";
+export type {
+  CreateReminderDialogProps,
+  ReminderBellButtonProps,
+} from "./create-reminder-dialog";
+
 export { PreviewZoomModal } from "./preview-zoom-modal";
 export {
   readValidatedPageSize,

@@ -52,6 +52,7 @@ import { PatternAnalysisPanel } from "@/quilting/components/PatternAnalysisPanel
 import {
   CollectionDetailHero,
   CollectionDetailPanelStack,
+  ReminderBellButton,
 } from "@workspace/collection-ui";
 
 type PatternData = {
@@ -434,6 +435,11 @@ export default function PatternDetail() {
                   </>
                 ) : (
                   <>
+                    <ReminderBellButton
+                      entityType="quilting_pattern"
+                      entityId={patternId}
+                      defaultTitle={`Reminder: ${p.name}`}
+                    />
                     {p.imageUrl && (
                       <Button
                         variant="outline"

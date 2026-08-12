@@ -44,6 +44,7 @@ import {
 import {
   CollectionDetailHero,
   CollectionDetailPanelStack,
+  ReminderBellButton,
 } from "@workspace/collection-ui";
 
 type QuiltData = {
@@ -374,6 +375,11 @@ export default function QuiltDetail() {
                   </>
                 ) : (
                   <>
+                    <ReminderBellButton
+                      entityType="quilting_quilt"
+                      entityId={quiltId}
+                      defaultTitle={`Reminder: ${q.name}`}
+                    />
                     <Button
                       variant="outline"
                       size="icon"

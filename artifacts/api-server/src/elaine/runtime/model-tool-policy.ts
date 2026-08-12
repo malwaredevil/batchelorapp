@@ -43,6 +43,7 @@ export const MODEL_VISIBLE_HARD_TOOL_NAMES = new Set<string>([
   "read_app_operation",
   "check_integrations_health",
   "generate_document",
+  "list_reminders",
 ]);
 
 export const MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS: Readonly<
@@ -87,6 +88,7 @@ export const MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS: Readonly<
   read_app_operation: "checking the Batchelor App",
   check_integrations_health: "checking connected services",
   generate_document: "creating that document",
+  list_reminders: "checking your reminders",
 };
 
 export const SPECIALIZED_CURRENT_TOOL_NAMES = new Set<string>([

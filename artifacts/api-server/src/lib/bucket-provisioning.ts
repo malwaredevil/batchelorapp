@@ -7,6 +7,7 @@ import {
   TRAVELS_BUCKET_POLICY,
   MESSENGER_BUCKET_POLICY,
   ELAINE_ATTACHMENTS_BUCKET_POLICY,
+  RICH_TEXT_BUCKET_POLICY,
 } from "./storage-core";
 
 interface BucketSpec {
@@ -21,6 +22,7 @@ const BUCKET_SPECS: BucketSpec[] = [
   { name: "travels", policy: TRAVELS_BUCKET_POLICY },
   { name: "messenger", policy: MESSENGER_BUCKET_POLICY },
   { name: "elaine-attachments", policy: ELAINE_ATTACHMENTS_BUCKET_POLICY },
+  { name: "rich-text", policy: RICH_TEXT_BUCKET_POLICY },
 ];
 
 /**

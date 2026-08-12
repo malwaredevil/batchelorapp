@@ -237,6 +237,15 @@ export const MESSENGER_BUCKET_POLICY: BucketPolicy = {
   ],
 };
 
+export const RICH_TEXT_BUCKET_POLICY: BucketPolicy = {
+  // Images embedded via the shared RichTextEditor (Travels reminder
+  // descriptions, Office notes) — image-only, same 25 MB ceiling as the
+  // other collection image buckets since these are inline content images,
+  // not document attachments.
+  fileSizeLimit: STANDARD_IMAGE_BUCKET_FILE_BYTES,
+  allowedMimeTypes: ["image/jpeg", "image/png", "image/webp"],
+};
+
 export const ELAINE_ATTACHMENTS_BUCKET_POLICY: BucketPolicy = {
   // Same 50 MB Supabase-side cap. Elaine attachments cover images, PDFs, and
   // the office document formats she can both read and generate (CSV, DOCX,

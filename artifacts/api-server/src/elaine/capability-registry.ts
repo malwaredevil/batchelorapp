@@ -129,7 +129,6 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
       "delete_diary_entry",
       "edit_diary_entry",
       "add_reminder",
-      "sync_reminder_to_calendar",
       "edit_reminder",
       "delete_reminder",
       "add_itinerary_day",
@@ -232,6 +231,41 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
     ...ACTION_DEFAULTS,
     domain: "office",
     executorPrefix: "communicationAction",
+    channels: WEB_TRUSTED_AND_SLACK_CHANNELS,
+  }),
+  // create_reminder: general-purpose "remind me..." reminder, always scoped
+  // to the requesting user's own account (email/sms/slack/messenger
+  // recipients all resolve to self, never another household member) — same
+  // trust boundary as call_contact/message_contact, so it gets the same
+  // channel set including Slack.
+  ...policies(["create_reminder"], {
+    ...ACTION_DEFAULTS,
+    domain: "office",
+    executorPrefix: "reminderAction",
+    channels: WEB_TRUSTED_AND_SLACK_CHANNELS,
+  }),
+  // snooze_reminder (issue #524 Elaine parity): reschedules ANY reminder the
+  // requesting user can manage (creator or recipient on any channel), same
+  // trust boundary as create_reminder — safe on the same channel set.
+  ...policies(["snooze_reminder"], {
+    ...ACTION_DEFAULTS,
+    domain: "office",
+    executorPrefix: "reminderAction",
+    channels: WEB_TRUSTED_AND_SLACK_CHANNELS,
+  }),
+  // list_reminders: read-only, mirrors the central Reminders page's own
+  // GET /api/reminders scope. Same channel set as list_contact_channels
+  // below — useful anywhere Elaine might need to find a reminder's id
+  // before acting on it.
+  ...policies(["list_reminders"], {
+    domain: "office",
+    kind: "read",
+    risk: "none",
+    auth: "session",
+    confirmation: "never",
+    executorPrefix: "reminderRead",
+    audit: "runtime_observation",
+    retry: "read_only",
     channels: WEB_TRUSTED_AND_SLACK_CHANNELS,
   }),
   // list_contact_channels: read-only — returns which channels are reachable for

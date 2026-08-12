@@ -386,6 +386,12 @@ router.delete("/:id", async (req, res) => {
       p,
     );
     await client.query("DELETE FROM travels_reminders WHERE user_id = $1", p);
+    // Generic cross-app reminders (reminder_deliveries and
+    // reminder_calendar_sync_state cascade via their reminder_id FK).
+    await client.query(
+      "DELETE FROM reminders WHERE created_by_user_id = $1",
+      p,
+    );
     // Trip content leaf tables
     await client.query("DELETE FROM travels_trip_photos WHERE user_id = $1", p);
     await client.query(

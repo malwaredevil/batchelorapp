@@ -3156,4 +3156,93 @@ END $$`,
      consecutive_error_count INTEGER NOT NULL DEFAULT 0,
      last_updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
+
+  // ── Generic cross-app reminder system (issue #513) ────────────────────────
+  // Replaces travels_reminders/travels_reminder_alert_log/
+  // travels_reminder_alert_deliveries (Travels-only) and
+  // elaine_scheduled_actions (Elaine's own parallel scheduler) with one
+  // generic system usable from any module. This issue is purely additive —
+  // the old tables are left in place, untouched, until a later explicit
+  // cleanup migration drops them (never bundled with the cutover itself).
+  `CREATE TABLE IF NOT EXISTS reminders (
+     id                          SERIAL PRIMARY KEY,
+     entity_type                 TEXT,
+     entity_id                   INTEGER,
+     created_by_user_id          INTEGER NOT NULL,
+     title                       TEXT NOT NULL,
+     description                 TEXT,
+     due_at                      TIMESTAMPTZ,
+     lead_times                  JSONB NOT NULL DEFAULT '[]',
+     recurrence_interval_value   INTEGER,
+     recurrence_interval_unit    TEXT,
+     recurrence_weekday          INTEGER,
+     recurrence_day_of_month     INTEGER,
+     recurrence_end_date         DATE,
+     recurrence_max_occurrences  INTEGER,
+     recurrence_fired_count      INTEGER NOT NULL DEFAULT 0,
+     calendar_connection_id      INTEGER REFERENCES travels_connected_calendars(id),
+     google_event_id             TEXT,
+     google_event_html_link      TEXT,
+     email_recipients            TEXT[] NOT NULL DEFAULT '{}',
+     sms_recipient_user_ids      INTEGER[] NOT NULL DEFAULT '{}',
+     call_recipient_user_ids     INTEGER[] NOT NULL DEFAULT '{}',
+     slack_recipient_user_ids    INTEGER[] NOT NULL DEFAULT '{}',
+     messenger_recipient_user_ids INTEGER[] NOT NULL DEFAULT '{}',
+     status                      TEXT NOT NULL DEFAULT 'active',
+     elaine_action_type          TEXT,
+     elaine_action_payload       JSONB,
+     legacy_source_table         TEXT,
+     legacy_source_id            INTEGER,
+     deleted_at                  TIMESTAMPTZ,
+     created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     updated_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE reminders ENABLE ROW LEVEL SECURITY`,
+  // Additive columns for reminders created before the backfill-tracking
+  // columns existed (issue #514) — safe no-ops once the CREATE TABLE above
+  // already includes them for a fresh database.
+  `ALTER TABLE reminders ADD COLUMN IF NOT EXISTS legacy_source_table TEXT`,
+  `ALTER TABLE reminders ADD COLUMN IF NOT EXISTS legacy_source_id INTEGER`,
+  // Additive column for issue #519 — the table already existed in every
+  // real environment by the time this was added, so the CREATE TABLE IF NOT
+  // EXISTS above (which now also lists it) is a no-op there; this explicit
+  // ALTER is what actually creates it (see schema-field-missing-ddl memory).
+  `ALTER TABLE reminders ADD COLUMN IF NOT EXISTS google_event_html_link TEXT`,
+  // due_at was briefly NOT NULL when this table was first created (#513);
+  // loosened before any real writes existed once #514's backfill found
+  // real travels_reminders rows with no due date at all (a legitimate
+  // bare/no-date reminder). DROP NOT NULL is a no-op if already nullable.
+  `ALTER TABLE reminders ALTER COLUMN due_at DROP NOT NULL`,
+  `CREATE INDEX IF NOT EXISTS reminders_entity_idx ON reminders (entity_type, entity_id)`,
+  `CREATE INDEX IF NOT EXISTS reminders_created_by_user_id_idx ON reminders (created_by_user_id)`,
+  `CREATE INDEX IF NOT EXISTS reminders_status_due_at_idx ON reminders (status, due_at)`,
+  `CREATE INDEX IF NOT EXISTS reminders_calendar_connection_id_idx ON reminders (calendar_connection_id)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS reminders_legacy_source_idx ON reminders (legacy_source_table, legacy_source_id)`,
+
+  `CREATE TABLE IF NOT EXISTS reminder_deliveries (
+     id              SERIAL PRIMARY KEY,
+     reminder_id     INTEGER NOT NULL REFERENCES reminders(id) ON DELETE CASCADE,
+     occurrence_key  TEXT NOT NULL,
+     channel         TEXT NOT NULL,
+     recipient_ref   TEXT NOT NULL,
+     scheduled_for   TIMESTAMPTZ NOT NULL,
+     status          TEXT NOT NULL DEFAULT 'pending',
+     fired_at        TIMESTAMPTZ,
+     error           TEXT,
+     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     UNIQUE (reminder_id, occurrence_key, channel, recipient_ref)
+  )`,
+  `ALTER TABLE reminder_deliveries ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS reminder_deliveries_reminder_id_idx ON reminder_deliveries (reminder_id)`,
+  `CREATE INDEX IF NOT EXISTS reminder_deliveries_status_scheduled_for_idx
+     ON reminder_deliveries (status, scheduled_for)`,
+
+  `CREATE TABLE IF NOT EXISTS reminder_calendar_sync_state (
+     id                       SERIAL PRIMARY KEY,
+     reminder_id              INTEGER NOT NULL UNIQUE REFERENCES reminders(id) ON DELETE CASCADE,
+     last_synced_event_title  TEXT,
+     last_synced_event_start  TIMESTAMPTZ,
+     last_checked_at          TIMESTAMPTZ
+  )`,
+  `ALTER TABLE reminder_calendar_sync_state ENABLE ROW LEVEL SECURITY`,
 ];

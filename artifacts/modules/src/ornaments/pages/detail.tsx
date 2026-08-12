@@ -439,6 +439,15 @@ export default function OrnamentDetail() {
             />
           </div>
         }
+        reminder={
+          isEditing
+            ? undefined
+            : {
+                entityType: "ornament",
+                entityId: ornament.id,
+                defaultTitle: `Reminder: ${ornament.name}`,
+              }
+        }
         titleSlot={
           isEditing ? (
             <div className="space-y-1">

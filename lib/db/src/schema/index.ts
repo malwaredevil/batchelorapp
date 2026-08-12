@@ -19,3 +19,4 @@ export * from "./notifications";
 export * from "./knowledge";
 export * from "./slack";
 export * from "./webhook-side-effects";
+export * from "./reminders";

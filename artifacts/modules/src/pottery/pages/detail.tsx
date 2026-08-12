@@ -78,6 +78,7 @@ import {
 import {
   CollectionDetailHero,
   CollectionDetailPanelStack,
+  ReminderBellButton,
 } from "@workspace/collection-ui";
 
 // ---------------------------------------------------------------------------
@@ -973,6 +974,11 @@ export default function PieceDetail() {
 
             {!editing && (
               <div className="flex shrink-0 gap-1">
+                <ReminderBellButton
+                  entityType="pottery_item"
+                  entityId={id}
+                  defaultTitle={`Reminder: ${item.name}`}
+                />
                 <Button
                   variant="outline"
                   size="icon"

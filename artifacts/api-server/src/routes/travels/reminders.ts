@@ -2,9 +2,18 @@ import { Router, type IRouter } from "express";
 import { and, eq, inArray, asc, isNull } from "drizzle-orm";
 import { logActivity } from "../../lib/soft-delete";
 import { z } from "zod/v4";
-import { db, travelsTrips, reminders, appUsers } from "@workspace/db";
+import {
+  db,
+  travelsTrips,
+  travelsConnectedCalendars,
+  reminders,
+  appUsers,
+} from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import { tripExists } from "../../lib/travels/db-helpers";
+import { getValidAccessToken } from "../../lib/google-calendar-tokens";
+import { getCalendarEvent } from "../../lib/google-calendar";
+import { logger } from "../../lib/logger";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -14,14 +23,25 @@ router.use(requireAuth);
 // reminder-system programme). This route intentionally keeps its external
 // wire shape stable (`dueDate` as a plain date string, `alertDaysBefore` as
 // a number array) so the frontend and lib/api-client-react/src/travels.ts
-// never needed to change — only the storage underneath did.
+// never needed to change for the pre-existing fields — only the storage
+// underneath did. New optional fields (`leadTimes`, `calendarConnectionId`,
+// `googleEventId`) are additive.
 //
 // Google Calendar sync (create/update/delete an event) was retired along
 // with the migration: the generic system never writes a new calendar event
-// for a reminder — see reminders.calendarConnectionId/googleEventId, which
-// only ever store a read-only *link* to an already-existing event (issue
-// #518/#519, not yet surfaced on this route).
+// for a reminder — reminders.calendarConnectionId/googleEventId only ever
+// store a read-only *link* to an already-existing event on one of the
+// user's own connected calendars (issue #518). The unified scheduler
+// (reminders-scheduler.ts's syncCalendarLinkedReminders, issue #516) keeps
+// dueAt in sync with that event's start time going forward.
 const ENTITY_TYPE = "travels_trip" as const;
+
+const LEAD_TIME_UNITS = ["minutes", "hours", "days", "weeks"] as const;
+const LeadTimeInput = z.object({
+  value: z.number().int().min(0),
+  unit: z.enum(LEAD_TIME_UNITS),
+});
+type LeadTimeInput = z.infer<typeof LeadTimeInput>;
 
 // Same default day-offsets the old travels_reminders.alert_days_before
 // column used.
@@ -40,6 +60,15 @@ const CreateReminderBody = z.object({
   smsRecipientUserIds: z.array(z.number().int()).optional(),
   callRecipientUserIds: z.array(z.number().int()).optional(),
   alertDaysBefore: z.array(z.number().int().min(0)).min(1).optional(),
+  // New (issue #518): arbitrary-unit, arbitrary-count lead times, superseding
+  // alertDaysBefore when present. Both are accepted so existing callers keep
+  // working unchanged.
+  leadTimes: z.array(LeadTimeInput).min(1).optional(),
+  // New (issue #518): attach this reminder to an event on one of the user's
+  // OWN already-connected calendars. Both fields must be provided together
+  // to link; dueDate is ignored in favor of the event's start time when set.
+  calendarConnectionId: z.number().int().positive().nullable().optional(),
+  googleEventId: z.string().min(1).nullable().optional(),
 });
 
 const UpdateReminderBody = z.object({
@@ -51,6 +80,10 @@ const UpdateReminderBody = z.object({
   smsRecipientUserIds: z.array(z.number().int()).optional(),
   callRecipientUserIds: z.array(z.number().int()).optional(),
   alertDaysBefore: z.array(z.number().int().min(0)).min(1).optional(),
+  leadTimes: z.array(LeadTimeInput).min(1).optional(),
+  // Pass null for either to detach the calendar link entirely.
+  calendarConnectionId: z.number().int().positive().nullable().optional(),
+  googleEventId: z.string().min(1).nullable().optional(),
 });
 
 // Only household members with a verified phone number can be selected as SMS
@@ -99,8 +132,70 @@ function leadTimesToAlertDaysBefore(
     .map((lt) => lt.value);
 }
 
+function normalizeLeadTimes(leadTimes: unknown): LeadTimeInput[] {
+  if (!Array.isArray(leadTimes)) return [];
+  return leadTimes
+    .map((lt) => LeadTimeInput.safeParse(lt))
+    .filter((r): r is { success: true; data: LeadTimeInput } => r.success)
+    .map((r) => r.data);
+}
+
+class CalendarLinkError extends Error {}
+
+// Resolves and validates a calendarConnectionId/googleEventId pair: the
+// calendar must belong to the requesting user (never another household
+// member's), and the event must still exist. Returns the event's start time
+// to use as the reminder's dueAt. Throws CalendarLinkError with a
+// user-facing message on any failure — callers turn that into a 400/404/502.
+async function resolveCalendarLink(
+  userId: number,
+  calendarConnectionId: number,
+  googleEventId: string,
+): Promise<Date> {
+  const [calendar] = await db
+    .select()
+    .from(travelsConnectedCalendars)
+    .where(
+      and(
+        eq(travelsConnectedCalendars.id, calendarConnectionId),
+        eq(travelsConnectedCalendars.userId, userId),
+      ),
+    )
+    .limit(1);
+  if (!calendar) {
+    throw new CalendarLinkError("Connected calendar not found.");
+  }
+
+  const accessToken = await getValidAccessToken(userId);
+  if (!accessToken) {
+    throw new CalendarLinkError("Could not connect to Google Calendar.");
+  }
+
+  let event;
+  try {
+    event = await getCalendarEvent(
+      accessToken,
+      calendar.googleCalendarId,
+      googleEventId,
+    );
+  } catch (err) {
+    logger.error(
+      { err, calendarConnectionId, googleEventId },
+      "reminders: failed to look up linked calendar event",
+    );
+    throw new CalendarLinkError("Could not reach Google Calendar.");
+  }
+  if (!event) {
+    throw new CalendarLinkError(
+      "That calendar event no longer exists. Pick another one.",
+    );
+  }
+  return new Date(event.start);
+}
+
 // Maps a generic `reminders` row (for a travels_trip entity) back to the
-// travels_reminders-shaped object the frontend expects.
+// travels_reminders-shaped object the frontend expects, extended (issue
+// #518) with the full leadTimes array and calendar-link fields.
 function toWireShape(row: typeof reminders.$inferSelect) {
   return {
     id: row.id,
@@ -114,6 +209,9 @@ function toWireShape(row: typeof reminders.$inferSelect) {
     smsRecipientUserIds: row.smsRecipientUserIds,
     callRecipientUserIds: row.callRecipientUserIds,
     alertDaysBefore: leadTimesToAlertDaysBefore(row.leadTimes),
+    leadTimes: normalizeLeadTimes(row.leadTimes),
+    calendarConnectionId: row.calendarConnectionId,
+    googleEventId: row.googleEventId,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     deletedAt: row.deletedAt,
@@ -192,6 +290,32 @@ router.post("/trips/:id/reminders", async (req, res) => {
   const callRecipientUserIds = body.callRecipientUserIds
     ? await filterVerifiedPhoneUserIds(body.callRecipientUserIds)
     : [];
+
+  // Calendar-linked reminders (issue #518): the event's own start time wins
+  // over any dueDate the client also sent.
+  let dueAt = dueDateToDueAt(body.dueDate);
+  if (body.calendarConnectionId && body.googleEventId) {
+    try {
+      dueAt = await resolveCalendarLink(
+        userId,
+        body.calendarConnectionId,
+        body.googleEventId,
+      );
+    } catch (err) {
+      if (err instanceof CalendarLinkError) {
+        res.status(400).json({ error: err.message });
+        return;
+      }
+      throw err;
+    }
+  }
+
+  const leadTimes = body.leadTimes
+    ? body.leadTimes
+    : alertDaysBeforeToLeadTimes(
+        body.alertDaysBefore ?? DEFAULT_ALERT_DAYS_BEFORE,
+      );
+
   const [row] = await db
     .insert(reminders)
     .values({
@@ -200,14 +324,20 @@ router.post("/trips/:id/reminders", async (req, res) => {
       createdByUserId: userId,
       title: body.title,
       description: body.description ?? null,
-      dueAt: dueDateToDueAt(body.dueDate),
+      dueAt,
       status: "active",
       emailRecipients: body.recipientEmails ?? [],
       smsRecipientUserIds,
       callRecipientUserIds,
-      leadTimes: alertDaysBeforeToLeadTimes(
-        body.alertDaysBefore ?? DEFAULT_ALERT_DAYS_BEFORE,
-      ),
+      leadTimes,
+      calendarConnectionId:
+        body.calendarConnectionId && body.googleEventId
+          ? body.calendarConnectionId
+          : null,
+      googleEventId:
+        body.calendarConnectionId && body.googleEventId
+          ? body.googleEventId
+          : null,
     })
     .returning();
 
@@ -216,6 +346,7 @@ router.post("/trips/:id/reminders", async (req, res) => {
 
 // PATCH /trips/:id/reminders/:reminderId
 router.patch("/trips/:id/reminders/:reminderId", async (req, res) => {
+  const userId = req.session.userId!;
   const tripId = parseInt(req.params.id, 10);
   const reminderId = parseInt(req.params.reminderId, 10);
   if (isNaN(tripId) || isNaN(reminderId)) {
@@ -240,8 +371,41 @@ router.patch("/trips/:id/reminders/:reminderId", async (req, res) => {
     updateData.callRecipientUserIds = await filterVerifiedPhoneUserIds(
       body.callRecipientUserIds,
     );
-  if (body.alertDaysBefore !== undefined)
+  if (body.leadTimes !== undefined) {
+    updateData.leadTimes = body.leadTimes;
+  } else if (body.alertDaysBefore !== undefined) {
     updateData.leadTimes = alertDaysBeforeToLeadTimes(body.alertDaysBefore);
+  }
+
+  // Calendar link (issue #518): either field present (including explicit
+  // null) touches the link. Both null clears it; both set re-links (and
+  // re-anchors dueAt to the new event's start, overriding any dueDate also
+  // sent in this same request).
+  if (
+    body.calendarConnectionId !== undefined ||
+    body.googleEventId !== undefined
+  ) {
+    if (body.calendarConnectionId && body.googleEventId) {
+      try {
+        updateData.dueAt = await resolveCalendarLink(
+          userId,
+          body.calendarConnectionId,
+          body.googleEventId,
+        );
+      } catch (err) {
+        if (err instanceof CalendarLinkError) {
+          res.status(400).json({ error: err.message });
+          return;
+        }
+        throw err;
+      }
+      updateData.calendarConnectionId = body.calendarConnectionId;
+      updateData.googleEventId = body.googleEventId;
+    } else {
+      updateData.calendarConnectionId = null;
+      updateData.googleEventId = null;
+    }
+  }
   updateData.updatedAt = new Date();
 
   const [updated] = await db

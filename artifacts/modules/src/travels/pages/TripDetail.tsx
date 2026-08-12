@@ -52,10 +52,15 @@ import {
   useRevokeTripShareToken,
   type PhotoType,
   type Reminder,
+  type ReminderLeadTime,
   type TravelsAppUser,
   type CustomDocumentType,
   getUploadErrorMessage,
 } from "@workspace/api-client-react";
+import {
+  CalendarLinkPicker,
+  LeadTimesEditor,
+} from "../components/ReminderCalendarAndLeadTimes";
 import {
   LARGE_IMAGE_UPLOAD,
   validateClientUpload,
@@ -2610,6 +2615,9 @@ function RemindersSection({ tripId }: { tripId: number }) {
         setNewDue("");
         setNewRecipients([]);
         setCustomEmail("");
+        setNewLeadTimes([{ value: 0, unit: "days" }]);
+        setNewCalendarConnectionId(null);
+        setNewGoogleEventId(null);
         setAdding(false);
         toast.success("Reminder added");
       },
@@ -2649,18 +2657,17 @@ function RemindersSection({ tripId }: { tripId: number }) {
   const [newDue, setNewDue] = useState("");
   const [newRecipients, setNewRecipients] = useState<string[]>([]);
   const [customEmail, setCustomEmail] = useState("");
-  const [newAlertDays, setNewAlertDays] = useState<number[]>([0]);
+  const [newLeadTimes, setNewLeadTimes] = useState<ReminderLeadTime[]>([
+    { value: 0, unit: "days" },
+  ]);
+  const [newCalendarConnectionId, setNewCalendarConnectionId] = useState<
+    number | null
+  >(null);
+  const [newGoogleEventId, setNewGoogleEventId] = useState<string | null>(
+    null,
+  );
   const [editingReminder, setEditingReminder] = useState<Reminder | null>(null);
-  const ALERT_DAY_OPTIONS = [0, 1, 3, 7];
-
-  function toggleNewAlertDay(day: number) {
-    setNewAlertDays((prev) => {
-      const next = prev.includes(day)
-        ? prev.filter((d) => d !== day)
-        : [...prev, day];
-      return next.length > 0 ? next : [0];
-    });
-  }
+  const calendarLinked = newCalendarConnectionId != null && newGoogleEventId != null;
 
   function toggleRecipient(email: string) {
     setNewRecipients((prev) =>
@@ -2713,11 +2720,22 @@ function RemindersSection({ tripId }: { tripId: number }) {
               onChange={(e) => setNewTitle(e.target.value)}
               autoFocus
             />
-            <Input
-              type="date"
-              value={newDue}
-              onChange={(e) => setNewDue(e.target.value)}
-              placeholder="Due date (optional)"
+            {!calendarLinked && (
+              <Input
+                type="date"
+                value={newDue}
+                onChange={(e) => setNewDue(e.target.value)}
+                placeholder="Due date (optional)"
+              />
+            )}
+
+            <CalendarLinkPicker
+              calendarConnectionId={newCalendarConnectionId}
+              googleEventId={newGoogleEventId}
+              onChange={(calendarConnectionId, googleEventId) => {
+                setNewCalendarConnectionId(calendarConnectionId);
+                setNewGoogleEventId(googleEventId);
+              }}
             />
 
             <div className="space-y-1.5 pt-1">
@@ -2799,29 +2817,10 @@ function RemindersSection({ tripId }: { tripId: number }) {
               )}
             </div>
 
-            <div className="space-y-1.5 pt-1">
-              <Label className="text-xs text-muted-foreground">
-                Remind me
-              </Label>
-              <div className="flex flex-wrap gap-1.5">
-                {ALERT_DAY_OPTIONS.map((day) => (
-                  <button
-                    key={day}
-                    type="button"
-                    onClick={() => toggleNewAlertDay(day)}
-                    className={`text-xs rounded-full px-2.5 py-1 border transition-colors ${
-                      newAlertDays.includes(day)
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "bg-background text-muted-foreground border-card-border hover:border-primary/50"
-                    }`}
-                  >
-                    {day === 0
-                      ? "On the day"
-                      : `${day} day${day > 1 ? "s" : ""} before`}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <LeadTimesEditor
+              leadTimes={newLeadTimes}
+              onChange={setNewLeadTimes}
+            />
 
             <div className="flex gap-2 pt-1">
               <Button
@@ -2832,9 +2831,11 @@ function RemindersSection({ tripId }: { tripId: number }) {
                     tripId,
                     body: {
                       title: newTitle.trim(),
-                      dueDate: newDue || undefined,
+                      dueDate: calendarLinked ? undefined : newDue || undefined,
                       recipientEmails: newRecipients,
-                      alertDaysBefore: newAlertDays,
+                      leadTimes: newLeadTimes,
+                      calendarConnectionId: newCalendarConnectionId,
+                      googleEventId: newGoogleEventId,
                     },
                   });
                 }}

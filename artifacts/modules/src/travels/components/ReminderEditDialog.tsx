@@ -5,6 +5,7 @@ import {
   useUpdateReminder,
   useDeleteReminder,
   useListTravelsAppUsers,
+  useListConnectedCalendars,
   useSendPhoneVerificationCode,
   useVerifyPhoneCode,
   useSendTestSms,
@@ -13,8 +14,13 @@ import {
   getListTravelsAppUsersQueryKey,
   getGetCurrentUserQueryKey,
   type Reminder,
+  type ReminderLeadTime,
   type TravelsAppUser,
 } from "@workspace/api-client-react";
+import {
+  CalendarLinkPicker,
+  LeadTimesEditor,
+} from "./ReminderCalendarAndLeadTimes";
 import { useAuth } from "@workspace/web-core/auth";
 import {
   Dialog,
@@ -74,8 +80,16 @@ export function ReminderEditDialog({
   const [customEmail, setCustomEmail] = useState("");
   const [smsRecipients, setSmsRecipients] = useState<number[]>([]);
   const [callRecipients, setCallRecipients] = useState<number[]>([]);
-  const [alertDays, setAlertDays] = useState<number[]>([0]);
+  const [leadTimes, setLeadTimes] = useState<ReminderLeadTime[]>([
+    { value: 0, unit: "days" },
+  ]);
+  const [calendarConnectionId, setCalendarConnectionId] = useState<
+    number | null
+  >(null);
+  const [googleEventId, setGoogleEventId] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const { data: connectedCalendars = [] } = useListConnectedCalendars();
+  const calendarLinked = calendarConnectionId != null && googleEventId != null;
 
   const [showPhoneSetup, setShowPhoneSetup] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -92,11 +106,18 @@ export function ReminderEditDialog({
       setRecipients(reminder.recipientEmails);
       setSmsRecipients(reminder.smsRecipientUserIds ?? []);
       setCallRecipients(reminder.callRecipientUserIds ?? []);
-      setAlertDays(
-        reminder.alertDaysBefore && reminder.alertDaysBefore.length > 0
-          ? reminder.alertDaysBefore
-          : [0],
+      setLeadTimes(
+        reminder.leadTimes && reminder.leadTimes.length > 0
+          ? reminder.leadTimes
+          : reminder.alertDaysBefore && reminder.alertDaysBefore.length > 0
+            ? reminder.alertDaysBefore.map((value) => ({
+                value,
+                unit: "days" as const,
+              }))
+            : [{ value: 0, unit: "days" }],
       );
+      setCalendarConnectionId(reminder.calendarConnectionId ?? null);
+      setGoogleEventId(reminder.googleEventId ?? null);
       setCustomEmail("");
       setConfirmingDelete(false);
       setShowPhoneSetup(false);
@@ -106,17 +127,6 @@ export function ReminderEditDialog({
       setSmsConsent(false);
     }
   }, [reminder, open]);
-
-  const ALERT_DAY_OPTIONS = [0, 1, 3, 7];
-
-  function toggleAlertDay(day: number) {
-    setAlertDays((prev) => {
-      const next = prev.includes(day)
-        ? prev.filter((d) => d !== day)
-        : [...prev, day];
-      return next.length > 0 ? next : [0];
-    });
-  }
 
   function invalidateAll(tripId: number) {
     qc.invalidateQueries({ queryKey: getListRemindersQueryKey(tripId) });
@@ -257,11 +267,13 @@ export function ReminderEditDialog({
       body: {
         title: title.trim(),
         description: description.trim() ? description : null,
-        dueDate: dueDate || null,
+        dueDate: calendarLinked ? null : dueDate || null,
         recipientEmails: recipients,
         smsRecipientUserIds: smsRecipients,
         callRecipientUserIds: callRecipients,
-        alertDaysBefore: alertDays,
+        leadTimes,
+        calendarConnectionId,
+        googleEventId,
       },
     });
   }
@@ -314,6 +326,7 @@ export function ReminderEditDialog({
                 >
                   {isOverdue ? "Overdue · " : "Due "}
                   {formattedDueDate}
+                  {calendarLinked && " · linked to a calendar event"}
                 </p>
               )}
             </div>
@@ -410,15 +423,28 @@ export function ReminderEditDialog({
               />
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="reminder-edit-due">Due date</Label>
-              <Input
-                id="reminder-edit-due"
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
+            {!calendarLinked && (
+              <div className="space-y-1.5">
+                <Label htmlFor="reminder-edit-due">Due date</Label>
+                <Input
+                  id="reminder-edit-due"
+                  type="date"
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                />
+              </div>
+            )}
+
+            {connectedCalendars.length > 0 && (
+              <CalendarLinkPicker
+                calendarConnectionId={calendarConnectionId}
+                googleEventId={googleEventId}
+                onChange={(nextCalendarConnectionId, nextGoogleEventId) => {
+                  setCalendarConnectionId(nextCalendarConnectionId);
+                  setGoogleEventId(nextGoogleEventId);
+                }}
               />
-            </div>
+            )}
 
             <div className="space-y-1.5">
               <Label>Description</Label>
@@ -671,29 +697,7 @@ export function ReminderEditDialog({
               </p>
             </div>
 
-            <div className="space-y-1.5 pt-1">
-              <Label className="text-xs text-muted-foreground">
-                Remind me
-              </Label>
-              <div className="flex flex-wrap gap-1.5">
-                {ALERT_DAY_OPTIONS.map((day) => (
-                  <button
-                    key={day}
-                    type="button"
-                    onClick={() => toggleAlertDay(day)}
-                    className={`text-xs rounded-full px-2.5 py-1 border transition-colors ${
-                      alertDays.includes(day)
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "bg-background text-muted-foreground border-card-border hover:border-primary/50"
-                    }`}
-                  >
-                    {day === 0
-                      ? "On the day"
-                      : `${day} day${day > 1 ? "s" : ""} before`}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <LeadTimesEditor leadTimes={leadTimes} onChange={setLeadTimes} />
           </div>
         )}
 

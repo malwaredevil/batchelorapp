@@ -853,6 +853,13 @@ export function useUpdateTripPhoto<TError = unknown, TContext = unknown>(
 // Reminders
 // ---------------------------------------------------------------------------
 
+export type ReminderLeadTimeUnit = "minutes" | "hours" | "days" | "weeks";
+
+export interface ReminderLeadTime {
+  value: number;
+  unit: ReminderLeadTimeUnit;
+}
+
 export interface Reminder {
   id: number;
   tripId: number;
@@ -865,6 +872,13 @@ export interface Reminder {
   smsRecipientUserIds?: number[];
   callRecipientUserIds?: number[];
   alertDaysBefore?: number[];
+  // New (issue #518): the full lead-time list (arbitrary units/count) behind
+  // alertDaysBefore, which only ever reflects the day-unit subset.
+  leadTimes?: ReminderLeadTime[];
+  // New (issue #518): set when this reminder is linked to an event on one of
+  // the user's own connected calendars. Both are null/undefined together.
+  calendarConnectionId?: number | null;
+  googleEventId?: string | null;
   createdAt: string;
 }
 
@@ -876,6 +890,9 @@ export interface CreateReminderBody {
   smsRecipientUserIds?: number[];
   callRecipientUserIds?: number[];
   alertDaysBefore?: number[];
+  leadTimes?: ReminderLeadTime[];
+  calendarConnectionId?: number | null;
+  googleEventId?: string | null;
 }
 
 export interface UpdateReminderBody {
@@ -887,6 +904,9 @@ export interface UpdateReminderBody {
   smsRecipientUserIds?: number[];
   callRecipientUserIds?: number[];
   alertDaysBefore?: number[];
+  leadTimes?: ReminderLeadTime[];
+  calendarConnectionId?: number | null;
+  googleEventId?: string | null;
 }
 
 const listReminders = (tripId: number, options?: RequestInit): Promise<Reminder[]> =>

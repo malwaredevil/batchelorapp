@@ -29,10 +29,15 @@ export function initBrowserMonitoring({
     integrations: [
       Sentry.browserTracingIntegration(),
       Sentry.replayIntegration({
-        // This is a private single-household app with no third-party users.
-        // Keep actual content visible so owner-only replays are useful.
-        maskAllText: false,
-        blockAllMedia: false,
+        // Architecture hardening (#754): previously false/false, which
+        // recorded the literal on-screen text and media of every screen —
+        // including full Elaine AI chat transcripts, email bodies, and
+        // messenger content — in every session replay. A crash replay only
+        // needs to show WHERE the user was and WHAT UI state broke, not the
+        // private conversation content behind it. Masked/blocked by default;
+        // do not flip back without discussing the privacy trade-off.
+        maskAllText: true,
+        blockAllMedia: true,
       }),
       Sentry.replayCanvasIntegration(),
       Sentry.httpClientIntegration({

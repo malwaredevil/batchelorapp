@@ -520,7 +520,12 @@ export function CalendarSyncCard({
   const { data: calendars = [], isLoading: calendarsLoading } =
     useListCalendars<CalendarListItem[]>({
       query: {
-        enabled: !!status?.connected,
+        // Only fire when connected AND the token is not known-expired — the
+        // /google-calendar/calendars endpoint returns 404 for both "not
+        // connected" and "token expired" (getValidAccessToken returns null in
+        // both cases), so gating on !tokenExpired avoids a predictable 404
+        // round-trip when we already know it will fail.
+        enabled: !!status?.connected && !status?.tokenExpired,
         retry: false,
         throwOnError: false,
         queryKey: getListCalendarsQueryKey(),

@@ -33,6 +33,13 @@ export interface ClockTime {
 }
 
 export type RelativeTimeSpec =
+  // "in 20 minutes" -> { kind: "minutes-from-now", count: 20 }. No clockTime
+  // (a sub-day offset already IS the exact time; there is nothing to
+  // override).
+  | { kind: "minutes-from-now"; count: number }
+  // "in 2 hours" -> { kind: "hours-from-now", count: 2 }. Same rationale as
+  // minutes-from-now: no clockTime field.
+  | { kind: "hours-from-now"; count: number }
   // "tomorrow" -> { kind: "days-from-now", count: 1 }
   // "in 3 days" -> { kind: "days-from-now", count: 3 }
   | { kind: "days-from-now"; count: number; clockTime?: ClockTime }
@@ -60,6 +67,14 @@ const ClockTimeZod = z.object({
 });
 
 export const RelativeTimeSpecZod = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("minutes-from-now"),
+    count: z.number().int().positive(),
+  }),
+  z.object({
+    kind: z.literal("hours-from-now"),
+    count: z.number().int().positive(),
+  }),
   z.object({
     kind: z.literal("days-from-now"),
     count: z.number().int().positive(),
@@ -101,6 +116,8 @@ export const RELATIVE_TIME_SPEC_JSON_SCHEMA = {
     kind: {
       type: "string",
       enum: [
+        "minutes-from-now",
+        "hours-from-now",
         "days-from-now",
         "weeks-from-now",
         "months-from-now",
@@ -109,6 +126,8 @@ export const RELATIVE_TIME_SPEC_JSON_SCHEMA = {
         "next-weekday",
       ],
       description:
+        '"minutes-from-now"/count for "in 20 minutes"; ' +
+        '"hours-from-now"/count for "in 2 hours" or "in an hour" (count=1); ' +
         '"days-from-now"/count for "tomorrow" (count=1) or "in N days"; ' +
         '"weeks-from-now"/count for "in a week" (count=1) or "in N weeks"; ' +
         '"months-from-now"/count for "in N months"; ' +
@@ -119,7 +138,7 @@ export const RELATIVE_TIME_SPEC_JSON_SCHEMA = {
     count: {
       type: "integer",
       description:
-        "Required for days-from-now/weeks-from-now/months-from-now, omit otherwise.",
+        "Required for minutes-from-now/hours-from-now/days-from-now/weeks-from-now/months-from-now, omit otherwise.",
     },
     dayOfWeek: {
       type: "integer",
@@ -129,7 +148,7 @@ export const RELATIVE_TIME_SPEC_JSON_SCHEMA = {
     clockTime: {
       type: "object",
       description:
-        'Only include when the user gave an explicit time (e.g. "at 9am"); omit to use the default of 00:01.',
+        'Only include when the user gave an explicit time (e.g. "at 9am"); omit to use the default of 00:01. Never include for minutes-from-now/hours-from-now — those already resolve to an exact instant.',
       properties: {
         hour: { type: "integer", description: "0-23" },
         minute: { type: "integer", description: "0-59" },
@@ -332,9 +351,20 @@ export function resolveRelativeTime(
   now: Date = new Date(),
 ): Date {
   const tz = isValidIanaTimeZone(timezone) ? timezone : DEFAULT_TIMEZONE;
-  assertValidClockTime(spec.clockTime);
+  // minutes-from-now/hours-from-now have no clockTime field at all (a
+  // sub-day offset already IS the exact instant), so guard the property
+  // access rather than assuming every variant has it.
+  assertValidClockTime("clockTime" in spec ? spec.clockTime : undefined);
 
   switch (spec.kind) {
+    case "minutes-from-now": {
+      assertPositiveCount(spec.count, "minutes-from-now");
+      return new Date(now.getTime() + spec.count * 60_000);
+    }
+    case "hours-from-now": {
+      assertPositiveCount(spec.count, "hours-from-now");
+      return new Date(now.getTime() + spec.count * 3_600_000);
+    }
     case "days-from-now": {
       assertPositiveCount(spec.count, "days-from-now");
       return addLocalDays(tz, now, spec.count, spec.clockTime);

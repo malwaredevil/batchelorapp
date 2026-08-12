@@ -1,5 +1,14 @@
-import { pool, db, travelsTrips } from "@workspace/db";
-import { inArray } from "drizzle-orm";
+import {
+  pool,
+  db,
+  travelsTrips,
+  travelsConnectedCalendars,
+  reminders,
+  reminderCalendarSyncState,
+  elaineHistoryConversations,
+  elaineHistoryMessages,
+} from "@workspace/db";
+import { inArray, eq, and } from "drizzle-orm";
 import {
   sendGenericReminderAlertEmail,
   resendConfigured,
@@ -17,6 +26,12 @@ import {
   recordScheduledTaskFailure,
 } from "./scheduler-guard";
 import { logger } from "./logger";
+import { getValidAccessToken } from "./google-calendar-tokens";
+import { getCalendarEvent } from "./google-calendar";
+import {
+  fireCallContact,
+  fireMessageContact,
+} from "../elaine/communication-actions";
 
 /**
  * Unified, entity-agnostic reminder delivery scheduler — replaces the old
@@ -26,12 +41,24 @@ import { logger } from "./logger";
  * (Travels, Elaine scheduled actions, Office Notes, collection detail pages,
  * etc.) that creates a row in `reminders` gets delivery for free.
  *
- * Scope note (issue #514): this first cut handles the common non-recurring
- * case — one or more fixed lead times before a single `dueAt`, delivered by
- * email/SMS/call/Slack. Recurrence, calendar re-sync, and `elaine_action`
- * entity dispatch are intentionally NOT handled here yet; they're additive
- * extensions of this same module (issue #516), not a rewrite — see the
- * `TODO(#516)` markers below for exactly where each hooks in.
+ * Handles the full spec (issue #514 shipped the non-recurring
+ * email/SMS/call/Slack case; issue #516 adds everything below):
+ *
+ *   - Recurring reminders (interval, weekly-on-weekday, or monthly-on-day)
+ *     advance to their next occurrence once the current one's deliveries
+ *     all resolve — see advanceCompletedReminders().
+ *   - Calendar-linked reminders (a reminder pointing at an existing event on
+ *     a connected Travels calendar) are re-pulled each run so an edit or
+ *     deletion made directly on Google Calendar is reflected before
+ *     deliveries are computed — see syncCalendarLinkedReminders().
+ *   - `elaine_action` reminders dispatch through the same
+ *     communication-actions.ts executors (fireCallContact/fireMessageContact)
+ *     the immediate (non-scheduled) path uses, via a synthetic
+ *     "elaine_action" delivery channel — see the elaine_action branch in
+ *     claimAndSendDueDeliveries().
+ *   - The "messenger" channel (messengerRecipientUserIds) delivers an
+ *     in-app Elaine-chat message, the same way deliverElaineChat() does for
+ *     Elaine's own conversational replies.
  *
  * Two-phase design, mirroring the crash-safe pattern documented on the
  * `reminder_deliveries` table:
@@ -40,7 +67,11 @@ import { logger } from "./logger";
  *     with a due date, compute one `reminder_deliveries` row per
  *     (lead time × channel × recipient) and insert it as `pending`.
  *     Idempotent via the table's dedup unique index
- *     (reminder_id, occurrence_key, channel, recipient_ref).
+ *     (reminder_id, occurrence_key, channel, recipient_ref). The occurrence
+ *     key embeds the reminder's current `recurrence_fired_count`, so once a
+ *     recurring reminder advances to its next occurrence this phase
+ *     naturally schedules a fresh set of delivery rows instead of treating
+ *     them as already-delivered duplicates of the prior occurrence.
  *
  *   Phase B (claimAndSendDueDeliveries) — atomically claims any `pending`
  *     row whose `scheduled_for` has arrived (pending -> sending, using
@@ -49,6 +80,14 @@ import { logger } from "./logger";
  *     stuck `sending` row is recovered as `failed` by
  *     recoverStuckSendingDeliveries on the next run, same as the crash
  *     recovery model documented on the table).
+ *
+ *   Phase C (advanceCompletedReminders) — once every delivery for a
+ *     reminder's current occurrence has resolved (fired or failed), either
+ *     marks it `done` (one-off reminders), or computes the next occurrence's
+ *     `dueAt`, bumps `recurrence_fired_count`, and leaves it `active` for
+ *     Phase A to pick up again next run (recurring reminders) — unless
+ *     `recurrenceEndDate`/`recurrenceMaxOccurrences` has been reached, in
+ *     which case it becomes `done` instead.
  */
 
 type LeadTime = { value: number; unit: "minutes" | "hours" | "days" | "weeks" };
@@ -68,8 +107,21 @@ function leadTimeToMs(lead: LeadTime): number {
   }
 }
 
-function occurrenceKeyForLeadTime(lead: LeadTime): string {
-  return `lead:${lead.value}${lead.unit}`;
+// Embeds the occurrence index (== the reminder's recurrence_fired_count at
+// the time this delivery was scheduled) so a recurring reminder's next
+// occurrence naturally gets its own fresh set of delivery rows instead of
+// colliding with the dedup index on the prior occurrence's rows. Non-
+// recurring reminders are always occurrence 0 for their one and only cycle.
+function occurrenceKeyForLeadTime(lead: LeadTime, occurrence: number): string {
+  return `occ${occurrence}:lead:${lead.value}${lead.unit}`;
+}
+
+// Every occurrence's rows share this "occN:" prefix regardless of which
+// lead time or channel they're for — used by advanceCompletedReminders() to
+// find all of a specific occurrence's deliveries without needing a separate
+// column.
+function occurrencePrefix(occurrence: number): string {
+  return `occ${occurrence}:`;
 }
 
 function alertLabelForLeadTime(lead: LeadTime): string {
@@ -129,6 +181,8 @@ type CandidateReminder = {
   sms_recipient_user_ids: number[];
   call_recipient_user_ids: number[];
   slack_recipient_user_ids: number[];
+  messenger_recipient_user_ids: number[];
+  recurrence_fired_count: number;
 };
 
 /**
@@ -149,7 +203,8 @@ export async function scheduleDueDeliveries(): Promise<{
       `SELECT id, entity_type, entity_id, title, description,
               due_at::text AS due_at, lead_times,
               email_recipients, sms_recipient_user_ids,
-              call_recipient_user_ids, slack_recipient_user_ids
+              call_recipient_user_ids, slack_recipient_user_ids,
+              messenger_recipient_user_ids, recurrence_fired_count
          FROM reminders
         WHERE status = 'active'
           AND deleted_at IS NULL
@@ -163,32 +218,44 @@ export async function scheduleDueDeliveries(): Promise<{
       const leadTimes = Array.isArray(reminder.lead_times)
         ? reminder.lead_times
         : [];
+      const occurrence = reminder.recurrence_fired_count;
 
       for (const lead of leadTimes) {
         const scheduledFor = new Date(dueAtMs - leadTimeToMs(lead));
-        const occurrenceKey = occurrenceKeyForLeadTime(lead);
+        const occurrenceKey = occurrenceKeyForLeadTime(lead, occurrence);
 
         const recipients: Array<{ channel: string; recipientRef: string }> =
-          [
-            ...reminder.email_recipients.map((email) => ({
-              channel: "email",
-              recipientRef: email,
-            })),
-            ...reminder.sms_recipient_user_ids.map((userId) => ({
-              channel: "sms",
-              recipientRef: String(userId),
-            })),
-            ...reminder.call_recipient_user_ids.map((userId) => ({
-              channel: "call",
-              recipientRef: String(userId),
-            })),
-            ...reminder.slack_recipient_user_ids.map((userId) => ({
-              channel: "slack",
-              recipientRef: String(userId),
-            })),
-            // TODO(#516): messenger_recipient_user_ids -> channel "messenger"
-            // once an in-app delivery path exists for generic reminders.
-          ];
+          reminder.entity_type === "elaine_action"
+            ? // elaine_action reminders carry no channel/recipient arrays —
+              // #515 writes them empty because "delivery" for this entity
+              // type means invoking the stored action itself (see the
+              // elaine_action branch in claimAndSendDueDeliveries), not
+              // sending to a channel recipient. One synthetic row per lead
+              // time is enough to drive that dispatch through the same
+              // claim/send/retry machinery every other channel uses.
+              [{ channel: "elaine_action", recipientRef: "dispatch" }]
+            : [
+                ...reminder.email_recipients.map((email) => ({
+                  channel: "email",
+                  recipientRef: email,
+                })),
+                ...reminder.sms_recipient_user_ids.map((userId) => ({
+                  channel: "sms",
+                  recipientRef: String(userId),
+                })),
+                ...reminder.call_recipient_user_ids.map((userId) => ({
+                  channel: "call",
+                  recipientRef: String(userId),
+                })),
+                ...reminder.slack_recipient_user_ids.map((userId) => ({
+                  channel: "slack",
+                  recipientRef: String(userId),
+                })),
+                ...reminder.messenger_recipient_user_ids.map((userId) => ({
+                  channel: "messenger",
+                  recipientRef: String(userId),
+                })),
+              ];
 
         for (const { channel, recipientRef } of recipients) {
           const result = await client.query(
@@ -224,6 +291,85 @@ async function recoverStuckSendingDeliveries(): Promise<number> {
         AND created_at < NOW() - INTERVAL '${STUCK_SENDING_TIMEOUT_MS} milliseconds'`,
   );
   return result.rowCount ?? 0;
+}
+
+/**
+ * "messenger" channel delivery — writes a message directly into the
+ * recipient's Elaine conversation history so it appears in their chat
+ * widget, the same way deliverElaineChat() in communication-actions.ts
+ * delivers Elaine's own conversational replies (that function isn't reused
+ * directly because it's keyed on a resolved `ResolvedContact`, not a bare
+ * userId, and generic reminders have no such contact-resolution step).
+ */
+async function deliverGenericMessengerReminder(
+  userId: number,
+  message: string,
+): Promise<void> {
+  let [conv] = await db
+    .select({ id: elaineHistoryConversations.id })
+    .from(elaineHistoryConversations)
+    .where(
+      and(
+        eq(elaineHistoryConversations.userId, userId),
+        eq(elaineHistoryConversations.isWidgetDefault, true),
+      ),
+    )
+    .limit(1);
+
+  if (!conv) {
+    const [inserted] = await db
+      .insert(elaineHistoryConversations)
+      .values({ userId, isWidgetDefault: true, title: "Elaine" })
+      .returning({ id: elaineHistoryConversations.id });
+    conv = inserted;
+  }
+  if (!conv) {
+    throw new Error(
+      "deliverGenericMessengerReminder: could not find or create conversation",
+    );
+  }
+
+  await db.insert(elaineHistoryMessages).values({
+    conversationId: conv.id,
+    userId,
+    role: "assistant",
+    content: message,
+    channel: "web",
+  });
+  await db
+    .update(elaineHistoryConversations)
+    .set({ updatedAt: new Date() })
+    .where(eq(elaineHistoryConversations.id, conv.id));
+}
+
+/**
+ * Dispatches an `elaine_action` reminder's stored action through the same
+ * executors communication-actions.ts uses for immediate (non-scheduled)
+ * call_contact/message_contact requests, so scheduled and immediate
+ * delivery never diverge in behavior. New elaineActionType values added to
+ * communication-actions.ts in the future need a matching case here.
+ */
+async function dispatchElaineActionReminder(
+  actionType: string | null,
+  payload: unknown,
+): Promise<{ status: number; body: unknown }> {
+  const p = (payload ?? {}) as Record<string, unknown>;
+  if (actionType === "call_contact") {
+    return fireCallContact(String(p.contactName ?? ""), String(p.message ?? ""));
+  }
+  if (actionType === "message_contact") {
+    const channel = (p.channel ??
+      "auto") as "auto" | "sms" | "slack" | "email" | "elaine_chat";
+    return fireMessageContact(
+      String(p.contactName ?? ""),
+      String(p.message ?? ""),
+      channel,
+    );
+  }
+  return {
+    status: 500,
+    body: { error: `unknown elaine_action_type: ${actionType}` },
+  };
 }
 
 type ClaimedDelivery = {
@@ -343,10 +489,10 @@ export async function claimAndSendDueDeliveries(): Promise<{
   for (const delivery of claimed) {
     let outcome: { success: true } | { success: false; error: unknown };
     try {
-      // Reconstruct the lead time from the occurrence key (`lead:<value><unit>`)
-      // purely for the human-readable label — safe to fall back to "now" if
-      // parsing ever fails (e.g. a future occurrence-key scheme from #516).
-      const match = /^lead:(\d+)(minutes|hours|days|weeks)$/.exec(
+      // Reconstruct the lead time from the occurrence key
+      // (`occN:lead:<value><unit>`) purely for the human-readable label —
+      // safe to fall back to "now" if parsing ever fails.
+      const match = /^occ\d+:lead:(\d+)(minutes|hours|days|weeks)$/.exec(
         delivery.occurrence_key,
       );
       const label = match
@@ -463,8 +609,40 @@ export async function claimAndSendDueDeliveries(): Promise<{
           formattedDate,
           contextLabel,
         );
+      } else if (delivery.channel === "messenger") {
+        const userId = Number(delivery.recipient_ref);
+        const body = delivery.reminder_description
+          ? `${delivery.reminder_title}\n\n${delivery.reminder_description}`
+          : delivery.reminder_title;
+        const message = contextLabel ? `${body}\n\n${contextLabel}` : body;
+        await deliverGenericMessengerReminder(userId, message);
+      } else if (delivery.channel === "elaine_action") {
+        // entity_type is always 'elaine_action' here (see the synthetic
+        // recipients branch in scheduleDueDeliveries) — dispatch through
+        // the same executors the immediate (non-scheduled) path uses, so
+        // scheduled and immediate call_contact/message_contact behave
+        // identically.
+        const [{ elaine_action_type: actionType, elaine_action_payload: payload }] =
+          (
+            await pool.query<{
+              elaine_action_type: string | null;
+              elaine_action_payload: unknown;
+            }>(
+              `SELECT elaine_action_type, elaine_action_payload FROM reminders WHERE id = $1`,
+              [delivery.reminder_id],
+            )
+          ).rows;
+        const result = await dispatchElaineActionReminder(
+          actionType,
+          payload,
+        );
+        if (result.status >= 400) {
+          const errBody = result.body as { error?: string } | null;
+          throw new Error(
+            errBody?.error ?? `elaine_action dispatch failed (${result.status})`,
+          );
+        }
       } else {
-        // TODO(#516): "messenger" channel dispatch.
         throw new Error(`unsupported channel: ${delivery.channel}`);
       }
       outcome = { success: true };
@@ -504,13 +682,318 @@ export async function claimAndSendDueDeliveries(): Promise<{
  * in-process fallback timer and the Scheduled Deployment cron script.
  */
 export async function runReminderDeliveries(): Promise<void> {
+  const calendarSync = await syncCalendarLinkedReminders();
   const { remindersChecked, deliveriesScheduled } =
     await scheduleDueDeliveries();
   const { claimed, sent, failed } = await claimAndSendDueDeliveries();
+  const { markedDone, advanced } = await advanceCompletedReminders();
   logger.info(
-    { remindersChecked, deliveriesScheduled, claimed, sent, failed },
+    {
+      calendarChecked: calendarSync.checked,
+      calendarUpdated: calendarSync.updated,
+      calendarCancelled: calendarSync.cancelled,
+      remindersChecked,
+      deliveriesScheduled,
+      claimed,
+      sent,
+      failed,
+      markedDone,
+      advanced,
+    },
     "reminders-scheduler: run summary",
   );
+}
+
+type RecurrenceRow = {
+  id: number;
+  due_at: string;
+  recurrence_interval_value: number | null;
+  recurrence_interval_unit: string | null;
+  recurrence_weekday: number | null;
+  recurrence_day_of_month: number | null;
+  recurrence_end_date: string | null;
+  recurrence_max_occurrences: number | null;
+  recurrence_fired_count: number;
+};
+
+/**
+ * Computes the next `dueAt` for a recurring reminder, given the occurrence
+ * that just completed. Returns null if the reminder isn't recurring, or has
+ * reached its end condition (recurrenceEndDate / recurrenceMaxOccurrences)
+ * — either case means the reminder should be marked `done` instead of
+ * advanced. Only one of interval/weekday/day-of-month is expected to be set
+ * per reminder (enforced at creation time, not here); if more than one is
+ * present, interval wins, then weekday, then day-of-month.
+ */
+function computeNextOccurrence(reminder: RecurrenceRow): Date | null {
+  const firedCount = reminder.recurrence_fired_count + 1; // this occurrence, about to complete
+  if (
+    reminder.recurrence_max_occurrences != null &&
+    firedCount >= reminder.recurrence_max_occurrences
+  ) {
+    return null;
+  }
+
+  const currentDue = new Date(reminder.due_at);
+  let next: Date | null = null;
+
+  if (
+    reminder.recurrence_interval_value != null &&
+    reminder.recurrence_interval_unit
+  ) {
+    const unit = reminder.recurrence_interval_unit;
+    const value = reminder.recurrence_interval_value;
+    next = new Date(currentDue);
+    switch (unit) {
+      case "minutes":
+        next.setMinutes(next.getMinutes() + value);
+        break;
+      case "hours":
+        next.setHours(next.getHours() + value);
+        break;
+      case "days":
+        next.setDate(next.getDate() + value);
+        break;
+      case "weeks":
+        next.setDate(next.getDate() + value * 7);
+        break;
+      case "months":
+        next.setMonth(next.getMonth() + value);
+        break;
+      case "years":
+        next.setFullYear(next.getFullYear() + value);
+        break;
+      default:
+        next = null;
+    }
+  } else if (reminder.recurrence_weekday != null) {
+    // Next occurrence of the given weekday, always strictly in the future
+    // relative to the current due date (adds 7 days if today already
+    // matches, so a weekly reminder never re-fires the same day).
+    next = new Date(currentDue);
+    do {
+      next.setDate(next.getDate() + 1);
+    } while (next.getDay() !== reminder.recurrence_weekday);
+  } else if (reminder.recurrence_day_of_month != null) {
+    // Next month's occurrence of the given day-of-month. Clamps to the
+    // month's last day if the target day doesn't exist (e.g. day 31 in
+    // February) rather than overflowing into the following month.
+    next = new Date(currentDue);
+    next.setMonth(next.getMonth() + 1, 1);
+    const daysInTargetMonth = new Date(
+      next.getFullYear(),
+      next.getMonth() + 1,
+      0,
+    ).getDate();
+    next.setDate(Math.min(reminder.recurrence_day_of_month, daysInTargetMonth));
+  }
+
+  if (!next) return null;
+
+  if (reminder.recurrence_end_date) {
+    const end = new Date(`${reminder.recurrence_end_date}T23:59:59.999Z`);
+    if (next.getTime() > end.getTime()) return null;
+  }
+
+  return next;
+}
+
+/**
+ * Phase C: for every active reminder whose *current* occurrence has fully
+ * resolved (every reminder_deliveries row under that occurrence's key
+ * prefix is `fired` or `failed` — none still `pending`/`sending`), either
+ * marks it `done` (non-recurring, or a recurring reminder that just hit its
+ * end condition) or advances it to its next occurrence in place
+ * (`due_at` + `recurrence_fired_count`++), leaving it `active` so
+ * scheduleDueDeliveries() naturally picks up the new occurrence next run.
+ *
+ * Reminders with zero delivery rows for their current occurrence (e.g. an
+ * elaine_action/channel reminder whose recipient arrays are all empty due
+ * to misconfiguration) are treated as already-resolved rather than stuck
+ * forever — same "don't hang the whole reminder on one broken row" logic
+ * the crash-recovery path uses.
+ */
+export async function advanceCompletedReminders(): Promise<{
+  markedDone: number;
+  advanced: number;
+}> {
+  const { rows: active } = await pool.query<RecurrenceRow>(
+    `SELECT id, due_at::text AS due_at, recurrence_interval_value,
+            recurrence_interval_unit, recurrence_weekday,
+            recurrence_day_of_month, recurrence_end_date::text AS recurrence_end_date,
+            recurrence_max_occurrences, recurrence_fired_count
+       FROM reminders
+      WHERE status = 'active' AND deleted_at IS NULL AND due_at IS NOT NULL`,
+  );
+
+  let markedDone = 0;
+  let advanced = 0;
+
+  for (const reminder of active) {
+    const prefix = occurrencePrefix(reminder.recurrence_fired_count);
+    const { rows: pendingRows } = await pool.query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM reminder_deliveries
+        WHERE reminder_id = $1 AND occurrence_key LIKE $2 || '%'
+          AND status IN ('pending', 'sending')`,
+      [reminder.id, prefix],
+    );
+    if (Number(pendingRows[0]?.count ?? "0") > 0) continue; // still in flight
+
+    const isRecurring =
+      (reminder.recurrence_interval_value != null &&
+        reminder.recurrence_interval_unit != null) ||
+      reminder.recurrence_weekday != null ||
+      reminder.recurrence_day_of_month != null;
+
+    if (!isRecurring) {
+      await pool.query(
+        `UPDATE reminders SET status = 'done', updated_at = NOW() WHERE id = $1`,
+        [reminder.id],
+      );
+      markedDone++;
+      continue;
+    }
+
+    const nextDueAt = computeNextOccurrence(reminder);
+    if (!nextDueAt) {
+      await pool.query(
+        `UPDATE reminders SET status = 'done', updated_at = NOW() WHERE id = $1`,
+        [reminder.id],
+      );
+      markedDone++;
+      continue;
+    }
+
+    await pool.query(
+      `UPDATE reminders
+          SET due_at = $2,
+              recurrence_fired_count = recurrence_fired_count + 1,
+              updated_at = NOW()
+        WHERE id = $1`,
+      [reminder.id, nextDueAt],
+    );
+    advanced++;
+  }
+
+  return { markedDone, advanced };
+}
+
+type CalendarLinkedReminder = {
+  id: number;
+  due_at: string;
+  google_event_id: string;
+  connected_calendar_user_id: number;
+  google_calendar_id: string;
+  last_synced_event_title: string | null;
+  last_synced_event_start: string | null;
+};
+
+/**
+ * Read-only pull sync for calendar-linked reminders (issue #516). The
+ * generic reminders system deliberately never creates/updates/deletes
+ * Google Calendar events itself (see the design-intent comment in
+ * google-calendar.ts) — a reminder can only *link* to an event the user
+ * already created elsewhere (e.g. via the Travels calendar UI). This
+ * function re-pulls each linked event and:
+ *   - updates `due_at` if the event's start time changed,
+ *   - marks the reminder `cancelled` if the event was deleted,
+ *   - otherwise just refreshes the sync-state bookkeeping row.
+ * Runs before scheduleDueDeliveries() each tick so any change is reflected
+ * before delivery rows are computed off the (possibly stale) due date.
+ */
+export async function syncCalendarLinkedReminders(): Promise<{
+  checked: number;
+  updated: number;
+  cancelled: number;
+}> {
+  const { rows: linked } = await pool.query<CalendarLinkedReminder>(
+    `SELECT r.id, r.due_at::text AS due_at, r.google_event_id,
+            tcc.user_id AS connected_calendar_user_id,
+            tcc.google_calendar_id,
+            s.last_synced_event_title, s.last_synced_event_start::text AS last_synced_event_start
+       FROM reminders r
+       JOIN travels_connected_calendars tcc ON tcc.id = r.calendar_connection_id
+       LEFT JOIN reminder_calendar_sync_state s ON s.reminder_id = r.id
+      WHERE r.status = 'active' AND r.deleted_at IS NULL
+        AND r.calendar_connection_id IS NOT NULL AND r.google_event_id IS NOT NULL`,
+  );
+
+  let updated = 0;
+  let cancelled = 0;
+
+  for (const reminder of linked) {
+    try {
+      const accessToken = await getValidAccessToken(
+        reminder.connected_calendar_user_id,
+      );
+      if (!accessToken) {
+        logger.warn(
+          { reminderId: reminder.id },
+          "reminders-scheduler: calendar-linked reminder has no valid access token, skipping sync",
+        );
+        continue;
+      }
+
+      const event = await getCalendarEvent(
+        accessToken,
+        reminder.google_calendar_id,
+        reminder.google_event_id,
+      );
+
+      if (!event) {
+        // Deleted on Google Calendar — cancel the reminder rather than
+        // leaving it firing against a stale due date forever.
+        await pool.query(
+          `UPDATE reminders SET status = 'cancelled', updated_at = NOW() WHERE id = $1`,
+          [reminder.id],
+        );
+        cancelled++;
+        continue;
+      }
+
+      const eventStart = event.start ? new Date(event.start) : null;
+      const titleChanged = event.title !== reminder.last_synced_event_title;
+      const startChanged =
+        eventStart &&
+        eventStart.getTime() !==
+          (reminder.last_synced_event_start
+            ? new Date(reminder.last_synced_event_start).getTime()
+            : NaN);
+
+      if (startChanged && eventStart) {
+        await pool.query(
+          `UPDATE reminders SET due_at = $2, updated_at = NOW() WHERE id = $1`,
+          [reminder.id, eventStart],
+        );
+        updated++;
+      }
+
+      if (titleChanged || startChanged) {
+        await pool.query(
+          `INSERT INTO reminder_calendar_sync_state
+             (reminder_id, last_synced_event_title, last_synced_event_start, last_checked_at)
+           VALUES ($1, $2, $3, NOW())
+           ON CONFLICT (reminder_id) DO UPDATE
+             SET last_synced_event_title = EXCLUDED.last_synced_event_title,
+                 last_synced_event_start = EXCLUDED.last_synced_event_start,
+                 last_checked_at = NOW()`,
+          [reminder.id, event.title, eventStart],
+        );
+      } else {
+        await pool.query(
+          `UPDATE reminder_calendar_sync_state SET last_checked_at = NOW() WHERE reminder_id = $1`,
+          [reminder.id],
+        );
+      }
+    } catch (err) {
+      logger.error(
+        { err, reminderId: reminder.id },
+        "reminders-scheduler: calendar re-sync failed for linked reminder",
+      );
+    }
+  }
+
+  return { checked: linked.length, updated, cancelled };
 }
 
 const IN_PROCESS_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes

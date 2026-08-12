@@ -252,3 +252,28 @@ export async function deleteCalendarEvent(
     { method: "DELETE" },
   );
 }
+
+// Fetches a single event by id, for the read-only calendar-link re-sync used
+// by the generic reminders scheduler (issue #516): a reminder may link to an
+// already-existing event elsewhere on a connected calendar, and the
+// scheduler needs to detect if that event's title/start time changed or it
+// was deleted, without listing/diffing the whole calendar. Returns null for
+// a 404 (event deleted or never existed) instead of throwing, since that's
+// an expected, actionable outcome for callers — not an error condition.
+export async function getCalendarEvent(
+  accessToken: string,
+  calendarId: string,
+  eventId: string,
+): Promise<CalendarEvent | null> {
+  try {
+    const raw = await calendarApiJson<RawGoogleEvent>(
+      accessToken,
+      `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
+    );
+    if (raw.status === "cancelled") return null;
+    return fromGoogleEvent(raw);
+  } catch (err) {
+    if (err instanceof Error && /\b404\b/.test(err.message)) return null;
+    throw err;
+  }
+}

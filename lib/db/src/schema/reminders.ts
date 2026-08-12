@@ -44,7 +44,11 @@ export const reminders = pgTable(
     // start time. Interpreted using the creating user's app_users.timezone
     // (same fallback pattern as comm-check-scheduler.ts) when the user
     // specifies a relative/local time.
-    dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
+    // Nullable: a reminder can exist with no specific due date/time (a bare
+    // note-like reminder). It simply never fires under the delivery
+    // scheduler until a due date is set — mirrors the old
+    // travelsReminders.dueDate, which was also nullable.
+    dueAt: timestamp("due_at", { withTimezone: true }),
     // Array of { value: number, unit: "minutes"|"hours"|"days"|"weeks" }.
     // A plain one-off reminder with no extra lead time has a single entry
     // { value: 0, unit: "minutes" }. Generalizes the old
@@ -102,6 +106,12 @@ export const reminders = pgTable(
     // invoke for this reminder's "delivery".
     elaineActionType: text("elaine_action_type"),
     elaineActionPayload: jsonb("elaine_action_payload"),
+    // Set only by one-time backfill scripts (e.g. the travels_reminders /
+    // elaine_scheduled_actions migrations) so re-running a backfill is
+    // idempotent (ON CONFLICT DO NOTHING) and so a migrated row's origin can
+    // be traced. Never set or read by normal application code.
+    legacySourceTable: text("legacy_source_table"),
+    legacySourceId: integer("legacy_source_id"),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()

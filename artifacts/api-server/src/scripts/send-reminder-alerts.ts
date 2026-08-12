@@ -6,7 +6,7 @@
  * Intended to be run by a Replit Scheduled Deployment (real cron), so
  * delivery does not depend on the main `autoscale` web server instance
  * being awake. Runs the same idempotent checks as the in-process fallback
- * schedulers (`lib/reminder-scheduler.ts`, `lib/travels-nudges.ts`,
+ * schedulers (`lib/reminders-scheduler.ts`, `lib/travels-nudges.ts`,
  * `lib/integrations-health-nudges.ts`, `lib/gmail-scan.ts`) and exits. All
  * are additive/idempotent (each guarded by `shouldRunScheduledTask`'s
  * per-task interval check), so running them together here is safe even
@@ -14,7 +14,7 @@
  * server instance happens to be warm.
  */
 import { pool } from "@workspace/db";
-import { runReminderAlerts } from "../lib/reminder-scheduler";
+import { runReminderDeliveries } from "../lib/reminders-scheduler";
 import { computeAndStoreNudges } from "../lib/travels-nudges";
 import { runScheduledIntegrationsHealthNudges } from "../lib/integrations-health-nudges";
 import { scanAllGmailConnections } from "../lib/gmail-scan";
@@ -45,7 +45,7 @@ async function runGmailScanIfDue(): Promise<void> {
 }
 
 Promise.all([
-  runReminderAlerts(),
+  runReminderDeliveries(),
   computeAndStoreNudges(),
   // Use the stateless scheduled path: inserts failure nudges for every
   // currently-failing service using stable per-error slug keys, with

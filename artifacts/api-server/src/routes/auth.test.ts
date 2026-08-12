@@ -79,8 +79,8 @@ vi.mock("../lib/slack", () => ({
   slackConfigured: () => false,
 }));
 
-vi.mock("../lib/reminder-scheduler", () => ({
-  runReminderAlerts: vi.fn(),
+vi.mock("../lib/reminders-scheduler", () => ({
+  runReminderDeliveries: vi.fn(),
 }));
 
 vi.mock("../lib/session", () => ({

@@ -46,7 +46,7 @@ import {
   SmsRegistrationPendingError,
   SmsOptedOutError,
 } from "../lib/sms";
-import { runReminderAlerts } from "../lib/reminder-scheduler";
+import { runReminderDeliveries } from "../lib/reminders-scheduler";
 import { THIRTY_DAYS_MS } from "../lib/session";
 import { isValidIanaTimeZone } from "../lib/timezone";
 
@@ -149,8 +149,11 @@ router.post("/auth/login", loginLimiter, async (req, res) => {
     // hourly in-process fallback and the scheduled cron job. This is a
     // single shared function so any future notification channel (SMS, etc.)
     // added to it automatically gets this same trigger for free.
-    runReminderAlerts().catch((err: unknown) =>
-      req.log.error({ err }, "reminder-scheduler: login-triggered run failed"),
+    runReminderDeliveries().catch((err: unknown) =>
+      req.log.error(
+        { err },
+        "reminders-scheduler: login-triggered run failed",
+      ),
     );
   });
 });
@@ -978,10 +981,10 @@ router.get("/auth/google/callback", async (req, res) => {
         res.redirect(returnTo ?? "/");
 
         // Same shared trigger as password login — see comment there.
-        runReminderAlerts().catch((err: unknown) =>
+        runReminderDeliveries().catch((err: unknown) =>
           req.log.error(
             { err },
-            "reminder-scheduler: login-triggered run failed (google)",
+            "reminders-scheduler: login-triggered run failed (google)",
           ),
         );
       });

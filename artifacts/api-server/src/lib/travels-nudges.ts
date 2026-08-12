@@ -1,8 +1,8 @@
 /**
  * Proactive nudges — elAIne messaging a user without being asked first
  * (e.g. "your trip starts in 2 days and your packing list is still empty").
- * Runs on the same cadence as the reminder-alert scheduler (in-process
- * hourly fallback + Replit Scheduled Deployment, see reminder-scheduler.ts
+ * Runs on the same cadence as the reminder-delivery scheduler (in-process
+ * fallback + Replit Scheduled Deployment, see reminders-scheduler.ts
  * and scripts/send-reminder-alerts.ts). Every generated nudge is inserted
  * with a stable `nudgeKey` and a unique (user_id, nudge_key) index, so
  * re-running this job never produces a duplicate nag — a condition either

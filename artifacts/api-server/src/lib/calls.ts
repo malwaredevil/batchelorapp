@@ -165,6 +165,22 @@ export function buildReminderCallScript(
   return `Hi! I'm calling with a Batchelor Travels reminder. Your reminder "${reminderTitle}" is due in ${label} on ${formattedDueDate}, for your trip "${tripTitle}" to ${tripDestination}. Have a great trip!`;
 }
 
+/**
+ * Entity-agnostic version of buildReminderCallScript, used by the generic
+ * cross-app reminders-scheduler. `contextPhrase` is an optional clause
+ * describing what the reminder is attached to (e.g. `, for your trip "Paris"`
+ * — include any leading punctuation/wording); omit it for reminders with no
+ * parent entity.
+ */
+export function buildGenericReminderCallScript(
+  reminderTitle: string,
+  label: string,
+  formattedDueDate: string,
+  contextPhrase?: string,
+): string {
+  return `Hi! I'm calling with a Batchelor reminder. Your reminder "${reminderTitle}" is due in ${label} on ${formattedDueDate}${contextPhrase ?? ""}. Have a great day!`;
+}
+
 // AgentPhone outbound calls are available whenever the connector proxy can
 // resolve. Kept as a named export to mirror smsConfigured() and give
 // callers/UI a single place to gate on.

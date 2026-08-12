@@ -3171,7 +3171,7 @@ END $$`,
      created_by_user_id          INTEGER NOT NULL,
      title                       TEXT NOT NULL,
      description                 TEXT,
-     due_at                      TIMESTAMPTZ NOT NULL,
+     due_at                      TIMESTAMPTZ,
      lead_times                  JSONB NOT NULL DEFAULT '[]',
      recurrence_interval_value   INTEGER,
      recurrence_interval_unit    TEXT,
@@ -3190,15 +3190,28 @@ END $$`,
      status                      TEXT NOT NULL DEFAULT 'active',
      elaine_action_type          TEXT,
      elaine_action_payload       JSONB,
+     legacy_source_table         TEXT,
+     legacy_source_id            INTEGER,
      deleted_at                  TIMESTAMPTZ,
      created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
      updated_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
   `ALTER TABLE reminders ENABLE ROW LEVEL SECURITY`,
+  // Additive columns for reminders created before the backfill-tracking
+  // columns existed (issue #514) — safe no-ops once the CREATE TABLE above
+  // already includes them for a fresh database.
+  `ALTER TABLE reminders ADD COLUMN IF NOT EXISTS legacy_source_table TEXT`,
+  `ALTER TABLE reminders ADD COLUMN IF NOT EXISTS legacy_source_id INTEGER`,
+  // due_at was briefly NOT NULL when this table was first created (#513);
+  // loosened before any real writes existed once #514's backfill found
+  // real travels_reminders rows with no due date at all (a legitimate
+  // bare/no-date reminder). DROP NOT NULL is a no-op if already nullable.
+  `ALTER TABLE reminders ALTER COLUMN due_at DROP NOT NULL`,
   `CREATE INDEX IF NOT EXISTS reminders_entity_idx ON reminders (entity_type, entity_id)`,
   `CREATE INDEX IF NOT EXISTS reminders_created_by_user_id_idx ON reminders (created_by_user_id)`,
   `CREATE INDEX IF NOT EXISTS reminders_status_due_at_idx ON reminders (status, due_at)`,
   `CREATE INDEX IF NOT EXISTS reminders_calendar_connection_id_idx ON reminders (calendar_connection_id)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS reminders_legacy_source_idx ON reminders (legacy_source_table, legacy_source_id)`,
 
   `CREATE TABLE IF NOT EXISTS reminder_deliveries (
      id              SERIAL PRIMARY KEY,

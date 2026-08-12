@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { z } from "zod/v4";
 import { db, appUsers } from "@workspace/db";
 import { isValidIanaTimeZone } from "./timezone";
 
@@ -47,6 +48,96 @@ export type RelativeTimeSpec =
   // "next Tuesday" -> the next upcoming occurrence of that weekday, always
   // strictly in the future (if today IS that weekday, resolves 7 days out).
   | { kind: "next-weekday"; dayOfWeek: number; clockTime?: ClockTime };
+
+// Zod mirror of RelativeTimeSpec above — the single source of truth for
+// validating this shape wherever a tool payload accepts it (reminder-actions.ts's
+// create_reminder `when` field, and communication-actions.ts's call_contact /
+// message_contact `scheduleAt` field). Keep in lockstep with the TS type by
+// hand; there is no automated sync.
+const ClockTimeZod = z.object({
+  hour: z.number().int().min(0).max(23),
+  minute: z.number().int().min(0).max(59),
+});
+
+export const RelativeTimeSpecZod = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("days-from-now"),
+    count: z.number().int().positive(),
+    clockTime: ClockTimeZod.optional(),
+  }),
+  z.object({
+    kind: z.literal("weeks-from-now"),
+    count: z.number().int().positive(),
+    clockTime: ClockTimeZod.optional(),
+  }),
+  z.object({
+    kind: z.literal("months-from-now"),
+    count: z.number().int().positive(),
+    clockTime: ClockTimeZod.optional(),
+  }),
+  z.object({
+    kind: z.literal("next-week-start"),
+    clockTime: ClockTimeZod.optional(),
+  }),
+  z.object({
+    kind: z.literal("next-month-start"),
+    clockTime: ClockTimeZod.optional(),
+  }),
+  z.object({
+    kind: z.literal("next-weekday"),
+    dayOfWeek: z.number().int().min(0).max(6),
+    clockTime: ClockTimeZod.optional(),
+  }),
+]);
+
+// Shared JSON-schema fragment for tool definitions that accept a
+// RelativeTimeSpec, so the model gets identical guidance regardless of which
+// tool (create_reminder / call_contact / message_contact) it's calling.
+export const RELATIVE_TIME_SPEC_JSON_SCHEMA = {
+  type: "object",
+  description:
+    "Structured relative-time spec — you compute WHICH variant applies from the user's words, never the actual datetime yourself; resolveRelativeTime computes the exact datetime deterministically in code.",
+  properties: {
+    kind: {
+      type: "string",
+      enum: [
+        "days-from-now",
+        "weeks-from-now",
+        "months-from-now",
+        "next-week-start",
+        "next-month-start",
+        "next-weekday",
+      ],
+      description:
+        '"days-from-now"/count for "tomorrow" (count=1) or "in N days"; ' +
+        '"weeks-from-now"/count for "in a week" (count=1) or "in N weeks"; ' +
+        '"months-from-now"/count for "in N months"; ' +
+        '"next-week-start" for "next week" (Sunday of the following week); ' +
+        '"next-month-start" for "next month" (1st of the following month); ' +
+        '"next-weekday"/dayOfWeek for "next Tuesday" etc (0=Sunday..6=Saturday) — always resolves to a future date, never today even if today is that weekday.',
+    },
+    count: {
+      type: "integer",
+      description:
+        "Required for days-from-now/weeks-from-now/months-from-now, omit otherwise.",
+    },
+    dayOfWeek: {
+      type: "integer",
+      description:
+        "Required for next-weekday (0=Sunday..6=Saturday), omit otherwise.",
+    },
+    clockTime: {
+      type: "object",
+      description:
+        'Only include when the user gave an explicit time (e.g. "at 9am"); omit to use the default of 00:01.',
+      properties: {
+        hour: { type: "integer", description: "0-23" },
+        minute: { type: "integer", description: "0-59" },
+      },
+    },
+  },
+  required: ["kind"],
+} as const;
 
 // Thrown when a spec is malformed (e.g. count <= 0, invalid dayOfWeek, or an
 // invalid clockTime). Callers MUST treat this as "ask the user to clarify",

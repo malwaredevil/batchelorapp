@@ -31,6 +31,7 @@ import {
   listContactChannelsTool,
   communicationActionTools,
 } from "./communication-actions";
+import { reminderActionTools } from "./reminder-actions";
 
 // ---------------------------------------------------------------------------
 // Shared enums used by tool JSON schemas and route-handler Zod schemas alike.
@@ -763,6 +764,7 @@ export const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     },
   },
   ...communicationActionTools,
+  ...reminderActionTools,
 ];
 
 export const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [

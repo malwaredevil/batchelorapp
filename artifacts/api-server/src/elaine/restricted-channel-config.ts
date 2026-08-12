@@ -173,6 +173,14 @@ export const RESTRICTED_EXCLUDED_ACTION_TYPES_SOURCE: readonly string[] = [
   // before the turn runs. See capability-registry.ts for the full reasoning.
   "call_contact",
   "message_contact",
+  // create_reminder: same spoofable-From-header reasoning as call_contact /
+  // message_contact above. Although the reminder always targets the
+  // requesting user's own account (never a third party), a spoofed email
+  // sender matched to a real household member's app_users.email could still
+  // plant unwanted reminders on that member's account. SMS/voice and Slack
+  // re-allow it via channelAllowedExtras because sender identity is strongly
+  // verified there before the turn runs.
+  "create_reminder",
   // Notification management actions: these are web-only because managing
   // notification preferences is an in-app settings action that is not
   // meaningful or safe to trigger from an async channel without the settings

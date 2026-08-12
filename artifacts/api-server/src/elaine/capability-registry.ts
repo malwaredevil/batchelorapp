@@ -233,6 +233,17 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
     executorPrefix: "communicationAction",
     channels: WEB_TRUSTED_AND_SLACK_CHANNELS,
   }),
+  // create_reminder: general-purpose "remind me..." reminder, always scoped
+  // to the requesting user's own account (email/sms/slack/messenger
+  // recipients all resolve to self, never another household member) — same
+  // trust boundary as call_contact/message_contact, so it gets the same
+  // channel set including Slack.
+  ...policies(["create_reminder"], {
+    ...ACTION_DEFAULTS,
+    domain: "office",
+    executorPrefix: "reminderAction",
+    channels: WEB_TRUSTED_AND_SLACK_CHANNELS,
+  }),
   // list_contact_channels: read-only — returns which channels are reachable for
   // a given household member. Available on web/SMS/voice/Slack so Elaine can
   // ask for clarification before picking a delivery channel.

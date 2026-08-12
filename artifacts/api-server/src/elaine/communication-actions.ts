@@ -19,21 +19,45 @@ import { initiateOutboundCall, waitForCallOutcome } from "../lib/calls";
 import { openDmChannel, postSlackMessage, slackConfigured } from "../lib/slack";
 import { sendAssistantEmail, resendConfigured } from "../lib/email";
 import { logger } from "../lib/logger";
+import {
+  resolveRelativeTime,
+  getUserTimezone,
+  RelativeTimeResolutionError,
+  RelativeTimeSpecZod,
+  RELATIVE_TIME_SPEC_JSON_SCHEMA,
+  type RelativeTimeSpec,
+} from "../lib/relative-time-resolver";
 
 // ---------------------------------------------------------------------------
 // Schemas
 // ---------------------------------------------------------------------------
 
-// Optional scheduleAt in ISO 8601 — when present the action is deferred to
-// that time rather than fired immediately. The scheduler worker polls every
-// minute for due rows and dispatches them.
+// scheduleAt accepts EITHER an exact ISO 8601 datetime OR a structured
+// RelativeTimeSpec (see relative-time-resolver.ts, issue #525/#526) — when
+// present the action is deferred rather than fired immediately. The
+// scheduler worker polls every minute for due rows and dispatches them.
+// resolveScheduleAt() below normalizes either form to a concrete ISO string
+// before it's stored.
 const scheduleAtField = z
-  .string()
-  .datetime({ offset: true })
+  .union([z.string().datetime({ offset: true }), RelativeTimeSpecZod])
   .optional()
   .describe(
-    "ISO 8601 datetime to fire this action at. Omit to execute immediately.",
+    "Either an exact ISO 8601 datetime, or a structured relative-time spec (see its own description), to fire this action at. Omit to execute immediately.",
   );
+
+// Resolves a scheduleAt field (already-exact ISO string, or a
+// RelativeTimeSpec the model produced) to a concrete ISO datetime string in
+// the requesting user's timezone. Throws RelativeTimeResolutionError for a
+// malformed spec — callers must surface that as "please clarify", never
+// guess a fallback time.
+async function resolveScheduleAt(
+  scheduleAt: string | RelativeTimeSpec,
+  userId: number,
+): Promise<string> {
+  if (typeof scheduleAt === "string") return scheduleAt;
+  const tz = await getUserTimezone(userId);
+  return resolveRelativeTime(scheduleAt, tz).toISOString();
+}
 
 const CallContactPayload = z.object({
   contactName: z.string().min(1).max(100),
@@ -729,7 +753,10 @@ type ActionExecutor = (
 ) => Promise<{ status: number; body: unknown }>;
 
 // Formats a Date for human-readable confirmation: "3:45 PM" or "Jan 15 at 3:45 PM"
-function formatScheduledTime(iso: string): string {
+// Exported for reuse by reminder-actions.ts's create_reminder confirmation
+// message — keep this the single formatting implementation rather than
+// duplicating it (see the "always consolidate" convention in replit.md).
+export function formatScheduledTime(iso: string): string {
   try {
     const d = new Date(iso);
     const now = new Date();
@@ -762,6 +789,20 @@ export const communicationActionExecutors: Record<
     userId: number,
   ) => {
     if (payload.scheduleAt) {
+      let scheduledFor: string;
+      try {
+        scheduledFor = await resolveScheduleAt(payload.scheduleAt, userId);
+      } catch (err) {
+        if (err instanceof RelativeTimeResolutionError) {
+          return {
+            status: 400,
+            body: {
+              error: `I couldn't work out exactly when you mean (${err.message}). Could you give me a specific day and time?`,
+            },
+          };
+        }
+        throw err;
+      }
       // Deferred — write a row to the generic reminders table (entityType
       // 'elaine_action') and return a confirmation. The unified reminder
       // delivery scheduler claims and fires this the same way it fires every
@@ -777,17 +818,17 @@ export const communicationActionExecutors: Record<
           entityType: "elaine_action",
           createdByUserId: userId,
           title: `Call ${contact?.displayName ?? payload.contactName}`,
-          dueAt: new Date(payload.scheduleAt),
+          dueAt: new Date(scheduledFor),
           leadTimes: [{ value: 0, unit: "minutes" }],
           elaineActionType: "call_contact",
           elaineActionPayload: storedPayload,
         })
         .returning({ id: reminders.id });
-      const formattedTime = formatScheduledTime(payload.scheduleAt);
+      const formattedTime = formatScheduledTime(scheduledFor);
       logger.info(
         {
           scheduledActionId: row?.id,
-          scheduledFor: payload.scheduleAt,
+          scheduledFor,
           contactName: payload.contactName,
         },
         "elaine: scheduled outbound call",
@@ -799,7 +840,7 @@ export const communicationActionExecutors: Record<
           result: {
             scheduled: true,
             scheduledActionId: row?.id,
-            scheduledFor: payload.scheduleAt,
+            scheduledFor,
             contactName: contact?.displayName ?? payload.contactName,
             confirmationMessage: `Got it — I'll call ${contact?.displayName ?? payload.contactName} at ${formattedTime}.`,
           },
@@ -819,9 +860,23 @@ export const communicationActionExecutors: Record<
       : [payload.contactName];
 
     if (payload.scheduleAt) {
+      let scheduledFor: string;
+      try {
+        scheduledFor = await resolveScheduleAt(payload.scheduleAt, userId);
+      } catch (err) {
+        if (err instanceof RelativeTimeResolutionError) {
+          return {
+            status: 400,
+            body: {
+              error: `I couldn't work out exactly when you mean (${err.message}). Could you give me a specific day and time?`,
+            },
+          };
+        }
+        throw err;
+      }
       // Deferred — write one reminders row per recipient (entityType
       // 'elaine_action') and return a summary.
-      const formattedTime = formatScheduledTime(payload.scheduleAt);
+      const formattedTime = formatScheduledTime(scheduledFor);
 
       const rows = await Promise.all(
         names.map(async (name) => {
@@ -837,7 +892,7 @@ export const communicationActionExecutors: Record<
               entityType: "elaine_action",
               createdByUserId: userId,
               title: `Message ${contact?.displayName ?? name}`,
-              dueAt: new Date(payload.scheduleAt!),
+              dueAt: new Date(scheduledFor),
               leadTimes: [{ value: 0, unit: "minutes" }],
               elaineActionType: "message_contact",
               elaineActionPayload: storedPayload,
@@ -846,7 +901,7 @@ export const communicationActionExecutors: Record<
           logger.info(
             {
               scheduledActionId: row?.id,
-              scheduledFor: payload.scheduleAt,
+              scheduledFor,
               contactName: name,
             },
             "elaine: scheduled contact message",
@@ -863,7 +918,7 @@ export const communicationActionExecutors: Record<
           result: {
             scheduled: true,
             scheduledActionIds: rows.map((r) => r.id),
-            scheduledFor: payload.scheduleAt,
+            scheduledFor,
             recipients: rows.map((r) => r.name),
             confirmationMessage: `Got it — I'll message ${recipientList} at ${formattedTime}.`,
           },
@@ -1543,7 +1598,10 @@ export async function buildCommunicationActionLabel(action: {
     case "call_contact": {
       const payload = CallContactPayload.parse(action.payload);
       if (payload.scheduleAt) {
-        const when = formatScheduledTime(payload.scheduleAt);
+        const when =
+          typeof payload.scheduleAt === "string"
+            ? formatScheduledTime(payload.scheduleAt)
+            : "the resolved time";
         return `Schedule a call to ${payload.contactName} at ${when}`;
       }
       return `Call ${payload.contactName}`;
@@ -1559,7 +1617,10 @@ export async function buildCommunicationActionLabel(action: {
           : names.slice(0, -1).join(", ") + ` and ${names[names.length - 1]}`;
       const via = payload.channel !== "auto" ? ` via ${payload.channel}` : "";
       if (payload.scheduleAt) {
-        const when = formatScheduledTime(payload.scheduleAt);
+        const when =
+          typeof payload.scheduleAt === "string"
+            ? formatScheduledTime(payload.scheduleAt)
+            : "the resolved time";
         return `Schedule a message to ${recipientStr}${via} at ${when}`;
       }
       return `Message ${recipientStr}${via}`;
@@ -1600,8 +1661,8 @@ export const communicationActionTools: OpenAI.Chat.Completions.ChatCompletionToo
           "WRONG: 'Jonathan asked me to remind you to pick up the cat.' " +
           "RIGHT: 'Hey, just a reminder to pick up the cat from the vet today!' " +
           "Confirm the contact name and message wording before proposing this action. " +
-          "If the user wants the call at a future time, include `scheduleAt` as an ISO 8601 datetime (e.g. '2026-08-01T15:45:00+02:00'). " +
-          "When scheduling: confirm the time in your visible reply before calling this tool. " +
+          "If the user wants the call at a future time, include `scheduleAt` — either an exact ISO 8601 datetime, or (preferred whenever the user speaks relatively, e.g. 'tomorrow', 'in an hour') the structured relative-time spec described on that field; never compute the datetime yourself from a relative phrase. " +
+          "When scheduling: confirm the resolved time in your visible reply before calling this tool. " +
           "After the tool returns, the result includes a `callStatus` field — incorporate it naturally: " +
           "'answered' → 'I called [name] — they answered.'; " +
           "'voicemail' → 'I called [name] — went to voicemail.'; " +
@@ -1622,9 +1683,16 @@ export const communicationActionTools: OpenAI.Chat.Completions.ChatCompletionToo
                 "What Elaine says when the call is answered — first person, direct, as if Elaine herself is speaking. No attribution to the person who asked.",
             },
             scheduleAt: {
-              type: "string",
+              oneOf: [
+                {
+                  type: "string",
+                  description:
+                    "Exact ISO 8601 datetime to fire the call at (e.g. '2026-08-01T15:45:00+02:00').",
+                },
+                RELATIVE_TIME_SPEC_JSON_SCHEMA,
+              ],
               description:
-                "Optional ISO 8601 datetime to fire the call at (e.g. '2026-08-01T15:45:00+02:00'). Omit to call immediately.",
+                "Optional. Omit to call immediately. Otherwise either an exact ISO datetime or a relative-time spec — prefer the relative-time spec whenever the user spoke relatively.",
             },
           },
           required: ["contactName", "message"],
@@ -1644,8 +1712,8 @@ export const communicationActionTools: OpenAI.Chat.Completions.ChatCompletionToo
           "IMPORTANT: if the user hasn't specified a channel, call list_contact_channels first to see what's available, then ask which they prefer. " +
           "For multi-recipient ('tell B, C, and D'), pass an array in contactName. " +
           "Confirm contact(s) and message wording before proposing. " +
-          "If the user wants the message at a future time, include `scheduleAt` as an ISO 8601 datetime. " +
-          "When scheduling: confirm the time in your visible reply before calling this tool.",
+          "If the user wants the message at a future time, include `scheduleAt` — either an exact ISO 8601 datetime, or (preferred whenever the user speaks relatively, e.g. 'tomorrow', 'in an hour') the structured relative-time spec described on that field; never compute the datetime yourself from a relative phrase. " +
+          "When scheduling: confirm the resolved time in your visible reply before calling this tool.",
         parameters: {
           type: "object",
           properties: {
@@ -1678,9 +1746,16 @@ export const communicationActionTools: OpenAI.Chat.Completions.ChatCompletionToo
                 "'auto' uses Slack if available, then SMS. 'elaine_chat' writes to their Elaine chat widget. Only specify when the user explicitly requests a channel; otherwise call list_contact_channels first.",
             },
             scheduleAt: {
-              type: "string",
+              oneOf: [
+                {
+                  type: "string",
+                  description:
+                    "Exact ISO 8601 datetime to send the message at.",
+                },
+                RELATIVE_TIME_SPEC_JSON_SCHEMA,
+              ],
               description:
-                "Optional ISO 8601 datetime to send the message at. Omit to send immediately.",
+                "Optional. Omit to send immediately. Otherwise either an exact ISO datetime or a relative-time spec — prefer the relative-time spec whenever the user spoke relatively.",
             },
           },
           required: ["contactName", "message"],

@@ -3,13 +3,26 @@
  *
  * Polls `elaine_scheduled_actions` every 60 seconds for rows with
  * `status = 'pending' AND scheduled_for <= NOW()`. For each due row it
- * dispatches the appropriate communication action (call or message),
- * then marks the row `fired` (success) or `failed` (with the error text).
+ * atomically claims it into an in-flight `sending` state, dispatches the
+ * appropriate communication action (call or message), then marks the row
+ * `fired` (confirmed delivered) or `failed` (with the error text).
+ *
+ * Crash safety (architecture hardening #754): a row is marked `fired` ONLY
+ * after the provider call actually returns success. If the process crashes
+ * or is killed between the claim and the provider call completing, the row
+ * is left in `sending` rather than `fired` — it must never look like a
+ * confirmed delivery it wasn't. A separate recovery pass below finds rows
+ * stuck in `sending` past a timeout and marks them `failed` with an
+ * "unknown outcome" error. It deliberately does NOT retry them
+ * automatically: for a call/SMS, the provider call may have actually gone
+ * out right before the crash, so silently re-firing could double-deliver a
+ * real-world call or message. A human (via chat) has to decide whether to
+ * resend.
  *
  * Survives a server restart — rows are in the DB, not in memory.
  */
 
-import { and, eq, lte } from "drizzle-orm";
+import { and, eq, lte, lt } from "drizzle-orm";
 import {
   db,
   elaineScheduledActions,
@@ -24,7 +37,78 @@ import { logger } from "./logger";
 
 const POLL_INTERVAL_MS = 60_000; // one minute
 
+// How long a row may sit in the in-flight "sending" state before the
+// recovery pass gives up waiting for it to resolve and marks it "failed".
+// Provider calls (fireCallContact/fireMessageContact) normally resolve in
+// well under a minute; this only kicks in after a crash left a row stranded.
+const STUCK_SENDING_TIMEOUT_MS = 10 * 60_000; // 10 minutes
+
+/**
+ * Recovers rows left stuck in the in-flight "sending" state by a crash
+ * (server killed/restarted between the claim and the provider call
+ * completing). Marks them "failed" with an explanatory error — never
+ * resurrects them as "fired", and never auto-retries them, since the
+ * underlying call/message may have actually been delivered right before
+ * the crash.
+ */
+async function recoverStuckSendingActions(): Promise<void> {
+  const cutoff = new Date(Date.now() - STUCK_SENDING_TIMEOUT_MS);
+
+  const stuck = await db
+    .update(elaineScheduledActions)
+    .set({
+      status: "failed",
+      error:
+        "Delivery outcome unknown: the server restarted or crashed while this action was in flight, so we can't confirm whether it actually went out. Please check and resend manually if needed.",
+    })
+    .where(
+      and(
+        eq(elaineScheduledActions.status, "sending"),
+        lt(elaineScheduledActions.firedAt, cutoff),
+      ),
+    )
+    .returning({
+      id: elaineScheduledActions.id,
+      actionType: elaineScheduledActions.actionType,
+      initiatedByUserId: elaineScheduledActions.initiatedByUserId,
+      actionPayload: elaineScheduledActions.actionPayload,
+    });
+
+  if (stuck.length === 0) return;
+
+  logger.error(
+    { count: stuck.length, ids: stuck.map((r) => r.id) },
+    "elaine-scheduler: recovered scheduled actions stuck in 'sending' after an apparent crash — marked failed, not retried",
+  );
+
+  for (const row of stuck) {
+    const contactName =
+      (row.actionPayload as { contactName?: string } | null)?.contactName ?? "";
+    if (!contactName) continue;
+    const msg =
+      row.actionType === "call_contact"
+        ? `I'm not sure whether my scheduled call to ${contactName} actually went through — the server restarted while it was in progress. Please check and try again if needed.`
+        : `I'm not sure whether my scheduled message to ${contactName} actually went through — the server restarted while it was in progress. Please check and try again if needed.`;
+    await appendScheduledActionChatMessage(row.initiatedByUserId, msg).catch(
+      (chatErr) =>
+        logger.warn(
+          { scheduledActionId: row.id, chatErr },
+          "elaine-scheduler: could not append crash-recovery chat message",
+        ),
+    );
+  }
+}
+
 async function runDueScheduledActions(): Promise<void> {
+  // Recover any rows a prior crash left stranded in "sending" before
+  // claiming new work, so a stuck row can never masquerade as delivered.
+  await recoverStuckSendingActions().catch((err) =>
+    logger.error(
+      { err },
+      "elaine-scheduler: stuck-sending recovery pass failed",
+    ),
+  );
+
   const now = new Date();
 
   // Claim all due pending rows in one query.
@@ -47,14 +131,18 @@ async function runDueScheduledActions(): Promise<void> {
 
   await Promise.allSettled(
     due.map(async (row) => {
-      // Atomically claim the row by updating it to "fired" only if it is still
-      // "pending".  We use UPDATE...RETURNING rather than a separate SELECT so
-      // that two concurrent scheduler instances (e.g. after an autoscale
-      // restart) cannot both pass the status check and both fire the same
-      // action — only the process whose UPDATE touches 1 row proceeds.
+      // Atomically claim the row into the in-flight "sending" state only if
+      // it is still "pending". We use UPDATE...RETURNING rather than a
+      // separate SELECT so that two concurrent scheduler instances (e.g.
+      // after an autoscale restart) cannot both pass the status check and
+      // both fire the same action — only the process whose UPDATE touches 1
+      // row proceeds. `firedAt` is stamped here (claim time) so the stale-
+      // "sending" recovery pass can tell how long a row has been in flight;
+      // it is NOT re-stamped on actual success, so it always reflects when
+      // delivery was attempted, whichever status the row ends up in.
       const [claimed] = await db
         .update(elaineScheduledActions)
-        .set({ status: "fired", firedAt: new Date() })
+        .set({ status: "sending", firedAt: new Date() })
         .where(
           and(
             eq(elaineScheduledActions.id, row.id),
@@ -128,6 +216,16 @@ async function runDueScheduledActions(): Promise<void> {
           }
           return;
         }
+
+        // Only now — after the provider call has actually returned success —
+        // is the row marked "fired". This is the crash-safety boundary: if
+        // the process dies before this line runs, the row stays "sending"
+        // and the recovery pass above will correct it to "failed" rather
+        // than letting a not-actually-confirmed row look like a delivery.
+        await db
+          .update(elaineScheduledActions)
+          .set({ status: "fired" })
+          .where(eq(elaineScheduledActions.id, row.id));
 
         logger.info(
           {

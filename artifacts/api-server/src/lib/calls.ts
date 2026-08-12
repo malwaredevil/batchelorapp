@@ -176,6 +176,12 @@ export function buildReminderCallScript(
  * Calendar event, the script mentions that fact so the listener knows to
  * check their calendar — it must NEVER speak the raw URL itself, since a
  * spoken link is useless and TTS engines mangle long tokenized strings.
+ *
+ * `hasDescription` (issue #521): when the reminder has a description, the
+ * script asks whether the caller wants to hear it, rather than reading it
+ * unprompted — descriptions can be long, and most callers just want the
+ * title and due date. See `richTextToSpeech` for how the description
+ * itself gets converted to speech-safe text if they say yes.
  */
 export function buildGenericReminderCallScript(
   reminderTitle: string,
@@ -183,11 +189,15 @@ export function buildGenericReminderCallScript(
   formattedDueDate: string,
   contextPhrase?: string,
   hasCalendarEvent?: boolean,
+  hasDescription?: boolean,
 ): string {
   const calendarPhrase = hasCalendarEvent
     ? " This is linked to an event on your calendar."
     : "";
-  return `Hi! I'm calling with a Batchelor reminder. Your reminder "${reminderTitle}" is due in ${label} on ${formattedDueDate}${contextPhrase ?? ""}.${calendarPhrase} Have a great day!`;
+  const descriptionOffer = hasDescription
+    ? " Would you like me to read you the full description?"
+    : "";
+  return `Hi! I'm calling with a Batchelor reminder. Your reminder "${reminderTitle}" is due in ${label} on ${formattedDueDate}${contextPhrase ?? ""}.${calendarPhrase}${descriptionOffer} Have a great day!`;
 }
 
 // AgentPhone outbound calls are available whenever the connector proxy can

@@ -32,6 +32,8 @@ import {
   fireCallContact,
   fireMessageContact,
 } from "../elaine/communication-actions";
+import { richTextToPlainText, richTextToSpeech } from "./rich-text-plaintext";
+import { seedOutboundCallContext } from "./agentphone-conversation";
 
 /**
  * Unified, entity-agnostic reminder delivery scheduler — replaces the old
@@ -583,6 +585,9 @@ export async function claimAndSendDueDeliveries(): Promise<{
           year: "numeric",
         });
         try {
+          const speechDescription = richTextToSpeech(
+            delivery.reminder_description,
+          );
           const initialGreeting = buildGenericReminderCallScript(
             delivery.reminder_title,
             label,
@@ -590,12 +595,27 @@ export async function claimAndSendDueDeliveries(): Promise<{
             contextLabel ? `, for your ${contextLabel.toLowerCase()}` : "",
             // Issue #519: mention the linked event exists, never speak its URL.
             !!calendarEventUrl,
+            // Issue #521: offer to read the description rather than reading
+            // it unprompted; the actual read-back happens in a later turn
+            // once the caller says yes (see seedOutboundCallContext below).
+            !!speechDescription,
           );
           await initiateOutboundCall({
             toNumber: phone,
             initialGreeting,
             callScreeningPurpose: `Reminder: ${delivery.reminder_title}`,
           });
+          // Best-effort: give the restricted voice-turn engine the context
+          // it needs to answer "yes" to the description offer above without
+          // ever having seen the raw HTML or a URL itself.
+          await seedOutboundCallContext(
+            phone,
+            Number(delivery.recipient_ref),
+            initialGreeting,
+            speechDescription
+              ? `if the caller wants to hear the reminder description, read them exactly this: "${speechDescription}"`
+              : undefined,
+          );
         } catch (callErr) {
           logger.warn(
             { err: callErr, deliveryId: delivery.id },
@@ -645,8 +665,11 @@ export async function claimAndSendDueDeliveries(): Promise<{
             [delivery.reminder_id],
           )
         ).rows;
-        const body = delivery.reminder_description
-          ? `${delivery.reminder_title}\n\n${delivery.reminder_description}`
+        const plainDescription = richTextToPlainText(
+          delivery.reminder_description,
+        );
+        const body = plainDescription
+          ? `${delivery.reminder_title}\n\n${plainDescription}`
           : delivery.reminder_title;
         const withContext = contextLabel ? `${body}\n\n${contextLabel}` : body;
         const message = calendarEventUrl

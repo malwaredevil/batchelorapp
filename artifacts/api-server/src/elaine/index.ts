@@ -186,7 +186,6 @@ import {
   buildReminderActionLabel,
   reminderActionExecutors,
   reminderActionSchemas,
-  reminderReadTools,
   LIST_REMINDERS_TOOL_NAME,
   executeListRemindersTool,
   type ReminderActionType,

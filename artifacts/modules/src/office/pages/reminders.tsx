@@ -77,6 +77,7 @@ async function fetchReminders(
   when: WhenFilter,
 ): Promise<Reminder[]> {
   const params = new URLSearchParams({ status, when });
+  // raw-fetch-ok — generic reminders endpoint isn't in the OpenAPI spec yet, no Orval hook
   const res = await fetch(`/api/reminders?${params.toString()}`, {
     credentials: "include",
   });
@@ -160,6 +161,7 @@ export default function OfficeReminders() {
 
   async function setReminderStatus(id: number, next: ReminderStatus) {
     try {
+      // raw-fetch-ok — generic reminders endpoint isn't in the OpenAPI spec yet, no Orval hook
       const res = await fetch(`/api/reminders/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -182,6 +184,7 @@ export default function OfficeReminders() {
 
   async function snoozeTo(id: number, dueAt: Date) {
     try {
+      // raw-fetch-ok — generic reminders endpoint isn't in the OpenAPI spec yet, no Orval hook
       const res = await fetch(`/api/reminders/${id}/snooze`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -198,6 +201,7 @@ export default function OfficeReminders() {
 
   async function skipNext(id: number) {
     try {
+      // raw-fetch-ok — generic reminders endpoint isn't in the OpenAPI spec yet, no Orval hook
       const res = await fetch(`/api/reminders/${id}/snooze`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

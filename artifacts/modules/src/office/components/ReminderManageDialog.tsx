@@ -183,6 +183,7 @@ export function ReminderManageDialog({
         body.recurrenceEndDate = recurrenceEndDate;
       }
 
+      // raw-fetch-ok — generic reminders endpoint isn't in the OpenAPI spec yet, no Orval hook
       const res = await fetch(`/api/reminders/${reminder.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -209,6 +210,7 @@ export function ReminderManageDialog({
     if (!reminder) return;
     setDeleting(true);
     try {
+      // raw-fetch-ok — generic reminders endpoint isn't in the OpenAPI spec yet, no Orval hook
       const res = await fetch(`/api/reminders/${reminder.id}`, {
         method: "DELETE",
         credentials: "include",

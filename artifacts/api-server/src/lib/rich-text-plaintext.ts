@@ -15,13 +15,18 @@ const ANCHOR_RE =
   /<a\b[^>]*\bhref\s*=\s*(?:"([^"]*)"|'([^']*)')[^>]*>([\s\S]*?)<\/a>/gi;
 
 function decodeEntities(text: string): string {
+  // &amp; must decode LAST. Decoding it first would turn a doubly-escaped
+  // sequence like "&amp;lt;" into "&lt;", which the next replace would then
+  // unescape a second time into a literal "<" — reintroducing a character
+  // the original author never actually typed (CodeQL: double escaping or
+  // unescaping).
   return text
     .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">")
     .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'");
+    .replace(/&#39;/gi, "'")
+    .replace(/&amp;/gi, "&");
 }
 
 function extractHostname(url: string): string | null {
@@ -36,10 +41,20 @@ function extractHostname(url: string): string | null {
 }
 
 function stripRemainingTags(html: string): string {
-  return html
+  const withBreaks = html
     .replace(/<\/(p|li|div)>/gi, "\n")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<[^>]+>/g, "");
+    .replace(/<br\s*\/?>/gi, "\n");
+  // Strip tags to a fixed point rather than in one pass. A single pass can
+  // leave a live tag behind when removing one tag exposes another (e.g. an
+  // interleaved/overlapping construct like "<scr<script>ipt>"), which is
+  // exactly the incomplete-sanitization shape CodeQL flags.
+  let current = withBreaks;
+  let previous: string;
+  do {
+    previous = current;
+    current = current.replace(/<[^>]+>/g, "");
+  } while (current !== previous);
+  return current;
 }
 
 function collapseWhitespace(text: string): string {

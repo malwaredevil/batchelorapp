@@ -2,9 +2,6 @@ import {
   pool,
   db,
   travelsTrips,
-  travelsConnectedCalendars,
-  reminders,
-  reminderCalendarSyncState,
   elaineHistoryConversations,
   elaineHistoryMessages,
 } from "@workspace/db";

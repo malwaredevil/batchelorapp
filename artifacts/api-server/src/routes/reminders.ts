@@ -9,9 +9,6 @@ import {
   filterSlackLinkedUserIds,
 } from "../lib/reminder-recipients";
 import {
-  buildEntityLink,
-  channelsForRow,
-  isRecurring,
   listManageableReminders,
   findManageableReminder,
   snoozeReminder,

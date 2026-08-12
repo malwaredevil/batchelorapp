@@ -1,7 +1,11 @@
 import { db, webhookSideEffects } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { logger } from "./logger";
-import { shouldRunScheduledTask } from "./scheduler-guard";
+import {
+  shouldRunScheduledTask,
+  recordScheduledTaskSuccess,
+  recordScheduledTaskFailure,
+} from "./scheduler-guard";
 
 // How long a completed/failed/stuck ledger row is kept before cleanup removes
 // it. AgentPhone/Resend webhook redelivery windows are minutes to hours, not
@@ -106,12 +110,18 @@ export function startWebhookSideEffectCleanupScheduler(): () => void {
     }
     try {
       const deleted = await cleanupOldWebhookSideEffects();
+      // Architecture hardening (#754): this call was previously missing, so
+      // last_success_at for this task stayed NULL forever — the heartbeat's
+      // crash-recovery check (which requires a non-null last_success_at)
+      // could never apply to this task, silently hiding a real failure.
+      await recordScheduledTaskSuccess("webhook-side-effect-cleanup");
       logger.info(
         { deleted },
         "webhook-side-effect-idempotency: cleanup run complete",
       );
     } catch (err) {
       logger.error({ err }, "webhook-side-effect-idempotency: cleanup failed");
+      recordScheduledTaskFailure("webhook-side-effect-cleanup");
     }
   };
 

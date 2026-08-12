@@ -9,7 +9,11 @@
 import { db, appUsers } from "@workspace/db";
 import { isNotNull } from "drizzle-orm";
 import { sendBirthdayEmail, resendConfigured } from "./email";
-import { shouldRunScheduledTask } from "./scheduler-guard";
+import {
+  shouldRunScheduledTask,
+  recordScheduledTaskSuccess,
+  recordScheduledTaskFailure,
+} from "./scheduler-guard";
 import { logger } from "./logger";
 
 const TASK_NAME = "birthday-emails";
@@ -61,7 +65,18 @@ export function startBirthdayScheduler(): () => void {
     try {
       const ok = await shouldRunScheduledTask(TASK_NAME, ONE_DAY_MS);
       if (ok) {
-        await runBirthdayEmails();
+        try {
+          await runBirthdayEmails();
+          // Architecture hardening (#754): this call was previously missing,
+          // so last_success_at for this task stayed NULL forever — the
+          // heartbeat's crash-recovery check (which requires a non-null
+          // last_success_at) could never apply to this task, silently
+          // hiding a real failure from monitoring.
+          await recordScheduledTaskSuccess(TASK_NAME);
+        } catch (err) {
+          recordScheduledTaskFailure(TASK_NAME);
+          throw err;
+        }
       }
     } catch (err) {
       logger.error({ err }, "birthday-scheduler: tick error");

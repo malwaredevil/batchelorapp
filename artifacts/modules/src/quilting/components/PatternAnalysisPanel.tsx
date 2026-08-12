@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Loader2,
   CheckCircle2,
@@ -19,6 +19,7 @@ import {
   type QuiltingQuiltingAnalysis,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { pollUntilDone } from "../lib/poll-until-done";
 
 type ShoppingItem = {
   role: string;
@@ -92,6 +93,15 @@ export function PatternAnalysisPanel({ patternId }: { patternId: number }) {
   const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState(false);
 
+  // Holds the cleanup fn (clearInterval + document visibilitychange
+  // listener removal) for the in-flight poll, if any. Must be invoked
+  // before starting a new poll and on unmount, or the visibilitychange
+  // listener leaks — see poll-until-done.ts.
+  const stopPollingRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    return () => stopPollingRef.current?.();
+  }, []);
+
   const { data: analyses } = useListPatternAnalyses(patternId, {
     query: {
       queryKey: getListPatternAnalysesQueryKey(patternId),
@@ -105,12 +115,18 @@ export function PatternAnalysisPanel({ patternId }: { patternId: number }) {
           queryKey: getListPatternAnalysesQueryKey(patternId),
         });
         setExpanded(true);
-        const poll = setInterval(() => {
-          void queryClient.invalidateQueries({
-            queryKey: getListPatternAnalysesQueryKey(patternId),
-          });
-        }, 3000);
-        setTimeout(() => clearInterval(poll), 90_000);
+        // Stop any previous poll before starting a new one (e.g. user
+        // re-runs analysis while a prior poll is still active).
+        stopPollingRef.current?.();
+        // Poll for completion, but stop as soon as the analysis leaves
+        // "running" (instead of always running the full 90s window) and
+        // pause while the tab is hidden. See poll-until-done.ts.
+        stopPollingRef.current = pollUntilDone<QuiltingQuiltingAnalysis[]>(
+          queryClient,
+          getListPatternAnalysesQueryKey(patternId),
+          (data) => (data?.[0]?.status ?? "running") !== "running",
+          { intervalMs: 3000, timeoutMs: 90_000 },
+        );
       },
       onError: () => toast.error("Failed to start analysis"),
     },

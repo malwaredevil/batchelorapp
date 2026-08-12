@@ -1627,6 +1627,20 @@ export const STATEMENTS: string[] = [
 
   // ── Operations: job queue + external operation tracking ──────────────────
 
+  // Architecture hardening (#754) migration-ledger reconciliation: this repo
+  // previously had TWO disagreeing migration-history records — this table
+  // (version-keyed, meant to back a standalone `lib/db/src/migrations/*`
+  // CLI/runner) and `schema_migration_log` (hash-keyed, actually used by
+  // `startup-migrate.ts` on every real boot). The standalone CLI/runner was
+  // never invoked by any script, workflow, or CI job, so this table stayed
+  // permanently empty while the CLI reported all migrations "pending" even
+  // though every one of their DDL changes had long since been applied via
+  // STATEMENTS below. The dead CLI/runner/manifest code has been removed.
+  // `schema_migration_log` in startup-migrate.ts is now the single, sole
+  // source of truth for migration history. This table is kept — empty and
+  // unwritten — only because dropping an existing table is out of scope for
+  // this hardening pass (no DB deletions); do not resurrect a second writer
+  // for it.
   `CREATE TABLE IF NOT EXISTS app_schema_migrations (
     version         BIGINT PRIMARY KEY,
     name            TEXT NOT NULL,
@@ -2896,18 +2910,17 @@ export const STATEMENTS: string[] = [
      ON travels_reminder_alert_deliveries (status, next_attempt_at)
      WHERE status IN ('pending', 'retryable')`,
 
-  // ── #328: Drop redundant non-unique indexes superseded by unique constraints ──
-  // Each table below has a .unique() column that PostgreSQL automatically backs
-  // with a unique B-tree index. The corresponding non-unique indexes listed here
-  // are structural duplicates: same table, same column, same operator class.
-  // They waste storage, slow every write/upsert, and add unnecessary WAL/vacuum
-  // work. DROP INDEX IF EXISTS is idempotent so re-running bootstrap is safe.
-  `DROP INDEX IF EXISTS hallmark_catalog_sku_idx`,
-  `DROP INDEX IF EXISTS hallmark_hist_url_idx`,
-  `DROP INDEX IF EXISTS hallmark_hooh_url_idx`,
-  `DROP INDEX IF EXISTS hallmark_ornaments_sku_idx`,
-  `DROP INDEX IF EXISTS travels_packing_lists_trip_id_idx`,
-  `DROP INDEX IF EXISTS travels_monitoring_prefs_user_idx`,
+  // ── #328: redundant non-unique indexes superseded by unique constraints ──
+  // (hallmark_catalog_sku_idx, hallmark_hist_url_idx, hallmark_hooh_url_idx,
+  // hallmark_ornaments_sku_idx, travels_packing_lists_trip_id_idx,
+  // travels_monitoring_prefs_user_idx) were one-time cleanup DROP INDEX
+  // statements. They already ran in every environment this array has ever
+  // been applied to. Architecture hardening (#754): this startup script must
+  // never carry destructive DDL (DROP/TRUNCATE), even idempotent one-time
+  // cleanup — a past change here could otherwise silently reintroduce a real
+  // DROP on a fresh/restored database. Removed now that the cleanup is done;
+  // do not re-add DROP statements to this array for future cleanups — use a
+  // one-off reviewed script instead, run manually.
 
   // ── #341: Soft-delete support (deleted_at on 12 collection tables) ────────
   `ALTER TABLE pottery_items ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`,
@@ -2947,6 +2960,11 @@ export const STATEMENTS: string[] = [
      ON household_activity_log (occurred_at DESC)`,
   `CREATE INDEX IF NOT EXISTS household_activity_log_entity_idx
      ON household_activity_log (entity_type, entity_id)`,
+  // Architecture hardening (#754): actor_user_id FK had no covering index —
+  // every "activity by this user" lookup and delete-cascade check on
+  // app_users did a seq scan of the whole log. Additive only.
+  `CREATE INDEX IF NOT EXISTS household_activity_log_actor_user_id_idx
+     ON household_activity_log (actor_user_id)`,
 
   // ── RLS deny-all policies for the anon role ───────────────────────────────
   // The server connects exclusively via service_role, which has the PostgreSQL
@@ -2991,6 +3009,11 @@ END $$`,
   `ALTER TABLE slack_webhook_deliveries ADD COLUMN IF NOT EXISTS processed_at TIMESTAMPTZ`,
   `CREATE INDEX IF NOT EXISTS slack_webhook_deliveries_status_received_idx
      ON slack_webhook_deliveries (status, received_at)`,
+  // Architecture hardening (#754): job_id FK had no covering index — every
+  // ON DELETE SET NULL cascade check and any job_id lookup did a seq scan.
+  // Additive only.
+  `CREATE INDEX IF NOT EXISTS slack_webhook_deliveries_job_id_idx
+     ON slack_webhook_deliveries (job_id)`,
   `CREATE TABLE IF NOT EXISTS app_webhook_side_effects (
      effect_key TEXT PRIMARY KEY,
      provider TEXT NOT NULL,

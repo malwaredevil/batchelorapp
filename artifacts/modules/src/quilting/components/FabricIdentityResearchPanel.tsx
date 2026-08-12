@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader2, Search, ChevronDown, ChevronUp, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +12,7 @@ import {
   type QuiltingFabricIdentityResearch,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { pollUntilDone } from "../lib/poll-until-done";
 
 type Candidate = {
   manufacturer: string | null;
@@ -46,6 +47,15 @@ export function FabricIdentityResearchPanel({
   const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState(false);
 
+  // Holds the cleanup fn (clearInterval + document visibilitychange
+  // listener removal) for the in-flight poll, if any. Must be invoked
+  // before starting a new poll and on unmount, or the visibilitychange
+  // listener leaks — see poll-until-done.ts.
+  const stopPollingRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    return () => stopPollingRef.current?.();
+  }, []);
+
   const { data: jobs } = useListFabricIdentityResearch(fabricId, {
     query: {
       queryKey: getListFabricIdentityResearchQueryKey(fabricId),
@@ -60,12 +70,20 @@ export function FabricIdentityResearchPanel({
         void queryClient.invalidateQueries({
           queryKey: getListFabricIdentityResearchQueryKey(fabricId),
         });
-        const poll = setInterval(() => {
-          void queryClient.invalidateQueries({
-            queryKey: getListFabricIdentityResearchQueryKey(fabricId),
-          });
-        }, 3000);
-        setTimeout(() => clearInterval(poll), 60_000);
+        // Stop any previous poll before starting a new one (e.g. user
+        // re-runs research while a prior poll is still active).
+        stopPollingRef.current?.();
+        // Poll for completion, but stop as soon as the job leaves "running"
+        // (instead of always running the full 60s window) and pause while
+        // the tab is hidden. See poll-until-done.ts.
+        stopPollingRef.current = pollUntilDone<
+          QuiltingFabricIdentityResearch[]
+        >(
+          queryClient,
+          getListFabricIdentityResearchQueryKey(fabricId),
+          (data) => (data?.[0]?.status ?? "running") !== "running",
+          { intervalMs: 3000, timeoutMs: 60_000 },
+        );
       },
       onError: () => toast.error("Failed to start identity research"),
     },

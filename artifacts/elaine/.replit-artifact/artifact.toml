@@ -26,6 +26,26 @@ serve = "static"
 from = "/*"
 to = "/index.html"
 
+[[services.production.responseHeaders]]
+path = "/*"
+name = "X-Content-Type-Options"
+value = "nosniff"
+
+[[services.production.responseHeaders]]
+path = "/*"
+name = "X-Frame-Options"
+value = "SAMEORIGIN"
+
+[[services.production.responseHeaders]]
+path = "/*"
+name = "Referrer-Policy"
+value = "strict-origin-when-cross-origin"
+
+[[services.production.responseHeaders]]
+path = "/*"
+name = "Permissions-Policy"
+value = "geolocation=(), camera=(), microphone=()"
+
 [services.env]
 PORT = "25669"
 BASE_PATH = "/elaine/"

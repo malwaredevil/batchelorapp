@@ -43,6 +43,7 @@ import {
   formatElaineContextList,
   formatElaineContextEntity,
 } from "@workspace/elaine-ui";
+import { ReminderBellButton } from "@workspace/collection-ui";
 
 // ─── Notes JSON format ────────────────────────────────────────────────────────
 //
@@ -410,12 +411,20 @@ function WishlistRow({ item }: { item: WishlistItem }) {
           <p className="font-medium text-foreground leading-snug">
             {item.destination}
           </p>
-          <button
-            onClick={handleDelete}
-            className="shrink-0 p-1 text-muted-foreground hover:text-destructive transition-colors rounded hover:bg-destructive/10 opacity-0 group-hover:opacity-100"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
+          <div className="flex shrink-0 items-center gap-1 opacity-0 group-hover:opacity-100">
+            <ReminderBellButton
+              entityType="travels_wishlist_item"
+              entityId={item.id}
+              defaultTitle={`Reminder: ${item.destination}`}
+              className="p-1 text-muted-foreground transition-colors rounded hover:bg-muted hover:text-foreground"
+            />
+            <button
+              onClick={handleDelete}
+              className="p-1 text-muted-foreground hover:text-destructive transition-colors rounded hover:bg-destructive/10"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {item.targetDate && (

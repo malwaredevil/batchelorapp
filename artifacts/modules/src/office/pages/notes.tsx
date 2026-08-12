@@ -13,6 +13,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { RichTextEditor } from "@/travels/components/RichTextEditor";
+import { ReminderBellButton } from "@workspace/collection-ui";
 
 // Preset background colours for note cards
 const NOTE_COLORS: { label: string; value: string | null; hex: string }[] = [
@@ -285,14 +286,21 @@ export default function OfficeNotes() {
                       />
                     )}
                   </button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleDelete(note.id)}
-                    disabled={deleteNote.isPending}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <div className="flex shrink-0 gap-1">
+                    <ReminderBellButton
+                      entityType="office_note"
+                      entityId={note.id}
+                      defaultTitle={`Reminder: ${note.title}`}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDelete(note.id)}
+                      disabled={deleteNote.isPending}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
                 <p className="mt-2 text-xs text-muted-foreground">
                   {note.createdByName ? `By ${note.createdByName} · ` : ""}

@@ -55,7 +55,10 @@ const DEFAULT_DUE_TIME_UTC = "T00:01:00.000Z";
 const CreateReminderBody = z.object({
   title: z.string().min(1),
   description: z.string().nullable().optional(),
-  dueDate: z.string().optional(),
+  dueDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "dueDate must be YYYY-MM-DD")
+    .optional(),
   recipientEmails: z.array(z.email()).optional(),
   smsRecipientUserIds: z.array(z.number().int()).optional(),
   callRecipientUserIds: z.array(z.number().int()).optional(),
@@ -74,7 +77,11 @@ const CreateReminderBody = z.object({
 const UpdateReminderBody = z.object({
   title: z.string().min(1).optional(),
   description: z.string().nullable().optional(),
-  dueDate: z.string().nullable().optional(),
+  dueDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "dueDate must be YYYY-MM-DD")
+    .nullable()
+    .optional(),
   done: z.boolean().optional(),
   recipientEmails: z.array(z.email()).optional(),
   smsRecipientUserIds: z.array(z.number().int()).optional(),

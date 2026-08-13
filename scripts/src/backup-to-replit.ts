@@ -615,6 +615,14 @@ CREATE TABLE IF NOT EXISTS travels_reminder_alert_log (
   sent_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Integrations health state (Task #745): per-service consecutive-error
+-- counts shared between the in-process scheduler and scheduled-deployment.
+CREATE TABLE IF NOT EXISTS integrations_health_state (
+  service                 TEXT PRIMARY KEY,
+  consecutive_error_count INTEGER NOT NULL DEFAULT 0,
+  last_updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Generic cross-app reminder system (see lib/db/src/schema/reminders.ts).
 CREATE TABLE IF NOT EXISTS reminders (
   id                          SERIAL PRIMARY KEY,
@@ -2629,6 +2637,7 @@ async function main() {
       "updated_at",
     ],
     orderBy: "id",
+    jsonbColumns: ["lead_times", "elaine_action_payload"],
   });
   await resetSequence(dest, "reminders", "id");
 

@@ -588,14 +588,16 @@ function HallmarkEventStatTile() {
   const gcalEvents = Array.isArray(gcalEventsRaw) ? gcalEventsRaw : [];
   const upcoming = gcalEvents
     .map((e) => {
-      const startDate = e.start.slice(0, 10);
-      const endDate = e.allDay
-        ? (() => {
-            const d = new Date(e.end + "T00:00:00");
-            d.setDate(d.getDate() - 1);
-            return d.toISOString().slice(0, 10);
-          })()
-        : e.end.slice(0, 10);
+      // The server's fromGoogleEvent() already converts Google's exclusive
+      // all-day end date back to an inclusive one, so e.end here is already
+      // correct — do not subtract another day, or a multi-day event loses
+      // its last day and a single-day event ends up with end < start
+      // (rendering as e.g. "Oct 10 – Oct 8" instead of "Oct 8 – Oct 10").
+      // Swap defensively in case an event was ever entered backwards.
+      const rawStart = e.start.slice(0, 10);
+      const rawEnd = e.end.slice(0, 10);
+      const startDate = rawStart <= rawEnd ? rawStart : rawEnd;
+      const endDate = rawStart <= rawEnd ? rawEnd : rawStart;
       return {
         title: e.title,
         start: new Date(`${startDate}T00:00:00`),

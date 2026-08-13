@@ -64,12 +64,13 @@ type GCalHallmarkEvent = {
   description?: string | null;
 };
 
-// GCal all-day events have an exclusive end date; convert to inclusive.
+// The server's fromGoogleEvent() already converts Google's exclusive all-day
+// end date back to an inclusive one, so e.end is already correct here — do
+// not subtract another day, or a multi-day event loses its last day and a
+// single-day event ends up with an end date before its start date.
 function gcalEventEndKey(e: TravelCalendarEvent): string {
   if (e.allDay) {
-    const d = new Date(e.end + "T00:00:00");
-    d.setDate(d.getDate() - 1);
-    return dateKey(d);
+    return e.end.slice(0, 10);
   }
   return dateKey(new Date(e.end));
 }

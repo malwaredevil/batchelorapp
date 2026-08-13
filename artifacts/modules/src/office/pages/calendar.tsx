@@ -68,11 +68,13 @@ function eventDayKey(event: TravelCalendarEvent): string {
   return dateKey(new Date(event.start));
 }
 
+// The server's fromGoogleEvent() already converts Google's exclusive all-day
+// end date back to an inclusive one, so event.end is already correct here —
+// do not subtract another day, or a multi-day event's bar renders one day
+// short (and a single-day event can end up with an end date before start).
 function gcalEventEndKey(event: TravelCalendarEvent): string {
   if (event.allDay) {
-    const d = new Date(event.end + "T00:00:00");
-    d.setDate(d.getDate() - 1);
-    return dateKey(d);
+    return event.end.slice(0, 10);
   }
   return dateKey(new Date(event.end));
 }

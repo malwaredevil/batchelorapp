@@ -121,15 +121,13 @@ function NextHallmarkEventCard() {
 
   const upcoming = gcalEvents
     .map((e: TravelCalendarEvent) => {
+      // The server's fromGoogleEvent() already converts Google's exclusive
+      // all-day end date back to an inclusive one, so e.end is already
+      // correct — do not subtract another day here, or a multi-day event
+      // loses its last day. The swap below stays as a defensive guard for
+      // any event genuinely entered backwards.
       const rawStart = e.start.slice(0, 10);
-      const rawEnd = (() => {
-        if (e.allDay) {
-          const d = new Date(e.end + "T00:00:00");
-          d.setDate(d.getDate() - 1);
-          return d.toISOString().slice(0, 10);
-        }
-        return e.end.slice(0, 10);
-      })();
+      const rawEnd = e.end.slice(0, 10);
       const startDate = rawStart <= rawEnd ? rawStart : rawEnd;
       const endDate = rawStart <= rawEnd ? rawEnd : rawStart;
       return {

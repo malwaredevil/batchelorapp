@@ -389,12 +389,29 @@ export default function HallmarkEvents() {
     });
   }, [gcalEvents, hallmarkCal]);
 
-  // Read view from URL params once on mount so deep-links work (e.g. ?view=list).
+  // Read view/month/event from URL params once on mount so deep-links work
+  // (e.g. ?view=list, or ?month=2026-10&event=<gcalId> from the hero card).
+  const initialSearch = useMemo(
+    () => new URLSearchParams(window.location.search),
+    [],
+  );
   const initialView = useMemo<ViewMode>(() => {
-    const v = new URLSearchParams(window.location.search).get("view");
+    const v = initialSearch.get("view");
     if (v === "month" || v === "week" || v === "list") return v;
     return "month";
-  }, []);
+  }, [initialSearch]);
+  const initialCursor = useMemo<Date | undefined>(() => {
+    const m = initialSearch.get("month");
+    if (!m || !/^\d{4}-\d{2}$/.test(m)) return undefined;
+    const d = new Date(`${m}-01T00:00:00`);
+    return Number.isNaN(d.getTime()) ? undefined : d;
+  }, [initialSearch]);
+  const deepLinkEventId = useMemo(
+    () => initialSearch.get("event"),
+    [initialSearch],
+  );
+  const [pendingDeepLinkEventId, setPendingDeepLinkEventId] =
+    useState(deepLinkEventId);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<
@@ -447,6 +464,24 @@ export default function HallmarkEvents() {
     setDefaultDate(undefined);
     setFormOpen(true);
   };
+
+  // Deep-link support: when arriving with ?event=<gcalId> (e.g. from the
+  // "days until" hero card), auto-open that event's view modal once its
+  // data has loaded, then clear the param so back/refresh doesn't re-open it.
+  useEffect(() => {
+    if (!pendingDeepLinkEventId) return;
+    const match = allNormalized.find(
+      (e) => e.gcalId === pendingDeepLinkEventId,
+    );
+    if (match) {
+      setViewingEvent(match);
+      setPendingDeepLinkEventId(null);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("event");
+      url.searchParams.delete("month");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, [pendingDeepLinkEventId, allNormalized]);
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
@@ -501,6 +536,7 @@ export default function HallmarkEvents() {
 
       <CalendarCore
         defaultView={initialView}
+        defaultCursor={initialCursor}
         listLabel="Upcoming events"
         disableNavInList
       >

@@ -131,6 +131,7 @@ function NextHallmarkEventCard() {
       const startDate = rawStart <= rawEnd ? rawStart : rawEnd;
       const endDate = rawStart <= rawEnd ? rawEnd : rawStart;
       return {
+        gcalId: e.id,
         title: e.title,
         startDate,
         endDate,
@@ -160,8 +161,10 @@ function NextHallmarkEventCard() {
     year: "numeric",
   })}`;
 
+  const eventHref = `/ornaments/hallmark-events?month=${next.startDate.slice(0, 7)}&event=${encodeURIComponent(next.gcalId)}`;
+
   return (
-    <Link href="/ornaments/hallmark-events">
+    <Link href={eventHref}>
       <div className="flex items-center gap-4 rounded-xl border border-rose-200/60 dark:border-rose-800/40 bg-rose-50 dark:bg-rose-900/20 p-4 hover:bg-rose-100/70 dark:hover:bg-rose-900/30 transition-colors cursor-pointer">
         <div className="w-12 h-12 rounded-lg bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center flex-shrink-0">
           <CalendarHeart className="w-6 h-6 text-rose-600 dark:text-rose-400" />

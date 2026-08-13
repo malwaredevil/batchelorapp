@@ -1194,7 +1194,7 @@ export function AppLauncher() {
             </p>
           )}
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {appCardOrder.map((appId) => {
               const app = APPS.find((a) => a.id === appId);
               const cfg = CARD_CONFIG[appId];

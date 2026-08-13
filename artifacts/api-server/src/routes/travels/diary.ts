@@ -32,7 +32,9 @@ router.get("/trips/:tripId/diary", async (req, res) => {
 // ── POST /trips/:tripId/diary ──────────────────────────────────────────────────
 
 const CreateEntryBody = z.object({
-  entryDate: z.string().min(1),
+  entryDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "entryDate must be YYYY-MM-DD"),
   title: z.string().max(200).optional(),
   body: z.string().min(1).max(20000),
 });
@@ -49,7 +51,11 @@ router.post("/trips/:tripId/diary", async (req, res) => {
   }
   const parsed = CreateEntryBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: "Invalid request body" });
+    const details = parsed.error.issues.map((i) => ({
+      path: i.path.join("."),
+      message: i.message,
+    }));
+    res.status(400).json({ error: "Invalid request.", details });
     return;
   }
   const body = parsed.data;
@@ -71,7 +77,10 @@ router.post("/trips/:tripId/diary", async (req, res) => {
 // ── PATCH /trips/:tripId/diary/:entryId ────────────────────────────────────────
 
 const UpdateEntryBody = z.object({
-  entryDate: z.string().min(1).optional(),
+  entryDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "entryDate must be YYYY-MM-DD")
+    .optional(),
   title: z.string().max(200).nullable().optional(),
   body: z.string().min(1).max(20000).optional(),
 });
@@ -85,7 +94,11 @@ router.patch("/trips/:tripId/diary/:entryId", async (req, res) => {
   }
   const parsed = UpdateEntryBody.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({ error: "Invalid request body" });
+    const details = parsed.error.issues.map((i) => ({
+      path: i.path.join("."),
+      message: i.message,
+    }));
+    res.status(400).json({ error: "Invalid request.", details });
     return;
   }
   const body = parsed.data;

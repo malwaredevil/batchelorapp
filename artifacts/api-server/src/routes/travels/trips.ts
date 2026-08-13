@@ -56,8 +56,14 @@ const CreateTripBody = z.object({
   status: z
     .enum(["wishlist", "planning", "booked", "active", "completed"])
     .default("wishlist"),
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
+  startDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "startDate must be YYYY-MM-DD")
+    .optional(),
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "endDate must be YYYY-MM-DD")
+    .optional(),
   transportTo: z.enum(["drove", "flew", "train"]).optional(),
   transportDetails: z.string().optional(),
   hasRentalCar: z.boolean().default(false),

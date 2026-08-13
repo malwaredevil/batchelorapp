@@ -715,7 +715,13 @@ const AddItineraryDayActionPayload = z.object({
   date: z.string().max(20).optional(),
   title: z.string().min(1).max(200),
   activityName: z.string().max(200).optional(),
-  activityTime: z.string().max(20).optional(),
+  activityTime: z
+    .string()
+    .regex(
+      /^(?:[01]\d|2[0-3]):[0-5]\d$/,
+      "activityTime must be HH:MM (00:00–23:59)",
+    )
+    .optional(),
   activityDescription: z.string().max(1000).optional(),
 });
 

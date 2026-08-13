@@ -32,14 +32,21 @@ async function geocodeDestination(
 
 const CreateBody = z.object({
   destination: z.string().min(1),
-  targetDate: z.string().optional(),
+  targetDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "targetDate must be YYYY-MM-DD")
+    .optional(),
   notes: z.string().optional(),
   sortOrder: z.number().int().default(0),
 });
 
 const UpdateBody = z.object({
   destination: z.string().min(1).optional(),
-  targetDate: z.string().nullable().optional(),
+  targetDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "targetDate must be YYYY-MM-DD")
+    .nullable()
+    .optional(),
   notes: z.string().nullable().optional(),
   lat: z.number().nullable().optional(),
   lng: z.number().nullable().optional(),

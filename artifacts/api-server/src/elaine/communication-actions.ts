@@ -65,6 +65,20 @@ const CallContactPayload = z.object({
   scheduleAt: scheduleAtField,
 });
 
+// Canonical channel enum values for message_contact. Exported so the JSON
+// tool-schema enum (below) and the Zod schema share a single array — a drift
+// between them was the root cause of the relative-time-spec "relative_minutes"
+// Sentry incident. Keep this in sync with the JSON schema in
+// communicationActionTools; tool-schema-description-coverage.test.ts enforces
+// the invariant automatically.
+export const MESSAGE_CONTACT_CHANNEL_ENUM = [
+  "auto",
+  "sms",
+  "slack",
+  "email",
+  "elaine_chat",
+] as const;
+
 const MessageContactPayload = z.object({
   // Accept a single name or a list of names for multi-recipient fanout
   // ("SMS users B, C, and D and tell them to come home").
@@ -79,9 +93,7 @@ const MessageContactPayload = z.object({
   // "email"      — send to contact's account email via Resend
   // "elaine_chat"— write into the contact's Elaine conversation history so
   //                it appears in their Elaine chat widget / main Elaine page
-  channel: z
-    .enum(["auto", "sms", "slack", "email", "elaine_chat"])
-    .default("auto"),
+  channel: z.enum(MESSAGE_CONTACT_CHANNEL_ENUM).default("auto"),
   scheduleAt: scheduleAtField,
 });
 
@@ -89,13 +101,19 @@ const CancelScheduledContactPayload = z.object({
   scheduledActionId: z.number().int().positive(),
 });
 
+// Canonical channel enum values for continue_in_channel. Exported so the JSON
+// tool-schema enum and the Zod schema share a single array — same drift-
+// prevention pattern as MESSAGE_CONTACT_CHANNEL_ENUM. Enforced by
+// tool-schema-description-coverage.test.ts.
+export const CONTINUE_IN_CHANNEL_ENUM = ["slack", "sms", "email"] as const;
+
 // continue_in_channel: send a message to the requesting user's OWN account on
 // another channel. This is purely self-directed (user → themselves), not a
 // household-member contact, so it is safe to execute from any channel.
 // It should NOT be added to RESTRICTED_EXCLUDED_ACTION_TYPES.
 const ContinueInChannelPayload = z.object({
   targetChannel: z
-    .enum(["slack", "sms", "email"])
+    .enum(CONTINUE_IN_CHANNEL_ENUM)
     .describe(
       "Channel to deliver the continuation message on. Choose whichever the user asked for.",
     ),
@@ -1741,7 +1759,7 @@ export const communicationActionTools: OpenAI.Chat.Completions.ChatCompletionToo
             },
             channel: {
               type: "string",
-              enum: ["auto", "sms", "slack", "email", "elaine_chat"],
+              enum: [...MESSAGE_CONTACT_CHANNEL_ENUM],
               description:
                 "'auto' uses Slack if available, then SMS. 'elaine_chat' writes to their Elaine chat widget. Only specify when the user explicitly requests a channel; otherwise call list_contact_channels first.",
             },
@@ -1799,7 +1817,7 @@ export const communicationActionTools: OpenAI.Chat.Completions.ChatCompletionToo
           properties: {
             targetChannel: {
               type: "string",
-              enum: ["slack", "sms", "email"],
+              enum: [...CONTINUE_IN_CHANNEL_ENUM],
               description:
                 "The channel to deliver the message on. Match what the user asked for.",
             },

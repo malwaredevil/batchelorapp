@@ -85,6 +85,12 @@ export interface CalendarCoreContext {
 export interface CalendarCoreProps {
   defaultView?: ViewMode;
   /**
+   * Initial month/date the calendar grid opens on. Defaults to today.
+   * Only read once on mount (like defaultView) — later changes to this
+   * value do not move an already-mounted calendar.
+   */
+  defaultCursor?: Date;
+  /**
    * Extra content rendered between the toolbar and the grid — e.g. filter
    * chips, overlay calendar toggles, or AI-suggestion panels.
    */
@@ -114,6 +120,7 @@ export interface CalendarCoreProps {
 
 export function CalendarCore({
   defaultView = "month",
+  defaultCursor,
   belowToolbar,
   listLabel,
   disableNavInList = false,
@@ -121,7 +128,7 @@ export function CalendarCore({
   onCursorChange,
   children,
 }: CalendarCoreProps) {
-  const [cursor, setCursorState] = useState(() => new Date());
+  const [cursor, setCursorState] = useState(() => defaultCursor ?? new Date());
   const [view, setViewState] = useState<ViewMode>(defaultView);
 
   function setView(v: ViewMode) {

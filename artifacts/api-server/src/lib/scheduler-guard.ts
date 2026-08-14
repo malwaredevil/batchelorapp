@@ -322,6 +322,67 @@ type SchedulerRunRow = {
 };
 
 /**
+ * Canonical set of every task name that actively calls shouldRunScheduledTask
+ * in this codebase. Used by reconcileSchedulerRuns() to prune orphaned rows
+ * left behind when a scheduler is renamed or removed (e.g. the old
+ * "reminder-scheduler" that was superseded by "reminders-scheduler").
+ *
+ * MAINTENANCE: add a name here whenever a new scheduler is introduced and
+ * remove (or rename) the entry whenever one is retired — otherwise the retired
+ * row will permanently look stale and trip the shared heartbeat.
+ */
+export const KNOWN_SCHEDULER_NAMES = new Set([
+  "birthday-emails",
+  "gmail-scan",
+  "integrations-health-nudges",
+  "monitoring-scheduler",
+  "reminders-scheduler",
+  "travels-calendar-scan",
+  "travels-nudges",
+  "webhook-side-effect-cleanup",
+]);
+
+/**
+ * Deletes any `scheduler_runs` row whose name is NOT in KNOWN_SCHEDULER_NAMES.
+ * Call this once at server startup (after migrations, before the heartbeat
+ * starts) so that a renamed or removed scheduler cannot leave a permanently-
+ * stale row that keeps tripping the shared Sentry Cron Monitor.
+ *
+ * Non-fatal: a failure is logged as a warning and does not prevent the server
+ * from starting.
+ */
+export async function reconcileSchedulerRuns(): Promise<void> {
+  try {
+    const knownNames = [...KNOWN_SCHEDULER_NAMES];
+    const result = await db.execute<{ name: string }>(sql`
+      DELETE FROM scheduler_runs
+      WHERE name != ALL(${sql.raw(
+        "ARRAY[" +
+          knownNames.map((n) => `'${n.replace(/'/g, "''")}'`).join(",") +
+          "]::text[]",
+      )})
+      RETURNING name
+    `);
+    const deleted = result.rows.map((r) => r.name);
+    if (deleted.length > 0) {
+      logger.warn(
+        { deleted },
+        "scheduler-guard: removed orphaned scheduler_runs rows for retired schedulers",
+      );
+    } else {
+      logger.debug(
+        "scheduler-guard: scheduler_runs reconciliation complete — no orphaned rows found",
+      );
+    }
+  } catch (err) {
+    logger.warn(
+      { err },
+      "scheduler-guard: reconcileSchedulerRuns failed — continuing startup without cleanup",
+    );
+  }
+}
+
+/**
  * Starts the single, shared Sentry Cron Monitor for every in-process
  * scheduler. Sentry's free/Developer plan grants exactly one Cron Monitor
  * per org, so instead of one monitor per taskName (which silently hit the

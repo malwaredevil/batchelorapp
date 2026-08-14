@@ -37,5 +37,8 @@ jobs:
       - name: "Architecture: domain composition boundaries"
         run: pnpm --filter @workspace/scripts run check-domain-composition
 
+      - name: "Scheduler: all task names registered in KNOWN_SCHEDULER_NAMES"
+        run: pnpm --filter @workspace/scripts run check-scheduler-names
+
       - name: "Ban: raw fetch('/api/...') in frontend artifacts"
         run: pnpm --filter @workspace/scripts run check-raw-fetch

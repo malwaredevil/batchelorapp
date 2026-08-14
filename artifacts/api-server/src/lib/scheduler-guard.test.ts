@@ -57,7 +57,9 @@ vi.mock("@sentry/node", () => ({
 import {
   shouldRunScheduledTask,
   startSchedulerHeartbeat,
+  reconcileSchedulerRuns,
   CLAIM_GRACE_MS,
+  KNOWN_SCHEDULER_NAMES,
 } from "./scheduler-guard";
 import { logger } from "./logger";
 import * as Sentry from "@sentry/node";
@@ -891,6 +893,192 @@ describe("startSchedulerHeartbeat", () => {
 
     // No DB queries should have run — both timers were cancelled
     expect(mockExecute).not.toHaveBeenCalled();
+  });
+});
+
+// ── reconcileSchedulerRuns ────────────────────────────────────────────────────
+//
+// These tests verify that reconcileSchedulerRuns():
+//   (a) deletes orphaned (retired) rows and leaves known rows untouched
+//   (b) is a no-op (logs debug) when no orphaned rows exist
+//   (c) swallows DB errors and logs a warning instead of throwing
+
+describe("reconcileSchedulerRuns", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("(a) deletes orphaned rows, leaves known rows untouched", async () => {
+    // Simulate the DB deleting only the retired "reminder-scheduler" row.
+    // The mock represents what RETURNING reports after the DELETE; known-name
+    // rows are never returned because the WHERE clause excluded them.
+    const orphanedName = "reminder-scheduler"; // retired name, not in KNOWN_SCHEDULER_NAMES
+    mockExecute.mockResolvedValueOnce({
+      rows: [{ name: orphanedName }],
+    });
+
+    await reconcileSchedulerRuns();
+
+    // logger.warn must be called with the deleted names
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deleted: expect.arrayContaining([orphanedName]),
+      }),
+      expect.stringContaining("orphaned"),
+    );
+
+    // No known scheduler name may appear in the deleted list
+    const warnCall = (logger.warn as ReturnType<typeof vi.fn>).mock.calls.find(
+      (args) => Array.isArray((args[0] as { deleted?: unknown }).deleted),
+    );
+    const deletedNames = (warnCall![0] as { deleted: string[] }).deleted;
+    for (const name of KNOWN_SCHEDULER_NAMES) {
+      expect(deletedNames).not.toContain(name);
+    }
+
+    // The orphaned name itself must not be in KNOWN_SCHEDULER_NAMES
+    expect(KNOWN_SCHEDULER_NAMES.has(orphanedName)).toBe(false);
+  });
+
+  it("(a2) SQL excludes all KNOWN_SCHEDULER_NAMES from deletion", async () => {
+    // Confirm every known name is represented in the DELETE's WHERE clause.
+    // We inspect the raw SQL string that db.execute receives to ensure the
+    // ARRAY literal encodes all current known names.
+    mockExecute.mockResolvedValueOnce({ rows: [] });
+
+    await reconcileSchedulerRuns();
+
+    expect(mockExecute).toHaveBeenCalledTimes(1);
+    const sqlArg = mockExecute.mock.calls[0][0] as { queryChunks?: unknown[] };
+
+    // Convert to a string representation to search for known names.
+    // reconcileSchedulerRuns uses sql.raw() to embed the ARRAY literal
+    // directly in the SQL, so the names appear as plain strings in the query.
+    const sqlStr = JSON.stringify(sqlArg);
+    for (const name of KNOWN_SCHEDULER_NAMES) {
+      expect(sqlStr).toContain(name);
+    }
+  });
+
+  it("(b) no orphaned rows — logs debug, does not warn", async () => {
+    // When RETURNING emits no rows, no orphaned rows existed.
+    mockExecute.mockResolvedValueOnce({ rows: [] });
+
+    await reconcileSchedulerRuns();
+
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.stringContaining("no orphaned"),
+    );
+    // logger.warn must NOT have been called with a `deleted` payload
+    const warnWithDeleted = (
+      logger.warn as ReturnType<typeof vi.fn>
+    ).mock.calls.filter((args) =>
+      Array.isArray((args[0] as { deleted?: unknown }).deleted),
+    );
+    expect(warnWithDeleted).toHaveLength(0);
+  });
+
+  it("(c) db.execute throws — logs warning, does not re-throw", async () => {
+    mockExecute.mockRejectedValueOnce(
+      new Error("relation scheduler_runs does not exist"),
+    );
+
+    // Must not throw
+    await expect(reconcileSchedulerRuns()).resolves.toBeUndefined();
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ err: expect.any(Error) }),
+      expect.stringContaining("reconcileSchedulerRuns failed"),
+    );
+  });
+});
+
+// ── heartbeat: known-healthy rows are not flagged after reconcile ─────────────
+//
+// This describe block pins the scenario from task #802: after
+// reconcileSchedulerRuns() removes an orphaned "reminder-scheduler" row, the
+// surviving known rows are all recently updated and the heartbeat must report
+// "ok" — not "error".  Previously, the stale orphaned row tripped a false
+// "gone silent" alert even though every active scheduler was healthy.
+
+describe("startSchedulerHeartbeat — known-healthy rows pass the staleness check", () => {
+  const NOW_ISO = "2026-08-09T12:00:00.000Z";
+  const NOW_MS = new Date(NOW_ISO).getTime();
+  const FIRST_CHECK_DELAY_MS = 3 * 60 * 1000;
+  const ONE_HOUR_MS = 60 * 60 * 1000;
+
+  let stopHeartbeat: (() => void) | undefined;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW_MS);
+  });
+
+  afterEach(() => {
+    stopHeartbeat?.();
+    stopHeartbeat = undefined;
+    vi.useRealTimers();
+  });
+
+  it("all known-name rows recently updated → ok check-in, no error", async () => {
+    // Simulate a world where reconcileSchedulerRuns() already ran and removed
+    // the orphaned "reminder-scheduler" row.  The remaining rows are all from
+    // KNOWN_SCHEDULER_NAMES and each last succeeded 5 minutes ago — well within
+    // every task's tolerance window.  The heartbeat must report "ok".
+    const recentSuccessAgeMs = 5 * 60 * 1000; // 5 minutes ago
+
+    const rows = [...KNOWN_SCHEDULER_NAMES].map((name) => ({
+      name,
+      last_success_at: new Date(NOW_MS - recentSuccessAgeMs).toISOString(),
+      last_run_at: new Date(NOW_MS - recentSuccessAgeMs).toISOString(),
+      expected_interval_ms: ONE_HOUR_MS,
+    }));
+
+    mockExecute.mockResolvedValue({ rows });
+
+    stopHeartbeat = startSchedulerHeartbeat();
+    await vi.advanceTimersByTimeAsync(FIRST_CHECK_DELAY_MS + 1);
+
+    const statuses = (
+      Sentry.captureCheckIn as ReturnType<typeof vi.fn>
+    ).mock.calls.map((args) => (args[0] as { status: string }).status);
+    expect(statuses).toContain("ok");
+    expect(statuses).not.toContain("error");
+  });
+
+  it("an orphaned stale row causes error, but after it is removed (no row) the heartbeat reports ok", async () => {
+    // Phase 1: the orphaned "reminder-scheduler" row is stale → error.
+    const STALE_AGE_MS = 3 * ONE_HOUR_MS; // 3 hours — well past 1-hour + 30-min tolerance
+    const orphanRow = {
+      name: "reminder-scheduler",
+      last_success_at: new Date(NOW_MS - STALE_AGE_MS).toISOString(),
+      last_run_at: new Date(NOW_MS - STALE_AGE_MS).toISOString(),
+      expected_interval_ms: ONE_HOUR_MS,
+    };
+    mockExecute.mockResolvedValueOnce({ rows: [orphanRow] });
+
+    stopHeartbeat = startSchedulerHeartbeat();
+    await vi.advanceTimersByTimeAsync(FIRST_CHECK_DELAY_MS + 1);
+
+    const statusesPhase1 = (
+      Sentry.captureCheckIn as ReturnType<typeof vi.fn>
+    ).mock.calls.map((args) => (args[0] as { status: string }).status);
+    expect(statusesPhase1).toContain("error");
+
+    // Phase 2: reconcileSchedulerRuns() has run; the orphan row is gone.
+    // The next heartbeat tick queries an empty table (no active schedulers
+    // with stale rows) and must report "ok".
+    vi.clearAllMocks();
+    mockExecute.mockResolvedValueOnce({ rows: [] });
+
+    await vi.advanceTimersByTimeAsync(15 * 60 * 1000); // one HEARTBEAT_INTERVAL_MS
+
+    const statusesPhase2 = (
+      Sentry.captureCheckIn as ReturnType<typeof vi.fn>
+    ).mock.calls.map((args) => (args[0] as { status: string }).status);
+    expect(statusesPhase2).toContain("ok");
+    expect(statusesPhase2).not.toContain("error");
   });
 });
 

@@ -84,6 +84,19 @@ function extractHrefsFromSource(source: string): string[] {
     results.push(m[1]);
   }
 
+  // e) Ternary assigned to a local `href` const with two hardcoded template
+  //    literal branches (e.g. a dynamic deep-link vs a plain fallback):
+  //      const href =
+  //        cond
+  //          ? `/path/a?x=${y}`
+  //          : `/path/b`;
+  for (const m of source.matchAll(
+    /const\s+href\s*=\s*[^;`]*\?\s*`(\/[^`]*)`\s*:\s*`(\/[^`]*)`/g,
+  )) {
+    results.push(m[1]);
+    results.push(m[2]);
+  }
+
   return results;
 }
 

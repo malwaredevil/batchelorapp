@@ -1,7 +1,19 @@
 {
   "extends": "../../tsconfig.base.json",
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "build", "dist", "**/*.test.ts"],
+  "exclude": [
+    "node_modules",
+    "build",
+    "dist",
+    "**/*.test.ts",
+    // Throwaway fixtures check-domain-composition.test.ts briefly writes
+    // into src/ during its integration tests (deleted immediately after
+    // each assertion). Without this, a typecheck run overlapping with a
+    // test run can catch one mid-existence and fail on an intentionally
+    // invalid fixture instead of a real error.
+    "src/_temp_composition_guard_test_fixture.ts",
+    "src/_temp_composition_guard_test_c_fixture.tsx"
+  ],
   "compilerOptions": {
     "incremental": true,
     "tsBuildInfoFile": ".tsbuildinfo",

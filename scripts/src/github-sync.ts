@@ -616,19 +616,26 @@ async function main() {
         head: syncBranch,
         base: BRANCH,
         body: prBody,
+        draft: true,
       },
     );
 
     console.log(
-      `\n✓ Sync PR #${pr.number} opened — ${changed} file(s) changed`,
+      `\n✓ Sync PR #${pr.number} opened as Draft — ${changed} file(s) changed`,
     );
     console.log(`  PR:     ${pr.html_url}`);
     console.log(`  Commit: https://github.com/${REPO}/commit/${commitSha}`);
     console.log(
-      `\n  CI is now running on the PR. Merge when all checks are green.`,
+      `\n  Only the fast/cheap checks run while the PR is a Draft (the heavy ` +
+        `suite — E2E, codegen-drift, elaine-capability-parity — is gated to ` +
+        `skip until it's Ready for review). Iterate here until those are green.`,
     );
     console.log(
       `  The composition guard runs in the "Composition guard" and "Lint" CI jobs.`,
+    );
+    console.log(
+      `\n  Once green: pnpm --filter @workspace/scripts run promote-pr-ready\n` +
+        `  That runs the full heavy suite; merge once it's green too.`,
     );
   };
 

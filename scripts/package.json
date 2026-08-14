@@ -27,6 +27,7 @@
     "sentry-baseline": "tsx ./src/sentry-baseline.ts",
     "github-sync": "tsx ./src/github-sync.ts",
     "apply-pr-suggestions": "tsx ./src/apply-pr-suggestions.ts",
+    "promote-pr-ready": "tsx ./src/promote-pr-ready.ts",
     "pull-from-github": "tsx ./src/pull-from-github.ts",
     "check-github-drift": "tsx ./src/check-github-drift.ts",
     "sync-github-secrets": "tsx ./src/sync-github-secrets.ts",

@@ -42,8 +42,14 @@
 import fs from "fs";
 import path from "path";
 import { spawnSync } from "child_process";
+import {
+  REPO,
+  gh,
+  findOpenSyncPr,
+  findPrByBranch,
+  findPrByNumber,
+} from "./gh-pr-lookup.js";
 
-const REPO = process.env["GITHUB_REPO"] || "malwaredevil/batchelorapp";
 const TOKEN = process.env["GH_PAT"];
 
 // ── Types ────────────────────────────────────────────────────────────────
@@ -221,67 +227,8 @@ export function applyEdits(
 }
 
 // ── IO (network + filesystem) ───────────────────────────────────────────
-
-async function gh<T>(
-  method: string,
-  apiPath: string,
-  body?: unknown,
-): Promise<T> {
-  const res = await fetch(`https://api.github.com${apiPath}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${TOKEN}`,
-      Accept: "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28",
-      ...(body ? { "Content-Type": "application/json" } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(
-      `GitHub API ${res.status} for ${method} ${apiPath}: ${text.slice(0, 300)}`,
-    );
-  }
-  return (await res.json()) as T;
-}
-
-async function findOpenSyncPr(): Promise<{
-  number: number;
-  head: { ref: string; sha: string };
-}> {
-  const prs = await gh<
-    Array<{ number: number; head: { ref: string; sha: string } }>
-  >(
-    "GET",
-    `/repos/${REPO}/pulls?state=open&sort=created&direction=desc&per_page=20`,
-  );
-  const syncPr = prs.find((pr) => pr.head.ref.startsWith("sync/"));
-  if (!syncPr) {
-    throw new Error(
-      "No open sync/… PR found. Pass --pr <n> or --branch <name> explicitly.",
-    );
-  }
-  return syncPr;
-}
-
-async function findPrByBranch(
-  branch: string,
-): Promise<{ number: number; head: { ref: string; sha: string } }> {
-  const owner = REPO.split("/")[0];
-  const prs = await gh<
-    Array<{ number: number; head: { ref: string; sha: string } }>
-  >("GET", `/repos/${REPO}/pulls?state=open&head=${owner}:${branch}`);
-  const pr = prs[0];
-  if (!pr) throw new Error(`No open PR found for branch ${branch}.`);
-  return pr;
-}
-
-async function findPrByNumber(
-  n: number,
-): Promise<{ number: number; head: { ref: string; sha: string } }> {
-  return gh("GET", `/repos/${REPO}/pulls/${n}`);
-}
+// gh() and the PR-lookup helpers (findOpenSyncPr/findPrByBranch/
+// findPrByNumber) live in ./gh-pr-lookup.ts, shared with promote-pr-ready.ts.
 
 async function fetchAllReviewComments(
   prNumber: number,

@@ -8,6 +8,17 @@
     "types": ["node"]
   },
   "include": ["src"],
+  // Excludes the throwaway fixture check-scheduler-names.test.ts briefly
+  // writes into src/ during its integration tests (deleted immediately
+  // after each assertion). Without this, a typecheck run that happens to
+  // overlap with a test run can catch the file mid-existence and fail on
+  // an intentionally-invalid fixture instead of a real error.
+  "exclude": [
+    "src/_ci_sentinel_scheduler_names_.ts",
+    // Throwaway fixture check-domain-composition.test.ts briefly writes
+    // into src/routes/ during its integration tests — same race as above.
+    "src/routes/_temp_composition_guard_test_b_fixture.ts"
+  ],
   "references": [
     {
       "path": "../../lib/db"

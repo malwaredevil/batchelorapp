@@ -12,7 +12,10 @@ import { startBirthdayScheduler } from "./lib/birthday-scheduler";
 import { startMonitoringScheduler } from "./lib/monitoring-scheduler";
 import { startCommCheckScheduler } from "./lib/comm-check-scheduler";
 import { startWebhookSideEffectCleanupScheduler } from "./lib/webhook-side-effect-idempotency";
-import { startSchedulerHeartbeat } from "./lib/scheduler-guard";
+import {
+  startSchedulerHeartbeat,
+  reconcileSchedulerRuns,
+} from "./lib/scheduler-guard";
 import { startJobWorker, stopAllJobWorkers } from "./lib/jobs/worker";
 import {
   markBucketsReady,
@@ -70,6 +73,11 @@ async function initializeRuntime(): Promise<void> {
   }
 
   markStartupReady();
+
+  // Prune any scheduler_runs rows left behind by renamed/retired schedulers
+  // before the heartbeat's first tick could flag them as stale.
+  await reconcileSchedulerRuns();
+
   stopSchedulers.push(
     startRemindersScheduler(),
     startNudgeScheduler(),

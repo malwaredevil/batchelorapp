@@ -137,6 +137,49 @@ it. Storage deletes cannot be rolled back if the surrounding DB transaction fail
 
 Never swap these. Never hardcode either connection string.
 
+### 2.10 Scheduler task names must be statically verifiable
+
+Every task name passed to `shouldRunScheduledTask()` or `recordScheduledTaskSuccess()`
+must be **statically resolvable** by the `check-scheduler-names` CI guardrail. The
+guardrail supports exactly two forms:
+
+```typescript
+// ✅ Pattern A — inline string literal (preferred)
+await shouldRunScheduledTask("birthday-emails", ONE_DAY_MS);
+
+// ✅ Pattern B — module-level same-file const assignment (no shadowing anywhere in the file)
+const TASK_NAME = "birthday-emails";
+await shouldRunScheduledTask(TASK_NAME, ONE_DAY_MS);
+```
+
+These forms are **never** allowed — they cause a CI violation with a clear message:
+
+```typescript
+// ✖ imported variable — cross-file resolution is not supported
+import { TASK_NAME } from "./constants";
+await shouldRunScheduledTask(TASK_NAME, ONE_DAY_MS);
+
+// ✖ object-property reference — const objects are mutable, properties cannot be verified
+const NAMES = { BIRTHDAY: "birthday-emails" };
+await shouldRunScheduledTask(NAMES.BIRTHDAY, ONE_DAY_MS);
+
+// ✖ template literal — not statically verifiable
+await shouldRunScheduledTask(`${prefix}-scan`, INTERVAL_MS);
+
+// ✖ computed expression
+await shouldRunScheduledTask(getTaskName(), INTERVAL_MS);
+
+// ✖ Pattern B with shadowing — a parameter, catch variable, or inner const
+//   with the same name anywhere in the file makes the binding ambiguous
+function run(TASK_NAME: string) {
+  await shouldRunScheduledTask(TASK_NAME, ONE_DAY_MS); // ✖ shadowed by parameter
+}
+```
+
+In addition, the name must be listed in `KNOWN_SCHEDULER_NAMES` in
+`artifacts/api-server/src/lib/scheduler-guard.ts`. Add it there when introducing a
+new scheduler and remove it when retiring one.
+
 ---
 
 ## 3. Feature Completion Gate — mandatory before every "done"

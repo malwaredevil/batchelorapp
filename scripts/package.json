@@ -22,9 +22,11 @@
     "check-domain-composition": "node --import tsx ./src/check-domain-composition.ts",
     "check-workflow-security": "node --import tsx ./src/check-workflow-security.ts",
     "check-guardrails": "tsx ./src/check-guardrails.ts",
+    "check-scheduler-names": "tsx ./src/check-scheduler-names.ts",
     "cleanup-app-config-defaults": "tsx ./src/cleanup-app-config-defaults.ts",
     "sentry-baseline": "tsx ./src/sentry-baseline.ts",
     "github-sync": "tsx ./src/github-sync.ts",
+    "apply-pr-suggestions": "tsx ./src/apply-pr-suggestions.ts",
     "pull-from-github": "tsx ./src/pull-from-github.ts",
     "check-github-drift": "tsx ./src/check-github-drift.ts",
     "sync-github-secrets": "tsx ./src/sync-github-secrets.ts",
@@ -47,7 +49,7 @@
     "elaine:operation-catalog": "tsx ./src/elaine-app-operation-catalog.ts --check",
     "elaine:operation-catalog-write": "tsx ./src/elaine-app-operation-catalog.ts --write",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx ./src/pii-scan.test.ts && tsx ./src/check-domain-composition.test.ts && tsx ./src/check-workflow-security.test.ts && tsx ./src/check-public-file-secrets.test.ts && tsx ./src/check-secrets-registry.test.ts && tsx ./src/check-guardrails.test.ts && tsx ./src/check-github-drift.test.ts && tsx ./src/check-ci-status.test.ts && tsx ./src/github-sync.test.ts && tsx ./src/check-backup-coverage.test.ts",
+    "test": "tsx ./src/pii-scan.test.ts && tsx ./src/check-domain-composition.test.ts && tsx ./src/check-workflow-security.test.ts && tsx ./src/check-public-file-secrets.test.ts && tsx ./src/check-secrets-registry.test.ts && tsx ./src/check-guardrails.test.ts && tsx ./src/check-github-drift.test.ts && tsx ./src/check-ci-status.test.ts && tsx ./src/github-sync.test.ts && tsx ./src/check-backup-coverage.test.ts && tsx ./src/apply-pr-suggestions.test.ts && tsx ./src/check-scheduler-names.test.ts",
     "secret-audit": "python3 ../.local/secret-audit.py",
     "docs:test": "tsx ./src/docs/generate.test.ts",
     "check-stale-overrides": "node --import tsx ./src/check-stale-overrides.ts",
@@ -67,6 +69,7 @@
     "@types/node": "catalog:",
     "@types/pg": "^8.11.0",
     "prettier": "^3.8.3",
-    "tsx": "catalog:"
+    "tsx": "catalog:",
+    "typescript": "~5.9.3"
   }
 }

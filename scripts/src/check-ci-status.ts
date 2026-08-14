@@ -37,6 +37,8 @@
  *   GITHUB_REPO  — optional, defaults to "malwaredevil/batchelorapp".
  */
 
+import { findOpenPrForBranchOrNull } from "./gh-pr-lookup.js";
+
 const REPO = process.env["GITHUB_REPO"] || "malwaredevil/batchelorapp";
 const BRANCH = process.env["GITHUB_BRANCH"] || "main";
 const PAT = process.env["GH_PAT"];
@@ -57,7 +59,7 @@ interface CombinedStatus {
   }>;
 }
 
-interface CheckRun {
+export interface CheckRun {
   name: string;
   status: "queued" | "in_progress" | "completed";
   conclusion: string | null;
@@ -65,7 +67,7 @@ interface CheckRun {
   started_at?: string;
 }
 
-interface CheckRunsResponse {
+export interface CheckRunsResponse {
   total_count: number;
   check_runs: CheckRun[];
 }
@@ -107,9 +109,11 @@ function fail(message: string): never {
 }
 
 /**
- * Fetches the check-runs and combined status for a given SHA.
+ * Fetches the check-runs and combined status for a given SHA. Exported so
+ * promote-pr-ready.ts can reuse the same fetch + evaluateCheckRuns pairing
+ * instead of re-implementing it.
  */
-async function fetchCiForSha(sha: string): Promise<{
+export async function fetchCiForSha(sha: string): Promise<{
   combined: CombinedStatus;
   checkRuns: CheckRunsResponse;
 }> {
@@ -398,6 +402,32 @@ async function main(): Promise<void> {
     `\n✅ GitHub Actions CI is green for ${shaLabel} ` +
       `(${runs.map((r) => r.name).join(", ") || "no named check runs, but combined status is success"}).\n`,
   );
+
+  // ── Draft-aware note ─────────────────────────────────────────────────────
+  // A green verdict on a branch that's behind an open Draft PR only means
+  // the fast/cheap checks passed — the heavy suite (E2E, codegen-drift,
+  // elaine-capability-parity) is gated behind `draft == false` and reports
+  // as "skipped", which evaluateCheckRuns already (correctly) treats as
+  // passing. Make that distinction explicit so it isn't mistaken for a
+  // fully merge-ready verdict.
+  if (BRANCH !== "main") {
+    const pr = await findOpenPrForBranchOrNull(BRANCH);
+    if (pr) {
+      if (pr.draft) {
+        console.log(
+          `ℹ️  PR #${pr.number} is still in Draft — this is a Draft-stage green, ` +
+            `not a full merge-ready verdict. The heavy CI suite is gated to skip ` +
+            `until the PR is Ready for review. Run promote-pr-ready once you're ` +
+            `done iterating.`,
+        );
+      } else {
+        console.log(
+          `ℹ️  PR #${pr.number} is Ready for review — this green includes the ` +
+            `full CI suite. Safe to merge once confirmed.`,
+        );
+      }
+    }
+  }
 }
 
 // Only invoke main() when this file is run directly (not imported by tests).

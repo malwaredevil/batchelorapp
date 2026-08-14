@@ -352,12 +352,25 @@ async function main(): Promise<void> {
   const noopReport: SuggestionEdit[] = [];
 
   for (const [file, fileEdits] of applicable) {
-    const abs = path.join(root, file);
-    if (!fs.existsSync(abs)) {
+    const abs = path.resolve(root, file);
+    // Path-containment check: refuse to touch anything outside the repo
+    // root, since `file` originates from a (bot-authored, but still
+    // externally-supplied) PR review comment's `path` field.
+    if (abs !== root && !abs.startsWith(root + path.sep)) {
+      conflicts.push(...fileEdits);
+      continue;
+    }
+    // No existsSync pre-check: read the file and treat a missing/unreadable
+    // file as "gone locally" via the catch, so there is no separate
+    // check-then-act step on the same path before the later write below
+    // (avoids a TOCTOU race between checking and writing the same file).
+    let original: string[];
+    try {
+      original = fs.readFileSync(abs, "utf8").split(/\r?\n/);
+    } catch {
       conflicts.push(...fileEdits); // file gone locally — can't be applied
       continue;
     }
-    const original = fs.readFileSync(abs, "utf8").split(/\r?\n/);
     const { newLines, applied, noop } = applyEdits(original, fileEdits);
     noopReport.push(...noop);
     if (applied.length === 0) continue; // everything was already applied

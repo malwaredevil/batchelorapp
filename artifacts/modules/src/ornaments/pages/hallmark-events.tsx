@@ -54,6 +54,11 @@ import {
   type CalendarCoreContext,
 } from "@/components/CalendarCore";
 
+// How long to wait for the GCal events query before treating it as an error.
+// This bounds the worst-case hang when the network stalls without ever
+// returning a hard failure (e.g. TCP timeout after 2+ minutes).
+const GCAL_QUERY_TIMEOUT_MS = 10_000;
+
 // All events are now GCal events — the ornaments_hallmark_events DB table has
 // been removed. Google Calendar is the sole source of truth.
 type GCalHallmarkEvent = {
@@ -86,16 +91,57 @@ function HallmarkGCalLoader({
   end: string;
   onEvents: (events: TravelCalendarEvent[]) => void;
 }) {
-  const { data = [] } = useListConnectedCalendarEvents(calendarId, start, end, {
+  const {
+    data = [],
+    isSuccess,
+    isError,
+  } = useListConnectedCalendarEvents(calendarId, start, end, {
     query: {
       enabled: Boolean(calendarId && start && end),
       queryKey: getListConnectedCalendarEventsQueryKey(calendarId, start, end),
+      // Don't retry — let the timeout below be the real bound on the worst case.
+      retry: false,
     },
   });
+
+  // Encode the current query identity so the timeout is scoped to a single
+  // (calendarId, start, end) triple.  Storing *which* query timed out (rather
+  // than a plain boolean) means the flag resets atomically when the user
+  // navigates to a new range — no extra setState, no extra render cycle where
+  // a stale `timedOut=true` could poison the new query's first propagation.
+  const queryId = `${calendarId}|${start}|${end}`;
+  const [timedOutFor, setTimedOutFor] = useState<string | null>(null);
+  // true only when THIS query (not a previous range) timed out.
+  const timedOut = timedOutFor === queryId;
+
+  const settled = isSuccess || isError;
   useEffect(() => {
-    onEvents(data);
+    // Clear any stale timer and start a fresh one for each new query identity.
+    // If the query settles before the deadline the cleanup cancels the timer.
+    if (settled || timedOut) return;
+    const timer = setTimeout(
+      () => setTimedOutFor(queryId),
+      GCAL_QUERY_TIMEOUT_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [settled, timedOut, queryId]);
+
+  useEffect(() => {
+    // Only propagate events once the query has settled (success, error, or
+    // timeout).  The default `data = []` fires before the query completes,
+    // which would incorrectly signal "loaded with no results" too early.
+    // If the query eventually succeeds after a timeout, prefer the real data
+    // so a late response isn't permanently discarded.
+    if (!isSuccess && !isError && !timedOut) return;
+    if (isSuccess) {
+      onEvents(data);
+    } else {
+      // isError or timed out (and no success yet) — signal empty so the
+      // deep-link cleanup branch can fire instead of waiting forever.
+      onEvents([]);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(data)]);
+  }, [isSuccess, isError, timedOut, JSON.stringify(data)]);
   return null;
 }
 
@@ -361,7 +407,9 @@ export default function HallmarkEvents() {
   const deleteEvent = useDeleteHallmarkGCalEvent();
 
   const [gcalEvents, setGcalEvents] = useState<TravelCalendarEvent[]>([]);
-  const { data: connectedCalendars = [] } = useListConnectedCalendars();
+  const [gcalLoaded, setGcalLoaded] = useState(false);
+  const { data: connectedCalendars = [], isSuccess: calendarsSuccess } =
+    useListConnectedCalendars();
   const hallmarkCal = useMemo<ConnectedCalendar | null>(
     () => connectedCalendars.find((c) => c.isHallmarkCalendar) ?? null,
     [connectedCalendars],
@@ -468,8 +516,11 @@ export default function HallmarkEvents() {
   // Deep-link support: when arriving with ?event=<gcalId> (e.g. from the
   // "days until" hero card), auto-open that event's view modal once its
   // data has loaded, then clear the param so back/refresh doesn't re-open it.
+  // If loading finishes and no match is found (event was deleted), clean up
+  // the URL and show a brief toast so the user isn't left wondering.
   useEffect(() => {
     if (!pendingDeepLinkEventId) return;
+
     const match = allNormalized.find(
       (e) => e.gcalId === pendingDeepLinkEventId,
     );
@@ -480,8 +531,28 @@ export default function HallmarkEvents() {
       url.searchParams.delete("event");
       url.searchParams.delete("month");
       window.history.replaceState({}, "", url.toString());
+      return;
     }
-  }, [pendingDeepLinkEventId, allNormalized]);
+
+    // Loading is considered complete when the calendars query has settled AND
+    // either there is no Hallmark calendar (so events will never arrive) or the
+    // GCal loader has already delivered its first batch of events.
+    const loadingDone = calendarsSuccess && (!hallmarkCal || gcalLoaded);
+    if (loadingDone) {
+      toast.error("Event not found");
+      setPendingDeepLinkEventId(null);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("event");
+      url.searchParams.delete("month");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, [
+    pendingDeepLinkEventId,
+    allNormalized,
+    calendarsSuccess,
+    hallmarkCal,
+    gcalLoaded,
+  ]);
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
@@ -546,7 +617,10 @@ export default function HallmarkEvents() {
               calendarId={hallmarkCal.id}
               start={range.start.toISOString()}
               end={range.end.toISOString()}
-              onEvents={setGcalEvents}
+              onEvents={(events) => {
+                setGcalEvents(events);
+                setGcalLoaded(true);
+              }}
             />
           ) : null;
 

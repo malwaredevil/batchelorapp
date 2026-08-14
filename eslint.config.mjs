@@ -19,6 +19,7 @@ export default [
       "artifacts/modules/src/ornaments/components/use-barcode-camera.test.ts",
       "lib/api-client-react/src/custom-fetch.test.ts",
       "lib/api-client-react/src/elaine.test.ts",
+      "lib/api-client-react/src/ornaments-hallmark.test.ts",
     ],
   },
   {

@@ -8,10 +8,6 @@ import {
   useDeleteOrnament,
   useUpdateOrnament,
   getListOrnamentsQueryKey,
-  useListConnectedCalendars,
-  useListConnectedCalendarEvents,
-  getListConnectedCalendarEventsQueryKey,
-  type TravelCalendarEvent,
   type OrnamentsOrnamentItem,
 } from "@workspace/api-client-react";
 import { CategoryEditDialog } from "@/quilting/components/CategoryEditDialog";
@@ -88,107 +84,8 @@ const SORT_OPTIONS: SortOption<OrnamentSortKey>[] = [
   { key: "value-desc", label: "Highest value" },
 ];
 
-function NextHallmarkEventCard() {
-  const { data: connectedCalendars = [] } = useListConnectedCalendars();
-  const hallmarkCal =
-    connectedCalendars.find((c) => c.isHallmarkCalendar) ?? null;
-
-  const { rangeStart, rangeEnd } = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const end = new Date(today);
-    end.setFullYear(end.getFullYear() + 1);
-    return { rangeStart: today.toISOString(), rangeEnd: end.toISOString() };
-  }, []);
-
-  const { data: gcalEvents = [] } = useListConnectedCalendarEvents(
-    hallmarkCal?.id ?? 0,
-    rangeStart,
-    rangeEnd,
-    {
-      query: {
-        enabled: !!hallmarkCal,
-        queryKey: getListConnectedCalendarEventsQueryKey(
-          hallmarkCal?.id ?? 0,
-          rangeStart,
-          rangeEnd,
-        ),
-      },
-    },
-  );
-
-  const nowMs = Date.now();
-
-  const upcoming = gcalEvents
-    .map((e: TravelCalendarEvent) => {
-      // The server's fromGoogleEvent() already converts Google's exclusive
-      // all-day end date back to an inclusive one, so e.end is already
-      // correct — do not subtract another day here, or a multi-day event
-      // loses its last day. The swap below stays as a defensive guard for
-      // any event genuinely entered backwards.
-      const rawStart = e.start.slice(0, 10);
-      const rawEnd = e.end.slice(0, 10);
-      const startDate = rawStart <= rawEnd ? rawStart : rawEnd;
-      const endDate = rawStart <= rawEnd ? rawEnd : rawStart;
-      return {
-        gcalId: e.id,
-        title: e.title,
-        startDate,
-        endDate,
-        startMs: new Date(`${startDate}T00:00:00`).getTime(),
-        endMs: new Date(`${endDate}T23:59:59`).getTime(),
-      };
-    })
-    .filter((e) => e.endMs >= nowMs)
-    .sort((a, b) => a.startMs - b.startMs);
-
-  const next = upcoming[0];
-  if (!next) return null;
-
-  const isLive = nowMs >= next.startMs && nowMs <= next.endMs;
-  const daysAway = isLive
-    ? 0
-    : Math.max(0, Math.ceil((next.startMs - nowMs) / 86_400_000));
-
-  const dateRangeLabel = `${new Date(
-    `${next.startDate}T00:00:00`,
-  ).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  })} – ${new Date(`${next.endDate}T00:00:00`).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  })}`;
-
-  const eventHref = `/ornaments/hallmark-events?month=${next.startDate.slice(0, 7)}&event=${encodeURIComponent(next.gcalId)}`;
-
-  return (
-    <Link href={eventHref}>
-      <div className="flex items-center gap-4 rounded-xl border border-rose-200/60 dark:border-rose-800/40 bg-rose-50 dark:bg-rose-900/20 p-4 hover:bg-rose-100/70 dark:hover:bg-rose-900/30 transition-colors cursor-pointer">
-        <div className="w-12 h-12 rounded-lg bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center flex-shrink-0">
-          <CalendarHeart className="w-6 h-6 text-rose-600 dark:text-rose-400" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="font-serif font-semibold truncate">{next.title}</div>
-          <div className="text-sm text-muted-foreground">{dateRangeLabel}</div>
-        </div>
-        <div className="text-center flex-shrink-0">
-          <div
-            className={`text-3xl font-bold tabular-nums leading-none ${isLive ? "text-red-700 dark:text-red-400" : "text-rose-600 dark:text-rose-400"}`}
-          >
-            {isLive ? "Live" : daysAway}
-          </div>
-          {!isLive && (
-            <div className="text-[10px] text-muted-foreground uppercase tracking-wide">
-              days away
-            </div>
-          )}
-        </div>
-      </div>
-    </Link>
-  );
-}
+// Extracted into its own file for testability; re-used here unchanged.
+import { NextHallmarkEventCard } from "@/ornaments/components/NextHallmarkEventCard";
 
 export default function Collection() {
   const [search, setSearch] = useState("");

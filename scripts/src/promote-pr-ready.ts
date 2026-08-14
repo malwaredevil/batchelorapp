@@ -30,6 +30,10 @@
  * Usage:
  *   pnpm --filter @workspace/scripts run promote-pr-ready [--branch <sync/…>] [--pr <n>] [--dry-run]
  *
+ * Branch resolution order: --branch flag, then --pr flag, then the
+ * GITHUB_BRANCH env var (same var check-ci-status.ts reads — set it once and
+ * both scripts target the same PR), then the most recent open sync/… PR.
+ *
  * Requires:
  *   GH_PAT — GitHub personal access token with repo read/write access.
  */
@@ -58,11 +62,14 @@ async function main(): Promise<void> {
   const explicitBranch = branchIdx !== -1 ? args[branchIdx + 1] : undefined;
   const explicitPr = prIdx !== -1 ? Number(args[prIdx + 1]) : undefined;
 
+  const envBranch = process.env["GITHUB_BRANCH"];
   const pr: PrRef = explicitPr
     ? await findPrByNumber(explicitPr)
     : explicitBranch
       ? await findPrByBranch(explicitBranch)
-      : await findOpenSyncPr();
+      : envBranch && envBranch !== "main"
+        ? await findPrByBranch(envBranch)
+        : await findOpenSyncPr();
 
   console.log(
     `PR #${pr.number} (${pr.head.ref}) — currently ${pr.draft ? "Draft" : "Ready for review"}.`,

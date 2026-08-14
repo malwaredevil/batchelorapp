@@ -61,8 +61,6 @@ import {
   useListNotes,
   useGetCalendarStatus,
   useListConnectedCalendars,
-  useListConnectedCalendarEvents,
-  getListConnectedCalendarEventsQueryKey,
   useListAllConnectedCalendarEvents,
   getListAllConnectedCalendarEventsQueryKey,
   useGetElaineNudgesUnseenCount,
@@ -116,17 +114,6 @@ const ORNAMENTS_QUICK_LINKS = [
   },
   { label: "Stats", icon: Activity, href: `${base}modules/ornaments/stats` },
 ];
-
-/**
- * Hallmark's annual Keepsake Ornament Premiere ("Open House") event.
- * This hardcoded fallback is only used until the real event data (synced
- * from the shared Hallmark Google Calendar / entered in-app) loads from
- * the ornaments-hallmark-events API — see useNextHallmarkEvent().
- */
-const HALLMARK_OPEN_HOUSE = {
-  start: new Date("2026-07-11T00:00:00"),
-  end: new Date("2026-07-19T23:59:59"),
-};
 
 const ELAINE_QUICK_LINKS = [
   { label: "Chat", icon: MessageCircle, href: `${base}elaine/` },
@@ -548,161 +535,8 @@ class SilentErrorBoundary extends Component<
 // Keep the old alias so the stat-tile usage below doesn't need changing.
 const StatTileErrorBoundary = SilentErrorBoundary;
 
-// Stable 90-day query window — computed once per page load so the query key
-// doesn't change on every render.
-const _hmToday = new Date();
-_hmToday.setHours(0, 0, 0, 0);
-const HM_TILE_RANGE_START = _hmToday.toISOString();
-const HM_TILE_RANGE_END = new Date(
-  _hmToday.getTime() + 90 * 86_400_000,
-).toISOString();
-
-function HallmarkEventStatTile() {
-  const now = Date.now();
-  const [index, setIndex] = useState(0);
-
-  const { data: connectedCalsRaw } = useListConnectedCalendars();
-  // Defensive: guard against non-array data (e.g. from a mis-routed dev proxy
-  // returning an HTML page). The default = [] on destructuring only fires for
-  // undefined, not for other non-array values.
-  const connectedCals = Array.isArray(connectedCalsRaw) ? connectedCalsRaw : [];
-  const hallmarkCal = connectedCals.find((c) => c.isHallmarkCalendar) ?? null;
-
-  const { data: gcalEventsRaw } = useListConnectedCalendarEvents(
-    hallmarkCal?.id ?? 0,
-    HM_TILE_RANGE_START,
-    HM_TILE_RANGE_END,
-    {
-      query: {
-        enabled: !!hallmarkCal,
-        queryKey: getListConnectedCalendarEventsQueryKey(
-          hallmarkCal?.id ?? 0,
-          HM_TILE_RANGE_START,
-          HM_TILE_RANGE_END,
-        ),
-      },
-    },
-  );
-
-  // Array.isArray (not `?? []`) — see connectedCalsRaw comment above.
-  const gcalEvents = Array.isArray(gcalEventsRaw) ? gcalEventsRaw : [];
-  const upcoming = gcalEvents
-    .map((e) => {
-      // The server's fromGoogleEvent() already converts Google's exclusive
-      // all-day end date back to an inclusive one, so e.end here is already
-      // correct — do not subtract another day, or a multi-day event loses
-      // its last day and a single-day event ends up with end < start
-      // (rendering as e.g. "Oct 10 – Oct 8" instead of "Oct 8 – Oct 10").
-      // Swap defensively in case an event was ever entered backwards.
-      const rawStart = e.start.slice(0, 10);
-      const rawEnd = e.end.slice(0, 10);
-      const startDate = rawStart <= rawEnd ? rawStart : rawEnd;
-      const endDate = rawStart <= rawEnd ? rawEnd : rawStart;
-      return {
-        title: e.title,
-        start: new Date(`${startDate}T00:00:00`),
-        end: new Date(`${endDate}T23:59:59`),
-      };
-    })
-    .filter((e) => e.end.getTime() >= now)
-    .sort((a, b) => a.start.getTime() - b.start.getTime());
-
-  const list: Array<{ title: string; start: Date; end: Date }> =
-    upcoming.length > 0
-      ? upcoming
-      : [
-          {
-            title: "Hallmark Open House",
-            start: HALLMARK_OPEN_HOUSE.start,
-            end: HALLMARK_OPEN_HOUSE.end,
-          },
-        ];
-
-  useEffect(() => {
-    if (list.length <= 1) return;
-    const id = setInterval(() => setIndex((i) => (i + 1) % list.length), 4000);
-    return () => clearInterval(id);
-  }, [list.length]);
-
-  const current = list[index % list.length];
-  const isLive = now >= current.start.getTime() && now <= current.end.getTime();
-  const daysAway = isLive
-    ? 0
-    : Math.max(0, Math.ceil((current.start.getTime() - now) / 86_400_000));
-
-  const shortTitle = current.title.replace(/hallmark'?s?\s*/i, "").trim();
-  const href = `/modules/ornaments/hallmark-events?view=month`;
-
-  const dateRange =
-    current.start.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-    }) +
-    " – " +
-    current.end.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-
-  return (
-    <div
-      data-testid="hallmark-event-tile"
-      role="link"
-      tabIndex={0}
-      title={current.title}
-      onClick={(e) => {
-        e.stopPropagation();
-        e.preventDefault();
-        window.location.href = href;
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.stopPropagation();
-          e.preventDefault();
-          window.location.href = href;
-        }
-      }}
-      className={`flex-[2] flex flex-col justify-between p-3 rounded-lg min-w-0 cursor-pointer h-[76px] overflow-hidden ${
-        isLive
-          ? "bg-red-100 dark:bg-red-900/40 hover:bg-red-200 dark:hover:bg-red-900/60"
-          : "bg-amber-50 dark:bg-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/50"
-      }`}
-    >
-      {/* Top: countdown or LIVE indicator */}
-      <div>
-        {isLive ? (
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
-            <span className="text-lg font-bold text-red-700 dark:text-red-300 leading-none uppercase tracking-wide">
-              Live Now
-            </span>
-          </div>
-        ) : (
-          <div className="flex items-end gap-2">
-            <span className="text-2xl font-bold text-amber-800 dark:text-amber-200 tabular-nums leading-none">
-              {daysAway}
-            </span>
-            <div className="text-[10px] font-medium text-amber-700/70 dark:text-amber-300/70 uppercase tracking-wider leading-tight pb-0.5">
-              days
-              <br />
-              until
-            </div>
-          </div>
-        )}
-      </div>
-      {/* Bottom: event name + date range */}
-      <div className="mt-2 min-w-0">
-        <span
-          className={`text-xs font-semibold uppercase tracking-wide truncate block ${isLive ? "text-red-900/80 dark:text-red-100/70" : "text-amber-900/80 dark:text-amber-100/70"}`}
-        >
-          {shortTitle || current.title}
-        </span>
-        <span
-          className={`text-[9px] block mt-0.5 ${isLive ? "text-red-700/60 dark:text-red-300/50" : "text-amber-700/55 dark:text-amber-300/50"}`}
-        >
-          {dateRange}
-        </span>
-      </div>
-    </div>
-  );
-}
+// Extracted into its own file for testability; re-used here unchanged.
+import { HallmarkEventStatTile } from "@/components/HallmarkEventStatTile";
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 export function AppLauncher() {

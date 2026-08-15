@@ -268,7 +268,6 @@ describe("executeAddReminderAction — duplicate detection wiring", () => {
     }));
 
     // Mark duplicate check as done after the select .limit() is consumed.
-    const originalSelect = dbMock.select.getMockImplementation();
     dbMock.select.mockImplementationOnce(() => {
       // This is the trip lookup.
       const entry = selectQueue.shift()!;

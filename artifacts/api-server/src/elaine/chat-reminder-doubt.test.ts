@@ -822,48 +822,6 @@ type ForcedToolChoice = {
 };
 
 /**
- * Configures callModelWithSubagent's FIRST invocation to:
- *   1. Capture the tool_choice from the chat.completions.create request body.
- *   2. Return a list_reminders tool-call stream ONLY when tool_choice actually
- *      forces list_reminders — so removing the production nextForcedToolQueue
- *      wiring causes the tool-call stream to vanish and downstream assertions
- *      fail. Subsequent invocations fall back to the beforeEach default.
- *
- * Returns a getter for the captured tool_choice after the request resolves.
- */
-function setUpFirstRoundConditionalMock(): () => unknown {
-  let captured: unknown = undefined;
-  mockCallModelWithSubagent.mockImplementationOnce(
-    async (
-      _model: string,
-      _instructions: string,
-      callback: (
-        client: unknown,
-        model: string,
-        serverTools: unknown[],
-      ) => Promise<void>,
-    ) => {
-      const createFn = vi
-        .fn()
-        .mockImplementation((body: { tool_choice?: ForcedToolChoice }) => {
-          captured = body.tool_choice;
-          const isForced =
-            body.tool_choice?.type === "function" &&
-            body.tool_choice?.function?.name === "list_reminders";
-          return isForced
-            ? makeToolCallStream("list_reminders", "{}")
-            : (async function* () {})();
-        });
-      const mockClient = {
-        chat: { completions: { create: createFn } },
-      };
-      await callback(mockClient, "mock-model", []);
-    },
-  );
-  return () => captured;
-}
-
-/**
  * Primes the DB select queue for a fresh widget-default conversation with no
  * history. Queue positions match the order the chat route issues selects:
  *   1. appUsers lookup

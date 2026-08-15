@@ -37,7 +37,6 @@ vi.mock("../ebay/browse", () => ({
 // ── Imports (after vi.mock) ──────────────────────────────────────────────────
 
 import { lookupEbayMarketValue } from "./ebay-market-value";
-import { probeFindingApi } from "../ebay/finding";
 import { findCompletedItems, type FindingListing } from "../ebay/finding";
 import {
   searchActiveListingPrices,

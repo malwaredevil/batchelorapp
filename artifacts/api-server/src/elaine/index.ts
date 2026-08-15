@@ -9,7 +9,6 @@ import {
   count,
   inArray,
   sql,
-  ilike,
   or,
   lt,
   gte,
@@ -34,7 +33,6 @@ import {
   elaineDailyBriefs,
   travelsTrips,
   travelsTripDocuments,
-  travelsDocChunks,
   travelsTripPhotos,
   reminders,
   travelsWishlist,
@@ -92,11 +90,7 @@ import {
   resolveOpenAIResponsesModel,
   streamOpenAIResponseRound,
 } from "../lib/openai-responses";
-import {
-  APP_CONFIG_DEFAULTS,
-  getAllConfig,
-  updateConfigValue,
-} from "../lib/app-config";
+import { APP_CONFIG_DEFAULTS, updateConfigValue } from "../lib/app-config";
 import { listOpenRouterModels } from "../lib/openrouter-models";
 import { deleteTripPhoto } from "../lib/travels/storage";
 import { logActivity } from "../lib/soft-delete";
@@ -193,7 +187,6 @@ import {
   communicationActionSchemas,
   executeListContactChannels,
   executeListScheduledContacts,
-  listContactChannelsTool,
   LIST_CONTACT_CHANNELS_TOOL_NAME,
   LIST_SCHEDULED_CONTACTS_TOOL_NAME,
   type CommunicationActionType,
@@ -204,8 +197,6 @@ import {
   reminderActionSchemas,
   LIST_REMINDERS_TOOL_NAME,
   executeListRemindersTool,
-  findDuplicateTripReminder,
-  tripReminderDuplicateWarningClause,
   executeAddReminderAction,
   type ReminderActionType,
 } from "./reminder-actions";
@@ -256,7 +247,6 @@ import {
   SUMMARIZE_INBOX_TOOL_NAME,
 } from "./office-actions";
 import {
-  assertElaineToolFamilyCoverage,
   aggregateElaineTraceEvaluations,
   buildElaineSourceRoute,
   buildClassifierDoubtLessonInput,
@@ -286,7 +276,6 @@ import {
   preparedActionAcknowledgement,
   provenanceForTool,
   requestNeedsStructuredPlan,
-  sanitizeRuntimeText,
   selectElaineReplanTool,
   isReusableElaineResponseState,
   selectElaineOpenAIRole,
@@ -295,11 +284,7 @@ import {
   type ElaineRuntimeTrace,
   type ElaineTraceEvaluationInput,
 } from "./runtime";
-import {
-  buildElaineCapabilityRegistry,
-  buildPlannerCatalogFromCapabilities,
-  ELAINE_TOOL_POLICIES,
-} from "./capability-registry";
+import { ELAINE_TOOL_POLICIES } from "./capability-registry";
 import {
   ACTION_CONFIRMATION_MODES,
   ACTION_TOOL_NAMES,
@@ -361,7 +346,6 @@ import {
   ensureBucketWithPolicy,
   ELAINE_ATTACHMENTS_BUCKET_POLICY,
 } from "../lib/storage-core";
-import pdfParse from "pdf-parse";
 import {
   extractDocumentText,
   docTypeTagForMime,
@@ -601,9 +585,9 @@ function detectStatedLocation(message: string): string | null {
   // Captures everything after the preposition up to punctuation or end-of-string.
   const patterns = [
     // "I'm in/at X", "I am in/at X"
-    /\b(?:i['']?m|i\s+am)\s+(?:in|at)\s+(.+?)(?:[.!?,]|$)/i,
+    /\b(?:i['\u2019]?m|i\s+am)\s+(?:in|at)\s+(.+?)(?:[.!?,]|$)/i,
     // "we're in/at X", "we are in/at X"
-    /\b(?:we['']?re|we\s+are)\s+(?:in|at)\s+(.+?)(?:[.!?,]|$)/i,
+    /\b(?:we['\u2019]?re|we\s+are)\s+(?:in|at)\s+(.+?)(?:[.!?,]|$)/i,
     // "just arrived in/at X"
     /\bjust\s+arrived\s+(?:in|at)\s+(.+?)(?:[.!?,]|$)/i,
     // "just got to X"
@@ -615,7 +599,7 @@ function detectStatedLocation(message: string): string | null {
     // "staying in/at X"
     /\bstaying\s+(?:in|at)\s+(.+?)(?:[.!?,]|$)/i,
     // "I've arrived in/at X"
-    /\bi['']?ve\s+arrived\s+(?:in|at)\s+(.+?)(?:[.!?,]|$)/i,
+    /\bi['\u2019]?ve\s+arrived\s+(?:in|at)\s+(.+?)(?:[.!?,]|$)/i,
   ];
   for (const pattern of patterns) {
     const match = message.match(pattern);
@@ -2717,61 +2701,6 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
 // that aren't part of the confirm-then-execute flow.
 // ---------------------------------------------------------------------------
 
-// Per-app allowlists for navigation suggestions. Elaine is one continuous
-// conversation across apps, but "suggest_navigation" must only ever point at
-// a real path in the app the user is currently viewing (see ChatBody.appId).
-const NAVIGATE_ALLOWED_PATHS_BY_APP: Record<AppId, readonly string[]> = {
-  travels: [
-    "/",
-    "/trips",
-    "/map",
-    "/explore",
-    "/wishlist",
-    "/destinations",
-    "/settings",
-  ],
-  pottery: [
-    "/",
-    "/add",
-    "/compare",
-    "/categories",
-    "/maintenance",
-    "/settings",
-  ],
-  quilting: [
-    "/fabrics",
-    "/fabrics/add",
-    "/patterns",
-    "/patterns/add",
-    "/quilts",
-    "/quilts/add",
-    "/compare",
-    "/blocks",
-    "/blocks/new",
-    "/library/blocks",
-    "/library/blocks/new",
-    "/layouts",
-    "/layouts/new",
-    "/whole-quilt",
-    "/whole-quilt/designer",
-    "/shopping",
-    "/tools/yardage",
-    "/categories",
-    "/maintenance",
-  ],
-  ornaments: [
-    "/",
-    "/add",
-    "/scan",
-    "/stats",
-    "/categories",
-    "/maintenance",
-    "/settings",
-  ],
-  hub: ["/", "/account"],
-  elaine: ["/", "/memory"],
-};
-
 // Dynamic-id path shapes allowed per app, checked against the same regex
 // pattern for every app since only the "kind" segment differs.
 const NAVIGATE_PATH_RE_BY_APP: Record<AppId, RegExp> = {
@@ -2790,7 +2719,7 @@ const NAVIGATE_PATH_RE_BY_APP: Record<AppId, RegExp> = {
 // The client detects these prefixes and uses window.location.href instead of
 // the SPA router so the correct React bundle loads.
 const CROSS_APP_NAVIGATE_RE =
-  /^\/(pottery|quilting|travels|ornaments|elaine)(\/[^?#]*)?(\?[a-zA-Z0-9=+%._~!$&'()*+,;:-]*)?\/?$|^\/barcode-lookup$/;
+  /^\/(pottery|quilting|travels|ornaments|elaine)(\/[^?#]*)?(\?[a-zA-Z0-9=+%._~!$&'()*,;:-]*)?\/?$|^\/barcode-lookup$/;
 
 function navigatePayloadSchemaFor(appId: AppId) {
   return z.object({
@@ -2806,11 +2735,6 @@ function navigatePayloadSchemaFor(appId: AppId) {
     reason: z.string().min(1).max(300),
   });
 }
-
-const NavigateToolPayload = z.object({
-  path: z.string().max(60),
-  reason: z.string().min(1).max(300),
-});
 
 const RememberToolPayload = z.object({
   content: z.string().min(1).max(2000),

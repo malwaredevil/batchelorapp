@@ -6,7 +6,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const {
   mockChatCreate,
-  capturedCreateParams,
   mockGetElaineGlobalConfig,
   mockIsOpenAIResponsesConfigured,
   mockPersistElaineTrace,
@@ -15,8 +14,6 @@ const {
   mockGetRelevantElaineMemory,
   mockGetElaineMemorySummary,
   mockLoadCrossChannelContext,
-  mockDbSelect,
-  mockDbInsert,
 } = vi.hoisted(() => {
   const capturedCreateParams: unknown[] = [];
 

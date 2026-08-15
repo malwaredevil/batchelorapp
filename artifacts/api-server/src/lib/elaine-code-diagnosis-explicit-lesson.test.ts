@@ -23,8 +23,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const {
   selectQueue,
-  insertResult,
-  updateResult,
   dbMock,
   mockCallModel,
   setInsertResult,

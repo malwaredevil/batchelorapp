@@ -1,6 +1,6 @@
 import { z } from "zod/v4";
 import type OpenAI from "openai";
-import { and, count, eq, gt, ilike, isNull, lte, min, sql } from "drizzle-orm";
+import { and, count, eq, gt, ilike, isNull, min, sql } from "drizzle-orm";
 import {
   db,
   appUsers,

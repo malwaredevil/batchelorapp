@@ -116,7 +116,10 @@ const CONTENT_SECRET_PATTERNS: RegExp[] = [
   /\bAIza[A-Za-z0-9_-]{35,}\b/, // Google API key
   /\bxox[bpoa]-[0-9A-Za-z-]{10,}\b/, // Slack token
   /\bre_[A-Za-z0-9]{24,}\b/, // Resend key
-  /\d{10,}-[a-z0-9]{32}\.apps\.googleusercontent\.com/, // Google OAuth client ID
+  // Google OAuth client ID. Anchored on both sides against any adjacent
+  // domain-like character so a crafted longer host (e.g. a client-id-shaped
+  // prefix glued onto an unrelated domain) can't slip past this check.
+  /(?:^|[^\w.-])\d{10,}-[a-z0-9]{32}\.apps\.googleusercontent\.com(?:[^\w.-]|$)/,
 ];
 
 const MAX_FILE_BYTES = 200 * 1024;
@@ -185,13 +188,15 @@ export function readAllowlistedSourceFiles(patternKey: string): ReviewedFile[] {
         `refusing to read "${relPath}": resolves outside the repo root`,
       );
     }
-    const stat = fs.statSync(absPath);
-    if (stat.size > MAX_FILE_BYTES) {
+    // Read once and size-check the content actually returned, rather than
+    // statting then reading — a separate stat-then-read pair leaves a TOCTOU
+    // window where the file could change between the two calls.
+    const content = fs.readFileSync(absPath, "utf-8");
+    if (Buffer.byteLength(content, "utf-8") > MAX_FILE_BYTES) {
       throw new CodeDiagnosisFileError(
-        `refusing to read "${relPath}": file too large (${stat.size} bytes)`,
+        `refusing to read "${relPath}": file too large (${Buffer.byteLength(content, "utf-8")} bytes)`,
       );
     }
-    const content = fs.readFileSync(absPath, "utf-8");
     if (hasSecretLikeContent(content)) {
       throw new CodeDiagnosisFileError(
         `refusing to read "${relPath}": content matches a secret-like pattern`,

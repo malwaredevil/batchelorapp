@@ -17,6 +17,7 @@ import { pool } from "@workspace/db";
 import { runReminderDeliveries } from "../lib/reminders-scheduler";
 import { computeAndStoreNudges } from "../lib/travels-nudges";
 import { runScheduledIntegrationsHealthNudges } from "../lib/integrations-health-nudges";
+import { computeAndStoreSentryErrorNudges } from "../lib/sentry-error-nudges";
 import { scanAllGmailConnections } from "../lib/gmail-scan";
 import {
   shouldRunScheduledTask,
@@ -26,6 +27,33 @@ import {
 import { logger } from "../lib/logger";
 
 const GMAIL_SCAN_INTERVAL_MS = 6 * 60 * 60 * 1000; // every 6 hours
+const SENTRY_NUDGE_INTERVAL_MS = 30 * 60 * 1000; // every 30 minutes
+// Must match SENTRY_NUDGE_TASK_NAME in lib/sentry-error-nudges.ts — kept as a
+// local literal because check-scheduler-names.ts cannot resolve cross-file
+// imports.
+const SENTRY_NUDGE_TASK_NAME = "sentry-error-nudges";
+
+async function runSentryErrorNudgesIfDue(): Promise<void> {
+  if (
+    !(await shouldRunScheduledTask(
+      SENTRY_NUDGE_TASK_NAME,
+      SENTRY_NUDGE_INTERVAL_MS,
+    ))
+  ) {
+    logger.info(
+      "send-reminder-alerts: sentry-error-nudges skipped (ran within the last 30 minutes)",
+    );
+    return;
+  }
+  try {
+    await computeAndStoreSentryErrorNudges();
+    await recordScheduledTaskSuccess(SENTRY_NUDGE_TASK_NAME);
+  } catch (err) {
+    logger.error({ err }, "send-reminder-alerts: sentry-error-nudges failed");
+    recordScheduledTaskFailure(SENTRY_NUDGE_TASK_NAME);
+    throw err;
+  }
+}
 
 async function runGmailScanIfDue(): Promise<void> {
   if (!(await shouldRunScheduledTask("gmail-scan", GMAIL_SCAN_INTERVAL_MS))) {
@@ -52,6 +80,7 @@ Promise.all([
   // ON CONFLICT DO NOTHING deduplicating already-known failures.
   runScheduledIntegrationsHealthNudges(),
   runGmailScanIfDue(),
+  runSentryErrorNudgesIfDue(),
 ])
   .then(async () => {
     logger.info("send-reminder-alerts: run complete");

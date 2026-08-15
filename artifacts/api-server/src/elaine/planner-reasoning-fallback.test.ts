@@ -12,14 +12,28 @@
  * never the sentinel string.
  */
 
-import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  beforeAll,
+} from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
 import { PRIVATE_REASONING_SENTINEL } from "./runtime/contracts";
 import { buildPlannerToolCatalogMock } from "./test-helpers/planner-tool-catalog-mock";
+import {
+  elaineLessonsMockFactory,
+  loggerMockFactory,
+  sentryMockFactory,
+  rateLimitMockFactory,
+} from "./test-helpers/standard-mock-scaffold";
+import { buildRuntimeMock } from "./test-helpers/runtime-mock";
 
 // ── Hoisted mock controls ────────────────────────────────────────────────────
-
 const {
   mockRegisterToolCalls,
   mockRecordModelRound,
@@ -139,30 +153,11 @@ const REASONING_ONLY_CANDIDATES_JSON = JSON.stringify({
 
 // ── vi.mock() declarations ────────────────────────────────────────────────────
 
-vi.mock("@sentry/node", () => ({
-  init: vi.fn(),
-  setUser: vi.fn(),
-  captureException: vi.fn(),
-  withScope: vi.fn(),
-  startSpan: vi.fn((_o: unknown, cb: () => unknown) => cb()),
-  setConversationId: vi.fn(),
-  Scope: class {},
-}));
+vi.mock("@sentry/node", () => sentryMockFactory());
 
-vi.mock("../lib/logger", () => ({
-  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
-}));
+vi.mock("../lib/logger", () => loggerMockFactory());
 
-vi.mock("../middleware/rateLimit", () => ({
-  loginLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  passwordResetLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  phoneVerifyLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  authLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  apiLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  adminLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  webhookLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  aiLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-}));
+vi.mock("../middleware/rateLimit", () => rateLimitMockFactory());
 
 vi.mock("../middleware/auth", () => ({
   requireAuth: (
@@ -436,19 +431,7 @@ vi.mock("../lib/elaine-tasks", () => ({
   listElaineTasksForUser: vi.fn().mockResolvedValue([]),
 }));
 
-vi.mock("../lib/elaine-lessons", () => ({
-  ELAINE_LESSON_DOMAINS: [
-    "travels",
-    "pottery",
-    "quilting",
-    "ornaments",
-    "general",
-  ],
-  getRelevantElaineLessons: vi
-    .fn()
-    .mockResolvedValue({ lessons: [], evidenceBlock: "" }),
-  recordElaineLesson: vi.fn().mockResolvedValue(undefined),
-}));
+vi.mock("../lib/elaine-lessons", () => elaineLessonsMockFactory());
 
 vi.mock("./office-actions", () => ({
   executeOfficeTool: vi.fn().mockResolvedValue({}),
@@ -464,44 +447,18 @@ vi.mock("./office-actions", () => ({
 // return true so the planner path actually fires for our test message.
 vi.mock("./runtime", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./runtime")>();
-  return {
-    assertElaineToolFamilyCoverage: vi.fn(),
-    aggregateElaineTraceEvaluations: vi.fn().mockReturnValue([]),
-    detectClaimedCheckWithoutToolCall: vi.fn().mockReturnValue(null),
-    buildSelfHealLessonInput: vi.fn(),
-    buildElaineSourceRoute: vi.fn().mockReturnValue({
-      preferredKinds: [],
-      fallbackKinds: [],
-      sourceKind: "direct",
-      sourceName: "current page context",
-      confidence: "high",
-    }),
-    classifyElaineRequest: vi.fn().mockReturnValue({
-      kind: "answer",
-      complexity: "multi_step",
-      requiresFreshData: false,
-      hasAttachment: false,
-    }),
-    isSchedulingDoubtMessage: vi.fn().mockReturnValue(false),
-    isReminderDoubtMessage: vi.fn().mockReturnValue(false),
-    buildClassifierDoubtLessonInput: vi.fn().mockReturnValue({
-      outcome: "mistake",
-      domain: "general",
-      situation: "mock situation",
-      takeaway: "mock takeaway",
-      tags: ["classifier-doubt"],
-    }),
-    classifierDoubtPatternKey: vi.fn().mockReturnValue("classifier_doubt:mock"),
-    completedActionAcknowledgement: vi.fn().mockReturnValue(""),
-    createElaineTurnTrace: vi.fn().mockResolvedValue({ id: 1 }),
+  return buildRuntimeMock({
     // Real createFallbackPlan so the fallback plan shape is correct.
     createFallbackPlan: actual.createFallbackPlan,
-    decideElaineModelStreamRecovery: vi.fn().mockReturnValue({
-      retry: false,
-      suppressTools: false,
-      resetPartialContent: false,
-    }),
-    ELAINE_READ_CONCURRENCY: 3,
+    // Real generateElainePlan — this is the code under test.  callModel is
+    // mocked to return REASONING_ONLY_CANDIDATES_JSON so the sentinel check
+    // fires inside validateElainePlan and the function falls back.
+    generateElainePlan: actual.generateElainePlan,
+    // Overridden per-test to true so the planner path fires.
+    requestNeedsStructuredPlan: (...args: unknown[]) =>
+      mockRequestNeedsStructuredPlan(...args),
+    // Real sanitizeRuntimeText so sentinel detection works correctly.
+    sanitizeRuntimeText: actual.sanitizeRuntimeText,
     ElaineTurnRuntime: class {
       registerToolCalls = mockRegisterToolCalls;
       recordModelRound = mockRecordModelRound;
@@ -512,39 +469,7 @@ vi.mock("./runtime", async (importOriginal) => {
       markFailedReadStepsAdjusted = mockMarkFailedReadStepsAdjusted;
       recordObservation = mockRecordObservation;
     },
-    evaluateForecastDateCoverage: vi.fn().mockResolvedValue({}),
-    evaluateElaineTrace: vi.fn().mockResolvedValue({}),
-    findElaineSatisfiedFallback: vi.fn().mockReturnValue(null),
-    finishElaineTurnTrace: vi.fn().mockResolvedValue(undefined),
-    // Real generateElainePlan — this is the code under test.  callModel is
-    // mocked to return REASONING_ONLY_CANDIDATES_JSON so the sentinel check
-    // fires inside validateElainePlan and the function falls back.
-    generateElainePlan: actual.generateElainePlan,
-    loadElaineTurnTracesForMessages: vi.fn().mockResolvedValue(new Map()),
-    mapWithConcurrency: vi
-      .fn()
-      .mockImplementation(
-        async <T>(
-          items: T[],
-          _concurrency: number,
-          fn: (item: T) => Promise<unknown>,
-        ) => Promise.all(items.map(fn)),
-      ),
-    MODEL_VISIBLE_HARD_TOOL_NAMES: new Set<string>(),
-    MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS: new Map<string, string>(),
-    persistElaineTraceBestEffort: vi.fn().mockResolvedValue(false),
-    preparedActionAcknowledgement: vi.fn().mockReturnValue(""),
-    provenanceForTool: vi.fn().mockReturnValue(null),
-    // Overridden per-test to true so the planner path fires.
-    requestNeedsStructuredPlan: (...args: unknown[]) =>
-      mockRequestNeedsStructuredPlan(...args),
-    // Real sanitizeRuntimeText so sentinel detection works correctly.
-    sanitizeRuntimeText: actual.sanitizeRuntimeText,
-    selectElaineReplanTool: vi.fn().mockReturnValue(null),
-    isReusableElaineResponseState: vi.fn().mockReturnValue(false),
-    selectElaineOpenAIRole: vi.fn().mockReturnValue("assistant"),
-    stripElaineCitationMetadata: vi.fn().mockImplementation((t: string) => t),
-  };
+  });
 });
 
 vi.mock("./capability-registry", () => ({
@@ -705,7 +630,7 @@ const dbMock = {
 };
 
 vi.mock("@workspace/db", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@workspace/db")>();
+  const actual = await importOriginal<typeof import("./runtime")>();
   return {
     ...actual,
     db: dbMock,
@@ -776,6 +701,24 @@ function primeDbForFreshChat() {
           ];
     return makeInsertBuilder(val);
   });
+}
+
+/**
+ * Asserts that every selectQueue slot added by primeDbForFreshChat was
+ * consumed during the test.  A leftover slot means the handler issued fewer
+ * db.select() calls than the queue was primed for; a deficit causes a cryptic
+ * ECONNRESET or wrong-data failure in the next test.
+ *
+ * Call this in afterEach so drift is surfaced with a clear failure message
+ * rather than a mysterious queue-misalignment error in a later test.
+ */
+function assertSelectQueueDrained() {
+  expect(
+    selectQueue.length,
+    `selectQueue has ${selectQueue.length} unconsumed slot(s) after the test — ` +
+      `update primeDbForFreshChat to match the current db.select() call order ` +
+      `in the chat handler (index.ts)`,
+  ).toBe(0);
 }
 
 /**
@@ -878,6 +821,10 @@ beforeEach(() => {
   mockRequestNeedsStructuredPlan.mockReturnValue(true);
 });
 
+afterEach(() => {
+  assertSelectQueueDrained();
+});
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe("POST /api/elaine/chat — planner pure-reasoning goal fallback", () => {
@@ -889,7 +836,7 @@ describe("POST /api/elaine/chat — planner pure-reasoning goal fallback", () =>
     const res = await request(buildApp())
       .post("/api/elaine/chat")
       .send({
-        message: "What's the weather in Paris this week?",
+        message: "Find me the best restaurants in Rome",
         appId: "travels",
       })
       .buffer(true);

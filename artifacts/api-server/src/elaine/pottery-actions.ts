@@ -22,6 +22,10 @@ import {
 } from "../routes/pottery/pottery";
 import { mergePotteryCategories } from "../routes/pottery/categories";
 import { deleteImage } from "../lib/pottery/storage";
+import {
+  lookupEbayMarketValue,
+  buildEbayQuery,
+} from "../lib/pottery/ebay-market-value";
 import { logActivity } from "../lib/soft-delete";
 import { env } from "../lib/env";
 import { consumeAiRateLimit } from "../middleware/rateLimit";
@@ -125,6 +129,11 @@ export const AddPhotoToPotteryPayload = z.object({
   attachmentUrl: z.string().url().max(2000),
 });
 
+export const EstimatePotteryMarketValueActionPayload = z.object({
+  itemId: z.number().int().positive(),
+  force: z.boolean().optional(),
+});
+
 export const potteryActionSchemas = [
   z.object({
     type: z.literal("update_pottery_item"),
@@ -170,6 +179,10 @@ export const potteryActionSchemas = [
     type: z.literal("add_photo_to_pottery"),
     payload: AddPhotoToPotteryPayload,
   }),
+  z.object({
+    type: z.literal("estimate_pottery_market_value"),
+    payload: EstimatePotteryMarketValueActionPayload,
+  }),
 ] as const;
 
 export type PotteryActionType =
@@ -183,7 +196,8 @@ export type PotteryActionType =
   | "promote_pottery_photo"
   | "merge_pottery_categories"
   | "bulk_reanalyze_pottery"
-  | "add_photo_to_pottery";
+  | "add_photo_to_pottery"
+  | "estimate_pottery_market_value";
 
 async function getPotteryItemLabelInfo(
   itemId: number,
@@ -459,6 +473,158 @@ export const potteryActionExecutors: Record<PotteryActionType, ActionExecutor> =
       };
     }) as ActionExecutor,
 
+    estimate_pottery_market_value: (async (
+      payload: z.infer<typeof EstimatePotteryMarketValueActionPayload>,
+      userId: number,
+    ) => {
+      if (!env.ebayAppId) {
+        return { status: 503, body: { error: "eBay API not configured." } };
+      }
+
+      const EBAY_CACHE_STALE_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
+
+      const [item] = await db
+        .select({
+          id: potteryItems.id,
+          name: potteryItems.name,
+          maker: potteryItems.maker,
+          style: potteryItems.style,
+          ebayPriceCachedAt: potteryItems.ebayPriceCachedAt,
+          ebayPriceMinUsd: potteryItems.ebayPriceMinUsd,
+          ebayPriceMaxUsd: potteryItems.ebayPriceMaxUsd,
+          ebayPriceMedianUsd: potteryItems.ebayPriceMedianUsd,
+          ebayPriceListings: potteryItems.ebayPriceListings,
+        })
+        .from(potteryItems)
+        .where(eq(potteryItems.id, payload.itemId));
+
+      if (!item) {
+        return { status: 404, body: { error: "Item not found." } };
+      }
+
+      const force = payload.force === true;
+      const cacheAgeMs = item.ebayPriceCachedAt
+        ? Date.now() - item.ebayPriceCachedAt.getTime()
+        : Infinity;
+
+      if (
+        !force &&
+        cacheAgeMs < EBAY_CACHE_STALE_AFTER_MS &&
+        item.ebayPriceMinUsd != null
+      ) {
+        const cached = item.ebayPriceListings as {
+          sourceType?: string;
+          items?: unknown[];
+        } | null;
+        const searchQuery = buildEbayQuery(item.name, {
+          maker: item.maker,
+          style: item.style,
+        });
+        return {
+          status: 200,
+          body: {
+            type: "estimate_pottery_market_value",
+            result: {
+              priceMinUsd: Number(item.ebayPriceMinUsd),
+              priceMaxUsd: item.ebayPriceMaxUsd
+                ? Number(item.ebayPriceMaxUsd)
+                : null,
+              priceMedianUsd: item.ebayPriceMedianUsd
+                ? Number(item.ebayPriceMedianUsd)
+                : null,
+              cachedAt: item.ebayPriceCachedAt!.toISOString(),
+              listingCount: cached?.items?.length ?? 0,
+              sourceType: cached?.sourceType ?? "active_listing",
+              searchQuery,
+              fromCache: true,
+            },
+          },
+        };
+      }
+
+      // Enforce the AI rate limit before triggering a paid Apify eBay scrape.
+      const { limited } = await consumeAiRateLimit(userId);
+      if (limited) {
+        return {
+          status: 429,
+          body: { error: "Too many AI requests, please try again later." },
+        };
+      }
+
+      const query = buildEbayQuery(item.name, {
+        maker: item.maker,
+        style: item.style,
+      });
+      let result: Awaited<ReturnType<typeof lookupEbayMarketValue>>;
+      try {
+        result = await lookupEbayMarketValue(query);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          status: 503,
+          body: {
+            error: `eBay lookup is temporarily unavailable. Please try again in a moment. (${msg.slice(0, 120)})`,
+          },
+        };
+      }
+      if (!result) {
+        return {
+          status: 422,
+          body: {
+            error:
+              "No eBay listings found for this item. Try refining the search.",
+          },
+        };
+      }
+
+      const listingsWithSource = {
+        sourceType: result.sourceType,
+        items: result.listings,
+      };
+      const [updated] = await db
+        .update(potteryItems)
+        .set({
+          ebayPriceMinUsd: String(result.priceMinUsd),
+          ebayPriceMaxUsd: String(result.priceMaxUsd),
+          ebayPriceMedianUsd: String(result.priceMedianUsd),
+          ebayPriceCachedAt: new Date(),
+          ebayPriceListings: listingsWithSource as unknown as Record<
+            string,
+            unknown
+          >,
+        })
+        .where(eq(potteryItems.id, payload.itemId))
+        .returning({
+          ebayPriceMinUsd: potteryItems.ebayPriceMinUsd,
+          ebayPriceMaxUsd: potteryItems.ebayPriceMaxUsd,
+          ebayPriceMedianUsd: potteryItems.ebayPriceMedianUsd,
+          ebayPriceCachedAt: potteryItems.ebayPriceCachedAt,
+        });
+
+      return {
+        status: 200,
+        body: {
+          type: "estimate_pottery_market_value",
+          result: {
+            priceMinUsd: updated.ebayPriceMinUsd
+              ? Number(updated.ebayPriceMinUsd)
+              : null,
+            priceMaxUsd: updated.ebayPriceMaxUsd
+              ? Number(updated.ebayPriceMaxUsd)
+              : null,
+            priceMedianUsd: updated.ebayPriceMedianUsd
+              ? Number(updated.ebayPriceMedianUsd)
+              : null,
+            cachedAt: updated.ebayPriceCachedAt?.toISOString() ?? null,
+            listingCount: result.listingCount,
+            sourceType: result.sourceType,
+            searchQuery: query,
+            fromCache: false,
+          },
+        },
+      };
+    }) as ActionExecutor,
+
     add_photo_to_pottery: (async (
       payload: z.infer<typeof AddPhotoToPotteryPayload>,
       userId: number,
@@ -606,6 +772,16 @@ export async function buildPotteryActionLabel(action: {
     }
     case "add_photo_to_pottery": {
       return "Add this photo to your pottery collection (runs full AI cataloguing)";
+    }
+    case "estimate_pottery_market_value": {
+      const payload = action.payload as z.infer<
+        typeof EstimatePotteryMarketValueActionPayload
+      >;
+      const item = await getPotteryItemLabelInfo(payload.itemId);
+      const name = item ? `"${item.name}"` : "this item";
+      return payload.force
+        ? `Refresh eBay market value for ${name} (bypasses cache)`
+        : `Look up eBay market value for ${name}`;
     }
   }
 }
@@ -792,6 +968,29 @@ export const potteryActionTools: OpenAI.Chat.Completions.ChatCompletionTool[] =
             },
           },
           required: ["attachmentUrl"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "estimate_pottery_market_value",
+        description:
+          "Look up current eBay market prices for a pottery item the user is viewing. Returns the cached result unless force is true. Pass force: true when the user explicitly asks to refresh, get fresh/current/updated prices, or says the price has changed — otherwise omit it (or pass false) to use the 7-day cache. Only call this if the item's numeric id is visible on screen; never guess an id.",
+        parameters: {
+          type: "object",
+          properties: {
+            itemId: {
+              type: "integer",
+              description: "Numeric id of the pottery item to look up",
+            },
+            force: {
+              type: "boolean",
+              description:
+                "Pass true to bypass the 7-day cache and fetch fresh eBay data. Only set this when the user explicitly requests a refresh or says prices have changed.",
+            },
+          },
+          required: ["itemId"],
         },
       },
     },

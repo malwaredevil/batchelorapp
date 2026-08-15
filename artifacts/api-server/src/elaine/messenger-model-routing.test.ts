@@ -17,6 +17,12 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import {
+  elaineLessonsMockFactory,
+  loggerMockFactory,
+  sentryMockFactory,
+  rateLimitMockFactory,
+} from "./test-helpers/standard-mock-scaffold";
 
 // ---------------------------------------------------------------------------
 // Hoisted shared state — must exist before vi.mock factories run.
@@ -97,23 +103,9 @@ const { dbMock, callModelSpy, selectQueue } = vi.hoisted(() => {
 // Module mocks
 // ---------------------------------------------------------------------------
 
-vi.mock("../lib/logger", () => ({
-  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
-}));
+vi.mock("../lib/logger", () => loggerMockFactory());
 
-vi.mock("../middleware/rateLimit", () => ({
-  webhookLimiter: vi.fn(),
-  authLimiter: vi.fn(),
-  apiLimiter: vi.fn(),
-  adminLimiter: vi.fn(),
-  phoneVerifyLimiter: vi.fn(),
-  aiLimiter: vi.fn(),
-  loginLimiter: vi.fn(),
-  bulkAiLimiter: vi.fn(),
-  compareLimiter: vi.fn(),
-  supplementalUploadLimiter: vi.fn(),
-  passwordResetLimiter: vi.fn(),
-}));
+vi.mock("../middleware/rateLimit", () => rateLimitMockFactory());
 
 vi.mock("../middleware/auth", () => ({
   requireAuth: vi.fn((_req: unknown, _res: unknown, next: () => void) =>
@@ -121,17 +113,7 @@ vi.mock("../middleware/auth", () => ({
   ),
 }));
 
-vi.mock("@sentry/node", () => ({
-  setConversationId: vi.fn(),
-  startSpan: vi.fn((_opts: unknown, fn: (s: unknown) => unknown) =>
-    fn({ setAttribute: vi.fn() }),
-  ),
-  withScope: vi.fn((fn: (s: unknown) => unknown) => fn({ setExtra: vi.fn() })),
-  captureException: vi.fn(),
-  captureCheckIn: vi.fn(),
-  setUser: vi.fn(),
-  init: vi.fn(),
-}));
+vi.mock("@sentry/node", () => sentryMockFactory());
 
 vi.mock("@workspace/db", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@workspace/db")>();
@@ -189,22 +171,10 @@ vi.mock("../lib/elaine-cross-channel", () => ({
   appendCrossChannelEntry: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("../lib/elaine-lessons", () => ({
-  ELAINE_LESSON_DOMAINS: [
-    "travels",
-    "pottery",
-    "quilting",
-    "ornaments",
-    "office",
-    "reminders",
-    "memory",
-    "general",
-  ],
-  getRelevantElaineLessons: vi
-    .fn()
-    .mockResolvedValue({ lessons: [], evidenceBlock: "" }),
-  recordElaineLesson: vi.fn().mockResolvedValue(undefined),
-}));
+// Uses the shared scaffold to keep the elaine-lessons mock in sync with siblings.
+// Wrapped in a lambda so Vitest's hoist pass doesn't reference the import
+// binding before the module is initialized.
+vi.mock("../lib/elaine-lessons", () => elaineLessonsMockFactory());
 
 vi.mock("../lib/app-config", () => ({
   getAllConfig: vi.fn().mockResolvedValue([]),
@@ -369,7 +339,7 @@ describe("runMessengerElaineTurn — model tier selection", () => {
     expect(callModelSpy).toHaveBeenCalled();
 
     // The first positional argument to callModel is the model string.
-    const modelArg = callModelSpy.mock.calls[0]?.[0] as string;
+    const modelArg = callModelSpy.mock.calls[0][0] as string;
     expect(modelArg).toBe("smart-restricted-model");
     expect(modelArg).not.toBe("fast-chat-model");
   });

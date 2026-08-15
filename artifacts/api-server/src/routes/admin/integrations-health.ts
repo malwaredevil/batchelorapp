@@ -18,7 +18,6 @@ import { adminLimiter } from "../../middleware/rateLimit";
 import { env } from "../../lib/env";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
-import { probeFindingApi } from "../../lib/ebay/finding";
 
 const router: IRouter = Router();
 router.use(adminLimiter, requireAuth, requireOwner);
@@ -508,69 +507,12 @@ async function checkEbayOAuth(): Promise<ServiceCheckResult> {
   });
 }
 
-/**
- * eBay Finding API check — probes the legacy `svcs.ebay.com` endpoint with a
- * minimal `findCompletedItems` call to detect WAF blocks (418/403) or quota
- * exhaustion that the OAuth check above cannot see.
- *
- * The OAuth check only verifies that the credential exchange works; it says
- * nothing about whether the Finding API itself is reachable. A 418 from the
- * Finding API with an empty body is a known symptom of eBay's WAF blocking
- * headless requests — this check surfaces that failure explicitly.
- */
-async function checkEbayFindingApi(): Promise<ServiceCheckResult> {
-  const { ebayAppId } = env;
-  if (!ebayAppId) {
-    return { service: "eBay Finding API", status: "missing_key" };
-  }
-  const start = Date.now();
-  let lastDetail: string | undefined;
-
-  for (let attempt = 1; attempt <= CHECK_MAX_ATTEMPTS; attempt++) {
-    try {
-      const result = await Promise.race([
-        probeFindingApi(ebayAppId),
-        new Promise<never>((_, reject) =>
-          setTimeout(
-            () => reject(new Error(`timeout after ${CHECK_TIMEOUT_MS}ms`)),
-            CHECK_TIMEOUT_MS,
-          ),
-        ),
-      ]);
-
-      const latencyMs = Date.now() - start;
-      if (result.ok) {
-        return { service: "eBay Finding API", status: "ok", latencyMs };
-      }
-      // 429 / 5xx are transient; 418/403 are WAF blocks (permanent until fixed).
-      const isTransient =
-        result.status !== undefined && isRetryableStatus(result.status);
-      if (isTransient && attempt < CHECK_MAX_ATTEMPTS) {
-        lastDetail = result.detail;
-        await new Promise<void>((r) => setTimeout(r, CHECK_RETRY_DELAY_MS));
-        continue;
-      }
-      return {
-        service: "eBay Finding API",
-        status: "error",
-        latencyMs,
-        detail: result.detail,
-      };
-    } catch (err) {
-      lastDetail = err instanceof Error ? err.message : String(err);
-      if (attempt < CHECK_MAX_ATTEMPTS) {
-        await new Promise<void>((r) => setTimeout(r, CHECK_RETRY_DELAY_MS));
-      }
-    }
-  }
-
-  return {
-    service: "eBay Finding API",
-    status: "error",
-    latencyMs: Date.now() - start,
-    detail: lastDetail ?? "unknown error",
-  };
-}
+// Note: the old "eBay Finding API" check (probing the legacy svcs.ebay.com
+// sold-listings endpoint) was removed 2026-08-15. That endpoint is
+// permanently blocked by eBay's own WAF (418 "I'm a teapot" on every
+// request, reproducible from multiple networks) and the app no longer calls
+// it — lib/pottery/ebay-market-value.ts now uses only the Browse API. See
+// lib/ebay/finding.ts for the retired client if eBay ever un-blocks it.
 
 /** Sentry: config-only — validate DSN format. */
 function checkSentry(): ServiceCheckResult {
@@ -611,7 +553,6 @@ export async function runAllChecks(): Promise<CachedResult> {
     Promise.resolve(checkGoogleWallet()),
     checkReplicate(),
     checkEbayOAuth(),
-    checkEbayFindingApi(),
     Promise.resolve(checkSentry()),
     Promise.resolve(checkVapid()),
   ]);

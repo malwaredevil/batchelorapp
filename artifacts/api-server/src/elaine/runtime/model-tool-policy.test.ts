@@ -47,6 +47,7 @@ const IMPLEMENTED_MAIN_CHAT_HARD_TOOLS = [
   "get_exchange_rate",
   "suggest_clothing_layers",
   "check_integrations_health",
+  "list_sentry_issues",
   "generate_document",
   "analyze_pottery_photo",
   "analyze_fabric_photo",

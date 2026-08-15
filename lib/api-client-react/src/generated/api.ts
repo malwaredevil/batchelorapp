@@ -35,6 +35,7 @@ import type {
   DeleteQuiltingUnusedCategories200,
   DismissWatchlistAlert200,
   Error,
+  EstimatePotteryMarketValueBody,
   ExtractPatternRequirements200,
   ForgotPasswordInput,
   GetBlockPreviewPngParams,
@@ -69,6 +70,7 @@ import type {
   ListPotteryParams,
   ListQuiltsParams,
   LoginInput,
+  LookupOrnamentEbayPriceBody,
   MarkMessageRead200,
   MergeQuiltingCategory200,
   MessengerAddReactionBody,
@@ -2096,14 +2098,16 @@ export const getEstimatePotteryMarketValueUrl = (id: number,) => {
 /**
  * @summary Look up eBay sold-listing prices and cache them on the item
  */
-export const estimatePotteryMarketValue = async (id: number, options?: RequestInit): Promise<PotteryEbayPriceResult> => {
+export const estimatePotteryMarketValue = async (id: number,
+    estimatePotteryMarketValueBody?: EstimatePotteryMarketValueBody, options?: RequestInit): Promise<PotteryEbayPriceResult> => {
 
   return customFetch<PotteryEbayPriceResult>(getEstimatePotteryMarketValueUrl(id),
   {
     ...options,
-    method: 'POST'
-
-
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      estimatePotteryMarketValueBody,)
   }
 );}
 
@@ -2111,8 +2115,8 @@ export const estimatePotteryMarketValue = async (id: number, options?: RequestIn
 
 
 export const getEstimatePotteryMarketValueMutationOptions = <TError = ErrorType<Error>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof estimatePotteryMarketValue>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof estimatePotteryMarketValue>>, TError,{id: number}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof estimatePotteryMarketValue>>, TError,{id: number;data?: BodyType<EstimatePotteryMarketValueBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof estimatePotteryMarketValue>>, TError,{id: number;data?: BodyType<EstimatePotteryMarketValueBody>}, TContext> => {
 
 const mutationKey = ['estimatePotteryMarketValue'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -2124,10 +2128,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof estimatePotteryMarketValue>>, {id: number}> = (props) => {
-          const {id} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof estimatePotteryMarketValue>>, {id: number;data?: BodyType<EstimatePotteryMarketValueBody>}> = (props) => {
+          const {id,data} = props ?? {};
 
-          return  estimatePotteryMarketValue(id,requestOptions)
+          return  estimatePotteryMarketValue(id,data,requestOptions)
         }
 
 
@@ -2138,18 +2142,18 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type EstimatePotteryMarketValueMutationResult = NonNullable<Awaited<ReturnType<typeof estimatePotteryMarketValue>>>
-
+    export type EstimatePotteryMarketValueMutationBody = BodyType<EstimatePotteryMarketValueBody> | undefined
     export type EstimatePotteryMarketValueMutationError = ErrorType<Error>
 
     /**
  * @summary Look up eBay sold-listing prices and cache them on the item
  */
 export const useEstimatePotteryMarketValue = <TError = ErrorType<Error>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof estimatePotteryMarketValue>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof estimatePotteryMarketValue>>, TError,{id: number;data?: BodyType<EstimatePotteryMarketValueBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof estimatePotteryMarketValue>>,
         TError,
-        {id: number},
+        {id: number;data?: BodyType<EstimatePotteryMarketValueBody>},
         TContext
       > => {
       return useMutation(getEstimatePotteryMarketValueMutationOptions(options));
@@ -15923,14 +15927,16 @@ export const getLookupOrnamentEbayPriceUrl = (id: number,) => {
 /**
  * @summary Look up eBay sold-listing prices and cache them on the ornament
  */
-export const lookupOrnamentEbayPrice = async (id: number, options?: RequestInit): Promise<OrnamentsEbayPriceResult> => {
+export const lookupOrnamentEbayPrice = async (id: number,
+    lookupOrnamentEbayPriceBody?: LookupOrnamentEbayPriceBody, options?: RequestInit): Promise<OrnamentsEbayPriceResult> => {
 
   return customFetch<OrnamentsEbayPriceResult>(getLookupOrnamentEbayPriceUrl(id),
   {
     ...options,
-    method: 'POST'
-
-
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      lookupOrnamentEbayPriceBody,)
   }
 );}
 
@@ -15938,8 +15944,8 @@ export const lookupOrnamentEbayPrice = async (id: number, options?: RequestInit)
 
 
 export const getLookupOrnamentEbayPriceMutationOptions = <TError = ErrorType<Error>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof lookupOrnamentEbayPrice>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof lookupOrnamentEbayPrice>>, TError,{id: number}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof lookupOrnamentEbayPrice>>, TError,{id: number;data?: BodyType<LookupOrnamentEbayPriceBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof lookupOrnamentEbayPrice>>, TError,{id: number;data?: BodyType<LookupOrnamentEbayPriceBody>}, TContext> => {
 
 const mutationKey = ['lookupOrnamentEbayPrice'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -15951,10 +15957,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof lookupOrnamentEbayPrice>>, {id: number}> = (props) => {
-          const {id} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof lookupOrnamentEbayPrice>>, {id: number;data?: BodyType<LookupOrnamentEbayPriceBody>}> = (props) => {
+          const {id,data} = props ?? {};
 
-          return  lookupOrnamentEbayPrice(id,requestOptions)
+          return  lookupOrnamentEbayPrice(id,data,requestOptions)
         }
 
 
@@ -15965,18 +15971,18 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type LookupOrnamentEbayPriceMutationResult = NonNullable<Awaited<ReturnType<typeof lookupOrnamentEbayPrice>>>
-
+    export type LookupOrnamentEbayPriceMutationBody = BodyType<LookupOrnamentEbayPriceBody> | undefined
     export type LookupOrnamentEbayPriceMutationError = ErrorType<Error>
 
     /**
  * @summary Look up eBay sold-listing prices and cache them on the ornament
  */
 export const useLookupOrnamentEbayPrice = <TError = ErrorType<Error>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof lookupOrnamentEbayPrice>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof lookupOrnamentEbayPrice>>, TError,{id: number;data?: BodyType<LookupOrnamentEbayPriceBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof lookupOrnamentEbayPrice>>,
         TError,
-        {id: number},
+        {id: number;data?: BodyType<LookupOrnamentEbayPriceBody>},
         TContext
       > => {
       return useMutation(getLookupOrnamentEbayPriceMutationOptions(options));

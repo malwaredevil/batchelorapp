@@ -1,4 +1,40 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { buildRuntimeMock } from "./test-helpers/runtime-mock";
+import {
+  barcodeMockFactory,
+  documentGenerationMockFactory,
+  documentParsingMockFactory,
+  ebayMarketValueMockFactory,
+  elaineLessonsMockFactory,
+  elaineTasksMockFactory,
+  emailMockFactory,
+  expertConsultMockFactory,
+  googleCalendarTokensMockFactory,
+  hallmarkSearchMockFactory,
+  integrationsHealthMockFactory,
+  loggerMockFactory,
+  multerMockFactory,
+  openaiMockFactory,
+  openrouterModelsMockFactory,
+  pdfParseMockFactory,
+  rateLimitMockFactory,
+  retryMockFactory,
+  sentryMockFactory,
+  smsMockFactory,
+  softDeleteMockFactory,
+  ssrfSafeFetchMockFactory,
+  storageCoreMockFactory,
+  supabaseMockFactory,
+  travelAiMockFactory,
+  travelDocumentsMockFactory,
+  travelFlightsMockFactory,
+  travelGoogleMapsMockFactory,
+  travelStorageMockFactory,
+  travelWishlistExecutorsMockFactory,
+  travelsStorageMockFactory,
+  uploadLimitsMockFactory,
+  webSearchMockFactory,
+} from "./test-helpers/standard-mock-scaffold";
 
 // ---------------------------------------------------------------------------
 // Hoist mock references so vi.fn() refs are available inside vi.mock() factories
@@ -253,9 +289,12 @@ vi.mock("../lib/openai-responses", () => ({
 }));
 
 // ── Runtime helpers ───────────────────────────────────────────────────────
-vi.mock("./runtime", async (importActual) => {
-  const actual = await importActual<typeof import("./runtime")>();
-  return {
+vi.mock("./runtime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./runtime")>();
+  return buildRuntimeMock({
+    // Spread the real runtime first so every export not covered by
+    // RUNTIME_MOCK_DEFAULTS (e.g. scheduler helpers, model-tool-policy
+    // constants) stays functional.  Named overrides below win over both.
     ...actual,
     // Trace persistence is best-effort; returning false means the handler
     // gracefully degrades (sets tracePersisted = false, sends runtime event).
@@ -274,7 +313,7 @@ vi.mock("./runtime", async (importActual) => {
       }),
     ),
     loadElaineTurnTracesForMessages: vi.fn().mockResolvedValue(new Map()),
-  };
+  });
 });
 
 // ── Elaine memory / cross-channel ────────────────────────────────────────
@@ -292,71 +331,18 @@ vi.mock("../lib/elaine-cross-channel", () => ({
 }));
 
 // ── Sentry ────────────────────────────────────────────────────────────────
-vi.mock("@sentry/node", () => ({
-  setConversationId: vi.fn(),
-  setUser: vi.fn(),
-  withScope: vi.fn(),
-  captureException: vi.fn(),
-  captureMessage: vi.fn(),
-}));
+vi.mock("@sentry/node", () => sentryMockFactory());
 
 // ── Supabase ──────────────────────────────────────────────────────────────
-vi.mock("@supabase/supabase-js", () => ({
-  createClient: vi.fn(() => ({
-    storage: {
-      from: vi.fn(() => ({
-        createSignedUrl: vi
-          .fn()
-          .mockResolvedValue({ data: { signedUrl: "" }, error: null }),
-        upload: vi.fn().mockResolvedValue({ data: {}, error: null }),
-      })),
-    },
-  })),
-}));
+vi.mock("@supabase/supabase-js", () => supabaseMockFactory());
 
 // ── Storage / upload ──────────────────────────────────────────────────────
-vi.mock("../lib/storage-core", () => ({
-  ensureBucketWithPolicy: vi.fn().mockResolvedValue(undefined),
-  ELAINE_ATTACHMENTS_BUCKET_POLICY: {},
-  buildStorageAdapter: vi.fn(() => ({
-    uploadImage: vi.fn(),
-    uploadFile: vi.fn(),
-    deleteFile: vi.fn(),
-    getSignedUrl: vi.fn(),
-  })),
-  IMAGE_ONLY_POLICY: {},
-  TRAVELS_BUCKET_POLICY: {},
-  ORNAMENTS_BUCKET_POLICY: {},
-  QUILTING_BUCKET_POLICY: {},
-}));
-vi.mock("../lib/upload-limits", () => ({
-  multerLimitForPrefix: vi.fn().mockReturnValue({}),
-}));
-vi.mock("multer", () => {
-  // pottery.ts calls multer.memoryStorage() at module-load time, so the
-  // default export needs memoryStorage as a static property.
-  const memoryStorage = vi.fn().mockReturnValue({});
-  const multerFn = Object.assign(
-    vi.fn(() => ({
-      fields: vi.fn(
-        () => (_req: unknown, _res: unknown, next: () => void) => next(),
-      ),
-      single: vi.fn(
-        () => (_req: unknown, _res: unknown, next: () => void) => next(),
-      ),
-      array: vi.fn(
-        () => (_req: unknown, _res: unknown, next: () => void) => next(),
-      ),
-    })),
-    { memoryStorage },
-  );
-  return { default: multerFn };
-});
+vi.mock("../lib/storage-core", () => storageCoreMockFactory());
+vi.mock("../lib/upload-limits", () => uploadLimitsMockFactory());
+vi.mock("multer", () => multerMockFactory());
 
 // ── pdf-parse ─────────────────────────────────────────────────────────────
-vi.mock("pdf-parse", () => ({
-  default: vi.fn().mockResolvedValue({ text: "" }),
-}));
+vi.mock("pdf-parse", () => pdfParseMockFactory());
 
 // ── Communication / reminder actions (executors that make real DB calls) ──
 vi.mock("./communication-actions", async (importActual) => {
@@ -377,16 +363,8 @@ vi.mock("./reminder-actions", async (importActual) => {
 });
 
 // ── Other external libs that make real network calls ─────────────────────
-vi.mock("../lib/email", () => ({
-  sendAssistantEmail: vi.fn(),
-  sendTestEmail: vi.fn(),
-  resendConfigured: vi.fn().mockReturnValue(false),
-}));
-vi.mock("../lib/sms", () => ({
-  sendSms: vi.fn(),
-  SmsOptedOutError: class extends Error {},
-  SmsRegistrationPendingError: class extends Error {},
-}));
+vi.mock("../lib/email", () => emailMockFactory());
+vi.mock("../lib/sms", () => smsMockFactory());
 vi.mock("../lib/calls", () => ({
   initiateOutboundCall: vi.fn(),
   waitForCallOutcome: vi.fn().mockResolvedValue("answered"),
@@ -396,89 +374,42 @@ vi.mock("../lib/slack", () => ({
   postSlackMessage: vi.fn(),
   slackConfigured: vi.fn().mockReturnValue(false),
 }));
-vi.mock("../lib/web-search", () => ({
-  webSearch: vi.fn().mockResolvedValue({ results: [] }),
-  fetchPage: vi.fn().mockResolvedValue(""),
-}));
-vi.mock("../lib/openai", () => ({
-  embedText: vi.fn().mockResolvedValue([]),
-}));
-vi.mock("../lib/travels/flights", () => ({ lookupFlightPrices: vi.fn() }));
-vi.mock("../lib/travels/google-maps", () => ({
-  getWeatherForecast: vi.fn(),
-  getAirQuality: vi.fn(),
-  getPollenForecast: vi.fn(),
-  searchPlaces: vi.fn(),
-  computeRoute: vi.fn(),
-}));
-vi.mock("../lib/travels/storage", () => ({ deleteTripPhoto: vi.fn() }));
-vi.mock("../lib/travels-storage", () => ({ deleteDocument: vi.fn() }));
-vi.mock("../lib/pottery/ebay-market-value", () => ({
-  lookupEbayMarketValue: vi.fn(),
-  buildEbayQuery: vi.fn(),
-}));
-vi.mock("../lib/ornaments/hallmark-search", () => ({
-  searchHallmark: vi.fn(),
-  lookupHallmarkFromDb: vi.fn(),
-}));
-vi.mock("../lib/ornaments/barcode", () => ({ lookupBarcode: vi.fn() }));
-vi.mock("../lib/google-calendar-tokens", () => ({
-  getValidAccessToken: vi.fn(),
-}));
-vi.mock("../routes/travels/documents", () => ({ rescanTripDocument: vi.fn() }));
-vi.mock("../routes/admin/integrations-health", () => ({
-  getCachedHealthChecks: vi.fn().mockResolvedValue([]),
-}));
-vi.mock("../routes/travels/ai", () => ({
-  generateItineraryForTrip: vi.fn(),
-  ItineraryActionError: class extends Error {},
-}));
-vi.mock("../lib/soft-delete", () => ({ logActivity: vi.fn() }));
-vi.mock("../lib/expert-consult", () => ({ consultExperts: vi.fn() }));
-vi.mock("../lib/retry", () => ({
-  withRetry: vi.fn((fn: () => Promise<unknown>) => fn()),
-}));
-vi.mock("../lib/ssrf-safe-fetch", () => ({ fetchJsonSafe: vi.fn() }));
-vi.mock("../lib/document-parsing", () => ({
-  extractDocumentText: vi.fn().mockResolvedValue(""),
-  docTypeTagForMime: vi.fn().mockReturnValue("csv"),
-}));
-vi.mock("../lib/document-generation", () => ({
-  buildDocumentBuffer: vi.fn().mockResolvedValue(Buffer.alloc(0)),
-  DOCUMENT_MIME_BY_FORMAT: {},
-  DOCUMENT_EXTENSION_BY_FORMAT: {},
-}));
-vi.mock("../lib/elaine-tasks", () => ({
-  cancelElaineTaskForUser: vi.fn(),
-  getElaineTaskForUser: vi.fn(),
-  listElaineTasksForUser: vi.fn().mockResolvedValue([]),
-}));
+vi.mock("../lib/web-search", () => webSearchMockFactory());
+vi.mock("../lib/openai", () => openaiMockFactory());
+vi.mock("../lib/travels/flights", () => travelFlightsMockFactory());
+vi.mock("../lib/travels/google-maps", () => travelGoogleMapsMockFactory());
+vi.mock("../lib/travels/storage", () => travelStorageMockFactory());
+vi.mock("../lib/travels-storage", () => travelsStorageMockFactory());
+vi.mock("../lib/pottery/ebay-market-value", () => ebayMarketValueMockFactory());
+vi.mock("../lib/ornaments/hallmark-search", () => hallmarkSearchMockFactory());
+vi.mock("../lib/ornaments/barcode", () => barcodeMockFactory());
+vi.mock("../lib/google-calendar-tokens", () =>
+  googleCalendarTokensMockFactory(),
+);
+vi.mock("../routes/travels/documents", () => travelDocumentsMockFactory());
+vi.mock("../routes/admin/integrations-health", () =>
+  integrationsHealthMockFactory(),
+);
+vi.mock("../routes/travels/ai", () => travelAiMockFactory());
+vi.mock("../lib/soft-delete", () => softDeleteMockFactory());
+vi.mock("../lib/expert-consult", () => expertConsultMockFactory());
+vi.mock("../lib/retry", () => retryMockFactory());
+vi.mock("../lib/ssrf-safe-fetch", () => ssrfSafeFetchMockFactory());
+vi.mock("../lib/document-parsing", () => documentParsingMockFactory());
+vi.mock("../lib/document-generation", () => documentGenerationMockFactory());
+vi.mock("../lib/elaine-tasks", () => elaineTasksMockFactory());
 
-// elaine-lessons must be mocked in every test file that drives
-// POST /elaine/chat via supertest.  The real getRelevantElaineLessons
-// issues an extra db.select() that shifts the selectQueue slots out of
-// alignment, silently aborting the SSE response with ECONNRESET before
-// headers are ever sent (task #851 / task #875).
-vi.mock("../lib/elaine-lessons", () => ({
-  ELAINE_LESSON_DOMAINS: [
-    "travels",
-    "pottery",
-    "quilting",
-    "ornaments",
-    "general",
-  ],
-  getRelevantElaineLessons: vi
-    .fn()
-    .mockResolvedValue({ lessons: [], evidenceBlock: "" }),
-  recordElaineLesson: vi.fn().mockResolvedValue(undefined),
-}));
+// elaine-lessons: the real getRelevantElaineLessons issues an extra
+// db.select() that shifts the selectQueue slots out of alignment,
+// silently aborting the SSE response with ECONNRESET before headers are
+// ever sent.  The shared factory in standard-mock-scaffold.ts is the
+// single source of truth for this mock.
+vi.mock("../lib/elaine-lessons", () => elaineLessonsMockFactory());
 
-vi.mock("../lib/openrouter-models", () => ({
-  listOpenRouterModels: vi.fn().mockResolvedValue([]),
-}));
-vi.mock("./travel-wishlist-executors", () => ({
-  removeWishlistItemExecutor: vi.fn(),
-}));
+vi.mock("../lib/openrouter-models", () => openrouterModelsMockFactory());
+vi.mock("./travel-wishlist-executors", () =>
+  travelWishlistExecutorsMockFactory(),
+);
 vi.mock("./admin-config", () => ({
   AdminConfigBody: { parse: vi.fn((v: unknown) => v) },
   applyAdminConfigPatch: vi.fn(),
@@ -510,20 +441,10 @@ vi.mock("../middleware/auth", () => ({
 }));
 
 // ── Rate limiters ─────────────────────────────────────────────────────────
-// Use importOriginal so any limiter referenced at module-load time (e.g.
-// supplementalUploadLimiter in pottery.ts) is a passthrough, not undefined.
-vi.mock("../middleware/rateLimit", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("../middleware/rateLimit")>();
-  const passthrough = (_req: unknown, _res: unknown, next: () => void) =>
-    next();
-  return Object.fromEntries(Object.keys(actual).map((k) => [k, passthrough]));
-});
+vi.mock("../middleware/rateLimit", () => rateLimitMockFactory());
 
 // ── Logger ────────────────────────────────────────────────────────────────
-vi.mock("../lib/logger", () => ({
-  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
-}));
+vi.mock("../lib/logger", () => loggerMockFactory());
 
 // ---------------------------------------------------------------------------
 // Import router under test — must come AFTER all vi.mock() calls.

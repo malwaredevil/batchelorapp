@@ -11,12 +11,13 @@ export default [
       "docs/generated/**",
       ".local/**",
       ".cache/**",
-      // Throwaway fixture that check-domain-composition.test.ts briefly writes
-      // into src/routes/ during integration tests. Listed here so the TS
-      // language service (projectService: true) never races on it between the
-      // fixture's creation and deletion — the same race the tsconfig exclude
-      // handles for tsc itself.
-      "artifacts/api-server/src/routes/_temp_composition_guard_test_b_fixture.ts",
+      // Throwaway fixtures that check-domain-composition.test.ts briefly writes
+      // into various src/ directories during integration tests. The glob covers
+      // all of them so the TS language service (projectService: true) never
+      // races on a fixture file between its creation and deletion — the same
+      // race the tsconfig exclude handles for tsc itself.
+      "**/_temp_*",
+      "**/_temp-*",
       // These executable/test files are intentionally outside their package
       // TypeScript projects, so type-aware rules cannot safely inspect them.
       "lib/api-spec/build-spec.ts",

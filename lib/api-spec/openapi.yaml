@@ -613,6 +613,17 @@ paths:
           required: true
           schema:
             type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                force:
+                  type: boolean
+                  description: |
+                    When true, skip the 7-day staleness cache and fire a fresh Apify sold-listings run regardless of the last fetch date.
       responses:
         "200":
           description: eBay price data
@@ -4982,6 +4993,17 @@ paths:
           required: true
           schema:
             type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                force:
+                  type: boolean
+                  description: |
+                    When true, skip the 7-day staleness cache and fire a fresh Apify sold-listings run regardless of the last fetch date.
       responses:
         "200":
           description: eBay price data

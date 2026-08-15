@@ -305,6 +305,30 @@ const requirements: Array<{
     fix: "artifacts/modules/src/App.tsx must use PublicRouteBoundary. Do not replace it with inline error boundaries or duplicate the public-route error handling.",
   },
 
+  // ── Elaine doubt-test files: both must use the shared mock scaffold ───────
+  //
+  // chat-reminder-doubt.test.ts and scheduling-doubt-tool-forcing.test.ts
+  // share almost identical mock scaffolds.  A single shared helper
+  // (standard-mock-scaffold.ts) is the source of truth for those factories.
+  // Both test files must import from it so that a mock update in one file
+  // cannot silently diverge from the other.
+  {
+    path: "artifacts/api-server/src/elaine/chat-reminder-doubt.test.ts",
+    includes: [
+      "./test-helpers/standard-mock-scaffold",
+      "elaineLessonsMockFactory",
+    ],
+    fix: "chat-reminder-doubt.test.ts must import elaineLessonsMockFactory (and other shared factories) from ./test-helpers/standard-mock-scaffold. Do not inline duplicate vi.mock() bodies that already exist in the shared scaffold.",
+  },
+  {
+    path: "artifacts/api-server/src/elaine/scheduling-doubt-tool-forcing.test.ts",
+    includes: [
+      "./test-helpers/standard-mock-scaffold",
+      "elaineLessonsMockFactory",
+    ],
+    fix: "scheduling-doubt-tool-forcing.test.ts must import elaineLessonsMockFactory (and other shared factories) from ./test-helpers/standard-mock-scaffold. Do not inline duplicate vi.mock() bodies that already exist in the shared scaffold.",
+  },
+
   // ── Elaine household data: shared facade must not be reimplemented ────────
   {
     path: "artifacts/api-server/src/elaine/index.ts",
@@ -915,6 +939,7 @@ export const PLANNER_TOOL_CATALOG_REQUIRED_EXPORTS: ReadonlyArray<{
     key: "CHECK_INTEGRATIONS_HEALTH_TOOL_NAME",
     value: "check_integrations_health",
   },
+  { key: "LIST_SENTRY_ISSUES_TOOL_NAME", value: "list_sentry_issues" },
   { key: "CONSULT_EXPERTS_TOOL_NAME", value: "consult_experts" },
   { key: "EBAY_SEARCH_TOOL_NAME", value: "ebay_search" },
   { key: "ELAINE_PLANNER_TOOL_CATALOG" },
@@ -1435,11 +1460,7 @@ for (const file of elaineTestFiles) {
   const wrong = wrongPlannerToolCatalogMockValues(contents);
   if (wrong !== null && wrong.size > 0) {
     const details = [...wrong.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(
-        ([key, { expected, got }]) =>
-          `    ${key}: "${got}" (expected "${expected}")`,
-      )
+      .map(([constName, value]) => `  - ${constName} ("${value}")`)
       .join("\n");
     violations.push(
       `${file}: vi.mock("./planner-tool-catalog") factory has ${wrong.size} wrong string value(s):\n${details}\n` +
@@ -1488,11 +1509,7 @@ for (const file of elaineTestFiles) {
   const wrongRuntime = wrongRuntimeMockValues(contents);
   if (wrongRuntime !== null && wrongRuntime.size > 0) {
     const details = [...wrongRuntime.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(
-        ([key, { expected, got }]) =>
-          `    ${key}: "${got}" (expected "${expected}")`,
-      )
+      .map(([constName, value]) => `  - ${constName} ("${value}")`)
       .join("\n");
     violations.push(
       `${file}: vi.mock("./runtime") factory has ${wrongRuntime.size} wrong string value(s):\n${details}\n` +
@@ -1501,19 +1518,6 @@ for (const file of elaineTestFiles) {
     );
   }
 }
-
-// ── Scan H: PLANNER_TOOL_CATALOG_REQUIRED_EXPORTS must cover every import ────
-//
-// PLANNER_TOOL_CATALOG_REQUIRED_EXPORTS is a manually maintained list used by
-// Scan G to verify that vi.mock("./planner-tool-catalog") factories in tests
-// supply every export that elaine/index.ts depends on.  If a developer adds a
-// new export to planner-tool-catalog.ts, imports it in index.ts, but forgets to
-// add it to the list, Scan G silently stops protecting the new export — the same
-// drift pattern the guardrail was designed to prevent.
-//
-// This scan closes the loop: it reads the real index.ts, extracts every
-// non-type named import from ./planner-tool-catalog, and flags any name that
-// is absent from PLANNER_TOOL_CATALOG_REQUIRED_EXPORTS.
 
 const elaineIndexPath = "artifacts/api-server/src/elaine/index.ts";
 let elaineIndexSource: string | null = null;
@@ -1638,8 +1642,7 @@ for (const file of ELAINE_IMPORTED_TOOL_FILES) {
   const orphaned = findOrphanedToolNameConstants(src);
   if (orphaned.size > 0) {
     const details = [...orphaned.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, value]) => `    ${key}: "${value}"`)
+      .map(([constName, value]) => `  - ${constName} ("${value}")`)
       .join("\n");
     violations.push(
       `${file}: ${orphaned.size} exported *_TOOL_NAME constant(s) have no matching ` +
@@ -2013,6 +2016,8 @@ export function extractActionToolNamesFromCatalogSection(
 
 const PLANNER_MOCK_HELPER =
   "artifacts/api-server/src/elaine/test-helpers/planner-tool-catalog-mock.ts";
+const RUNTIME_MOCK_HELPER =
+  "artifacts/api-server/src/elaine/test-helpers/runtime-mock.ts";
 
 {
   let helperContents: string;
@@ -2047,11 +2052,7 @@ const PLANNER_MOCK_HELPER =
     const wrongValues = wrongPlannerMockHelperValues(helperContents);
     if (wrongValues !== null && wrongValues.size > 0) {
       const details = [...wrongValues.entries()]
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(
-          ([key, { expected, got }]) =>
-            `    ${key}: "${got}" (expected "${expected}")`,
-        )
+        .map(([constName, value]) => `  - ${constName} ("${value}")`)
         .join("\n");
       violations.push(
         `${PLANNER_MOCK_HELPER}: PLANNER_TOOL_CATALOG_MOCK_DEFAULTS has ${wrongValues.size} wrong string value(s):\n${details}\n` +
@@ -2065,14 +2066,38 @@ const PLANNER_MOCK_HELPER =
   }
 }
 
-// ── Scan K: every POLICY_ROW tool name must have a definition in a tool file ──
-//
-// capability-registry.ts lists tool names in policies([...]) calls that
-// reference tool definitions in ELAINE_IMPORTED_TOOL_FILES.  If a tool name
-// appears in POLICY_ROWS but has no matching `name: "..."` field in any of
-// those tool files, it registers a capability that is never callable — the
-// model would invoke the tool by that name, but the dispatcher finds no
-// matching handler.  This scan catches such phantom entries early.
+{
+  let helperContents: string;
+  try {
+    helperContents = read(RUNTIME_MOCK_HELPER);
+  } catch {
+    violations.push(
+      `${RUNTIME_MOCK_HELPER}: file not found or unreadable\n` +
+        "  FIX: Create the shared runtime mock helper that exports\n" +
+        "       buildRuntimeMock() and RUNTIME_MOCK_DEFAULTS.",
+    );
+    helperContents = "";
+  }
+  if (helperContents) {
+    const missingKeys = missingRuntimeMockHelperKeys(helperContents);
+    if (missingKeys === null) {
+      violations.push(
+        `${RUNTIME_MOCK_HELPER}: RUNTIME_MOCK_DEFAULTS export not found\n` +
+          "  FIX: Export a const named RUNTIME_MOCK_DEFAULTS containing\n" +
+          "       the canonical default values for every required runtime key.\n" +
+          "       buildRuntimeMock() should spread it: { ...RUNTIME_MOCK_DEFAULTS, ...overrides }.",
+      );
+    } else if (missingKeys.size > 0) {
+      violations.push(
+        `${RUNTIME_MOCK_HELPER}: RUNTIME_MOCK_DEFAULTS is missing ${missingKeys.size} required key(s): ${[...missingKeys].sort().join(", ")}\n` +
+          "  FIX: Add each missing key (with its canonical value) to\n" +
+          "       RUNTIME_MOCK_DEFAULTS in this file.\n" +
+          "       The required set is defined by RUNTIME_REQUIRED_EXPORTS in\n" +
+          "       scripts/src/check-domain-composition.ts.",
+      );
+    }
+  }
+}
 
 /**
  * Extract all tool names referenced in `policies([...], ...)` calls in the
@@ -2155,7 +2180,7 @@ if (capabilityRegistrySource === null) {
   if (phantoms.length > 0) {
     const listed = phantoms
       .sort()
-      .map((n) => `    "${n}"`)
+      .map((p) => `    "${p}"`)
       .join("\n");
     violations.push(
       `${capabilityRegistryPath}: ${phantoms.length} tool name(s) in POLICY_ROWS have no ` +
@@ -2261,18 +2286,22 @@ export function missingRuntimeMockKeys(contents: string): Set<string> | null {
   return anyFactoryFound ? allMissing : null;
 }
 
-// ── Scan L: RUNTIME_REQUIRED_EXPORTS must cover every import ─────────────────
-//
-// RUNTIME_REQUIRED_EXPORTS is a manually maintained list used by the Scan G
-// runtime extension to verify that vi.mock("./runtime") factories in tests
-// supply every export that elaine/index.ts depends on.  If a developer adds a
-// new export to the runtime module, imports it in index.ts, but forgets to add
-// it to the list, the guardrail silently stops protecting the new export.
-//
-// This scan closes the loop: it reads the real index.ts, extracts every
-// non-type named import from ./runtime, and flags any name that is absent from
-// RUNTIME_REQUIRED_EXPORTS.
-
+export function extractRuntimeMockDefaultsBlock(source: string): string | null {
+  const anchor = source.indexOf("export const RUNTIME_MOCK_DEFAULTS");
+  if (anchor === -1) return null;
+  const braceStart = source.indexOf("{", anchor);
+  if (braceStart === -1) return null;
+  let depth = 0;
+  for (let i = braceStart; i < source.length; i++) {
+    if (source[i] === "{") {
+      depth++;
+    } else if (source[i] === "}") {
+      depth--;
+      if (depth === 0) return source.slice(braceStart, i + 1);
+    }
+  }
+  return null; // unmatched brace — malformed source
+}
 const runtimeElaineIndexPath = "artifacts/api-server/src/elaine/index.ts";
 let runtimeElaineIndexSource: string | null = null;
 try {
@@ -2290,21 +2319,514 @@ if (runtimeElaineIndexSource !== null) {
   const runtimeUncovered = importedFromRuntime.filter(
     (name) => !runtimeRequiredSet.has(name),
   );
+
   if (runtimeUncovered.length > 0) {
     violations.push(
-      `scripts/src/check-domain-composition.ts: RUNTIME_REQUIRED_EXPORTS ` +
-        `is missing ${runtimeUncovered.length} export(s) that ${runtimeElaineIndexPath} imports from ` +
-        `./runtime: ${runtimeUncovered.sort().join(", ")}\n` +
-        "  FIX: Add each missing name to RUNTIME_REQUIRED_EXPORTS in\n" +
-        "       scripts/src/check-domain-composition.ts.  This list must mirror the\n" +
-        "       import block that elaine/index.ts uses from ./runtime so the Scan G\n" +
-        "       runtime extension can catch incomplete vi.mock() factory objects in\n" +
-        "       the test suite.",
+      `${runtimeElaineIndexPath}: ${runtimeUncovered.length} name(s) imported from ./runtime are absent from RUNTIME_REQUIRED_EXPORTS: ${runtimeUncovered.join(", ")}\n` +
+        "  FIX: Add each name to the RUNTIME_REQUIRED_EXPORTS array in\n" +
+        "       scripts/src/check-domain-composition.ts and supply a correct\n" +
+        "       mock value so Scan G (runtime) tests can verify the mock.",
     );
   }
 }
 
-// ────────────────────────────────────────────────────────────────────────────
+/**
+ * Walk `source` starting at `startIndex`, tracking balanced parentheses while
+ * lexically skipping string literals (`"…"`, `'…'`, `` `…` ``) and line/block
+ * comments so that parens inside strings or comments do not skew the depth
+ * counter.  Returns the index of the `)` that closes the outermost `(` opened
+ * at or after `startIndex`.
+ *
+ * Template-literal expressions (`${…}`) are not recursed into — the factory
+ * bodies we inspect are unlikely to contain complex nested template expressions
+ * with unbalanced bare parens, so this limitation is acceptable.
+ *
+ * Exported for unit tests.
+ */
+export function findClosingParen(source: string, startIndex: number): number {
+  let depth = 0;
+  let inString: '"' | "'" | "`" | null = null;
+  let escaped = false;
+  let i = startIndex;
+  while (i < source.length) {
+    const ch = source[i];
+    if (escaped) {
+      escaped = false;
+      i++;
+      continue;
+    }
+    if (ch === "\\" && inString !== null) {
+      escaped = true;
+      i++;
+      continue;
+    }
+    if (inString !== null) {
+      if (ch === inString) inString = null;
+      i++;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      inString = ch;
+      i++;
+      continue;
+    }
+    // Skip line comments — but only when not inside a string (already handled
+    // above).  A `//' sequence here is always a real comment start.
+    if (ch === "/" && source[i + 1] === "/") {
+      while (i < source.length && source[i] !== "\n") i++;
+      continue;
+    }
+    // Skip block comments.
+    if (ch === "/" && source[i + 1] === "*") {
+      i += 2;
+      while (
+        i + 1 < source.length &&
+        !(source[i] === "*" && source[i + 1] === "/")
+      )
+        i++;
+      i += 2; // skip closing '*/'
+      continue;
+    }
+    if (ch === "(") depth++;
+    else if (ch === ")") {
+      depth--;
+      if (depth === 0) return i;
+    }
+    i++;
+  }
+  return source.length - 1; // unclosed — shouldn't happen in valid source
+}
+
+/**
+ * Replace the *contents* of all string literals in `text` with empty markers
+ * (keeping the surrounding quote characters) so that an identifier that
+ * appears only inside a string cannot be found by a plain `.includes()`.
+ *
+ * Handles `"…"`, `'…'`, and `` `…` `` literals and `\"` / `\'` escapes.
+ * Template expressions (`${…}`) are treated as opaque text and erased along
+ * with the rest of the literal body.
+ *
+ * Exported for unit tests.
+ */
+export function eraseStringContents(text: string): string {
+  const out: string[] = [];
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i];
+    if (ch === '"' || ch === "'" || ch === "`") {
+      out.push(ch); // opening quote
+      i++;
+      while (i < text.length) {
+        if (text[i] === "\\") {
+          i += 2; // skip escape sequence
+          continue;
+        }
+        if (text[i] === ch) break; // closing quote
+        i++;
+      }
+      out.push(ch); // closing quote
+      if (i < text.length) i++;
+      continue;
+    }
+    out.push(ch);
+    i++;
+  }
+  return out.join("");
+}
+export function hasInlinedElaineLessonsMock(contents: string): boolean {
+  // ── Step 1: lexically strip all comments from the full source so that:
+  //   - A commented-out vi.mock call is never treated as active.
+  //   - A factory name inside a comment (e.g. `// TODO: use elaineLessonsMockFactory`)
+  //     cannot falsely satisfy the factory-reference check.
+  // We use `findClosingParen`'s integrated comment-skipping logic by walking
+  // the whole file and rebuilding without comment spans.  This avoids a plain
+  // regex stripper that could misfire on `//` inside a URL string.
+  const commentChars: string[] = [];
+  {
+    let inString: '"' | "'" | "`" | null = null;
+    let escaped = false;
+    let i = 0;
+    while (i < contents.length) {
+      const ch = contents[i];
+      if (escaped) {
+        escaped = false;
+        commentChars.push(ch);
+        i++;
+        continue;
+      }
+      if (ch === "\\" && inString !== null) {
+        escaped = true;
+        commentChars.push(ch);
+        i++;
+        continue;
+      }
+      if (inString !== null) {
+        if (ch === inString) inString = null;
+        commentChars.push(ch);
+        i++;
+        continue;
+      }
+      if (ch === '"' || ch === "'" || ch === "`") {
+        inString = ch;
+        commentChars.push(ch);
+        i++;
+        continue;
+      }
+      // Line comment: drop everything up to (but not including) the newline.
+      if (ch === "/" && contents[i + 1] === "/") {
+        while (i < contents.length && contents[i] !== "\n") i++;
+        continue;
+      }
+      // Block comment: drop everything through the closing '*/'.
+      if (ch === "/" && contents[i + 1] === "*") {
+        i += 2;
+        while (
+          i + 1 < contents.length &&
+          !(contents[i] === "*" && contents[i + 1] === "/")
+        )
+          i++;
+        i += 2;
+        continue;
+      }
+      commentChars.push(ch);
+      i++;
+    }
+  }
+  const withoutComments = commentChars.join("");
+
+  // ── Step 2: locate ALL active vi.mock("../lib/elaine-lessons", …) calls.
+  // Iterating every call prevents a compliant first mock from hiding a
+  // violating second mock in the same file.
+  const MOCK_RE = /vi\.mock\s*\(\s*["']\.\.\/lib\/elaine-lessons["']/g;
+  let m: RegExpExecArray | null;
+  let foundAnyMock = false;
+
+  while ((m = MOCK_RE.exec(withoutComments)) !== null) {
+    foundAnyMock = true;
+
+    // ── Step 3: extract the full call using the lexical paren walker (handles
+    // strings and comments inside the call body).
+    const callEnd = findClosingParen(withoutComments, m.index);
+
+    // ── Step 4: erase string contents from the call slice so a factory name
+    // that appears only inside a string literal cannot satisfy the check.
+    // Then verify the factory is used in a *return position*, not merely
+    // referenced anywhere in the call body.  Valid return positions are:
+    //
+    //   (a) Direct 2nd argument:
+    //         vi.mock("...", elaineLessonsMockFactory)
+    //       → factory name immediately before the call's closing ")"
+    //
+    //   (b) Arrow-function returning a call:
+    //         vi.mock("...", () => elaineLessonsMockFactory())
+    //         vi.mock("...", () => (elaineLessonsMockFactory()))
+    //       → factory name immediately follows "=>" (with optional whitespace / "(")
+    //
+    //   (c) Arrow-function returning an object with a spread:
+    //         vi.mock("...", () => ({ ...elaineLessonsMockFactory() }))
+    //       → factory name follows "..."
+    //
+    // Patterns deliberately excluded (bypass attempts):
+    //   - `() => { elaineLessonsMockFactory(); return { inline }; }` — call
+    //     result discarded, effective mock is inline
+    //   - `() => ({ key: elaineLessonsMockFactory })` — identifier as a
+    //     property value, not the spread/return source
+    const callClean = eraseStringContents(
+      withoutComments.slice(m.index, callEnd + 1),
+    );
+    const FACTORY_IN_RETURN_POSITION_RE =
+      /(?:,\s*elaineLessonsMockFactory\s*\)|\.\.\.\s*elaineLessonsMockFactory\s*\(|=>\s*\(?\s*elaineLessonsMockFactory\s*\()/;
+    if (!FACTORY_IN_RETURN_POSITION_RE.test(callClean)) return true;
+
+    // Advance past this call so the next iteration finds a different mock.
+    MOCK_RE.lastIndex = callEnd + 1;
+  }
+
+  if (!foundAnyMock) return false;
+
+  // ── Step 5: require a *real named import* of elaineLessonsMockFactory from
+  // exactly the canonical scaffold path.  This blocks bypasses where:
+  //   - A local function is named elaineLessonsMockFactory.
+  //   - The factory is imported from an unrelated module.
+  //   - The import declaration is only present inside a comment.
+  // Checked against the comment-stripped source so a commented-out canonical
+  // import (e.g. `// import { elaineLessonsMockFactory } from "...scaffold"`)
+  // cannot satisfy this gate and hide a local-definition bypass.
+  const SCAFFOLD_IMPORT_RE =
+    /import\s+\{[^}]*elaineLessonsMockFactory[^}]*\}\s+from\s+["']\.\/test-helpers\/standard-mock-scaffold["']/;
+  return !SCAFFOLD_IMPORT_RE.test(withoutComments);
+}
+
+// ── Scan I (elaine-lessons): every vi.mock of elaine-lessons must use the scaffold ──
+
+for (const file of elaineTestFiles) {
+  const contents = read(file);
+  if (hasInlinedElaineLessonsMock(contents)) {
+    violations.push(
+      `${file}: vi.mock("../lib/elaine-lessons") body is inlined instead of using the shared scaffold.\n` +
+        "  FIX: Import elaineLessonsMockFactory from ./test-helpers/standard-mock-scaffold and\n" +
+        '       replace the inline factory with: vi.mock("../lib/elaine-lessons", () => elaineLessonsMockFactory()).\n' +
+        "       For tests that need per-test overrides, spread the factory:\n" +
+        '         vi.mock("../lib/elaine-lessons", () => ({ ...elaineLessonsMockFactory(), myKey: vi.fn() })).\n' +
+        "       Using the scaffold keeps all Elaine test files in sync when the module's\n" +
+        "       exports change.",
+    );
+  }
+}
+
+const UNIVERSAL_READ_TOOLS_PATH =
+  "artifacts/api-server/src/elaine/universal-read-tools.ts";
+
+try {
+  const universalReadSource = read(UNIVERSAL_READ_TOOLS_PATH);
+  const gaps = findUniversalReadDispatchGaps(universalReadSource);
+  if (gaps.size > 0) {
+    const details = [...gaps.entries()]
+      .map(([constName, value]) => `  - ${constName} ("${value}")`)
+      .join("\n");
+    violations.push(
+      `${UNIVERSAL_READ_TOOLS_PATH}: ${gaps.size} exported *_TOOL_NAME constant(s) have no` +
+        ` matching dispatch branch in executeUniversalReadTool:\n${details}\n` +
+        "  FIX: Add an \`if (name === CONST_NAME)\` branch inside executeUniversalReadTool\n" +
+        "       for each listed constant.  A missing branch means Elaine silently\n" +
+        "       receives null when she calls the tool — no error, no log entry, just\n" +
+        "       an empty result the model cannot distinguish from 'no data found'.",
+    );
+  }
+} catch {
+  violations.push(
+    `${UNIVERSAL_READ_TOOLS_PATH}: file not found or unreadable\n` +
+      "  FIX: Ensure the file exists at the path above.",
+  );
+}
+
+// ── Scan N: every executor prefix in POLICY_ROWS must be a known dispatch group ─
+//
+// Each policies([...], { executorPrefix: "X" }) call in POLICY_ROWS declares
+// which dispatcher prefix routes calls for those tools.  If "X" does not
+// correspond to a real executor group in the Elaine dispatch router
+// (artifacts/api-server/src/elaine/index.ts), every tool call with that prefix
+// is silently dropped at dispatch time — no error, no response.
+//
+// KNOWN_EXECUTOR_PREFIXES is the canonical enumeration of all executor groups
+// that are actually registered in ACTION_EXECUTORS or handled by the inline
+// hard-tool dispatch in index.ts.  When a new executor group is added:
+//   1. Add the implementation in index.ts (or the appropriate action file).
+//   2. Add the prefix here in the SAME change.
+// This scan catches the "typo or rename on one side only" failure mode before
+// it reaches production.
+
+/**
+ * Canonical set of executor prefix strings that have a real dispatcher
+ * implementation in artifacts/api-server/src/elaine/index.ts.
+ *
+ * Prefixes are grouped by dispatch mechanism.  When a new executor group is
+ * added to index.ts, add its prefix here in the same change.
+ *
+ * Exported for unit tests.
+ */
+export const KNOWN_EXECUTOR_PREFIXES: ReadonlySet<string> = new Set([
+  // ── Spread into ACTION_EXECUTORS in index.ts ─────────────────────────────
+  "travelAction", // TRAVEL_ACTION_EXECUTORS
+  "potteryAction", // potteryActionExecutors
+  "quiltingAction", // quiltingActionExecutors
+  "ornamentAction", // ornamentActionExecutors
+  "communicationAction", // communicationActionExecutors
+  "reminderAction", // reminderActionExecutors
+  "memoryAction", // universalActionExecutors (correct_memory, forget_memory)
+  "researchTaskAction", // adaptiveActionExecutors (queue_research_task, cancel_elaine_task)
+  // ── appOperation — executeAppOperationAction + discoverAppOperations ──────
+  "appOperation",
+  // ── Inline action dispatch in index.ts (not in a named executor object) ──
+  "officeAction", // create_note, update_note, delete_note, send_email
+  "notificationAction", // update_notification_state, bulk_update_notifications, update_notification_preferences
+  "accountAction", // send_test_email, send_test_sms, send_phone_verification_code, verify_phone_code, update_elaine_settings
+  "ownerAction", // update_app_config (owner-only)
+  // ── Hard-tool (read/utility) inline dispatch in index.ts ─────────────────
+  "travelRead", // search_trip_documents, search_flights, get_weather_forecast, find_nearby_places, …
+  "widget", // show_trip_card, show_destination_card, show_data_card
+  "collectionRead", // show_pottery_item, analyze_pottery_photo
+  "quiltingRead", // show_fabric_swatch, calculate_yardage, analyze_fabric_photo
+  "ornamentRead", // show_ornament_item, search_hallmark, lookup_product_barcode, analyze_ornament_photo, lookup_book_value
+  "officeRead", // list_notes, get_note (executeUniversalReadTool)
+  "gmailRead", // summarize_inbox, find_emails_about_topic, get_email_detail (executeOfficeTool)
+  "notificationRead", // list_notifications, get_notification_counts, get_notification_preferences (executeUniversalReadTool)
+  "memory", // remember_household_fact (rememberElaineMemory)
+  "lesson", // remember_lesson (recordElaineLesson)
+  "memoryRead", // list_memories (executeUniversalReadTool)
+  "researchTaskRead", // list_elaine_tasks, get_elaine_task (executeUniversalReadTool)
+  "research", // web_search, fetch_page, consult_experts, ebay_search
+  "documentGeneration", // generate_document (buildDocumentBuffer)
+  "navigation", // suggest_navigation
+  "settings", // set_action_confirmation_mode
+  "adminRead", // check_integrations_health (getCachedHealthChecks)
+  "reminderRead", // list_reminders (executeListRemindersTool)
+  "communicationRead", // list_contact_channels, list_scheduled_contacts
+]);
+
+/**
+ * Maps each action-class executor prefix to the JavaScript identifier of the
+ * executor-map variable that is spread into ACTION_EXECUTORS in index.ts.
+ *
+ * Only the prefixes from the "Spread into ACTION_EXECUTORS" section of
+ * KNOWN_EXECUTOR_PREFIXES are listed here — inline-dispatch and hard-tool
+ * prefixes have no named executor-map variable and are excluded.
+ *
+ * Scan O uses this map to verify the reverse direction: every action-class
+ * prefix in KNOWN_EXECUTOR_PREFIXES must still have a corresponding
+ * ...executorVar spread inside ACTION_EXECUTORS in index.ts.  When an
+ * executor variable is renamed or removed without updating this map, the
+ * stale prefix passes Scan N silently — Scan O catches it.
+ *
+ * Exported for unit tests.
+ */
+export const ACTION_CLASS_EXECUTOR_MAP: ReadonlyMap<string, string> = new Map([
+  ["travelAction", "TRAVEL_ACTION_EXECUTORS"],
+  ["potteryAction", "potteryActionExecutors"],
+  ["quiltingAction", "quiltingActionExecutors"],
+  ["ornamentAction", "ornamentActionExecutors"],
+  ["communicationAction", "communicationActionExecutors"],
+  ["reminderAction", "reminderActionExecutors"],
+  // memoryAction routes through universalActionExecutors (correct_memory, forget_memory)
+  ["memoryAction", "universalActionExecutors"],
+  // researchTaskAction routes through adaptiveActionExecutors (queue_research_task, cancel_elaine_task)
+  ["researchTaskAction", "adaptiveActionExecutors"],
+]);
+
+// ── Scan N runner: every executor prefix in POLICY_ROWS must be a known dispatch group ─
+if (capabilityRegistrySource !== null) {
+  violations.push(
+    ...scanNViolations(
+      capabilityRegistrySource,
+      KNOWN_EXECUTOR_PREFIXES,
+      capabilityRegistryPath,
+    ),
+  );
+}
+
+// ── Scan O (action-executor reverse): every action-class prefix must still have a spread ─
+//
+// Tests may set CHECK_DOMAIN_SCAN_O_INDEX_PATH to a temp copy of index.ts that
+// has a stale spread injected, so the e2e assertion never mutates the real file.
+{
+  const scanOIndexPathOverride = process.env["CHECK_DOMAIN_SCAN_O_INDEX_PATH"];
+  const scanOSource =
+    scanOIndexPathOverride != null
+      ? (() => {
+          try {
+            return read(scanOIndexPathOverride);
+          } catch {
+            return null;
+          }
+        })()
+      : elaineIndexSource;
+  const scanOFilePath = scanOIndexPathOverride ?? elaineIndexPath;
+  if (scanOSource !== null) {
+    violations.push(
+      ...scanOViolations(scanOSource, ACTION_CLASS_EXECUTOR_MAP, scanOFilePath),
+    );
+  }
+}
+
+/** All legacy-exempt inline mock files have been migrated. No entries remain. */
+const INLINE_SENTRY_RATELIMIT_MOCK_LEGACY_EXEMPT = new Set<string>();
+
+const LESSON_DOMAINS_SOURCE_PATH =
+  "artifacts/api-server/src/lib/elaine-lessons.ts";
+const LESSON_DOMAINS_MOCK_PATH =
+  "artifacts/api-server/src/elaine/test-helpers/standard-mock-scaffold.ts";
+
+const lessonDomainsSource = read(LESSON_DOMAINS_SOURCE_PATH);
+const mockScaffoldSource = read(LESSON_DOMAINS_MOCK_PATH);
+
+const canonicalDomains = extractStringArrayLiteral(
+  lessonDomainsSource,
+  "ELAINE_LESSON_DOMAINS = [",
+);
+const mockDomains = extractStringArrayLiteral(
+  mockScaffoldSource,
+  "ELAINE_LESSON_DOMAINS: [",
+);
+
+if (canonicalDomains === null) {
+  violations.push(
+    `${LESSON_DOMAINS_SOURCE_PATH}: could not extract ELAINE_LESSON_DOMAINS array literal\n` +
+      "  FIX: Ensure ELAINE_LESSON_DOMAINS is declared as a direct array literal" +
+      " assigned with '= ['.",
+  );
+} else if (mockDomains === null) {
+  violations.push(
+    `${LESSON_DOMAINS_MOCK_PATH}: could not extract ELAINE_LESSON_DOMAINS array` +
+      " inside elaineLessonsMockFactory\n" +
+      "  FIX: Ensure elaineLessonsMockFactory returns an object with a" +
+      " ELAINE_LESSON_DOMAINS: [...] key.",
+  );
+} else {
+  const canonicalSet = new Set(canonicalDomains);
+  const mockSet = new Set(mockDomains);
+  const missing = canonicalDomains.filter((d) => !mockSet.has(d));
+  const extra = mockDomains.filter((d) => !canonicalSet.has(d));
+  if (missing.length > 0 || extra.length > 0) {
+    const lines: string[] = [
+      `${LESSON_DOMAINS_MOCK_PATH}: elaineLessonsMockFactory's ELAINE_LESSON_DOMAINS` +
+        " does not match the canonical list in lib/elaine-lessons.ts",
+    ];
+    if (missing.length > 0) {
+      lines.push(
+        `  Missing from mock: ${missing.map((d) => JSON.stringify(d)).join(", ")}`,
+      );
+    }
+    if (extra.length > 0) {
+      lines.push(
+        `  Extra in mock:     ${extra.map((d) => JSON.stringify(d)).join(", ")}`,
+      );
+    }
+    lines.push(
+      "  FIX: Update the ELAINE_LESSON_DOMAINS array inside elaineLessonsMockFactory\n" +
+        `       in ${LESSON_DOMAINS_MOCK_PATH}\n` +
+        "       to exactly match the ELAINE_LESSON_DOMAINS constant in\n" +
+        `       ${LESSON_DOMAINS_SOURCE_PATH}.\n` +
+        "       The two lists must contain the same values (order is not checked).",
+    );
+    violations.push(lines.join("\n"));
+  }
+}
+
+// ── Scan O runner: inline @sentry/node and rateLimit mock bodies ─────────────
+//
+// Iterates every Elaine test file, skips legacy-exempt paths, and pushes a
+// violation for any file whose vi.mock("@sentry/node", …) or
+// vi.mock("…/middleware/rateLimit", …) call does not delegate to the
+// corresponding scaffold factory.
+
+for (const file of elaineTestFiles) {
+  if (INLINE_SENTRY_RATELIMIT_MOCK_LEGACY_EXEMPT.has(file)) continue;
+  const contents = read(file);
+  if (hasInlineSentryMock(contents)) {
+    violations.push(
+      `${file}: vi.mock("@sentry/node") has an inline factory body instead of delegating to the shared scaffold\n` +
+        "  FIX: Import sentryMockFactory from the shared scaffold and delegate:\n" +
+        '       import { sentryMockFactory } from "./test-helpers/standard-mock-scaffold";\n' +
+        '       vi.mock("@sentry/node", () => sentryMockFactory());\n' +
+        "       The canonical @sentry/node stub lives in standard-mock-scaffold.ts so that\n" +
+        "       all Elaine test files stay in sync when the Sentry API changes.\n" +
+        "       See artifacts/api-server/src/elaine/test-helpers/standard-mock-scaffold.ts.",
+    );
+  }
+  if (hasInlineRateLimitMock(contents)) {
+    violations.push(
+      `${file}: vi.mock("../middleware/rateLimit") has an inline factory body instead of delegating to the shared scaffold\n` +
+        "  FIX: Import rateLimitMockFactory from the shared scaffold and delegate:\n" +
+        '       import { rateLimitMockFactory } from "./test-helpers/standard-mock-scaffold";\n' +
+        '       vi.mock("../middleware/rateLimit", () => rateLimitMockFactory());\n' +
+        "       The canonical rateLimit stub lives in standard-mock-scaffold.ts so that\n" +
+        "       all Elaine test files stay in sync when new limiters are added.\n" +
+        "       See artifacts/api-server/src/elaine/test-helpers/standard-mock-scaffold.ts.",
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 if (violations.length > 0) {
   console.error(
@@ -2323,4 +2845,530 @@ if (violations.length > 0) {
   process.exitCode = 1;
 } else {
   console.log("✓ Domain composition boundaries are intact");
+}
+
+// ── Scan M helper functions ───────────────────────────────────────────────────
+// Exported at module scope so unit tests can import them without running the
+// top-level scan code.  Function declarations are hoisted in ESM, so placing
+// them after the scan blocks does not affect their availability above.
+
+/**
+ * Strip line comments (`// ...`) and block comments (`/* ... *\/`) from
+ * source text, preserving newlines so that line count is not disturbed.
+ *
+ * Used to prevent pattern-matching from being tricked by commented-out code,
+ * e.g. `// if (name === GET_NOTE_TOOL_NAME)` must NOT satisfy a dispatch check.
+ *
+ * Exported for unit tests.
+ */
+export function stripSourceComments(source: string): string {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
+    .replace(/\/\/[^\n]*/g, (m) => " ".repeat(m.length));
+}
+
+/**
+ * Replace the character content of single-quoted and double-quoted string
+ * literals with spaces so that unbalanced curly braces inside strings do not
+ * corrupt brace counting, and patterns embedded in string values cannot satisfy
+ * code-structure checks.
+ *
+ * Exported for unit tests.
+ */
+export function stripSimpleStringLiterals(source: string): string {
+  return source
+    .replace(/"(?:[^"\\]|\\.)*"/g, (m) => '"' + " ".repeat(m.length - 2) + '"')
+    .replace(/'(?:[^'\\]|\\.)*'/g, (m) => "'" + " ".repeat(m.length - 2) + "'");
+}
+
+/**
+ * Replace the character content of template literals with spaces.
+ *
+ * The regex does not handle nested template expressions (`${`inner`}`)
+ * but is sufficient to prevent patterns embedded in template strings from
+ * satisfying the dispatch-gap check.
+ *
+ * Exported for unit tests.
+ */
+export function stripTemplateLiterals(source: string): string {
+  return source.replace(
+    /`(?:[^`\\]|\\.)*`/g,
+    (m) => "`" + " ".repeat(m.length - 2) + "`",
+  );
+}
+
+/**
+ * Strip all string-literal content (single-quoted, double-quoted, and
+ * template literals) from source text.
+ *
+ * Exported for unit tests.
+ */
+export function stripAllStringLiteralContent(source: string): string {
+  return stripTemplateLiterals(stripSimpleStringLiterals(source));
+}
+
+/**
+ * Extract the full body of `executeUniversalReadTool` from a source file using
+ * brace-counting on a sanitized (comment-stripped, all-string-content-stripped)
+ * copy of the source, so that braces inside comments or any string form do not
+ * corrupt the function-body boundary.
+ *
+ * Returns null when the function declaration is not found or when its braces
+ * are unbalanced (malformed source).
+ *
+ * Exported for unit tests.
+ */
+export function extractUniversalReadDispatchBody(
+  source: string,
+): string | null {
+  // Match the exported async function declaration (export keyword is optional
+  // — the function may be exported separately).
+  const anchor = source.indexOf("function executeUniversalReadTool(");
+  if (anchor === -1) return null;
+  const braceStart = source.indexOf("{", anchor);
+  if (braceStart === -1) return null;
+
+  // Build a sanitized copy for brace counting: comments and all string-literal
+  // content are blanked out so their curly braces don't shift depth.
+  // The sanitized copy is the same length as the original — slicing the
+  // original at the found index always returns the correct body.
+  const sanitized = stripAllStringLiteralContent(stripSourceComments(source));
+
+  let depth = 0;
+  for (let i = braceStart; i < sanitized.length; i++) {
+    if (sanitized[i] === "{") {
+      depth++;
+    } else if (sanitized[i] === "}") {
+      depth--;
+      if (depth === 0) return source.slice(braceStart, i + 1);
+    }
+  }
+  return null; // unmatched brace
+}
+
+/**
+ * Given the full source of `universal-read-tools.ts`, returns a Map of
+ * exported `*_TOOL_NAME` constants that do NOT have a matching dispatch branch
+ * in `executeUniversalReadTool`.
+ *
+ * A dispatch branch is recognised ONLY in the constant-reference form:
+ *   `name === CONST_NAME`  (with word boundaries on both identifiers)
+ *
+ * The string-literal form (`name === "value"`) is intentionally NOT supported:
+ * it is unverifiable after necessary string stripping, and dispatch branches
+ * in this codebase always reference the exported constant, not the raw string.
+ *
+ * Pattern matching is performed on a fully-sanitized copy of the body (comments
+ * and ALL string-literal content stripped — single-quoted, double-quoted, and
+ * template literals) so that patterns embedded in comments or string values
+ * cannot masquerade as real dispatch branches.
+ *
+ * An empty Map means every constant is handled.
+ * When `executeUniversalReadTool` cannot be found, every constant is reported
+ * as a gap so the missing function itself is surfaced.
+ *
+ * Note: `extractToolNameConstants` targets `export const` declarations.
+ * Constants re-exported via a separate `export { NAME }` statement are not
+ * covered — in practice universal-read-tools.ts always uses inline `export const`.
+ *
+ * Exported for unit tests.
+ */
+export function findUniversalReadDispatchGaps(
+  source: string,
+): Map<string, string> {
+  const constants = extractToolNameConstants(source);
+  const rawBody = extractUniversalReadDispatchBody(source);
+  const gaps = new Map<string, string>();
+
+  // Sanitize fully: strip comments first, then all string-literal content.
+  // This ensures that:
+  //   • `// if (name === FOO_TOOL_NAME)` (line comment)           → not satisfied
+  //   • `/* name === FOO_TOOL_NAME */`   (block comment)          → not satisfied
+  //   • `throw new Error("name === FOO_TOOL_NAME")` (double-quot) → not satisfied
+  //   • throw new Error(`name === FOO_TOOL_NAME`)  (template lit) → not satisfied
+  const sanitizedBody =
+    rawBody !== null
+      ? stripAllStringLiteralContent(stripSourceComments(rawBody))
+      : null;
+
+  for (const [constName, value] of constants) {
+    if (sanitizedBody === null) {
+      // Function not found — every constant is a gap.
+      gaps.set(constName, value);
+      continue;
+    }
+
+    // Constant-reference form only: `\bname\s*===\s*CONST_NAME\b`
+    // Word boundaries prevent `toolname === CONST` from matching.
+    const byRefRE = new RegExp(`\\bname\\s*===\\s*${constName}\\b`);
+    if (!byRefRE.test(sanitizedBody)) {
+      gaps.set(constName, value);
+    }
+  }
+  return gaps;
+}
+
+/**
+ * Given a list of executor prefixes extracted from POLICY_ROWS and the canonical
+ * set of known valid executor prefixes, returns the subset of policy prefixes
+ * that have no corresponding dispatcher implementation.
+ *
+ * An empty array means all policy prefixes are known.
+ * Exported for unit tests so a synthetic known set can be supplied without
+ * reading real source files.
+ */
+export function findPhantomExecutorPrefixes(
+  policyPrefixes: readonly string[],
+  knownPrefixes: ReadonlySet<string>,
+): string[] {
+  return policyPrefixes.filter((p) => !knownPrefixes.has(p));
+}
+
+/**
+ * Extract all distinct `executorPrefix` values from `policies([...], {...})`
+ * calls in the given source text (typically capability-registry.ts).
+ *
+ * Handles both single-quoted and double-quoted prefix strings and ignores
+ * whitespace variations.
+ *
+ * Returns a deduplicated array of the extracted prefix strings.
+ * Exported for unit tests.
+ */
+export function extractPolicyRowExecutorPrefixes(source: string): string[] {
+  // Match the key `executorPrefix` followed by a colon and a quoted camelCase value.
+  // Prefix identifiers begin with a lowercase letter and contain only letters/digits.
+  const PREFIX_RE = /\bexecutorPrefix\s*:\s*["']([a-zA-Z][a-zA-Z0-9]*)["']/g;
+  const seen = new Set<string>();
+  let m: RegExpExecArray | null;
+  while ((m = PREFIX_RE.exec(source)) !== null) {
+    seen.add(m[1]);
+  }
+  return [...seen];
+}
+
+/**
+ * Core logic for Scan N: given the text of capability-registry.ts and the
+ * canonical known-prefix set, return any violation strings that should be
+ * pushed into the violations array.
+ *
+ * Extracted as a pure, testable helper so unit tests can verify the full
+ * violation message without touching the filesystem or running the complete
+ * script.  An empty array means no phantom prefixes were found.
+ *
+ * Exported for unit tests.
+ */
+export function scanNViolations(
+  source: string,
+  knownPrefixes: ReadonlySet<string>,
+  filePath: string,
+): string[] {
+  const policyPrefixes = extractPolicyRowExecutorPrefixes(source);
+  const phantoms = findPhantomExecutorPrefixes(policyPrefixes, knownPrefixes);
+  if (phantoms.length === 0) return [];
+  const listed = phantoms
+    .sort()
+    .map((p) => `    "${p}"`)
+    .join("\n");
+  return [
+    `${filePath}: ${phantoms.length} executor prefix(es) in POLICY_ROWS have no ` +
+      `corresponding dispatch group in the Elaine router (artifacts/api-server/src/elaine/index.ts):\n${listed}\n` +
+      '  FIX: Each executorPrefix value in policies([...], { executorPrefix: "X" }) must\n' +
+      "       appear in KNOWN_EXECUTOR_PREFIXES in scripts/src/check-domain-composition.ts.\n" +
+      "       A phantom prefix means either:\n" +
+      "         (a) the prefix was mistyped — fix it to match a real dispatcher group, OR\n" +
+      "         (b) a new executor group was added in index.ts — also add its prefix to\n" +
+      "             KNOWN_EXECUTOR_PREFIXES in the SAME change as the executor implementation.\n" +
+      "       Without a matching dispatcher, every call to tools with this prefix is\n" +
+      "       silently dropped at runtime with no error and no response.",
+  ];
+}
+
+export function missingRuntimeMockHelperKeys(
+  source: string,
+): Set<string> | null {
+  const block = extractRuntimeMockDefaultsBlock(source);
+  if (block === null) return null;
+  const missing = new Set<string>();
+  for (const { key } of RUNTIME_REQUIRED_EXPORTS) {
+    if (!block.includes(`${key}:`)) missing.add(key);
+  }
+  return missing;
+}
+
+/**
+ * Extract the set of identifier names that are spread into the ACTION_EXECUTORS
+ * object literal in index.ts.  Locates the `const ACTION_EXECUTORS` declaration,
+ * extracts its initializer body with brace-counting (using a sanitized copy to
+ * avoid being tricked by braces inside comments or string literals), then
+ * collects every `...IDENTIFIER` spread element found in that body.
+ *
+ * Returns an empty Set when ACTION_EXECUTORS cannot be located or its brace
+ * structure is malformed.
+ *
+ * Exported for unit tests.
+ */
+export function extractActionExecutorSpreads(source: string): Set<string> {
+  const constIdx = source.indexOf("const ACTION_EXECUTORS");
+  if (constIdx === -1) return new Set();
+  const assignIdx = source.indexOf("=", constIdx);
+  if (assignIdx === -1) return new Set();
+  const braceStart = source.indexOf("{", assignIdx);
+  if (braceStart === -1) return new Set();
+
+  // Sanitize for reliable brace-counting: comments and string literals may
+  // contain { } that would corrupt the depth counter.  These helpers preserve
+  // string length so the source-slice indices remain valid.
+  const sanitized = stripAllStringLiteralContent(stripSourceComments(source));
+
+  let depth = 0;
+  let bodyEnd = -1;
+  for (let i = braceStart; i < sanitized.length; i++) {
+    if (sanitized[i] === "{") {
+      depth++;
+    } else if (sanitized[i] === "}") {
+      depth--;
+      if (depth === 0) {
+        bodyEnd = i;
+        break;
+      }
+    }
+  }
+
+  const body =
+    bodyEnd !== -1
+      ? source.slice(braceStart, bodyEnd + 1)
+      : source.slice(braceStart);
+
+  // Sanitize the body before running the spread regex so that `...patterns`
+  // inside comments or string literals are not mistakenly captured as real
+  // spread elements.
+  const sanitizedBody = stripAllStringLiteralContent(stripSourceComments(body));
+
+  // Collect every ...IDENTIFIER spread element from the sanitized body.
+  const SPREAD_RE = /\.\.\.([A-Za-z_][A-Za-z0-9_]*)/g;
+  const names = new Set<string>();
+  let m: RegExpExecArray | null;
+  while ((m = SPREAD_RE.exec(sanitizedBody)) !== null) {
+    names.add(m[1]);
+  }
+  return names;
+}
+/**
+ * Extract a flat string-array literal from a source file by locating `anchor`
+ * and then bracket-counting to find the matching `]`.
+ *
+ * Returns the ordered list of quoted string values found inside the array, or
+ * null when the anchor is absent or the brackets are unmatched.
+ *
+ * Exported for unit tests.
+ */
+export function extractStringArrayLiteral(
+  source: string,
+  anchor: string,
+): string[] | null {
+  const anchorIdx = source.indexOf(anchor);
+  if (anchorIdx === -1) return null;
+  const bracketStart = source.indexOf("[", anchorIdx);
+  if (bracketStart === -1) return null;
+  let depth = 0;
+  let end = -1;
+  for (let i = bracketStart; i < source.length; i++) {
+    if (source[i] === "[") depth++;
+    else if (source[i] === "]") {
+      depth--;
+      if (depth === 0) {
+        end = i;
+        break;
+      }
+    }
+  }
+  if (end === -1) return null;
+  const body = source.slice(bracketStart + 1, end);
+  const STRING_RE = /["']([^"'\\]+)["']/g;
+  const values: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = STRING_RE.exec(body)) !== null) {
+    values.push(m[1]);
+  }
+  return values;
+}
+
+/**
+ * Compare the canonical ELAINE_LESSON_DOMAINS list from elaine-lessons.ts
+ * against the hard-coded array inside elaineLessonsMockFactory in
+ * standard-mock-scaffold.ts.
+ *
+ * Returns `{ missing, extra }` where:
+ *   - `missing` — domains present in the canonical list but absent from the mock
+ *   - `extra`   — domains present in the mock but absent from the canonical list
+ *
+ * Both arrays are empty when the two lists are perfectly in sync.
+ *
+ * Returns null when either array cannot be extracted from the supplied source
+ * text (extraction failure is reported as a separate violation by the inline
+ * Scan O block).
+ *
+ * Exported for unit tests.
+ */
+export function diffElaineLessonDomainsMock(
+  lessonDomainsSource: string,
+  mockScaffoldSource: string,
+): { missing: string[]; extra: string[] } | null {
+  const canonical = extractStringArrayLiteral(
+    lessonDomainsSource,
+    "ELAINE_LESSON_DOMAINS = [",
+  );
+  const mock = extractStringArrayLiteral(
+    mockScaffoldSource,
+    "ELAINE_LESSON_DOMAINS: [",
+  );
+  if (canonical === null || mock === null) return null;
+  const canonicalSet = new Set(canonical);
+  const mockSet = new Set(mock);
+  return {
+    missing: canonical.filter((d) => !mockSet.has(d)),
+    extra: mock.filter((d) => !canonicalSet.has(d)),
+  };
+}
+
+/**
+ * Given the action-class prefix → executor-variable map and the set of
+ * identifiers actually spread into ACTION_EXECUTORS, return the prefixes
+ * whose executor variable is no longer present in the spread.
+ *
+ * An empty array means every action-class prefix is still backed by a real
+ * spread in ACTION_EXECUTORS.
+ *
+ * Exported for unit tests.
+ */
+export function findStaleActionClassPrefixes(
+  knownMap: ReadonlyMap<string, string>,
+  spreads: ReadonlySet<string>,
+): string[] {
+  const stale: string[] = [];
+  for (const [prefix, executorVar] of knownMap) {
+    if (!spreads.has(executorVar)) {
+      stale.push(prefix);
+    }
+  }
+  return stale;
+}
+/**
+ * Scan O detector — exported for unit tests.
+ *
+ * Returns true if the source contains a `vi.mock("@sentry/node", …)` call
+ * whose factory body is defined inline — i.e. the mock call does NOT delegate
+ * to `sentryMockFactory()` from the shared scaffold as its factory argument.
+ *
+ * Detection strategy:
+ *   1. Check whether any `vi.mock("@sentry/node"` call exists at all (if not,
+ *      return false immediately — the file is clean).
+ *   2. Check whether the call uses the correct delegation form:
+ *        vi.mock("@sentry/node", () => sentryMockFactory())
+ *      `\s*` in the regex matches across newlines, so multi-line delegations
+ *      are accepted.
+ *   3. If (1) is true but (2) is false, the factory is inline → return true.
+ *
+ * This approach validates the factory of the specific `vi.mock` call rather
+ * than searching file-wide text, so a file that contains `sentryMockFactory()`
+ * somewhere else (e.g. an import statement or a comment) but still has an
+ * inline mock body is correctly flagged.
+ *
+ * A file that does not mock "@sentry/node" at all returns false.
+ */
+export function hasInlineSentryMock(contents: string): boolean {
+  // Count how many times @sentry/node is mocked.
+  const MOCK_PRESENT_RE = /vi\.mock\s*\(\s*["']@sentry\/node["']/g;
+  const allMocks = [...contents.matchAll(MOCK_PRESENT_RE)];
+  if (allMocks.length === 0) return false;
+
+  // Count how many of those calls delegate to sentryMockFactory() directly.
+  // \s* matches whitespace including newlines so multi-line delegations are
+  // accepted.  If fewer delegation calls exist than total mock calls, at least
+  // one call has an inline body.
+  const DELEGATE_RE =
+    /vi\.mock\s*\(\s*["']@sentry\/node["']\s*,\s*\(\s*\)\s*=>\s*sentryMockFactory\s*\(\s*\)\s*\)/g;
+  const delegateMocks = [...contents.matchAll(DELEGATE_RE)];
+  return delegateMocks.length < allMocks.length;
+}
+
+/**
+ * Scan O detector — exported for unit tests.
+ *
+ * Returns true if the source contains a `vi.mock(…/middleware/rateLimit, …)`
+ * call whose factory body is defined inline — i.e. the mock call does NOT
+ * delegate to `rateLimitMockFactory()` from the shared scaffold as its factory
+ * argument.
+ *
+ * The path pattern `[^"']*middleware/rateLimit` handles any relative depth
+ * (e.g. `"../middleware/rateLimit"` from a top-level Elaine test file or
+ * `"../../middleware/rateLimit"` from a nested subdirectory).
+ *
+ * Detection strategy mirrors `hasInlineSentryMock`: find the specific
+ * vi.mock call and validate its factory argument, not just search the file.
+ *
+ * A file that does not mock the rateLimit middleware at all returns false.
+ */
+export function hasInlineRateLimitMock(contents: string): boolean {
+  // Count how many times the rateLimit middleware is mocked.
+  // The path pattern [^"']* handles any relative depth (e.g. ../middleware or
+  // ../../middleware from nested subdirectories).
+  const MOCK_PRESENT_RE =
+    /vi\.mock\s*\(\s*["'][^"']*middleware\/rateLimit["']/g;
+  const allMocks = [...contents.matchAll(MOCK_PRESENT_RE)];
+  if (allMocks.length === 0) return false;
+
+  // Count how many of those calls delegate to rateLimitMockFactory() directly.
+  // If fewer delegation calls exist than total mock calls, at least one has an
+  // inline body.
+  const DELEGATE_RE =
+    /vi\.mock\s*\(\s*["'][^"']*middleware\/rateLimit["']\s*,\s*\(\s*\)\s*=>\s*rateLimitMockFactory\s*\(\s*\)\s*\)/g;
+  const delegateMocks = [...contents.matchAll(DELEGATE_RE)];
+  return delegateMocks.length < allMocks.length;
+}
+
+/**
+ * Core logic for Scan O: given the source of index.ts and the canonical
+ * action-class prefix → executor-variable map, return any violation strings
+ * that should be pushed into the violations array.
+ *
+ * An empty array means all action-class prefixes in KNOWN_EXECUTOR_PREFIXES
+ * are still backed by real executor spreads in ACTION_EXECUTORS.
+ *
+ * Exported for unit tests so the full violation message format can be asserted
+ * without touching the filesystem or running the complete script.
+ */
+export function scanOViolations(
+  source: string,
+  knownMap: ReadonlyMap<string, string>,
+  filePath: string,
+): string[] {
+  const spreads = extractActionExecutorSpreads(source);
+  if (spreads.size === 0) {
+    return [
+      `${filePath}: could not locate ACTION_EXECUTORS or it contains no spread elements\n` +
+        "  FIX: Scan O cannot verify KNOWN_EXECUTOR_PREFIXES action-class coverage\n" +
+        "       without a parseable ACTION_EXECUTORS object literal in this file.\n" +
+        "       Ensure ACTION_EXECUTORS is defined as a spread-object literal.",
+    ];
+  }
+  const stale = findStaleActionClassPrefixes(knownMap, spreads);
+  if (stale.length === 0) return [];
+  const listed = stale
+    .sort()
+    .map((p) => `    "${p}" (was backed by: ...${knownMap.get(p)!})`)
+    .join("\n");
+  return [
+    `${filePath}: ${stale.length} action-class executor prefix(es) in KNOWN_EXECUTOR_PREFIXES ` +
+      `no longer have a matching spread in ACTION_EXECUTORS:\n${listed}\n` +
+      "  FIX: Each entry in ACTION_CLASS_EXECUTOR_MAP must still correspond to an\n" +
+      "       ...executorVar spread inside ACTION_EXECUTORS in index.ts.  A stale\n" +
+      "       entry means the executor variable was renamed or removed without\n" +
+      "       updating the guardrail.  Do ONE of the following:\n" +
+      "         (a) The executor variable was renamed — update ACTION_CLASS_EXECUTOR_MAP\n" +
+      "             in check-domain-composition.ts to use the new variable name, AND\n" +
+      "             update the comment next to the prefix in KNOWN_EXECUTOR_PREFIXES.\n" +
+      "         (b) The executor group was removed — delete the prefix from both\n" +
+      "             KNOWN_EXECUTOR_PREFIXES and ACTION_CLASS_EXECUTOR_MAP.",
+  ];
 }

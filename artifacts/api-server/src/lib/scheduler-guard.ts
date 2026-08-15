@@ -337,6 +337,7 @@ export const KNOWN_SCHEDULER_NAMES = new Set([
   "integrations-health-nudges",
   "monitoring-scheduler",
   "reminders-scheduler",
+  "sentry-error-nudges",
   "travels-calendar-scan",
   "travels-nudges",
   "webhook-side-effect-cleanup",

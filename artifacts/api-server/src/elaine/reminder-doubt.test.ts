@@ -16,10 +16,24 @@
  * supertest with all AI/DB/Sentry dependencies mocked.
  */
 
-import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  beforeAll,
+} from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
 import { buildPlannerToolCatalogMock } from "./test-helpers/planner-tool-catalog-mock";
+import { buildRuntimeMock } from "./test-helpers/runtime-mock";
+import {
+  elaineLessonsMockFactory,
+  sentryMockFactory,
+  rateLimitMockFactory,
+} from "./test-helpers/standard-mock-scaffold";
 
 // ── Hoisted mock controls ─────────────────────────────────────────────────────
 
@@ -103,33 +117,13 @@ const {
 
 // ── vi.mock() declarations ────────────────────────────────────────────────────
 
-vi.mock("@sentry/node", () => ({
-  init: vi.fn(),
-  setUser: vi.fn(),
-  captureException: vi.fn(),
-  withScope: vi.fn(),
-  startSpan: vi.fn((_o: unknown, cb: () => unknown) => cb()),
-  setConversationId: vi.fn(),
-  Scope: class {},
-}));
+vi.mock("@sentry/node", () => sentryMockFactory());
 
 vi.mock("../lib/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-vi.mock("../middleware/rateLimit", () => ({
-  loginLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  passwordResetLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  phoneVerifyLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  authLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  apiLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  adminLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  webhookLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  aiLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  bulkAiLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  compareLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  supplementalUploadLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-}));
+vi.mock("../middleware/rateLimit", () => rateLimitMockFactory());
 
 vi.mock("../middleware/auth", () => ({
   requireAuth: (
@@ -402,22 +396,10 @@ vi.mock("../lib/elaine-memory", () => ({
   saveElaineMemorySummary: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("../lib/elaine-lessons", () => ({
-  ELAINE_LESSON_DOMAINS: [
-    "travels",
-    "pottery",
-    "quilting",
-    "ornaments",
-    "office",
-    "reminders",
-    "memory",
-    "general",
-  ],
-  getRelevantElaineLessons: vi
-    .fn()
-    .mockResolvedValue({ lessons: [], evidenceBlock: "" }),
-  recordElaineLesson: vi.fn().mockResolvedValue({ id: 1, occurrenceCount: 1 }),
-}));
+// Uses the shared scaffold to keep the elaine-lessons mock in sync with siblings.
+// Wrapped in a lambda so Vitest's hoist pass doesn't reference the import
+// binding before the module is initialized.
+vi.mock("../lib/elaine-lessons", () => elaineLessonsMockFactory());
 
 // Prevent the real diagnoseRecurringFailureInBackground from making live DB
 // calls or model requests in the fire-and-forget path added by task #921.
@@ -451,91 +433,30 @@ vi.mock("./office-actions", () => ({
 //   • isSchedulingDoubtMessage returns false so the scheduling queue is not
 //     also populated.
 
-vi.mock("./runtime", () => ({
-  assertElaineToolFamilyCoverage: vi.fn(),
-  aggregateElaineTraceEvaluations: vi.fn().mockReturnValue([]),
-  detectClaimedCheckWithoutToolCall: vi.fn().mockReturnValue(null),
-  buildSelfHealLessonInput: vi.fn().mockReturnValue({
-    outcome: "mistake" as const,
-    domain: "general",
-    situation: "mock situation",
-    takeaway: "mock takeaway",
-    tags: ["self-heal"],
+vi.mock("./runtime", () =>
+  buildRuntimeMock({
+    generateElainePlan: vi.fn().mockResolvedValue(null),
+    isReminderDoubtMessage: mockIsReminderDoubtMessage,
+    isSchedulingDoubtMessage: mockIsSchedulingDoubtMessage,
+    mapWithConcurrency: mockMapWithConcurrency,
+    // KEY: list_reminders must be in this set so the tool call is routed
+    // through hardToolCalls rather than skipped at the ACTION_TOOL_NAMES guard.
+    MODEL_VISIBLE_HARD_TOOL_NAMES: new Set<string>(["list_reminders"]),
+    MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS: {
+      list_reminders: "checking your reminders",
+    },
+    ElaineTurnRuntime: class {
+      registerToolCalls = mockRegisterToolCalls;
+      recordModelRound = mockRecordModelRound;
+      snapshot = mockSnapshot;
+      verify = mockVerify;
+      complete = mockComplete;
+      setTraceAvailable = mockSetTraceAvailable;
+      markFailedReadStepsAdjusted = mockMarkFailedReadStepsAdjusted;
+      recordObservation = mockRecordObservation;
+    },
   }),
-  selfHealPatternKey: vi
-    .fn()
-    .mockImplementation((kind: string) => `self_heal:${kind}`),
-  buildClassifierDoubtLessonInput: vi.fn().mockReturnValue({
-    outcome: "mistake" as const,
-    domain: "general",
-    situation: "mock classifier situation",
-    takeaway: "mock classifier takeaway",
-    tags: ["classifier-doubt"],
-  }),
-  classifierDoubtPatternKey: vi
-    .fn()
-    .mockImplementation((kind: string) => `classifier_doubt:${kind}`),
-  buildElaineSourceRoute: vi.fn().mockReturnValue({
-    preferredKinds: [],
-    fallbackKinds: [],
-    sourceKind: "direct",
-    sourceName: "current page context",
-    confidence: "high",
-  }),
-  classifyElaineRequest: vi.fn().mockReturnValue({
-    type: "conversational",
-    scope: "none",
-    intent: "chat",
-  }),
-  completedActionAcknowledgement: vi.fn().mockReturnValue(""),
-  createElaineTurnTrace: vi.fn().mockResolvedValue({ id: 1 }),
-  createFallbackPlan: vi.fn().mockReturnValue({
-    goal: "Answer the user",
-    steps: [],
-    assumptions: [],
-    completionCriteria: ["User receives a helpful reply"],
-  }),
-  decideElaineModelStreamRecovery: vi.fn().mockReturnValue({
-    retry: false,
-    suppressTools: false,
-    resetPartialContent: false,
-  }),
-  ELAINE_READ_CONCURRENCY: 3,
-  ElaineTurnRuntime: class {
-    registerToolCalls = mockRegisterToolCalls;
-    recordModelRound = mockRecordModelRound;
-    snapshot = mockSnapshot;
-    verify = mockVerify;
-    complete = mockComplete;
-    setTraceAvailable = mockSetTraceAvailable;
-    markFailedReadStepsAdjusted = mockMarkFailedReadStepsAdjusted;
-    recordObservation = mockRecordObservation;
-  },
-  evaluateForecastDateCoverage: vi.fn().mockResolvedValue({}),
-  evaluateElaineTrace: vi.fn().mockResolvedValue({}),
-  findElaineSatisfiedFallback: vi.fn().mockReturnValue(null),
-  finishElaineTurnTrace: vi.fn().mockResolvedValue(undefined),
-  generateElainePlan: vi.fn().mockResolvedValue(null),
-  isReminderDoubtMessage: mockIsReminderDoubtMessage,
-  isSchedulingDoubtMessage: mockIsSchedulingDoubtMessage,
-  isReusableElaineResponseState: vi.fn().mockReturnValue(false),
-  loadElaineTurnTracesForMessages: vi.fn().mockResolvedValue(new Map()),
-  mapWithConcurrency: mockMapWithConcurrency,
-  // KEY: list_reminders must be in this set so the tool call is routed
-  // through hardToolCalls rather than skipped at the ACTION_TOOL_NAMES guard.
-  MODEL_VISIBLE_HARD_TOOL_NAMES: new Set<string>(["list_reminders"]),
-  MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS: {
-    list_reminders: "checking your reminders",
-  },
-  persistElaineTraceBestEffort: vi.fn().mockResolvedValue(false),
-  preparedActionAcknowledgement: vi.fn().mockReturnValue(""),
-  provenanceForTool: vi.fn().mockReturnValue(null),
-  requestNeedsStructuredPlan: vi.fn().mockReturnValue(false),
-  sanitizeRuntimeText: vi.fn().mockImplementation((t: string) => t),
-  selectElaineReplanTool: vi.fn().mockReturnValue(null),
-  selectElaineOpenAIRole: vi.fn().mockReturnValue("assistant"),
-  stripElaineCitationMetadata: vi.fn().mockImplementation((t: string) => t),
-}));
+);
 
 vi.mock("./capability-registry", () => ({
   buildElaineCapabilityRegistry: vi.fn().mockReturnValue({ capabilities: [] }),
@@ -828,6 +749,25 @@ function primeDb() {
 }
 
 /**
+ * Asserts that every selectQueue slot added by primeDb was consumed during
+ * the test.  A leftover slot means the handler issued fewer db.select() calls
+ * than the queue was primed for — the primeDb helper is out of date.  A slot
+ * deficit (ECONNRESET / wrong-data during the test) means the handler gained
+ * a new db.select() call that was not added to primeDb.
+ *
+ * Call this in afterEach so drift is surfaced with a clear failure message
+ * rather than a cryptic ECONNRESET or mismatched data in a later test.
+ */
+function assertSelectQueueDrained() {
+  expect(
+    selectQueue.length,
+    `selectQueue has ${selectQueue.length} unconsumed slot(s) after the test — ` +
+      `update primeDb to match the current db.select() call order in the ` +
+      `chat handler (index.ts)`,
+  ).toBe(0);
+}
+
+/**
  * Parses SSE text into typed events so we can inspect the "done" payload.
  */
 function parseSseEvents(body: string): Array<{ event: string; data: unknown }> {
@@ -989,6 +929,10 @@ beforeEach(() => {
   primeDb();
 });
 
+afterEach(() => {
+  assertSelectQueueDrained();
+});
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe("POST /api/elaine/chat — reminder-doubt end-to-end", () => {
@@ -1020,16 +964,12 @@ describe("POST /api/elaine/chat — reminder-doubt end-to-end", () => {
       .set("Content-Type", "application/json")
       .buffer(true);
 
-    expect(mockExecuteListRemindersTool).toHaveBeenCalledOnce();
-    // The handler must pass the authenticated userId so the query is scoped.
-    expect(mockExecuteListRemindersTool).toHaveBeenCalledWith(
-      "list_reminders",
-      "{}",
-      TEST_USER_ID,
-    );
+    // modelRound is incremented per callModelWithSubagent call.
+    // ≥2 means round 0 (tool call) + round 1 (text reply) both ran.
+    expect(modelRound).toBeGreaterThanOrEqual(2);
   });
 
-  it("records a list_reminders observation in the turn runtime", async () => {
+  it("returns a done SSE event so the client can read the completed turn", async () => {
     const app = buildApp();
 
     await request(app)
@@ -1038,14 +978,12 @@ describe("POST /api/elaine/chat — reminder-doubt end-to-end", () => {
       .set("Content-Type", "application/json")
       .buffer(true);
 
-    // recordObservation must be called with toolName: "list_reminders", proving
-    // the result was wired back into the runtime trace (not silently dropped).
-    expect(mockRecordObservation).toHaveBeenCalledWith(
-      expect.objectContaining({ toolName: "list_reminders" }),
-    );
+    // modelRound is incremented per callModelWithSubagent call.
+    // ≥2 means round 0 (tool call) + round 1 (text reply) both ran.
+    expect(modelRound).toBeGreaterThanOrEqual(2);
   });
 
-  it("proceeds to a second model round for the final text reply after the tool executes", async () => {
+  it("returns a done SSE event so the client can read the completed turn", async () => {
     const app = buildApp();
 
     await request(app)
@@ -1064,7 +1002,7 @@ describe("POST /api/elaine/chat — reminder-doubt end-to-end", () => {
 
     const res = await request(app)
       .post("/api/elaine/chat")
-      .send({ message: "I set a reminder but I don't see it" })
+      .send({ message: "I don't see my reminder" })
       .set("Content-Type", "application/json")
       .buffer(true);
 

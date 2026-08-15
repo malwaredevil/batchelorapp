@@ -20,6 +20,10 @@ import {
   createOrnamentItemFromBuffer,
 } from "../routes/ornaments/ornaments";
 import { deleteImage } from "../lib/ornaments/storage";
+import {
+  lookupOrnamentEbayData,
+  buildEbayQuery,
+} from "../lib/pottery/ebay-market-value";
 import { logActivity } from "../lib/soft-delete";
 import { env } from "../lib/env";
 import { consumeAiRateLimit } from "../middleware/rateLimit";
@@ -120,6 +124,11 @@ export const AddPhotoToOrnamentsPayload = z.object({
   attachmentUrl: z.string().url().max(2000),
 });
 
+export const OrnamentEbayPriceLookupActionPayload = z.object({
+  itemId: z.number().int().positive(),
+  force: z.boolean().optional(),
+});
+
 export const ornamentActionSchemas = [
   z.object({
     type: z.literal("update_ornament_item"),
@@ -165,6 +174,10 @@ export const ornamentActionSchemas = [
     type: z.literal("add_photo_to_ornaments"),
     payload: AddPhotoToOrnamentsPayload,
   }),
+  z.object({
+    type: z.literal("ornament_ebay_price_lookup"),
+    payload: OrnamentEbayPriceLookupActionPayload,
+  }),
 ] as const;
 
 export type OrnamentActionType =
@@ -178,7 +191,8 @@ export type OrnamentActionType =
   | "promote_ornament_photo"
   | "merge_ornament_categories"
   | "bulk_reanalyze_ornaments"
-  | "add_photo_to_ornaments";
+  | "add_photo_to_ornaments"
+  | "ornament_ebay_price_lookup";
 
 async function getOrnamentItemLabelInfo(
   itemId: number,
@@ -491,6 +505,170 @@ export const ornamentActionExecutors: Record<
     };
   }) as ActionExecutor,
 
+  ornament_ebay_price_lookup: (async (
+    payload: z.infer<typeof OrnamentEbayPriceLookupActionPayload>,
+    userId: number,
+  ) => {
+    if (!env.ebayAppId) {
+      return { status: 503, body: { error: "eBay API not configured." } };
+    }
+
+    const EBAY_CACHE_STALE_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
+
+    const [item] = await db
+      .select({
+        id: ornamentsItems.id,
+        name: ornamentsItems.name,
+        brand: ornamentsItems.brand,
+        seriesOrCollection: ornamentsItems.seriesOrCollection,
+        year: ornamentsItems.year,
+        barcodeValue: ornamentsItems.barcodeValue,
+        ebayPriceCachedAt: ornamentsItems.ebayPriceCachedAt,
+        ebayPriceMinUsd: ornamentsItems.ebayPriceMinUsd,
+        ebayPriceMaxUsd: ornamentsItems.ebayPriceMaxUsd,
+        ebayPriceListings: ornamentsItems.ebayPriceListings,
+        ebayLastSoldPriceUsd: ornamentsItems.ebayLastSoldPriceUsd,
+        ebayLastSoldDate: ornamentsItems.ebayLastSoldDate,
+      })
+      .from(ornamentsItems)
+      .where(eq(ornamentsItems.id, payload.itemId));
+
+    if (!item) {
+      return { status: 404, body: { error: "Ornament not found." } };
+    }
+
+    const force = payload.force === true;
+    const cacheAgeMs = item.ebayPriceCachedAt
+      ? Date.now() - item.ebayPriceCachedAt.getTime()
+      : Infinity;
+
+    if (
+      !force &&
+      cacheAgeMs < EBAY_CACHE_STALE_AFTER_MS &&
+      (item.ebayPriceMinUsd != null || item.ebayLastSoldPriceUsd != null)
+    ) {
+      const cachedListings = item.ebayPriceListings as unknown[] | null;
+      const searchQuery = buildEbayQuery(item.name, {
+        brand: item.brand,
+        seriesOrCollection: item.seriesOrCollection,
+        year: item.year,
+      });
+      return {
+        status: 200,
+        body: {
+          type: "ornament_ebay_price_lookup",
+          result: {
+            forSale:
+              item.ebayPriceMinUsd != null
+                ? {
+                    priceMinUsd: Number(item.ebayPriceMinUsd),
+                    priceMaxUsd: item.ebayPriceMaxUsd
+                      ? Number(item.ebayPriceMaxUsd)
+                      : null,
+                    listingCount: cachedListings?.length ?? 0,
+                  }
+                : null,
+            lastSold: item.ebayLastSoldPriceUsd
+              ? {
+                  priceUsd: Number(item.ebayLastSoldPriceUsd),
+                  soldDate: item.ebayLastSoldDate?.toISOString() ?? null,
+                }
+              : null,
+            searchQuery,
+            cachedAt: item.ebayPriceCachedAt!.toISOString(),
+            fromCache: true,
+          },
+        },
+      };
+    }
+
+    // Enforce the AI rate limit before triggering a paid Apify eBay scrape.
+    const { limited } = await consumeAiRateLimit(userId);
+    if (limited) {
+      return {
+        status: 429,
+        body: { error: "Too many AI requests, please try again later." },
+      };
+    }
+
+    const query = buildEbayQuery(item.name, {
+      brand: item.brand,
+      seriesOrCollection: item.seriesOrCollection,
+      year: item.year,
+    });
+
+    let result: Awaited<ReturnType<typeof lookupOrnamentEbayData>>;
+    try {
+      result = await lookupOrnamentEbayData(query, {
+        upc: item.barcodeValue ?? undefined,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        status: 503,
+        body: {
+          error: `eBay lookup is temporarily unavailable. Please try again in a moment. (${msg.slice(0, 120)})`,
+        },
+      };
+    }
+
+    if (!result) {
+      return {
+        status: 422,
+        body: { error: "No eBay listings found for this ornament." },
+      };
+    }
+
+    await db
+      .update(ornamentsItems)
+      .set({
+        ebayPriceMinUsd: result.forSale
+          ? String(result.forSale.priceMinUsd)
+          : null,
+        ebayPriceMaxUsd: result.forSale
+          ? String(result.forSale.priceMaxUsd)
+          : null,
+        ebayPriceMedianUsd: null,
+        ebayPriceCachedAt: new Date(),
+        ebayPriceListings: result.forSale
+          ? (result.forSale.listings as unknown as Record<string, unknown>[])
+          : null,
+        ebayLastSoldPriceUsd: result.lastSold
+          ? String(result.lastSold.priceUsd)
+          : null,
+        ebayLastSoldDate: result.lastSold?.soldDate
+          ? new Date(result.lastSold.soldDate)
+          : null,
+      })
+      .where(eq(ornamentsItems.id, payload.itemId));
+
+    return {
+      status: 200,
+      body: {
+        type: "ornament_ebay_price_lookup",
+        result: {
+          forSale: result.forSale
+            ? {
+                priceMinUsd: result.forSale.priceMinUsd,
+                priceMaxUsd: result.forSale.priceMaxUsd,
+                listingCount: result.forSale.listingCount,
+              }
+            : null,
+          lastSold: result.lastSold
+            ? {
+                priceUsd: result.lastSold.priceUsd,
+                soldDate: result.lastSold.soldDate,
+                listingCount: result.lastSold.listingCount,
+              }
+            : null,
+          searchQuery: result.searchQuery,
+          cachedAt: result.cachedAt,
+          fromCache: false,
+        },
+      },
+    };
+  }) as ActionExecutor,
+
   add_photo_to_ornaments: (async (
     payload: z.infer<typeof AddPhotoToOrnamentsPayload>,
     userId: number,
@@ -638,6 +816,16 @@ export async function buildOrnamentActionLabel(action: {
     }
     case "add_photo_to_ornaments": {
       return "Add this photo to your ornaments collection (runs full AI cataloguing)";
+    }
+    case "ornament_ebay_price_lookup": {
+      const payload = action.payload as z.infer<
+        typeof OrnamentEbayPriceLookupActionPayload
+      >;
+      const item = await getOrnamentItemLabelInfo(payload.itemId);
+      const name = item ? `"${item.name}"` : "this ornament";
+      return payload.force
+        ? `Refresh eBay prices for ${name} (bypasses cache)`
+        : `Look up eBay prices for ${name}`;
     }
   }
 }
@@ -818,6 +1006,29 @@ export const ornamentActionTools: OpenAI.Chat.Completions.ChatCompletionTool[] =
             },
           },
           required: ["attachmentUrl"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "ornament_ebay_price_lookup",
+        description:
+          "Look up current eBay prices for an ornament the user is viewing — returns both for-sale listing prices and the most recent sold price. Returns the cached result unless force is true. Pass force: true when the user explicitly asks to refresh, get fresh/current/updated prices, or says the price has changed — otherwise omit it (or pass false) to use the 7-day cache. Only call this if the item's numeric id is visible on screen; never guess an id.",
+        parameters: {
+          type: "object",
+          properties: {
+            itemId: {
+              type: "integer",
+              description: "Numeric id of the ornament to look up",
+            },
+            force: {
+              type: "boolean",
+              description:
+                "Pass true to bypass the 7-day cache and fetch fresh eBay data. Only set this when the user explicitly requests a refresh or says prices have changed.",
+            },
+          },
+          required: ["itemId"],
         },
       },
     },

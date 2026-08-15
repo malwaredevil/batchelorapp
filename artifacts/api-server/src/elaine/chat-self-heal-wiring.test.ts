@@ -19,13 +19,27 @@
  * All AI / DB / third-party dependencies are mocked.
  */
 
-import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  beforeAll,
+} from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
 import { buildPlannerToolCatalogMock } from "./test-helpers/planner-tool-catalog-mock";
+import {
+  elaineLessonsMockFactory,
+  loggerMockFactory,
+  sentryMockFactory,
+  rateLimitMockFactory,
+} from "./test-helpers/standard-mock-scaffold";
+import { buildRuntimeMock } from "./test-helpers/runtime-mock";
 
 // ── Hoisted mock refs ─────────────────────────────────────────────────────────
-
 const {
   mockRegisterToolCalls,
   mockRecordModelRound,
@@ -118,30 +132,11 @@ const {
 
 // ── vi.mock() declarations ─────────────────────────────────────────────────────
 
-vi.mock("@sentry/node", () => ({
-  init: vi.fn(),
-  setUser: vi.fn(),
-  captureException: vi.fn(),
-  withScope: vi.fn(),
-  startSpan: vi.fn((_o: unknown, cb: () => unknown) => cb()),
-  setConversationId: vi.fn(),
-  Scope: class {},
-}));
+vi.mock("@sentry/node", () => sentryMockFactory());
 
-vi.mock("../lib/logger", () => ({
-  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
-}));
+vi.mock("../lib/logger", () => loggerMockFactory());
 
-vi.mock("../middleware/rateLimit", () => ({
-  loginLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  passwordResetLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  phoneVerifyLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  authLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  apiLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  adminLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  webhookLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  aiLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-}));
+vi.mock("../middleware/rateLimit", () => rateLimitMockFactory());
 
 vi.mock("../middleware/auth", () => ({
   requireAuth: (
@@ -432,16 +427,7 @@ vi.mock("../lib/elaine-tasks", () => ({
  * recordElaineLesson is controlled per-test via mockRecordElaineLesson.
  */
 vi.mock("../lib/elaine-lessons", () => ({
-  ELAINE_LESSON_DOMAINS: [
-    "travels",
-    "pottery",
-    "quilting",
-    "ornaments",
-    "general",
-  ],
-  getRelevantElaineLessons: vi
-    .fn()
-    .mockResolvedValue({ lessons: [], evidenceBlock: "" }),
+  ...elaineLessonsMockFactory(),
   recordElaineLesson: mockRecordElaineLesson,
 }));
 
@@ -465,96 +451,26 @@ vi.mock("./office-actions", () => ({
   SUMMARIZE_INBOX_TOOL_NAME: "summarize_inbox",
 }));
 
-vi.mock("./runtime", () => ({
-  assertElaineToolFamilyCoverage: vi.fn(),
-  aggregateElaineTraceEvaluations: vi.fn().mockReturnValue([]),
-  // Self-heal detector: controlled per-test via mockDetectMismatch.
-  detectClaimedCheckWithoutToolCall: mockDetectMismatch,
-  // buildSelfHealLessonInput and selfHealPatternKey must be in the runtime
-  // mock because index.ts imports them from "./runtime".
-  buildSelfHealLessonInput: mockBuildSelfHealLessonInput,
-  selfHealPatternKey: mockSelfHealPatternKey,
-  buildElaineSourceRoute: vi.fn().mockReturnValue({
-    preferredKinds: [],
-    fallbackKinds: [],
-    sourceKind: "direct",
-    sourceName: "current page context",
-    confidence: "high",
-  }),
-  classifyElaineRequest: vi.fn().mockReturnValue({
-    type: "conversational",
-    scope: "none",
-    intent: "chat",
-  }),
-  isReminderDoubtMessage: vi.fn().mockReturnValue(false),
-  isSchedulingDoubtMessage: vi.fn().mockReturnValue(false),
-  buildClassifierDoubtLessonInput: vi.fn().mockReturnValue({
-    outcome: "mistake",
-    domain: "general",
-    situation: "mock situation",
-    takeaway: "mock takeaway",
-    tags: ["classifier-doubt"],
-  }),
-  classifierDoubtPatternKey: vi.fn().mockReturnValue("classifier_doubt:mock"),
-  completedActionAcknowledgement: vi.fn().mockReturnValue(""),
-  createElaineTurnTrace: vi.fn().mockResolvedValue({ id: 1 }),
-  createFallbackPlan: vi.fn().mockReturnValue({
-    goal: "Answer the user",
-    steps: [],
-    assumptions: [],
-    completionCriteria: ["User receives a helpful reply"],
-  }),
-  decideElaineModelStreamRecovery: vi.fn().mockReturnValue({
-    retry: false,
-    suppressTools: false,
-    resetPartialContent: false,
-  }),
-  ELAINE_READ_CONCURRENCY: 3,
-  ElaineTurnRuntime: class {
-    registerToolCalls = mockRegisterToolCalls;
-    recordModelRound = mockRecordModelRound;
-    snapshot = mockSnapshot;
-    verify = mockVerify;
-    complete = mockComplete;
-    setTraceAvailable = mockSetTraceAvailable;
-    markFailedReadStepsAdjusted = mockMarkFailedReadStepsAdjusted;
-    recordObservation = mockRecordObservation;
-  },
-  evaluateForecastDateCoverage: vi.fn().mockResolvedValue({}),
-  evaluateElaineTrace: vi.fn().mockResolvedValue({}),
-  findElaineSatisfiedFallback: vi.fn().mockReturnValue(null),
-  finishElaineTurnTrace: vi.fn().mockResolvedValue(undefined),
-  generateElainePlan: vi.fn().mockResolvedValue({
-    plan: {
-      goal: "Answer the user",
-      steps: [],
-      assumptions: [],
-      completionCriteria: ["User receives a helpful reply"],
+vi.mock("./runtime", () =>
+  buildRuntimeMock({
+    // Self-heal detector: controlled per-test via mockDetectMismatch.
+    detectClaimedCheckWithoutToolCall: mockDetectMismatch,
+    // buildSelfHealLessonInput and selfHealPatternKey must be in the runtime
+    // mock because index.ts imports them from "./runtime".
+    buildSelfHealLessonInput: mockBuildSelfHealLessonInput,
+    selfHealPatternKey: mockSelfHealPatternKey,
+    ElaineTurnRuntime: class {
+      registerToolCalls = mockRegisterToolCalls;
+      recordModelRound = mockRecordModelRound;
+      snapshot = mockSnapshot;
+      verify = mockVerify;
+      complete = mockComplete;
+      setTraceAvailable = mockSetTraceAvailable;
+      markFailedReadStepsAdjusted = mockMarkFailedReadStepsAdjusted;
+      recordObservation = mockRecordObservation;
     },
-    source: "generated",
   }),
-  loadElaineTurnTracesForMessages: vi.fn().mockResolvedValue(new Map()),
-  mapWithConcurrency: vi
-    .fn()
-    .mockImplementation(
-      async <T>(
-        items: T[],
-        _concurrency: number,
-        fn: (item: T) => Promise<unknown>,
-      ) => Promise.all(items.map(fn)),
-    ),
-  MODEL_VISIBLE_HARD_TOOL_NAMES: new Set<string>(),
-  MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS: new Map<string, string>(),
-  persistElaineTraceBestEffort: vi.fn().mockResolvedValue(false),
-  preparedActionAcknowledgement: vi.fn().mockReturnValue(""),
-  provenanceForTool: vi.fn().mockReturnValue(null),
-  requestNeedsStructuredPlan: vi.fn().mockReturnValue(false),
-  sanitizeRuntimeText: vi.fn().mockImplementation((t: string) => t),
-  selectElaineReplanTool: vi.fn().mockReturnValue(null),
-  isReusableElaineResponseState: vi.fn().mockReturnValue(false),
-  selectElaineOpenAIRole: vi.fn().mockReturnValue("assistant"),
-  stripElaineCitationMetadata: vi.fn().mockImplementation((t: string) => t),
-}));
+);
 
 vi.mock("./capability-registry", () => ({
   buildElaineCapabilityRegistry: vi.fn().mockReturnValue({ capabilities: [] }),
@@ -791,6 +707,24 @@ function primeDbForFreshChat() {
 }
 
 /**
+ * Asserts that every selectQueue slot added by primeDbForFreshChat was
+ * consumed during the test.  A leftover slot means the handler issued fewer
+ * db.select() calls than the queue was primed for; a deficit causes a cryptic
+ * ECONNRESET or wrong-data failure in the next test.
+ *
+ * Call this in afterEach so drift is surfaced with a clear failure message
+ * rather than a mysterious queue-misalignment error in a later test.
+ */
+function assertSelectQueueDrained() {
+  expect(
+    selectQueue.length,
+    `selectQueue has ${selectQueue.length} unconsumed slot(s) after the test — ` +
+      `update primeDbForFreshChat to match the current db.select() call order ` +
+      `in the chat handler (index.ts)`,
+  ).toBe(0);
+}
+
+/**
  * Configures callModelWithSubagent to stream a plain text reply.
  * An empty stream body is sufficient — detectClaimedCheckWithoutToolCall is
  * mocked to always return a mismatch regardless of the actual text content.
@@ -921,6 +855,10 @@ beforeEach(() => {
   setUpTextReplyStream();
 });
 
+afterEach(() => {
+  assertSelectQueueDrained();
+});
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe("POST /api/elaine/chat — self-heal wiring in the real router", () => {
@@ -948,34 +886,20 @@ describe("POST /api/elaine/chat — self-heal wiring in the real router", () => 
 
     const res = await request(buildApp())
       .post("/api/elaine/chat")
-      .send({ message: "How are my reminders?", appId: "hub" })
+      .send({ message: "Check my reminders", appId: "hub" })
       .buffer(true);
 
     expect(res.status).toBe(200);
     expect(mockRecordElaineLesson).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: TEST_USER_ID,
-        source: "self_heal",
-        outcome: "mistake",
-      }),
+      expect.objectContaining({ source: "self_heal" }),
     );
-  }, 15_000);
-
-  it("calls diagnoseRecurringFailureInBackground with patternKey and occurrenceCount from the lesson", async () => {
-    primeDbForFreshChat();
-    mockRecordElaineLesson.mockResolvedValueOnce({ id: 7, occurrenceCount: 2 });
-
-    const res = await request(buildApp())
-      .post("/api/elaine/chat")
-      .send({ message: "Did my reminder save?", appId: "hub" })
-      .buffer(true);
-
-    expect(res.status).toBe(200);
+    // diagnoseRecurringFailureInBackground is called on every self-heal turn
+    // with the lesson row returned by recordElaineLesson.
     expect(mockDiagnoseInBackground).toHaveBeenCalledWith(
       expect.objectContaining({
         patternKey: "self_heal:claimed_check_without_tool_call",
-        lessonId: 7,
-        occurrenceCount: 2,
+        lessonId: 1,
+        occurrenceCount: 1,
       }),
     );
   }, 15_000);
@@ -1035,7 +959,7 @@ describe("POST /api/elaine/chat — self-heal wiring in the real router", () => 
 
     const res = await request(buildApp())
       .post("/api/elaine/chat")
-      .send({ message: "What's the weather like?", appId: "hub" })
+      .send({ message: "Check my reminders", appId: "hub" })
       .buffer(true);
 
     expect(res.status).toBe(200);

@@ -1,30 +1,32 @@
 /**
- * eBay sold-listings lookup for pottery items and ornaments.
+ * eBay market value lookup for pottery items and ornaments.
  *
- * Uses the official eBay Finding API (findCompletedItems) to search sold +
- * completed listings — every result is a real transaction, not just an asking
- * price. Replaced the previous Apify scraper approach with the official API.
+ * Primary source: eBay Browse API (RESTful, OAuth-based) for current
+ * asking-price ranges and structured item attributes via aspect refinements.
  *
- * For ornament lookups, also calls the Browse API to retrieve structured
- * item attributes (year, artist, series, theme) via aspect refinements.
+ * Sold-price source: Apify `epctex/ebay-scraper` actor (type "SOLD") when
+ * APIFY_API_TOKEN is configured.  The legacy Finding API is permanently
+ * blocked by eBay's own WAF (418 on every request from any network) and is
+ * no longer called — see lib/ebay/finding.ts for the reference implementation.
  *
- * Fallback behaviour
- * ------------------
- * When the Finding API is unavailable (e.g. 418 WAF block, quota exhaustion,
- * or API deprecation), `lookupEbayMarketValue` falls back to the Browse API's
- * active-listing prices. Results from this fallback are marked
- * `sourceType: "active_listing"` so callers can display appropriate wording
- * ("current asking prices" instead of "recent sold prices").
+ * ## Cost note (Apify sold-price lookups)
+ * Each sold-price lookup triggers an Apify actor run that consumes paid
+ * Apify platform credits — roughly $0.02–0.10 USD per call at typical run
+ * sizes (≤15 items, 256 MB, ~30–60 s).  Lookups are only performed when the
+ * user explicitly requests an eBay price refresh (never on page loads or
+ * background jobs) and only when `env.apifyApiToken` is set.  If Apify is
+ * unavailable or the actor returns no sold results, the function degrades
+ * gracefully to Browse API asking-price data (sourceType "active_listing").
  */
 
 import { env } from "../env";
-import { findCompletedItems, type FindingListing } from "../ebay/finding";
 import {
   searchItemAspects,
   searchActiveListingPrices,
   topAspectValues,
   type BrowseActiveListing,
 } from "../ebay/browse";
+import { lookupEbaySoldListings } from "../ebay/sold-listings";
 import { logger } from "../logger";
 
 export interface EbayListing {
@@ -45,10 +47,9 @@ export interface EbayMarketValueResult {
   listings: EbayListing[];
   cachedAt: string;
   /**
-   * Indicates whether prices came from real sold/completed listings ("sold") or
-   * from the Browse API's active-listing fallback ("active_listing"). Callers
-   * should adjust copy accordingly — e.g. "recent sold prices" vs "current
-   * asking prices". Defaults to "sold" when the Finding API works normally.
+   * Always "active_listing" now that the Finding API (the only "sold" source)
+   * is retired — kept as a discriminated field so existing callers/DB rows
+   * that branch on it keep working. See module header for context.
    */
   sourceType: "sold" | "active_listing";
   /** Structured item attributes from Browse API aspect refinements (ornament lookups only). */
@@ -83,15 +84,21 @@ function median(values: number[]): number {
 }
 
 /**
- * Look up eBay sold-listing market value for an item.
+ * Look up eBay market value for an item.
+ *
+ * Always fetches current asking prices from the Browse API. When
+ * `env.apifyApiToken` is configured, also attempts a sold-price lookup via
+ * the Apify `epctex/ebay-scraper` actor; if that succeeds the returned
+ * `sourceType` is `"sold"` and each listing carries a real `soldDate`.
+ * If the Apify run fails or returns no results, the function falls back
+ * gracefully to Browse API data with `sourceType: "active_listing"`.
  *
  * @param query       Search query (use buildEbayQuery to construct, or pass a
  *                    UPC / Hallmark item number directly — eBay handles all of
  *                    these as keywords and matches them to product listings).
  * @param opts.upc    Optional raw UPC or Hallmark SKU (e.g. "661127022308" or
- *                    "QXI7404"). When provided, the function tries a direct UPC
- *                    keyword search alongside the text query and uses whichever
- *                    returns more sold listings.
+ *                    "QXI7404"). When provided, the UPC is used as the primary
+ *                    search term for both Browse API and the Apify scraper.
  * @param opts.withAspects If true, also calls the Browse API for structured item
  *                    attributes (year, artist, series, etc.). Adds ~1s latency.
  */
@@ -104,96 +111,66 @@ export async function lookupEbayMarketValue(
   }
 
   const upcQuery = opts.upc?.trim();
+  const effectiveQuery = upcQuery ?? query;
 
-  // Run Finding API searches + aspect lookup in parallel.
-  // Both the primary keyword search and the UPC search are non-fatal:
-  // if the Finding API is blocked (e.g. 418 WAF) we fall back to Browse API
-  // active-listing prices rather than propagating the error to the caller.
-  const [primaryResults, upcResults, aspectResult] = await Promise.all([
-    findCompletedItems(query, 20).catch((err: unknown) => {
-      logger.warn(
-        { err, query },
-        "ebay finding: primary keyword search failed (will attempt Browse API fallback)",
-      );
-      return [] as FindingListing[];
-    }),
-    upcQuery && upcQuery !== query
-      ? findCompletedItems(upcQuery, 20).catch((err: unknown) => {
-          logger.warn(
-            { err, upc: upcQuery },
-            "ebay upc keyword search failed (non-fatal)",
-          );
-          return [] as FindingListing[];
-        })
-      : Promise.resolve([] as FindingListing[]),
+  // Run Browse API (asking prices + optional aspects) and Apify sold-price
+  // scraper in parallel. The Apify call is skipped when the token is absent.
+  const [browseResult, aspectResult, soldResult] = await Promise.all([
+    searchActiveListingPrices(effectiveQuery, { limit: 20 }).catch(
+      (err: unknown) => {
+        logger.warn(
+          { err, query: effectiveQuery },
+          "ebay browse active-listing search failed",
+        );
+        return null;
+      },
+    ),
     opts.withAspects
-      ? searchItemAspects(upcQuery ?? query).catch((err) => {
+      ? searchItemAspects(effectiveQuery).catch((err) => {
           logger.warn(
-            { err, query },
+            { err, query: effectiveQuery },
             "ebay browse aspects fetch failed (non-fatal)",
           );
           return null;
         })
       : Promise.resolve(null),
+    env.apifyApiToken
+      ? lookupEbaySoldListings(effectiveQuery, env.apifyApiToken)
+      : Promise.resolve(null),
   ]);
 
-  // Prefer UPC results when they outnumber the text-query results (better precision)
-  const findingResults =
-    upcResults.length >= primaryResults.length && upcResults.length > 0
-      ? upcResults
-      : primaryResults;
-
-  // ── Finding API fallback: use Browse API active-listing prices ──────────────
-  // When the Finding API returns nothing (API down, WAF block, quota exceeded,
-  // or genuine zero results), try the Browse API for current asking prices.
-  // This keeps the feature working with degraded data rather than failing hard.
-  if (findingResults.length === 0) {
-    const browseResult = await searchActiveListingPrices(upcQuery ?? query, {
-      limit: 20,
-    }).catch((err: unknown) => {
-      logger.warn(
-        { err, query },
-        "ebay browse active-listing fallback also failed",
-      );
-      return null;
-    });
-
-    if (!browseResult || browseResult.listings.length === 0) return null;
-
-    logger.info(
-      { query, found: browseResult.listings.length },
-      "ebay finding: using Browse API active-listing fallback (Finding API returned 0 results)",
-    );
-
-    const listings: EbayListing[] = browseResult.listings.map((l) => ({
+  // Prefer sold-price data when available; fall back to asking prices.
+  if (soldResult && soldResult.listings.length > 0) {
+    const listings: EbayListing[] = soldResult.listings.map((l) => ({
       title: l.title,
-      soldPrice: l.price, // repurposed field: asking price, not sold price
+      soldPrice: l.priceUsd,
       currency: l.currency,
-      soldDate: null,
+      soldDate: l.soldDate,
       condition: l.condition,
       imageUrl: l.imageUrl,
       itemUrl: l.itemUrl,
     }));
 
-    const prices = listings.map((l) => l.soldPrice);
     return {
-      priceMinUsd: browseResult.priceMinUsd,
-      priceMaxUsd: browseResult.priceMaxUsd,
-      priceMedianUsd: median(prices),
-      listingCount: listings.length,
-      listings: listings.slice(0, 10),
-      cachedAt: new Date().toISOString(),
-      sourceType: "active_listing",
+      priceMinUsd: soldResult.priceMinUsd,
+      priceMaxUsd: soldResult.priceMaxUsd,
+      priceMedianUsd: soldResult.priceMedianUsd,
+      listingCount: soldResult.listingCount,
+      listings,
+      cachedAt: soldResult.cachedAt,
+      sourceType: "sold",
       itemSpecifics: aspectResult ? topAspectValues(aspectResult) : undefined,
     };
   }
-  // ───────────────────────────────────────────────────────────────────────────
 
-  const listings: EbayListing[] = findingResults.map((l) => ({
+  // Apify unavailable or returned nothing — use Browse API asking prices.
+  if (!browseResult || browseResult.listings.length === 0) return null;
+
+  const listings: EbayListing[] = browseResult.listings.map((l) => ({
     title: l.title,
-    soldPrice: l.soldPrice,
+    soldPrice: l.price, // field name kept for compatibility — this is an asking price
     currency: l.currency,
-    soldDate: l.soldDate,
+    soldDate: null,
     condition: l.condition,
     imageUrl: l.imageUrl,
     itemUrl: l.itemUrl,
@@ -201,13 +178,13 @@ export async function lookupEbayMarketValue(
 
   const prices = listings.map((l) => l.soldPrice);
   return {
-    priceMinUsd: Math.min(...prices),
-    priceMaxUsd: Math.max(...prices),
+    priceMinUsd: browseResult.priceMinUsd,
+    priceMaxUsd: browseResult.priceMaxUsd,
     priceMedianUsd: median(prices),
     listingCount: listings.length,
     listings: listings.slice(0, 10),
     cachedAt: new Date().toISOString(),
-    sourceType: "sold",
+    sourceType: "active_listing",
     itemSpecifics: aspectResult ? topAspectValues(aspectResult) : undefined,
   };
 }
@@ -233,6 +210,11 @@ export interface OrnamentEbayLastSold {
 
 export interface OrnamentEbayData {
   forSale: OrnamentEbayForSale | null;
+  /**
+   * Always null now that the Finding API (the only sold-price source) is
+   * retired — kept on the type so existing callers/DB rows/UI branches that
+   * check for it keep compiling and degrade gracefully. See module header.
+   */
   lastSold: OrnamentEbayLastSold | null;
   itemSpecifics: Record<string, string> | undefined;
   searchQuery: string;
@@ -242,8 +224,13 @@ export interface OrnamentEbayData {
 /**
  * Look up eBay market data for an ornament:
  *  - forSale: current active-listing price range (Browse API)
- *  - lastSold: most recent sold price within the past 2 years (Finding API)
+ *  - lastSold: most-recent sold price via Apify scraper (when configured)
  *  - itemSpecifics: structured attributes from Browse API aspects
+ *
+ * When `env.apifyApiToken` is set, `lastSold` is populated from the Apify
+ * `epctex/ebay-scraper` actor (type "SOLD").  If the Apify run fails or
+ * returns no sold listings, `lastSold` is null and the function degrades
+ * gracefully to asking-price-only data.
  */
 export async function lookupOrnamentEbayData(
   query: string,
@@ -256,60 +243,49 @@ export async function lookupOrnamentEbayData(
   const upcQuery = opts.upc?.trim();
   const effectiveQuery = upcQuery ?? query;
 
-  const [forSaleResult, soldResults, soldResultsUpc, aspectResult] =
-    await Promise.all([
-      // Current active listings (asking prices)
-      searchActiveListingPrices(effectiveQuery).catch((err) => {
-        logger.warn(
-          { err, query: effectiveQuery },
-          "ebay for-sale search failed (non-fatal)",
-        );
-        return null;
-      }),
-      // Sold listings — past 2 years (730 days), most recent first
-      findCompletedItems(query, 20, 730).catch((err) => {
-        logger.warn(
-          { err, query },
-          "ebay sold search (text query) failed (non-fatal)",
-        );
-        return [] as FindingListing[];
-      }),
-      // UPC-based sold listings (more precise when available)
-      upcQuery && upcQuery !== query
-        ? findCompletedItems(upcQuery, 20, 730).catch((err) => {
-            logger.warn(
-              { err, upc: upcQuery },
-              "ebay sold search (upc) failed (non-fatal)",
-            );
-            return [] as FindingListing[];
-          })
-        : Promise.resolve([] as FindingListing[]),
-      // Item specifics via Browse aspects
-      searchItemAspects(effectiveQuery).catch((err) => {
-        logger.warn(
-          { err, query: effectiveQuery },
-          "ebay aspects fetch failed (non-fatal)",
-        );
-        return null;
-      }),
-    ]);
+  const [forSaleResult, aspectResult, soldResult] = await Promise.all([
+    // Current active listings (asking prices)
+    searchActiveListingPrices(effectiveQuery).catch((err) => {
+      logger.warn(
+        { err, query: effectiveQuery },
+        "ebay for-sale search failed (non-fatal)",
+      );
+      return null;
+    }),
+    // Item specifics via Browse aspects
+    searchItemAspects(effectiveQuery).catch((err) => {
+      logger.warn(
+        { err, query: effectiveQuery },
+        "ebay aspects fetch failed (non-fatal)",
+      );
+      return null;
+    }),
+    // Sold/completed listings via Apify (skipped when token absent)
+    env.apifyApiToken
+      ? lookupEbaySoldListings(effectiveQuery, env.apifyApiToken)
+      : Promise.resolve(null),
+  ]);
 
-  // Prefer UPC sold results when they are more numerous
-  const soldListing =
-    soldResultsUpc.length >= soldResults.length && soldResultsUpc.length > 0
-      ? soldResultsUpc
-      : soldResults;
+  if (!forSaleResult) return null;
 
-  const lastSold: OrnamentEbayLastSold | null =
-    soldListing.length > 0
-      ? {
-          priceUsd: soldListing[0].soldPrice,
-          soldDate: soldListing[0].soldDate,
-          listingCount: soldListing.length,
-        }
-      : null;
+  // Build lastSold from Apify results: use the median price across sold
+  // listings as the representative "last sold" price, and pick the most
+  // recent soldDate found in the result set.
+  let lastSold: OrnamentEbayLastSold | null = null;
+  if (soldResult && soldResult.listings.length > 0) {
+    const mostRecentDate =
+      soldResult.listings
+        .map((l) => l.soldDate)
+        .filter((d): d is string => d !== null)
+        .sort()
+        .at(-1) ?? null;
 
-  if (!forSaleResult && !lastSold) return null;
+    lastSold = {
+      priceUsd: soldResult.priceMedianUsd,
+      soldDate: mostRecentDate,
+      listingCount: soldResult.listingCount,
+    };
+  }
 
   return {
     forSale: forSaleResult,

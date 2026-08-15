@@ -24,10 +24,25 @@
  * see that file for the full mock scaffold rationale.
  */
 
-import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  beforeAll,
+} from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
 import { buildPlannerToolCatalogMock } from "./test-helpers/planner-tool-catalog-mock";
+import { buildRuntimeMock } from "./test-helpers/runtime-mock";
+import {
+  elaineLessonsMockFactory,
+  loggerMockFactory,
+  sentryMockFactory,
+  rateLimitMockFactory,
+} from "./test-helpers/standard-mock-scaffold";
 
 // ── Hoisted mock controls ────────────────────────────────────────────────────
 
@@ -110,30 +125,11 @@ const {
 
 // ── vi.mock() declarations ────────────────────────────────────────────────────
 
-vi.mock("@sentry/node", () => ({
-  init: vi.fn(),
-  setUser: vi.fn(),
-  captureException: vi.fn(),
-  withScope: vi.fn(),
-  startSpan: vi.fn((_o: unknown, cb: () => unknown) => cb()),
-  setConversationId: vi.fn(),
-  Scope: class {},
-}));
+vi.mock("@sentry/node", () => sentryMockFactory());
 
-vi.mock("../lib/logger", () => ({
-  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
-}));
+vi.mock("../lib/logger", () => loggerMockFactory());
 
-vi.mock("../middleware/rateLimit", () => ({
-  loginLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  passwordResetLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  phoneVerifyLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  authLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  apiLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  adminLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  webhookLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  aiLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-}));
+vi.mock("../middleware/rateLimit", () => rateLimitMockFactory());
 
 vi.mock("../middleware/auth", () => ({
   requireAuth: (
@@ -313,29 +309,35 @@ vi.mock("../lib/travels/google-maps", () => ({
 vi.mock("./pottery-actions", () => ({
   potteryActionSchemas: [],
   potteryActionExecutors: {},
+  potteryActionTools: [],
   buildPotteryActionLabel: vi.fn().mockResolvedValue(""),
 }));
 
 vi.mock("./quilting-actions", () => ({
   quiltingActionSchemas: [],
   quiltingActionExecutors: {},
+  quiltingActionTools: [],
   buildQuiltingActionLabel: vi.fn().mockResolvedValue(""),
 }));
 
 vi.mock("./ornaments-actions", () => ({
   ornamentActionSchemas: [],
   ornamentActionExecutors: {},
+  ornamentActionTools: [],
   buildOrnamentActionLabel: vi.fn().mockResolvedValue(""),
 }));
 
 vi.mock("./universal-actions", () => ({
   universalActionSchemas: [],
   universalActionExecutors: {},
+  universalActionTools: [],
   buildUniversalActionLabel: vi.fn().mockResolvedValue(""),
 }));
 
 vi.mock("./app-operation-tools", () => ({
   appOperationActionSchemas: [],
+  appOperationActionTools: [],
+  appOperationReadTools: [],
   buildAppOperationActionLabel: vi.fn().mockResolvedValue(""),
   DISCOVER_APP_OPERATIONS_TOOL_NAME: "discover_app_operations",
   discoverAppOperations: vi.fn().mockResolvedValue([]),
@@ -350,12 +352,14 @@ vi.mock("./app-operation-tools", () => ({
 vi.mock("./adaptive-actions", () => ({
   adaptiveActionSchemas: [],
   adaptiveActionExecutors: {},
+  adaptiveActionTools: [],
   buildAdaptiveActionLabel: vi.fn().mockResolvedValue(""),
 }));
 
 vi.mock("./communication-actions", () => ({
   communicationActionSchemas: [],
   communicationActionExecutors: {},
+  communicationActionTools: [],
   buildCommunicationActionLabel: vi.fn().mockResolvedValue(""),
   executeListContactChannels: vi.fn().mockResolvedValue([]),
   executeListScheduledContacts: mockExecuteListScheduledContacts,
@@ -406,6 +410,7 @@ vi.mock("./universal-read-tools", () => ({
   LIST_ELAINE_TASKS_TOOL_NAME: "list_elaine_tasks",
   LIST_NOTES_TOOL_NAME: "list_notes",
   LIST_NOTIFICATIONS_TOOL_NAME: "list_notifications",
+  universalReadTools: [],
   executeUniversalReadTool: vi.fn().mockResolvedValue("{}"),
 }));
 
@@ -429,19 +434,7 @@ vi.mock("../lib/elaine-tasks", () => ({
 // extra selectQueue slot and leaves the SSE response connection in an
 // unresolvable state before headers are sent.  Mock it out so the
 // queue stays aligned with primeDbForFreshChat's 5-slot layout.
-vi.mock("../lib/elaine-lessons", () => ({
-  ELAINE_LESSON_DOMAINS: [
-    "travels",
-    "pottery",
-    "quilting",
-    "ornaments",
-    "general",
-  ],
-  getRelevantElaineLessons: vi
-    .fn()
-    .mockResolvedValue({ lessons: [], evidenceBlock: "" }),
-  recordElaineLesson: vi.fn().mockResolvedValue({ id: 1, occurrenceCount: 1 }),
-}));
+vi.mock("../lib/elaine-lessons", () => elaineLessonsMockFactory());
 
 // Prevent the real diagnoseRecurringFailureInBackground from making live DB
 // calls or model requests in the fire-and-forget path added by task #921.
@@ -453,115 +446,11 @@ vi.mock("../lib/elaine-code-diagnosis", () => ({
 }));
 
 vi.mock("./office-actions", () => ({
+  officeActionTools: [],
   executeOfficeTool: vi.fn().mockResolvedValue("{}"),
   FIND_EMAILS_ABOUT_TOPIC_TOOL_NAME: "find_emails_about_topic",
   GET_EMAIL_DETAIL_TOOL_NAME: "get_email_detail",
   SUMMARIZE_INBOX_TOOL_NAME: "summarize_inbox",
-}));
-
-vi.mock("./runtime", () => ({
-  assertElaineToolFamilyCoverage: vi.fn(),
-  aggregateElaineTraceEvaluations: vi.fn().mockReturnValue([]),
-  // Self-heal detector — no-op; these scenarios don't exercise that path.
-  detectClaimedCheckWithoutToolCall: vi.fn().mockReturnValue(null),
-  buildSelfHealLessonInput: vi.fn().mockReturnValue({
-    outcome: "mistake" as const,
-    domain: "general",
-    situation: "mock situation",
-    takeaway: "mock takeaway",
-    tags: ["self-heal"],
-  }),
-  selfHealPatternKey: vi
-    .fn()
-    .mockImplementation((kind: string) => `self_heal:${kind}`),
-  buildElaineSourceRoute: vi.fn().mockReturnValue({
-    preferredKinds: [],
-    fallbackKinds: [],
-    sourceKind: "direct",
-    sourceName: "current page context",
-    confidence: "high",
-  }),
-  classifyElaineRequest: vi.fn().mockReturnValue({
-    type: "conversational",
-    scope: "none",
-    intent: "chat",
-  }),
-  // Controlled via mockIsReminderDoubtMessage / mockIsSchedulingDoubtMessage
-  isReminderDoubtMessage: mockIsReminderDoubtMessage,
-  isSchedulingDoubtMessage: mockIsSchedulingDoubtMessage,
-  buildClassifierDoubtLessonInput: vi.fn().mockReturnValue({
-    outcome: "mistake",
-    domain: "general",
-    situation: "mock situation",
-    takeaway: "mock takeaway",
-    tags: ["classifier-doubt"],
-  }),
-  classifierDoubtPatternKey: vi.fn().mockReturnValue("classifier_doubt:mock"),
-  completedActionAcknowledgement: vi.fn().mockReturnValue(""),
-  createElaineTurnTrace: vi.fn().mockResolvedValue({ id: 1 }),
-  createFallbackPlan: vi.fn().mockReturnValue({
-    goal: "Answer the user",
-    steps: [],
-    assumptions: [],
-    completionCriteria: ["User receives a helpful reply"],
-  }),
-  decideElaineModelStreamRecovery: vi.fn().mockReturnValue({
-    retry: false,
-    suppressTools: false,
-    resetPartialContent: false,
-  }),
-  ELAINE_READ_CONCURRENCY: 3,
-  ElaineTurnRuntime: class {
-    registerToolCalls = mockRegisterToolCalls;
-    recordModelRound = mockRecordModelRound;
-    snapshot = mockSnapshot;
-    verify = mockVerify;
-    complete = mockComplete;
-    setTraceAvailable = mockSetTraceAvailable;
-    markFailedReadStepsAdjusted = mockMarkFailedReadStepsAdjusted;
-    recordObservation = mockRecordObservation;
-  },
-  evaluateForecastDateCoverage: vi.fn().mockResolvedValue({}),
-  evaluateElaineTrace: vi.fn().mockResolvedValue({}),
-  findElaineSatisfiedFallback: vi.fn().mockReturnValue(null),
-  finishElaineTurnTrace: vi.fn().mockResolvedValue(undefined),
-  generateElainePlan: vi.fn().mockResolvedValue({
-    plan: {
-      goal: "Answer the user",
-      steps: [],
-      assumptions: [],
-      completionCriteria: ["User receives a helpful reply"],
-    },
-    source: "generated",
-  }),
-  loadElaineTurnTracesForMessages: vi.fn().mockResolvedValue(new Map()),
-  mapWithConcurrency: vi
-    .fn()
-    .mockImplementation(
-      async <T>(
-        items: T[],
-        _concurrency: number,
-        fn: (item: T) => Promise<unknown>,
-      ) => Promise.all(items.map(fn)),
-    ),
-  // list_reminders and list_scheduled_contacts are MODEL_VISIBLE hard tools
-  // in the real registry — they must be in this set or the round loop routes
-  // them to the soft-tool path (which skips the mapWithConcurrency executor
-  // that emits tool_start).
-  MODEL_VISIBLE_HARD_TOOL_NAMES: new Set<string>([
-    "list_reminders",
-    "list_scheduled_contacts",
-  ]),
-  MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS: new Map<string, string>(),
-  persistElaineTraceBestEffort: vi.fn().mockResolvedValue(false),
-  preparedActionAcknowledgement: vi.fn().mockReturnValue(""),
-  provenanceForTool: vi.fn().mockReturnValue(null),
-  requestNeedsStructuredPlan: vi.fn().mockReturnValue(false),
-  sanitizeRuntimeText: vi.fn().mockImplementation((t: string) => t),
-  selectElaineReplanTool: vi.fn().mockReturnValue(null),
-  isReusableElaineResponseState: vi.fn().mockReturnValue(false),
-  selectElaineOpenAIRole: vi.fn().mockReturnValue("assistant"),
-  stripElaineCitationMetadata: vi.fn().mockImplementation((t: string) => t),
 }));
 
 vi.mock("./capability-registry", () => ({
@@ -571,114 +460,78 @@ vi.mock("./capability-registry", () => ({
   NARROW_READ_CHANNEL_JUSTIFICATIONS: {},
 }));
 
-vi.mock("./admin-config", () => ({
-  AdminConfigBody: { parse: vi.fn() },
-  applyAdminConfigPatch: vi.fn().mockResolvedValue(undefined),
-  resetElaineGlobalConfigToDefaults: vi.fn().mockResolvedValue(undefined),
-}));
-
-vi.mock("./restricted-channel-config", () => ({
-  RESTRICTED_EXCLUDED_ACTION_TYPES: new Set<string>(),
-  RESTRICTED_SOFT_TOOL_NAMES: new Set<string>(),
-}));
-
 vi.mock("./planner-tool-catalog", () =>
   buildPlannerToolCatalogMock({
-    // list_reminders and list_scheduled_contacts appear in SOFT_TOOLS so the
-    // soft-tool execution path fires and tool_start events are emitted.
-    SOFT_TOOLS: [
-      {
-        type: "function",
-        function: {
-          name: "list_reminders",
-          parameters: { type: "object", properties: {} },
-        },
-      },
-      {
-        type: "function",
-        function: {
-          name: "list_scheduled_contacts",
-          parameters: { type: "object", properties: {} },
-        },
-      },
-    ],
+    ACTION_TOOL_NAMES: new Set<string>([]),
   }),
 );
 
-vi.mock("./household-counts", () => ({
-  queryHouseholdData: vi.fn().mockResolvedValue(""),
-}));
-
-vi.mock("./household-search", () => ({
-  searchHouseholdData: vi.fn().mockResolvedValue([]),
-}));
-
-vi.mock("./yardage-math", () => ({
-  calculateYardage: vi.fn().mockReturnValue({
-    backingYards: 4,
-    backingPanels: 1,
-    bindingYards: 0.5,
-    bindingStrips: 4,
-  }),
-}));
-
-vi.mock("multer", () => {
-  const multerFactory = (_opts?: unknown) => ({
-    single: () => (_r: unknown, _s: unknown, n: () => void) => n(),
-    array: () => (_r: unknown, _s: unknown, n: () => void) => n(),
-    fields: () => (_r: unknown, _s: unknown, n: () => void) => n(),
-  });
-  multerFactory.memoryStorage = () => ({});
-  return { default: multerFactory };
-});
-
-vi.mock("@supabase/supabase-js", () => ({
-  createClient: vi.fn().mockReturnValue({
-    storage: {
-      from: vi.fn().mockReturnValue({
-        upload: vi.fn().mockResolvedValue({ data: null, error: null }),
-        getPublicUrl: vi.fn().mockReturnValue({
-          data: { publicUrl: "https://mock.example.com/file.jpg" },
-        }),
-        createSignedUrl: vi.fn().mockResolvedValue({
-          data: { signedUrl: "https://signed.example.com/file.jpg" },
-          error: null,
-        }),
-      }),
+vi.mock("./runtime", () =>
+  buildRuntimeMock({
+    // Self-heal detector — no-op; these scenarios don't exercise that path.
+    buildSelfHealLessonInput: vi.fn().mockReturnValue({
+      outcome: "mistake" as const,
+      domain: "general",
+      situation: "mock situation",
+      takeaway: "mock takeaway",
+      tags: ["self-heal"],
+    }),
+    // Controlled via mockIsReminderDoubtMessage / mockIsSchedulingDoubtMessage
+    isReminderDoubtMessage: mockIsReminderDoubtMessage,
+    isSchedulingDoubtMessage: mockIsSchedulingDoubtMessage,
+    // list_reminders and list_scheduled_contacts are MODEL_VISIBLE hard tools
+    // in the real registry — they must be in this set or the round loop routes
+    // them to the soft-tool path (which skips the mapWithConcurrency executor
+    // that emits tool_start).
+    MODEL_VISIBLE_HARD_TOOL_NAMES: new Set<string>([
+      "list_reminders",
+      "list_scheduled_contacts",
+    ]),
+    ElaineTurnRuntime: class {
+      registerToolCalls = mockRegisterToolCalls;
+      recordModelRound = mockRecordModelRound;
+      snapshot = mockSnapshot;
+      verify = mockVerify;
+      complete = mockComplete;
+      setTraceAvailable = mockSetTraceAvailable;
+      markFailedReadStepsAdjusted = mockMarkFailedReadStepsAdjusted;
+      recordObservation = mockRecordObservation;
     },
+    evaluateForecastDateCoverage: vi.fn().mockResolvedValue({}),
+    evaluateElaineTrace: vi.fn().mockResolvedValue({}),
+    findElaineSatisfiedFallback: vi.fn().mockReturnValue(null),
+    finishElaineTurnTrace: vi.fn().mockResolvedValue(undefined),
+    generateElainePlan: vi.fn().mockResolvedValue({
+      plan: {
+        goal: "Answer the user",
+        steps: [],
+        assumptions: [],
+        completionCriteria: ["User receives a helpful reply"],
+      },
+      source: "generated",
+    }),
+    loadElaineTurnTracesForMessages: vi.fn().mockResolvedValue(new Map()),
+    mapWithConcurrency: vi
+      .fn()
+      .mockImplementation(
+        async <T>(
+          items: T[],
+          _concurrency: number,
+          fn: (item: T) => Promise<unknown>,
+        ) => Promise.all(items.map(fn)),
+      ),
+    MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS: new Map<string, string>(),
+    persistElaineTraceBestEffort: vi.fn().mockResolvedValue(false),
+    preparedActionAcknowledgement: vi.fn().mockReturnValue(""),
+    provenanceForTool: vi.fn().mockReturnValue(null),
+    requestNeedsStructuredPlan: vi.fn().mockReturnValue(false),
+    sanitizeRuntimeText: vi.fn().mockImplementation((t: string) => t),
+    selectElaineReplanTool: vi.fn().mockReturnValue(null),
+    isReusableElaineResponseState: vi.fn().mockReturnValue(false),
+    selectElaineOpenAIRole: vi.fn().mockReturnValue("assistant"),
+    stripElaineCitationMetadata: vi.fn().mockImplementation((t: string) => t),
   }),
-}));
-
-vi.mock("../lib/upload-limits", () => ({
-  multerLimitForPrefix: vi.fn().mockReturnValue({ fileSize: 5 * 1024 * 1024 }),
-}));
-
-vi.mock("../lib/storage-core", () => ({
-  ensureBucketWithPolicy: vi.fn().mockResolvedValue(undefined),
-  ELAINE_ATTACHMENTS_BUCKET_POLICY: {
-    name: "elaine-attachments",
-    allowedMimeTypes: [],
-  },
-}));
-
-vi.mock("pdf-parse", () => ({
-  default: vi.fn().mockResolvedValue({ text: "" }),
-}));
-
-vi.mock("../lib/retry", () => ({
-  withRetry: vi.fn().mockImplementation((fn: () => Promise<unknown>) => fn()),
-}));
-
-vi.mock("../lib/document-generation", () => ({
-  buildDocumentBuffer: vi.fn().mockResolvedValue(Buffer.from("")),
-  DOCUMENT_MIME_BY_FORMAT: {},
-  DOCUMENT_EXTENSION_BY_FORMAT: {},
-}));
-
-vi.mock("../lib/document-parsing", () => ({
-  extractDocumentText: vi.fn().mockResolvedValue(""),
-  docTypeTagForMime: vi.fn().mockReturnValue(""),
-}));
+);
 
 // ── DB mock ──────────────────────────────────────────────────────────────────
 
@@ -852,6 +705,26 @@ function primeDbForFreshChat() {
 }
 
 /**
+ * Asserts that every selectQueue slot added by primeDbForFreshChat was
+ * consumed during the test.  A leftover slot means the handler issued fewer
+ * db.select() calls than the queue was primed for — the primeDb* helper is
+ * out of date.  A slot deficit (ECONNRESET / wrong-data during the test)
+ * means the handler gained a new db.select() call that was not added to
+ * primeDbForFreshChat.
+ *
+ * Call this in afterEach so drift is surfaced with a clear failure message
+ * rather than a cryptic ECONNRESET or mismatched data in a later test.
+ */
+function assertSelectQueueDrained() {
+  expect(
+    selectQueue.length,
+    `selectQueue has ${selectQueue.length} unconsumed slot(s) after the test — ` +
+      `update primeDbForFreshChat to match the current db.select() call ` +
+      `order in the chat handler (index.ts)`,
+  ).toBe(0);
+}
+
+/**
  * Parses the raw SSE body and returns:
  *   - eventTypes: ordered list of all event type names seen
  *   - toolStartNames: name values from every tool_start event's data payload
@@ -988,6 +861,10 @@ beforeEach(() => {
         confirmationRequired: false,
       })),
   );
+});
+
+afterEach(() => {
+  assertSelectQueueDrained();
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -20,6 +20,7 @@ import {
   makeSimpleUpdateBuilder,
   makeDeleteBuilder,
 } from "../test-helpers/db-mock";
+import { rateLimitMockFactory } from "./test-helpers/standard-mock-scaffold";
 
 // ── DB mock ──────────────────────────────────────────────────────────────────
 // selectQueue drives sequential .where() / .limit() calls in order.
@@ -79,12 +80,7 @@ vi.mock("../middleware/auth", () => ({
 
 // ── Rate limiters ─────────────────────────────────────────────────────────────
 
-vi.mock("../middleware/rateLimit", () => ({
-  adminLimiter: (_req: unknown, _res: unknown, next: () => void) => next(),
-  phoneVerifyLimiter: (_req: unknown, _res: unknown, next: () => void) =>
-    next(),
-  aiLimiter: (_req: unknown, _res: unknown, next: () => void) => next(),
-}));
+vi.mock("../middleware/rateLimit", () => rateLimitMockFactory());
 
 // ── Logger ────────────────────────────────────────────────────────────────────
 

@@ -14,6 +14,10 @@ import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
 import type { IRouter } from "express";
+import {
+  sentryMockFactory,
+  rateLimitMockFactory,
+} from "./test-helpers/standard-mock-scaffold";
 
 // ---------------------------------------------------------------------------
 // Hoisted shared state — must exist before vi.mock factories run.
@@ -109,21 +113,7 @@ vi.mock("../lib/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-vi.mock("../middleware/rateLimit", () => ({
-  webhookLimiter: vi.fn(),
-  authLimiter: vi.fn(),
-  apiLimiter: vi.fn(),
-  adminLimiter: vi.fn(),
-  phoneVerifyLimiter: vi.fn((_req: unknown, _res: unknown, next: () => void) =>
-    next(),
-  ),
-  aiLimiter: vi.fn((_req: unknown, _res: unknown, next: () => void) => next()),
-  loginLimiter: vi.fn(),
-  bulkAiLimiter: vi.fn(),
-  compareLimiter: vi.fn(),
-  supplementalUploadLimiter: vi.fn(),
-  passwordResetLimiter: vi.fn(),
-}));
+vi.mock("../middleware/rateLimit", () => rateLimitMockFactory());
 
 vi.mock("../middleware/auth", () => ({
   requireAuth: (
@@ -139,17 +129,7 @@ vi.mock("../middleware/auth", () => ({
   },
 }));
 
-vi.mock("@sentry/node", () => ({
-  setConversationId: vi.fn(),
-  startSpan: vi.fn((_opts: unknown, fn: (s: unknown) => unknown) =>
-    fn({ setAttribute: vi.fn() }),
-  ),
-  withScope: vi.fn((fn: (s: unknown) => unknown) => fn({ setExtra: vi.fn() })),
-  captureException: vi.fn(),
-  captureCheckIn: vi.fn(),
-  setUser: vi.fn(),
-  init: vi.fn(),
-}));
+vi.mock("@sentry/node", () => sentryMockFactory());
 
 vi.mock("@workspace/db", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@workspace/db")>();

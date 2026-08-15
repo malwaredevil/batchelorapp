@@ -2065,6 +2065,18 @@ async function main() {
     orderBy: "service",
   });
 
+  await copyTable(source, dest, {
+    table: "sentry_seen_issues",
+    columns: [
+      "issue_id",
+      "last_status",
+      "alert_generation",
+      "first_alerted_at",
+      "last_updated_at",
+    ],
+    orderBy: "issue_id",
+  });
+
   // ── App configuration ─────────────────────────────────────────────────────
   await copyTable(source, dest, {
     table: "app_config",

@@ -98,6 +98,7 @@ import { deleteDocument } from "../lib/travels-storage";
 import { getValidAccessToken } from "../lib/google-calendar-tokens";
 import { rescanTripDocument } from "../routes/travels/documents";
 import { getCachedHealthChecks } from "../routes/admin/integrations-health";
+import { listSentryIssues } from "../lib/sentry-issues";
 import {
   generateItineraryForTrip,
   ItineraryActionError,
@@ -300,6 +301,7 @@ import {
   FETCH_PAGE_TOOL_NAME,
   FIND_NEARBY_PLACES_TOOL_NAME,
   GENERATE_DOCUMENT_TOOL_NAME,
+  LIST_SENTRY_ISSUES_TOOL_NAME,
   GET_AIR_QUALITY_TOOL_NAME,
   GET_EXCHANGE_RATE_TOOL_NAME,
   GET_POLLEN_FORECAST_TOOL_NAME,
@@ -357,6 +359,10 @@ import {
   type StructuredDocumentSpec,
   type TabularDocumentSpec,
 } from "../lib/document-generation";
+import {
+  detectLocationClear,
+  detectStatedLocation,
+} from "./location-helpers.js";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -570,47 +576,6 @@ async function reverseGeocodeToPlaceName(
   } catch {
     return null;
   }
-}
-
-/**
- * Detects an explicit user-stated current location from a chat message.
- * Matches phrases like "I'm in Gion", "just arrived in Kyoto",
- * "we're at the train station", "currently in Paris", etc.
- * Returns the extracted place name (trimmed, max 120 chars) or null if
- * no location statement is found. Used to persist ephemeral session-level
- * location state so the user doesn't have to repeat themselves across turns.
- */
-function detectStatedLocation(message: string): string | null {
-  // Patterns: verb phrase + preposition + place name.
-  // Captures everything after the preposition up to punctuation or end-of-string.
-  const patterns = [
-    // "I'm in/at X", "I am in/at X"
-    /\b(?:i['\u2019]?m|i\s+am)\s+(?:in|at)\s+(.+?)(?:[.!?,]|$)/i,
-    // "we're in/at X", "we are in/at X"
-    /\b(?:we['\u2019]?re|we\s+are)\s+(?:in|at)\s+(.+?)(?:[.!?,]|$)/i,
-    // "just arrived in/at X"
-    /\bjust\s+arrived\s+(?:in|at)\s+(.+?)(?:[.!?,]|$)/i,
-    // "just got to X"
-    /\bjust\s+got\s+to\s+(.+?)(?:[.!?,]|$)/i,
-    // "currently in/at X"
-    /\bcurrently\s+(?:in|at)\s+(.+?)(?:[.!?,]|$)/i,
-    // "visiting X"
-    /\bvisiting\s+(.+?)(?:[.!?,]|$)/i,
-    // "staying in/at X"
-    /\bstaying\s+(?:in|at)\s+(.+?)(?:[.!?,]|$)/i,
-    // "I've arrived in/at X"
-    /\bi['\u2019]?ve\s+arrived\s+(?:in|at)\s+(.+?)(?:[.!?,]|$)/i,
-  ];
-  for (const pattern of patterns) {
-    const match = message.match(pattern);
-    if (match?.[1]) {
-      const place = match[1].trim().slice(0, 120);
-      // Reject matches that are suspiciously short (< 2 chars) or contain
-      // placeholder-like tokens — they're unlikely to be real place names.
-      if (place.length >= 2 && !/^\s*$/.test(place)) return place;
-    }
-  }
-  return null;
 }
 
 /**
@@ -1162,6 +1127,7 @@ const POTTERY_ACTION_TYPES = new Set<string>([
   "merge_pottery_categories",
   "bulk_reanalyze_pottery",
   "add_photo_to_pottery",
+  "estimate_pottery_market_value",
 ]);
 const QUILTING_ACTION_TYPES = new Set<string>([
   "update_fabric",
@@ -1197,6 +1163,7 @@ const ORNAMENT_ACTION_TYPES = new Set<string>([
   "merge_ornament_categories",
   "bulk_reanalyze_ornaments",
   "add_photo_to_ornaments",
+  "ornament_ebay_price_lookup",
 ]);
 
 async function buildActionLabel(action: PendingAction): Promise<string> {
@@ -4092,6 +4059,8 @@ CONTROL PANEL: The Control Panel ("/control-panel", hub app, owner-only) holds e
 
 INTEGRATIONS HEALTH: When the owner asks whether a connected service is working — "is Slack connected?", "which integrations are broken?", "is everything working?", "why is email not sending?" — call check_integrations_health (owner-only) to get a live status summary. Respond in plain English: lead with a one-line overall verdict ("All 16 services are operational" or "1 service is showing an error"), then list any errors or missing keys by name with the detail message. For missing-key services, explain it means the secret/API key hasn't been configured yet. For errors, quote the exact detail string so the owner can diagnose it. If all services are ok, keep the reply short and reassuring — a full table is only needed when there are problems. Never call this tool for non-owners; if a non-owner asks, tell them only the app owner can check integration health.
 
+SENTRY ERRORS: When the owner asks about production errors — "are there any errors right now?", "what's broken in production?", "show me Sentry issues", "any crashes today?", "what errors are happening?" — call list_sentry_issues (owner-only). It returns up to 50 issues sorted by most recent. Default to environment: "production" and query: "is:unresolved" unless the owner specifically says otherwise. If the result says configured: false, tell the owner plainly that Sentry isn't connected yet (the SENTRY_AUTH_TOKEN, SENTRY_ORG_SLUG, or SENTRY_PROJECT_SLUG secret is missing) and that they can set it up in the Owner Panel. When issues are returned: lead with a one-line summary ("3 unresolved production errors" or "No unresolved issues — all clear"), then for each issue list its title, severity level, how many times it occurred (count), and when it was last seen. Keep the list concise — for more than 5 issues, show the top 5 by recency and note how many more exist. Never call this tool for non-owners.
+
 PROACTIVE CONFIG WARNINGS: When the on-screen page context already includes an "App config snapshot" section and a setting there looks likely to cause problems for what the current page does — for example, a very short request timeout on a page that runs AI analysis, or a very low token limit on a page that generates long text — volunteer a one-sentence observation early in your reply (e.g. "By the way, your AI timeout is set to 5 s, which may be why ornament analysis keeps timing out — the app owner can raise it in the Control Panel."). Only do this when the config value is genuinely out of range for the task at hand and is visible in the current page context; do not speculate about settings you haven't seen, and don't repeat the warning in the same conversation if you've already mentioned it.
 
 WEB SEARCH & PAGE READING: You have a real-time web_search tool AND a fetch_page tool — use them actively. Never tell the user to search Google or visit a website themselves; if you catch yourself writing "you could Google this" or "you might want to visit X", stop and call web_search instead. Use web_search proactively (no permission needed) for ANY question that benefits from current or specific information — prices, opening hours, product details, how-to guides, reviews, news, events, visa rules, recipes, recommendations, anything — not just travel topics. Call it multiple times if needed for different angles on the same question. If search results point to a specific page that would have more detail than the summary (e.g. an official site, a how-to article, a product listing), use fetch_page to read that URL and extract the relevant details before you answer. Once you have all the information: write your answer based on what you found, cite sources naturally (e.g. "according to [Site Name]"), and at the very end of your reply always include one Google search link formatted as: 🔍 [Search Google for "your query"](https://www.google.com/search?q=url+encoded+query) — this gives the user a quick way to explore further on their own. Never paste raw search output verbatim, never fabricate a fact instead of searching, and do not use web_search or fetch_page for things already in the on-screen state or for stable general knowledge that definitely hasn't changed.
@@ -4369,15 +4338,24 @@ router.post("/chat", async (req, res) => {
 
   // Detect whether the user is stating their current location this turn so we
   // can persist it for future turns in the same conversation.
-  const detectedLocationThisTurn = isTravelsAppTurn
-    ? detectStatedLocation(message)
-    : null;
+  // A clear phrase (e.g. "I've left Gion", "I'm back home") takes priority
+  // over any incidental positive-location phrase in the same message.
+  const clearLocationThisTurn = isTravelsAppTurn
+    ? detectLocationClear(message)
+    : false;
+  const detectedLocationThisTurn =
+    isTravelsAppTurn && !clearLocationThisTurn
+      ? detectStatedLocation(message)
+      : null;
   // Effective location for this turn: GPS reverse-geocode wins if available,
   // then a location stated earlier in this conversation, then nothing.
-  const effectiveLocation =
-    travelCompanionPlaceName ??
-    detectedLocationThisTurn ??
-    statedLocationFromConv;
+  // When the user explicitly cleared their location this turn, treat it as
+  // absent so Elaine stops injecting the stale location into context.
+  const effectiveLocation = clearLocationThisTurn
+    ? (travelCompanionPlaceName ?? null)
+    : (travelCompanionPlaceName ??
+      detectedLocationThisTurn ??
+      statedLocationFromConv);
 
   const travelCompanionContext =
     effectiveLocation || travelCompanionTripBlock
@@ -6967,6 +6945,44 @@ router.post("/chat", async (req, res) => {
                 cachedAt,
               });
             }
+          } else if (call.name === LIST_SENTRY_ISSUES_TOOL_NAME) {
+            const [me] = await db
+              .select({ isOwner: appUsers.isOwner })
+              .from(appUsers)
+              .where(eq(appUsers.id, userId));
+            if (!me?.isOwner) {
+              resultText =
+                "Access denied — only the app owner can view Sentry issues.";
+            } else {
+              const parsed = JSON.parse(call.args ?? "{}") as {
+                environment?: unknown;
+                query?: unknown;
+              };
+              const environment =
+                parsed.environment === "development"
+                  ? ("development" as const)
+                  : ("production" as const);
+              const query =
+                parsed.query === "is:resolved"
+                  ? ("is:resolved" as const)
+                  : ("is:unresolved" as const);
+              const result = await listSentryIssues({ environment, query });
+              if (!result.configured) {
+                resultText = JSON.stringify({
+                  configured: false,
+                  message:
+                    "Sentry is not configured — SENTRY_AUTH_TOKEN, SENTRY_ORG_SLUG, or SENTRY_PROJECT_SLUG is missing.",
+                });
+              } else {
+                resultText = JSON.stringify({
+                  configured: true,
+                  environment,
+                  query,
+                  count: result.issues.length,
+                  issues: result.issues,
+                });
+              }
+            }
           } else {
             resultText = "Unsupported tool.";
           }
@@ -7143,12 +7159,17 @@ router.post("/chat", async (req, res) => {
 
     // If the user stated their current location this turn, persist it so
     // subsequent turns in the same conversation don't need it repeated.
+    // If the user cleared their location this turn (e.g. "I've left Gion",
+    // "I'm back home"), set statedLocation to null so the stale value stops
+    // being injected into context on the next turn.
     // Only write when the value actually changes (avoids a no-op update).
-    const locationStateUpdate =
-      detectedLocationThisTurn !== null &&
-      detectedLocationThisTurn !== statedLocationFromConv
-        ? { statedLocation: detectedLocationThisTurn }
-        : {};
+    const locationStateUpdate: { statedLocation?: string | null } =
+      clearLocationThisTurn && statedLocationFromConv !== null
+        ? { statedLocation: null }
+        : detectedLocationThisTurn !== null &&
+            detectedLocationThisTurn !== statedLocationFromConv
+          ? { statedLocation: detectedLocationThisTurn }
+          : {};
 
     // Auto-title from the first user message (first 60 chars), then just
     // bump updatedAt on subsequent turns. Provider state is updated in the

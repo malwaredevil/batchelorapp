@@ -54,6 +54,7 @@
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
+import { pathToFileURL } from "node:url";
 import ts from "typescript";
 
 const REPO_ROOT = join(import.meta.dirname, "..", "..");
@@ -584,6 +585,10 @@ function main(): void {
   const allFiles = walk(API_SRC).filter((f) => {
     if (f === GUARD_FILE) return false;
     if (/\.test\.[^/]+$/.test(f)) return false;
+    // Skip integration-test temp fixtures (_temp_* / _temp-*) so a file that
+    // is briefly created and then deleted by a concurrent validation run never
+    // causes an ENOENT crash here.
+    if (/[\\/]_temp[-_]/.test(f)) return false;
     return true;
   });
 
@@ -668,4 +673,8 @@ function main(): void {
   process.exit(1);
 }
 
-main();
+// Only run when executed directly (tsx check-scheduler-names.ts), not when
+// imported by the test file (import { classifyArgument } from ...).
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}

@@ -595,6 +595,12 @@ const REPO_ROOT = join(import.meta.dirname, "..", "..");
 const API_SRC = join(REPO_ROOT, "artifacts", "api-server", "src");
 const SENTINEL = join(API_SRC, "_ci_sentinel_scheduler_names_.ts");
 
+// Guard: if a previous test run crashed before its finally block could clean up
+// the sentinel file it leaves _ci_sentinel_scheduler_names_.ts on disk.  That
+// leftover makes the "exits 0 on the actual repo" smoke test fail with a
+// spurious forward violation.  Remove it before running the smoke test.
+rmSync(SENTINEL, { force: true });
+
 itest(
   "script exits 0 on the actual repo (all scheduler names accounted for)",
   () => {

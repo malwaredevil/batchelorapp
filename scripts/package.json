@@ -23,6 +23,7 @@
     "check-workflow-security": "node --import tsx ./src/check-workflow-security.ts",
     "check-guardrails": "tsx ./src/check-guardrails.ts",
     "check-scheduler-names": "tsx ./src/check-scheduler-names.ts",
+    "verify-sentry-nudge-e2e": "tsx ./src/verify-sentry-nudge-e2e.ts",
     "cleanup-app-config-defaults": "tsx ./src/cleanup-app-config-defaults.ts",
     "sentry-baseline": "tsx ./src/sentry-baseline.ts",
     "github-sync": "tsx ./src/github-sync.ts",

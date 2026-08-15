@@ -519,6 +519,10 @@ export const EstimatePotteryMarketValueParams = zod.object({
   "id": zod.coerce.number()
 })
 
+export const EstimatePotteryMarketValueBody = zod.object({
+  "force": zod.boolean().optional().describe('When true, skip the 7-day staleness cache and fire a fresh Apify sold-listings run regardless of the last fetch date.\n')
+})
+
 export const EstimatePotteryMarketValueResponse = zod.object({
   "priceMinUsd": zod.number(),
   "priceMaxUsd": zod.number(),
@@ -5335,6 +5339,10 @@ export const RunOrnamentAiAppraisalResponse = zod.object({
  */
 export const LookupOrnamentEbayPriceParams = zod.object({
   "id": zod.coerce.number()
+})
+
+export const LookupOrnamentEbayPriceBody = zod.object({
+  "force": zod.boolean().optional().describe('When true, skip the 7-day staleness cache and fire a fresh Apify sold-listings run regardless of the last fetch date.\n')
 })
 
 export const LookupOrnamentEbayPriceResponse = zod.object({

@@ -20,6 +20,7 @@ import {
   useUpdateOrnament,
   useDeleteOrnament,
   useRefreshAllOrnamentData,
+  useLookupOrnamentEbayPrice,
   getGetOrnamentQueryKey,
   getListOrnamentsQueryKey,
   useSetOrnamentPrimaryImage,
@@ -59,6 +60,7 @@ import {
   CollectionDetailField,
   CollectionDetailSection,
 } from "@workspace/collection-ui";
+import { OrnamentEbayPriceSection } from "@/ornaments/components/OrnamentEbayPriceSection";
 
 function formatCurrency(amount: number | string | null | undefined): string {
   if (amount == null) return "—";
@@ -166,6 +168,8 @@ export default function OrnamentDetail() {
   });
 
   const refreshAll = useRefreshAllOrnamentData();
+  const lookupEbayPrice = useLookupOrnamentEbayPrice();
+  const [forceEbayRefreshing, setForceEbayRefreshing] = useState(false);
   const addImage = useUploadOrnamentImage(id);
   const setPrimaryImage = useSetOrnamentPrimaryImage();
   const deleteImage = useDeleteOrnamentImage();
@@ -245,6 +249,32 @@ export default function OrnamentDetail() {
     } catch {
       toast.dismiss("refresh-all");
       toast.error("Refresh failed — check connection and try again");
+    }
+  };
+
+  const handleEbayLookup = async (force = false) => {
+    try {
+      if (force) {
+        setForceEbayRefreshing(true);
+      } else {
+        toast.loading("Searching eBay listings…", { id: "ebay" });
+      }
+      await lookupEbayPrice.mutateAsync({
+        id,
+        data: force ? { force: true } : undefined,
+      });
+      if (!force) toast.dismiss("ebay");
+      queryClient.invalidateQueries({ queryKey: getGetOrnamentQueryKey(id) });
+      if (force) {
+        toast.success("eBay prices refreshed");
+      } else {
+        toast.success("eBay prices updated");
+      }
+    } catch {
+      if (!force) toast.dismiss("ebay");
+      toast.error("eBay lookup failed — try again");
+    } finally {
+      if (force) setForceEbayRefreshing(false);
     }
   };
 
@@ -509,6 +539,19 @@ export default function OrnamentDetail() {
                 data-testid="button-scan-barcode"
               >
                 <ScanBarcode className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => handleEbayLookup(false)}
+                disabled={lookupEbayPrice.isPending}
+                title="Look up eBay market value"
+              >
+                {lookupEbayPrice.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <TrendingUp className="h-4 w-4" />
+                )}
               </Button>
               <Button
                 variant="outline"
@@ -852,49 +895,17 @@ export default function OrnamentDetail() {
               />
             )}
 
-            {!isEditing && hasEbayForSale && (
-              <CollectionDetailField
-                label="eBay — For Sale Now"
-                value={
-                  <span>
-                    {formatCurrency(ornament.ebayPriceMinUsd)} –{" "}
-                    {formatCurrency(ornament.ebayPriceMaxUsd)}
-                    {ornament.ebayPriceCachedAt && (
-                      <span className="text-xs text-muted-foreground font-normal ml-1.5">
-                        · updated {formatDate(ornament.ebayPriceCachedAt)}
-                      </span>
-                    )}
-                  </span>
-                }
+            {!isEditing && (
+              <OrnamentEbayPriceSection
+                ebayPriceMinUsd={ornament.ebayPriceMinUsd}
+                ebayPriceMaxUsd={ornament.ebayPriceMaxUsd}
+                ebayLastSoldPriceUsd={ornament.ebayLastSoldPriceUsd}
+                ebayPriceCachedAt={ornament.ebayPriceCachedAt}
+                ebayLastSoldDate={ornament.ebayLastSoldDate}
+                onForceRefresh={() => handleEbayLookup(true)}
+                forceRefreshing={forceEbayRefreshing}
               />
             )}
-
-            {!isEditing && hasEbayLastSold && (
-              <CollectionDetailField
-                label="eBay — Last Sold"
-                value={
-                  <span>
-                    {formatCurrency(ornament.ebayLastSoldPriceUsd)}
-                    {ornament.ebayLastSoldDate && (
-                      <span className="text-xs text-muted-foreground font-normal ml-1.5">
-                        · {formatDate(ornament.ebayLastSoldDate)}
-                      </span>
-                    )}
-                  </span>
-                }
-              />
-            )}
-
-            {!isEditing &&
-              hasEbayData &&
-              !hasEbayForSale &&
-              !hasEbayLastSold && (
-                <CollectionDetailField
-                  label="eBay Market"
-                  value="No active listings found"
-                  empty
-                />
-              )}
 
             {!isEditing && !!ornament.aiAppraisal && (
               <CollectionDetailField

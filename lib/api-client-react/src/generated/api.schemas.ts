@@ -2959,6 +2959,12 @@ page?: number;
 pageSize?: number;
 };
 
+export type EstimatePotteryMarketValueBody = {
+  /** When true, skip the 7-day staleness cache and fire a fresh Apify sold-listings run regardless of the last fetch date.
+   */
+  force?: boolean;
+};
+
 export type DismissWatchlistAlert200 = {
   dismissed?: boolean;
 };
@@ -3217,6 +3223,12 @@ export const ListOrnamentsSort = {
   'name-desc': 'name-desc',
   'value-desc': 'value-desc',
 } as const;
+
+export type LookupOrnamentEbayPriceBody = {
+  /** When true, skip the 7-day staleness cache and fire a fresh Apify sold-listings run regardless of the last fetch date.
+   */
+  force?: boolean;
+};
 
 export type DeleteOrnamentUnusedCategories200 = {
   deleted: number;

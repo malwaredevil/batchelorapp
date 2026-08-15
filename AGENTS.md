@@ -265,6 +265,15 @@ reasonably within your reach right now:
   task, colocated the way this repo already does it (`*.test.ts` beside the source
   file; see `api-server-route-testing.md` in `.agents/memory/` for the
   vitest+supertest pattern used for routes).
+- **Elaine SSE route tests (`POST /api/elaine/chat` via supertest):** if the test file
+  uses a `selectQueue` + `primeDb*` helper to feed sequential `db.select()` results to
+  the real chat handler, it **must** also include `assertSelectQueueDrained()` in an
+  `afterEach`. A queue slot left over (or missing) causes cryptic ECONNRESET failures
+  in a later test rather than a clear assertion error in the failing one. See
+  `chat-dropped-action.test.ts`, `reminder-doubt.test.ts`, and
+  `chat-reminder-doubt.test.ts` for the canonical implementation. Files that mock
+  `chatCreate` directly (e.g. `scheduling-doubt-tool-forcing.test.ts`) or that drive
+  other `/api/elaine/*` endpoints without a `primeDb*` helper do **not** need this.
 - A bugfix's test must fail against the old code and pass against the fix — a
   regression test, not just a happy-path check.
 - Reserve a `test_gaps` follow-up for coverage that is genuinely out of reach in this

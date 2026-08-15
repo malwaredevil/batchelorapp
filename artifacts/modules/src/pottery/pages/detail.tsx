@@ -21,6 +21,7 @@ import type {
   PotteryPotteryItem as PotteryItem,
 } from "@workspace/api-client-react";
 import { toast } from "sonner";
+import { EbayPricePanel } from "../components/EbayPricePanel";
 import {
   ArrowLeft,
   Camera,
@@ -797,24 +798,53 @@ export default function PieceDetail() {
     priceMedianUsd: number;
     listingCount: number;
     searchQuery?: string;
+    sourceType: "sold" | "active_listing";
+    fromCache?: boolean;
+    cachedAt?: string;
   } | null>(null);
+  const [forceRefreshing, setForceRefreshing] = useState(false);
 
-  async function handleEstimateMarketValue() {
+  async function handleEstimateMarketValue(force = false) {
     try {
-      toast.loading("Searching eBay sold listings…", { id: "ebay" });
-      const result = await estimateMarketValue.mutateAsync({ id });
-      toast.dismiss("ebay");
-      if (result.listingCount > 0) {
-        setEbayResult(result);
-        toast.success(
-          `Found ${result.listingCount} listing${result.listingCount !== 1 ? "s" : ""} — median $${result.priceMedianUsd.toFixed(0)}`,
-        );
+      if (force) {
+        setForceRefreshing(true);
       } else {
-        toast.error("No eBay sold listings found for this piece.");
+        toast.loading("Searching eBay listings…", { id: "ebay" });
+      }
+      const result = await estimateMarketValue.mutateAsync({
+        id,
+        data: force ? { force: true } : undefined,
+      });
+      if (!force) toast.dismiss("ebay");
+      if (result.listingCount > 0) {
+        setEbayResult({
+          priceMinUsd: result.priceMinUsd,
+          priceMaxUsd: result.priceMaxUsd,
+          priceMedianUsd: result.priceMedianUsd,
+          listingCount: result.listingCount,
+          searchQuery: result.searchQuery,
+          sourceType:
+            (result as { sourceType?: string }).sourceType === "sold"
+              ? "sold"
+              : "active_listing",
+          fromCache: (result as { fromCache?: boolean }).fromCache ?? false,
+          cachedAt: (result as { cachedAt?: string }).cachedAt,
+        });
+        if (force) {
+          toast.success("eBay prices refreshed");
+        } else {
+          toast.success(
+            `Found ${result.listingCount} listing${result.listingCount !== 1 ? "s" : ""} — median $${result.priceMedianUsd.toFixed(0)}`,
+          );
+        }
+      } else {
+        toast.error("No eBay listings found for this piece.");
       }
     } catch {
-      toast.dismiss("ebay");
+      if (!force) toast.dismiss("ebay");
       toast.error("Failed to look up eBay price");
+    } finally {
+      if (force) setForceRefreshing(false);
     }
   }
 
@@ -982,7 +1012,7 @@ export default function PieceDetail() {
                 <Button
                   variant="outline"
                   size="icon"
-                  onClick={handleEstimateMarketValue}
+                  onClick={() => handleEstimateMarketValue()}
                   disabled={estimateMarketValue.isPending}
                   title="Look up eBay market value"
                 >
@@ -1072,45 +1102,19 @@ export default function PieceDetail() {
           </div>
 
           {ebayResult && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-sm font-medium text-amber-900 flex items-center gap-1.5">
-                  <TrendingUp className="h-4 w-4" />
-                  eBay Market Value
-                </p>
-                <button
-                  onClick={() => setEbayResult(null)}
-                  className="text-amber-500 hover:text-amber-700 text-xs"
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div>
-                  <p className="text-lg font-bold text-amber-800">
-                    ${ebayResult.priceMinUsd.toFixed(0)}
-                  </p>
-                  <p className="text-[10px] text-amber-600">Low</p>
-                </div>
-                <div>
-                  <p className="text-lg font-bold text-amber-800">
-                    ${ebayResult.priceMedianUsd.toFixed(0)}
-                  </p>
-                  <p className="text-[10px] text-amber-600">Median</p>
-                </div>
-                <div>
-                  <p className="text-lg font-bold text-amber-800">
-                    ${ebayResult.priceMaxUsd.toFixed(0)}
-                  </p>
-                  <p className="text-[10px] text-amber-600">High</p>
-                </div>
-              </div>
-              <p className="text-[10px] text-amber-600 mt-2 text-center">
-                {ebayResult.listingCount} sold listing
-                {ebayResult.listingCount !== 1 ? "s" : ""} · "
-                {ebayResult.searchQuery}"
-              </p>
-            </div>
+            <EbayPricePanel
+              priceMinUsd={ebayResult.priceMinUsd}
+              priceMedianUsd={ebayResult.priceMedianUsd}
+              priceMaxUsd={ebayResult.priceMaxUsd}
+              listingCount={ebayResult.listingCount}
+              searchQuery={ebayResult.searchQuery}
+              sourceType={ebayResult.sourceType}
+              fromCache={ebayResult.fromCache}
+              cachedAt={ebayResult.cachedAt}
+              onForceRefresh={() => handleEstimateMarketValue(true)}
+              forceRefreshing={forceRefreshing}
+              onDismiss={() => setEbayResult(null)}
+            />
           )}
 
           {/* AI description */}

@@ -91,6 +91,7 @@ export const SUGGEST_CLOTHING_LAYERS_TOOL_NAME = "suggest_clothing_layers";
 export const CALCULATE_YARDAGE_TOOL_NAME = "calculate_yardage";
 export const QUERY_HOUSEHOLD_TOOL_NAME = "query_household_data";
 export const CHECK_INTEGRATIONS_HEALTH_TOOL_NAME = "check_integrations_health";
+export const LIST_SENTRY_ISSUES_TOOL_NAME = "list_sentry_issues";
 export const GENERATE_DOCUMENT_TOOL_NAME = "generate_document";
 
 // ---------------------------------------------------------------------------
@@ -1719,6 +1720,32 @@ export const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       parameters: {
         type: "object",
         properties: {},
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: LIST_SENTRY_ISSUES_TOOL_NAME,
+      description:
+        "List current unresolved (or resolved) Sentry issues for the app, filtered by environment. Only available to the app owner (isOwner). Use this when the owner asks 'are there any production errors?', 'what errors are happening right now?', 'show me the Sentry issues', 'any crashes in production?', or similar questions about live application errors. Returns up to 50 issues sorted by most-recent. Gracefully returns 'not configured' if Sentry credentials are missing. Do not call this unless the user is the app owner.",
+      parameters: {
+        type: "object",
+        properties: {
+          environment: {
+            type: "string",
+            enum: ["production", "development"],
+            description:
+              "Which environment to query. Default to 'production' unless the owner specifically asks about development.",
+          },
+          query: {
+            type: "string",
+            enum: ["is:unresolved", "is:resolved"],
+            description:
+              "Whether to fetch unresolved (default) or resolved issues.",
+          },
+        },
         required: [],
       },
     },

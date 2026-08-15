@@ -95,6 +95,13 @@ export const env = {
   //   node -e "require('crypto').randomBytes(32).toString('base64')"
   oauthTokenEncryptionKey: required("OAUTH_TOKEN_ENCRYPTION_KEY"),
   sentryDsn: optional("SENTRY_DSN"),
+  // Sentry REST API credentials for listing unresolved issues (owner panel
+  // card + proactive Elaine error nudges). All three are optional at the env
+  // layer — the issues client reports a clean "not configured" state when any
+  // are missing instead of throwing, so the app boots fine without them.
+  sentryAuthToken: optional("SENTRY_AUTH_TOKEN"),
+  sentryOrgSlug: optional("SENTRY_ORG_SLUG"),
+  sentryProjectSlug: optional("SENTRY_PROJECT_SLUG"),
   // Direct OpenAI API key — used by the centralized Responses API provider
   // and by image edit (inpainting) in the owner AI Lab. It remains optional
   // so a missing key cleanly selects the existing OpenRouter path.

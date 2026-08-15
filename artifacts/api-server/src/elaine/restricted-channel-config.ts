@@ -212,6 +212,12 @@ export const RESTRICTED_EXCLUDED_ACTION_TYPES_SOURCE: readonly string[] = [
   "add_photo_to_pottery",
   "add_photo_to_quilting",
   "add_photo_to_ornaments",
+  // estimate_pottery_market_value / ornament_ebay_price_lookup: require the
+  // item's numeric id to be visible on screen (page context), and force:true
+  // can trigger a paid Apify scraper run. Both are web-only so users must
+  // consciously initiate them from the item detail page.
+  "estimate_pottery_market_value",
+  "ornament_ebay_price_lookup",
 ];
 
 /** Runtime Set derived from the source array — use for O(1) membership tests. */

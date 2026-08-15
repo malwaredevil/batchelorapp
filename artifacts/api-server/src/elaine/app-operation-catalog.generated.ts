@@ -1005,7 +1005,19 @@ export const ELAINE_APP_OPERATION_CATALOG = [
         },
       },
     ],
-    requestBody: null,
+    requestBody: {
+      required: false,
+      schema: {
+        type: "object",
+        properties: {
+          force: {
+            type: "boolean",
+            description:
+              "When true, skip the 7-day staleness cache and fire a fresh Apify sold-listings run regardless of the last fetch date.\n",
+          },
+        },
+      },
+    },
   },
   {
     operationId: "exportOperationEvents",

@@ -589,6 +589,7 @@ export const ELAINE_EVALUATION_CORPUS = {
         "show_data_card",
         "suggest_navigation",
         "check_integrations_health",
+        "list_sentry_issues",
       ],
       mockedObservations: [],
       expectedToolSequence: ["search_household_data"],

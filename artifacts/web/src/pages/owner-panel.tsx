@@ -36,6 +36,9 @@ import {
   ChevronRight,
   Clock,
   Zap,
+  Lightbulb,
+  Check,
+  ExternalLink,
 } from "lucide-react";
 import { GlobalConfigCard } from "@workspace/elaine-ui";
 import {
@@ -66,7 +69,8 @@ type Tab =
   | "ai-lab"
   | "infrastructure"
   | "users"
-  | "integrations";
+  | "integrations"
+  | "elaine-suggestions";
 
 type TabDef = { id: Tab; label: string; icon: typeof Globe };
 type TabGroup = {
@@ -94,6 +98,11 @@ const DEV_TABS: TabDef[] = [
   { id: "services", label: "Services", icon: Puzzle },
   { id: "ai-evidence", label: "AI Evidence", icon: Microscope },
   { id: "ai-lab", label: "Lab", icon: FlaskConical },
+  {
+    id: "elaine-suggestions",
+    label: "Elaine Suggestions",
+    icon: Lightbulb,
+  },
 ];
 
 /**
@@ -447,6 +456,7 @@ export default function OwnerPanel() {
               </p>
             </div>
             <GlobalConfigCard />
+            <ElaineDiagnosticsCard />
           </div>
         )}
 
@@ -463,6 +473,10 @@ export default function OwnerPanel() {
         {safeTab === "integrations" && isOwner && <IntegrationsContent />}
 
         {safeTab === "ai-evidence" && isOwner && <AiEvidenceContent />}
+
+        {safeTab === "elaine-suggestions" && isOwner && (
+          <ElaineCodeSuggestionsContent />
+        )}
 
         {safeTab === "ai-lab" && isOwner && <AiLabContent />}
         {safeTab === "users" && isOwner && <UserManagementContent />}
@@ -1268,6 +1282,173 @@ function UserManagementContent() {
 }
 
 // ---------------------------------------------------------------------------
+// Elaine Diagnostics Card — inline trace-quality summary embedded in the
+// Global Config tab so plan-comparison metrics are visible without curl.
+// ---------------------------------------------------------------------------
+
+interface ElaineTraceQuality {
+  evaluatedTurns: number;
+  healthyTurns: number;
+  needsReviewTurns: number;
+  failedTurns: number;
+  turnsWithReplans: number;
+  turnsWithMultiPathPlanning: number;
+  turnsWithKnownPlanChoice: number;
+  turnsWithNonDefaultPlanChosen: number;
+  nonDefaultPlanChosenRate: number | null;
+}
+
+interface ElaineDiagnosticsResponse {
+  generatedAt: string;
+  periodDays: number;
+  traceQuality: ElaineTraceQuality;
+}
+
+function ElaineDiagnosticsCard() {
+  const [data, setData] = useState<ElaineDiagnosticsResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = () => {
+    setLoading(true);
+    setError(null);
+    // raw-fetch-ok — owner-only admin panel; no generated hook for this endpoint
+    fetch("/api/elaine/diagnostics")
+      .then((r) => {
+        if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+        return r.json() as Promise<ElaineDiagnosticsResponse>;
+      })
+      .then((d) => setData(d))
+      .catch((e: unknown) =>
+        setError(e instanceof Error ? e.message : "Failed to load"),
+      )
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const tq = data?.traceQuality;
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold tracking-tight">
+          Trace Quality{" "}
+          {data && (
+            <span className="ml-1 font-normal text-muted-foreground">
+              (last {data.periodDays} days)
+            </span>
+          )}
+        </h3>
+        <button
+          type="button"
+          onClick={load}
+          className="rounded border border-border px-2 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          Refresh
+        </button>
+      </div>
+
+      {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
+
+      {error && (
+        <div className="rounded border border-destructive/30 bg-destructive/10 p-2 text-xs text-destructive">
+          {error}
+        </div>
+      )}
+
+      {!loading && !error && tq && (
+        <dl className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="flex flex-col gap-0.5">
+            <dt className="text-xs text-muted-foreground">Evaluated turns</dt>
+            <dd className="tabular-nums text-sm font-medium">
+              {tq.evaluatedTurns}
+            </dd>
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <dt className="text-xs text-muted-foreground">
+              Healthy / needs review / failed
+            </dt>
+            <dd className="tabular-nums text-sm font-medium">
+              <span className="text-green-600 dark:text-green-400">
+                {tq.healthyTurns}
+              </span>
+              {" / "}
+              <span className="text-yellow-600 dark:text-yellow-400">
+                {tq.needsReviewTurns}
+              </span>
+              {" / "}
+              <span className="text-destructive">{tq.failedTurns}</span>
+            </dd>
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <dt className="text-xs text-muted-foreground">
+              Turns with replans
+            </dt>
+            <dd className="tabular-nums text-sm font-medium">
+              {tq.turnsWithReplans}
+            </dd>
+          </div>
+          <div className="flex flex-col gap-0.5 sm:col-span-2">
+            <dt className="text-xs text-muted-foreground">
+              Multi-path planning
+            </dt>
+            <dd className="text-sm font-medium">
+              {tq.turnsWithMultiPathPlanning === 0 ? (
+                <span className="text-muted-foreground">
+                  0 turns used it in this window
+                </span>
+              ) : (
+                <>
+                  {tq.turnsWithMultiPathPlanning} of {tq.evaluatedTurns} turns
+                  used it
+                  {" · "}
+                  {tq.nonDefaultPlanChosenRate === null ? (
+                    <span className="text-muted-foreground">
+                      — (no multi-path turns in window)
+                    </span>
+                  ) : (
+                    <span>
+                      chose non-default{" "}
+                      <span
+                        className={
+                          tq.nonDefaultPlanChosenRate >= 0.1
+                            ? "text-green-600 dark:text-green-400"
+                            : "text-muted-foreground"
+                        }
+                      >
+                        {Math.round(tq.nonDefaultPlanChosenRate * 100)}%
+                      </span>{" "}
+                      of the time
+                      {tq.turnsWithKnownPlanChoice <
+                        tq.turnsWithMultiPathPlanning && (
+                        <span className="ml-1 text-xs text-muted-foreground">
+                          ({tq.turnsWithKnownPlanChoice} of{" "}
+                          {tq.turnsWithMultiPathPlanning} have a known choice)
+                        </span>
+                      )}
+                    </span>
+                  )}
+                </>
+              )}
+            </dd>
+          </div>
+        </dl>
+      )}
+
+      {data && (
+        <p className="text-xs text-muted-foreground">
+          Generated {new Date(data.generatedAt).toLocaleString()}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // AI Evidence — owner-only tab showing AI generation run statistics.
 // Helps the owner diagnose why AI picked certain field values and track
 // model quality over time. Never shown in regular user UI.
@@ -1306,9 +1487,10 @@ function AiEvidenceContent() {
       .finally(() => setLoading(false));
   };
 
-  useState(() => {
+  useEffect(() => {
     load();
-  });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="space-y-4">
@@ -1426,6 +1608,487 @@ function AiEvidenceContent() {
             </tbody>
           </table>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Elaine Suggestions (#895) — owner-only tab listing code-grounded
+// diagnosis suggestions Elaine generated after a self-heal behavioral
+// lesson recurred enough times to warrant a bounded, read-only look at the
+// actual source code. Nothing is ever auto-applied here — the owner
+// accepts or dismisses each suggestion, then decides separately whether it
+// becomes real follow-up work (e.g. a project task).
+// ---------------------------------------------------------------------------
+
+interface ElaineCodeSuggestion {
+  id: number;
+  patternKey: string;
+  lessonId: number | null;
+  occurrenceCount: number;
+  observedPattern: string;
+  filesReviewed: Array<{ path: string }>;
+  hypothesis: string;
+  status: "pending" | "accepted" | "dismissed";
+  createdAt: string;
+  decidedAt: string | null;
+  decidedByUserId: number | null;
+  linkedTaskRef: string | null;
+}
+
+function ElaineCodeSuggestionsContent() {
+  const [suggestions, setSuggestions] = useState<ElaineCodeSuggestion[] | null>(
+    null,
+  );
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [decidingId, setDecidingId] = useState<number | null>(null);
+  const [linkingId, setLinkingId] = useState<number | null>(null);
+  // Per-suggestion task-ref input values for accepted suggestions
+  const [taskRefInputs, setTaskRefInputs] = useState<Record<number, string>>(
+    {},
+  );
+  const [showDismissed, setShowDismissed] = useState(false);
+  const { toast } = useToast();
+
+  const load = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    // Fetch all statuses (no filter) — we split client-side so the accepted
+    // section persists after Accept without a full reload, and dismissed rows
+    // are available for the "Show dismissed" audit toggle.
+    // raw-fetch-ok — owner-only admin panel; no generated hook for this endpoint
+    fetch("/api/admin/elaine-code-suggestions")
+      .then((r) => {
+        if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+        return r.json() as Promise<{ suggestions: ElaineCodeSuggestion[] }>;
+      })
+      .then((d) => {
+        setSuggestions(d.suggestions);
+      })
+      .catch((e: unknown) =>
+        setError(e instanceof Error ? e.message : "Failed to load"),
+      )
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  // One-click: accepts the suggestion AND creates an elaine_code_tasks row,
+  // returning the auto-generated "#NNN" ref immediately (no manual entry).
+  const acceptAndCreateTask = (id: number) => {
+    setDecidingId(id);
+    // raw-fetch-ok — owner-only admin panel; no generated hook for this endpoint
+    fetch(`/api/admin/elaine-code-suggestions/${id}/create-task`, {
+      method: "POST",
+    })
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+        const data = (await r.json()) as {
+          suggestion: ElaineCodeSuggestion;
+          task: { id: number; title: string };
+          planFilePath: string | null;
+        };
+        // Update in-place; linkedTaskRef is already set on the returned row
+        setSuggestions(
+          (prev) =>
+            prev?.map((s) => (s.id === id ? data.suggestion : s)) ?? prev,
+        );
+        toast({
+          title: `Task #${data.task.id} created`,
+          description: data.task.title,
+        });
+      })
+      .catch((e: unknown) =>
+        toast({
+          title: "Failed to create task",
+          description: e instanceof Error ? e.message : undefined,
+          variant: "destructive",
+        }),
+      )
+      .finally(() => setDecidingId(null));
+  };
+
+  const dismiss = (id: number) => {
+    setDecidingId(id);
+    // raw-fetch-ok — owner-only admin panel; no generated hook for this endpoint
+    fetch(`/api/admin/elaine-code-suggestions/${id}/decision`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision: "dismissed" }),
+    })
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+        const data = (await r.json()) as { suggestion: ElaineCodeSuggestion };
+        // Update in-place (not remove) so the row is available in the
+        // "Show dismissed" audit section without a full reload.
+        setSuggestions(
+          (prev) =>
+            prev?.map((s) => (s.id === id ? data.suggestion : s)) ?? prev,
+        );
+        toast({ title: "Suggestion dismissed" });
+      })
+      .catch((e: unknown) =>
+        toast({
+          title: "Failed to dismiss",
+          description: e instanceof Error ? e.message : undefined,
+          variant: "destructive",
+        }),
+      )
+      .finally(() => setDecidingId(null));
+  };
+
+  const reopen = (id: number) => {
+    setDecidingId(id);
+    // raw-fetch-ok — owner-only admin panel; no generated hook for this endpoint
+    fetch(`/api/admin/elaine-code-suggestions/${id}/reopen`, {
+      method: "POST",
+    })
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+        const data = (await r.json()) as { suggestion: ElaineCodeSuggestion };
+        // Update in-place so the card moves into the pending section immediately.
+        setSuggestions(
+          (prev) =>
+            prev?.map((s) => (s.id === id ? data.suggestion : s)) ?? prev,
+        );
+        toast({ title: "Suggestion re-opened" });
+      })
+      .catch((e: unknown) =>
+        toast({
+          title: "Failed to re-open",
+          description: e instanceof Error ? e.message : undefined,
+          variant: "destructive",
+        }),
+      )
+      .finally(() => setDecidingId(null));
+  };
+
+  const linkTask = (id: number) => {
+    const ref = (taskRefInputs[id] ?? "").trim();
+    if (!ref) return;
+    setLinkingId(id);
+    // raw-fetch-ok — owner-only admin panel; no generated hook for this endpoint
+    fetch(`/api/admin/elaine-code-suggestions/${id}/linked-task`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ linkedTaskRef: ref }),
+    })
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+        const data = (await r.json()) as { suggestion: ElaineCodeSuggestion };
+        setSuggestions(
+          (prev) =>
+            prev?.map((s) => (s.id === id ? data.suggestion : s)) ?? prev,
+        );
+        setTaskRefInputs((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+        toast({ title: `Linked to task ${data.suggestion.linkedTaskRef}` });
+      })
+      .catch((e: unknown) =>
+        toast({
+          title: "Failed to link task",
+          description: e instanceof Error ? e.message : undefined,
+          variant: "destructive",
+        }),
+      )
+      .finally(() => setLinkingId(null));
+  };
+
+  const pending = suggestions?.filter((s) => s.status === "pending") ?? [];
+  const accepted = suggestions?.filter((s) => s.status === "accepted") ?? [];
+  const dismissed = suggestions?.filter((s) => s.status === "dismissed") ?? [];
+
+  const SuggestionCard = ({ s }: { s: ElaineCodeSuggestion }) => {
+    const isAccepted = s.status === "accepted";
+    return (
+      <div
+        className={`space-y-3 rounded-lg border p-4 ${
+          isAccepted ? "border-green-500/30 bg-green-500/5" : "border-border"
+        }`}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            {isAccepted && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-green-500/15 px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-400">
+                <Check className="h-3 w-3" />
+                Accepted
+              </span>
+            )}
+            <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-mono text-muted-foreground">
+              {s.patternKey}
+            </span>
+          </div>
+          <span className="text-xs text-muted-foreground">
+            Recurred {s.occurrenceCount}× ·{" "}
+            {new Date(s.createdAt).toLocaleString()}
+          </span>
+        </div>
+
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Pattern observed
+          </p>
+          <p className="mt-1 whitespace-pre-line text-sm">
+            {s.observedPattern}
+          </p>
+        </div>
+
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Suggested change
+          </p>
+          <p className="mt-1 text-sm">{s.hypothesis}</p>
+        </div>
+
+        {s.filesReviewed.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {s.filesReviewed.map((f) => (
+              <span
+                key={f.path}
+                className="rounded bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground"
+              >
+                {f.path}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Pending: Accept & Create Task / Dismiss */}
+        {!isAccepted && (
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              type="button"
+              disabled={decidingId === s.id}
+              onClick={() => acceptAndCreateTask(s.id)}
+              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+            >
+              <Check className="h-3.5 w-3.5" />
+              Accept & Create Task
+            </button>
+            <button
+              type="button"
+              disabled={decidingId === s.id}
+              onClick={() => dismiss(s.id)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+            >
+              <X className="h-3.5 w-3.5" />
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {/* Accepted: show linked task ref or link-task input */}
+        {isAccepted && (
+          <div className="pt-1">
+            {s.linkedTaskRef ? (
+              <div className="flex items-center gap-1.5 text-sm font-medium text-green-700 dark:text-green-400">
+                <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                {`→ Task ${s.linkedTaskRef.startsWith("#") ? s.linkedTaskRef : `#${s.linkedTaskRef}`}`}
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <p className="text-xs text-muted-foreground">
+                  A plan file was saved to{" "}
+                  <code className="rounded bg-muted px-1 py-0.5 font-mono">
+                    .local/tasks/
+                  </code>
+                  . Create the Replit project task from it, then link it here:
+                </p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="Task # (e.g. 921)"
+                    value={taskRefInputs[s.id] ?? ""}
+                    onChange={(e) =>
+                      setTaskRefInputs((prev) => ({
+                        ...prev,
+                        [s.id]: e.target.value,
+                      }))
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") linkTask(s.id);
+                    }}
+                    className="h-8 w-36 rounded-md border border-border bg-background px-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                  <button
+                    type="button"
+                    disabled={
+                      linkingId === s.id || !(taskRefInputs[s.id] ?? "").trim()
+                    }
+                    onClick={() => linkTask(s.id)}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+                  >
+                    Link Task
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const DismissedCard = ({ s }: { s: ElaineCodeSuggestion }) => (
+    <div className="space-y-3 rounded-lg border border-border/50 bg-muted/30 p-4 opacity-70">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+            <X className="h-3 w-3" />
+            Dismissed
+          </span>
+          <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-mono text-muted-foreground">
+            {s.patternKey}
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground">
+            Recurred {s.occurrenceCount}× · generated{" "}
+            {new Date(s.createdAt).toLocaleString()}
+            {s.decidedAt && (
+              <> · dismissed {new Date(s.decidedAt).toLocaleString()}</>
+            )}
+          </span>
+          <button
+            type="button"
+            disabled={decidingId === s.id}
+            onClick={() => reopen(s.id)}
+            className="shrink-0 rounded-md border border-border px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+          >
+            Re-open
+          </button>
+        </div>
+      </div>
+
+      <div>
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Pattern observed
+        </p>
+        <p className="mt-1 whitespace-pre-line text-sm text-muted-foreground">
+          {s.observedPattern}
+        </p>
+      </div>
+
+      <div>
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Suggested change
+        </p>
+        <p className="mt-1 text-sm text-muted-foreground">{s.hypothesis}</p>
+      </div>
+
+      {s.filesReviewed.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {s.filesReviewed.map((f) => (
+            <span
+              key={f.path}
+              className="rounded bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground"
+            >
+              {f.path}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight">
+            Elaine Suggestions
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            When the same self-heal correction recurs enough times, Elaine reads
+            the related source file(s) and leaves a code-grounded suggestion
+            here. Nothing is applied automatically — accept to generate a
+            pre-filled plan file, then link the Replit task number below.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={load}
+          className="rounded-md border border-border px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          Refresh
+        </button>
+      </div>
+
+      {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
+
+      {error && (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      {!loading && !error && suggestions !== null && (
+        <>
+          {pending.length === 0 && accepted.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              No pending suggestions. Elaine only generates one once a self-heal
+              pattern has recurred several times.
+            </p>
+          )}
+
+          {pending.length > 0 && (
+            <div className="space-y-4">
+              {accepted.length > 0 && (
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Pending review
+                </p>
+              )}
+              {pending.map((s) => (
+                <SuggestionCard key={s.id} s={s} />
+              ))}
+            </div>
+          )}
+
+          {accepted.length > 0 && (
+            <div className="space-y-4">
+              {pending.length > 0 && (
+                <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Accepted
+                </p>
+              )}
+              {accepted.map((s) => (
+                <SuggestionCard key={s.id} s={s} />
+              ))}
+            </div>
+          )}
+
+          {/* Dismissed audit section — collapsed by default */}
+          {dismissed.length > 0 && (
+            <div className="space-y-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowDismissed((v) => !v)}
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+              >
+                {showDismissed ? (
+                  <ChevronDown className="h-3.5 w-3.5" />
+                ) : (
+                  <ChevronRight className="h-3.5 w-3.5" />
+                )}
+                {showDismissed ? "Hide" : "Show"} dismissed ({dismissed.length})
+              </button>
+              {showDismissed && (
+                <div className="space-y-3">
+                  {dismissed.map((s) => (
+                    <DismissedCard key={s.id} s={s} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

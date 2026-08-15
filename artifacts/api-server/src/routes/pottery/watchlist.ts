@@ -181,6 +181,10 @@ router.post("/watchlist/:id/scan", aiLimiter, async (req, res) => {
     return true;
   });
 
+  // For active-listing fallback results (Finding API unavailable), soldDate is
+  // always null — don't store a soldAt timestamp that didn't happen.
+  const isActiveListing = result.sourceType === "active_listing";
+
   let newAlerts = 0;
   for (const listing of listings) {
     // Use itemUrl as a stable dedup key (no separate listing ID in this actor's output)
@@ -208,7 +212,12 @@ router.post("/watchlist/:id/scan", aiLimiter, async (req, res) => {
         condition: listing.condition,
         imageUrl: listing.imageUrl,
         listingUrl: listing.itemUrl ?? "",
-        soldAt: listing.soldDate != null ? new Date(listing.soldDate) : null,
+        // Do not populate soldAt for active-listing fallback data — it's an
+        // asking price, not a completed transaction, so there is no sold date.
+        soldAt:
+          !isActiveListing && listing.soldDate != null
+            ? new Date(listing.soldDate)
+            : null,
       });
       newAlerts++;
     }
@@ -222,7 +231,12 @@ router.post("/watchlist/:id/scan", aiLimiter, async (req, res) => {
     })
     .where(eq(potteryWatchlistItems.id, id));
 
-  res.json({ newAlerts, totalListings: listings.length, searchQuery: query });
+  res.json({
+    newAlerts,
+    totalListings: listings.length,
+    searchQuery: query,
+    sourceType: result.sourceType,
+  });
 });
 
 // ---------------------------------------------------------------------------

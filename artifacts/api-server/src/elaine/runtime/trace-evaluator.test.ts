@@ -121,4 +121,121 @@ describe("Elaine trace-driven evaluation", () => {
       /invented household item|prompt|message|payload/i,
     );
   });
+
+  it("reports no multi-path fields when no planSelection", () => {
+    const result = evaluateElaineTrace(inventedTrace());
+    expect(result.usedMultiPathPlanning).toBe(false);
+    expect(result.multiPathChoiceKnown).toBe(false);
+    expect(result.nonDefaultPlanChosen).toBe(false);
+  });
+
+  it("reports nonDefaultPlanChosen=false when the first candidate was chosen (chosenIndex=0)", () => {
+    const trace = inventedTrace();
+    trace.plan.planSelection = {
+      chosenApproach: "Look up first",
+      alternativeApproaches: ["Answer directly"],
+      reason: "More reliable",
+      chosenIndex: 0,
+    };
+    const result = evaluateElaineTrace(trace);
+    expect(result.usedMultiPathPlanning).toBe(true);
+    expect(result.multiPathChoiceKnown).toBe(true);
+    expect(result.nonDefaultPlanChosen).toBe(false);
+  });
+
+  it("reports nonDefaultPlanChosen=true when a later candidate was chosen (chosenIndex>0)", () => {
+    const trace = inventedTrace();
+    trace.plan.planSelection = {
+      chosenApproach: "Research first",
+      alternativeApproaches: ["Answer directly"],
+      reason: "Prevents an unsupported claim",
+      chosenIndex: 1,
+    };
+    const result = evaluateElaineTrace(trace);
+    expect(result.usedMultiPathPlanning).toBe(true);
+    expect(result.multiPathChoiceKnown).toBe(true);
+    expect(result.nonDefaultPlanChosen).toBe(true);
+  });
+
+  it("treats a legacy planSelection without chosenIndex as unknown — not index 0", () => {
+    const trace = inventedTrace();
+    // Simulate a trace written before chosenIndex was added
+    trace.plan.planSelection = {
+      chosenApproach: "Look up first",
+      alternativeApproaches: ["Answer directly"],
+      reason: "Older trace",
+      // chosenIndex intentionally absent
+    };
+    const result = evaluateElaineTrace(trace);
+    expect(result.usedMultiPathPlanning).toBe(true);
+    // Known=false: must be excluded from the rate denominator
+    expect(result.multiPathChoiceKnown).toBe(false);
+    expect(result.nonDefaultPlanChosen).toBe(false);
+  });
+
+  it("returns nonDefaultPlanChosenRate=null when no turn used multi-path planning", () => {
+    const aggregate = aggregateElaineTraceEvaluations([
+      evaluateElaineTrace(inventedTrace()),
+      evaluateElaineTrace(inventedTrace({ status: "failed" })),
+    ]);
+    expect(aggregate.turnsWithMultiPathPlanning).toBe(0);
+    expect(aggregate.turnsWithKnownPlanChoice).toBe(0);
+    expect(aggregate.turnsWithNonDefaultPlanChosen).toBe(0);
+    expect(aggregate.nonDefaultPlanChosenRate).toBeNull();
+  });
+
+  it("returns nonDefaultPlanChosenRate=null when only legacy multi-path traces exist", () => {
+    const legacyTrace = inventedTrace();
+    legacyTrace.plan.planSelection = {
+      chosenApproach: "Look up first",
+      alternativeApproaches: ["Answer directly"],
+      reason: "Older trace",
+      // no chosenIndex
+    };
+    const aggregate = aggregateElaineTraceEvaluations([
+      evaluateElaineTrace(legacyTrace),
+    ]);
+    // Legacy traces count toward turnsWithMultiPathPlanning but NOT turnsWithKnownPlanChoice
+    expect(aggregate.turnsWithMultiPathPlanning).toBe(1);
+    expect(aggregate.turnsWithKnownPlanChoice).toBe(0);
+    expect(aggregate.nonDefaultPlanChosenRate).toBeNull();
+  });
+
+  it("computes nonDefaultPlanChosenRate using only known-choice turns as denominator", () => {
+    const defaultChoice = inventedTrace();
+    defaultChoice.plan.planSelection = {
+      chosenApproach: "First",
+      alternativeApproaches: ["Second"],
+      reason: "Fine",
+      chosenIndex: 0,
+    };
+    const nonDefaultChoice = inventedTrace();
+    nonDefaultChoice.plan.planSelection = {
+      chosenApproach: "Second",
+      alternativeApproaches: ["First"],
+      reason: "Better",
+      chosenIndex: 1,
+    };
+    const legacyMultiPath = inventedTrace();
+    legacyMultiPath.plan.planSelection = {
+      chosenApproach: "Legacy approach",
+      alternativeApproaches: ["Other"],
+      reason: "Old trace, no chosenIndex",
+    };
+    const noComparison = inventedTrace();
+
+    const aggregate = aggregateElaineTraceEvaluations([
+      evaluateElaineTrace(defaultChoice),
+      evaluateElaineTrace(nonDefaultChoice),
+      evaluateElaineTrace(legacyMultiPath),
+      evaluateElaineTrace(noComparison),
+    ]);
+
+    // 3 multi-path turns total (2 new + 1 legacy), but only 2 have a known choice
+    expect(aggregate.turnsWithMultiPathPlanning).toBe(3);
+    expect(aggregate.turnsWithKnownPlanChoice).toBe(2);
+    expect(aggregate.turnsWithNonDefaultPlanChosen).toBe(1);
+    // Rate = 1/2 = 0.5 — legacy trace does NOT pull this toward 0
+    expect(aggregate.nonDefaultPlanChosenRate).toBe(0.5);
+  });
 });

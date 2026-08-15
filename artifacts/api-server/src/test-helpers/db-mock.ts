@@ -276,6 +276,13 @@ export interface GenericInsertCall {
 export interface GenericUpdateCall {
   table: unknown;
   set: unknown;
+  /**
+   * The drizzle SQL condition object passed to .where(), if any. Captured so
+   * tests can assert which row a write actually targeted (e.g. via
+   * `new PgDialect().sqlToQuery(call.where).params`) rather than only
+   * asserting that *some* update happened.
+   */
+  where?: unknown;
 }
 
 export interface GenericDeleteCall {
@@ -355,12 +362,15 @@ export function createTrackedMutationBuilders(): {
   }
 
   function makeUpdateBuilder(table: unknown) {
+    let currentCall: GenericUpdateCall | undefined;
     const builder = {
       set(set: unknown) {
-        updateCalls.push({ table, set });
+        currentCall = { table, set };
+        updateCalls.push(currentCall);
         return builder;
       },
-      where() {
+      where(condition?: unknown) {
+        if (currentCall) currentCall.where = condition;
         return builder;
       },
       returning() {

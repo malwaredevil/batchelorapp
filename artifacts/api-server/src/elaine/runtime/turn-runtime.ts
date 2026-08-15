@@ -58,6 +58,16 @@ function clonePlan(plan: ElainePlan): ElainePlan {
       ...step,
       dependsOn: [...step.dependsOn],
     })),
+    ...(plan.planSelection
+      ? {
+          planSelection: {
+            ...plan.planSelection,
+            alternativeApproaches: [
+              ...plan.planSelection.alternativeApproaches,
+            ],
+          },
+        }
+      : {}),
   };
 }
 
@@ -111,6 +121,18 @@ export class ElaineTurnRuntime {
     };
     this.emit("turn_started", "Request classified and runtime started");
     this.emit("plan_created", "Plan ready");
+    const planSelection = this.trace.plan.planSelection;
+    if (planSelection) {
+      const consideredApproaches = [
+        planSelection.chosenApproach,
+        ...planSelection.alternativeApproaches,
+      ];
+      const summary =
+        planSelection.alternativeApproaches.length > 0
+          ? `Considered ${consideredApproaches.length} approaches (${consideredApproaches.join(" vs. ")}); chose "${planSelection.chosenApproach}" — ${planSelection.reason}`
+          : `Chose approach "${planSelection.chosenApproach}" — ${planSelection.reason}`;
+      this.emit("plan_compared", summary);
+    }
   }
 
   snapshot(): ElaineRuntimeTrace {
@@ -289,6 +311,7 @@ export class ElaineTurnRuntime {
         stepId: stepId ?? null,
         toolName: input.toolName,
         success: input.success,
+        ...(input.waitingConfirmation ? { waitingConfirmation: true } : {}),
         ...(input.errorCategory
           ? { errorCategory: sanitizeRuntimeText(input.errorCategory, 80) }
           : {}),

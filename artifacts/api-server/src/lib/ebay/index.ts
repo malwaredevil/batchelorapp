@@ -2,6 +2,7 @@ export { getEbayAppToken } from "./oauth";
 export {
   findCompletedItems,
   findItemsByUpc,
+  probeFindingApi,
   type FindingListing,
   type FindingActiveListing,
 } from "./finding";

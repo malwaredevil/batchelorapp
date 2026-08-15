@@ -23,6 +23,7 @@ import express, {
   type NextFunction,
 } from "express";
 import request from "supertest";
+import { buildPlannerToolCatalogMock } from "./test-helpers/planner-tool-catalog-mock";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -388,6 +389,13 @@ vi.mock("./runtime", () => ({
   aggregateElaineTraceEvaluations: vi.fn(),
   buildElaineSourceRoute: vi.fn().mockReturnValue("web"),
   classifyElaineRequest: vi.fn(),
+  isReminderDoubtMessage: vi.fn().mockReturnValue(false),
+  isSchedulingDoubtMessage: vi.fn().mockReturnValue(false),
+  buildSelfHealLessonInput: vi.fn().mockReturnValue(null),
+  detectClaimedCheckWithoutToolCall: vi.fn().mockReturnValue(null),
+  selfHealPatternKey: vi.fn().mockReturnValue("self_heal:mock"),
+  buildClassifierDoubtLessonInput: vi.fn().mockReturnValue(null),
+  classifierDoubtPatternKey: vi.fn().mockReturnValue("classifier_doubt:mock"),
   completedActionAcknowledgement: vi.fn().mockReturnValue("Done."),
   createElaineTurnTrace: vi.fn().mockResolvedValue({ id: 1 }),
   createFallbackPlan: vi.fn(),
@@ -430,44 +438,7 @@ vi.mock("./capability-registry", () => ({
   ELAINE_TOOL_POLICIES: {},
 }));
 
-vi.mock("./planner-tool-catalog", () => ({
-  ACTION_CONFIRMATION_MODES: ["one_by_one", "all_at_once", "auto_run"] as const,
-  ACTION_TOOL_NAMES: new Set<string>(),
-  ACTION_TOOLS: [],
-  SOFT_TOOLS: [],
-  SOFT_TOOLS_EXTRA: [],
-  ELAINE_PLANNER_TOOL_CATALOG: [],
-  TRIP_STATUS_ENUM: ["planned", "active", "completed", "cancelled"] as const,
-  CALCULATE_YARDAGE_TOOL_NAME: "calculate_yardage",
-  CHECK_INTEGRATIONS_HEALTH_TOOL_NAME: "check_integrations_health",
-  CONSULT_EXPERTS_TOOL_NAME: "consult_experts",
-  EBAY_SEARCH_TOOL_NAME: "ebay_search",
-  FETCH_PAGE_TOOL_NAME: "fetch_page",
-  FIND_NEARBY_PLACES_TOOL_NAME: "find_nearby_places",
-  GENERATE_DOCUMENT_TOOL_NAME: "generate_document",
-  GET_AIR_QUALITY_TOOL_NAME: "get_air_quality",
-  GET_EXCHANGE_RATE_TOOL_NAME: "get_exchange_rate",
-  GET_POLLEN_FORECAST_TOOL_NAME: "get_pollen_forecast",
-  GET_ROUTE_INFO_TOOL_NAME: "get_route_info",
-  GET_WEATHER_TOOL_NAME: "get_weather",
-  LOOKUP_BARCODE_TOOL_NAME: "lookup_barcode",
-  NAVIGATE_TOOL_NAME: "navigate",
-  QUERY_HOUSEHOLD_TOOL_NAME: "query_household",
-  REMEMBER_TOOL_NAME: "remember",
-  SEARCH_FLIGHTS_TOOL_NAME: "search_flights",
-  SEARCH_HALLMARK_TOOL_NAME: "search_hallmark",
-  SEARCH_HOUSEHOLD_TOOL_NAME: "search_household",
-  SEARCH_TRIP_DOCUMENTS_TOOL_NAME: "search_trip_documents",
-  SET_MODE_TOOL_NAME: "set_mode",
-  SHOW_DATA_CARD_TOOL_NAME: "show_data_card",
-  SHOW_DESTINATION_CARD_TOOL_NAME: "show_destination_card",
-  SHOW_FABRIC_SWATCH_TOOL_NAME: "show_fabric_swatch",
-  SHOW_ORNAMENT_ITEM_TOOL_NAME: "show_ornament_item",
-  SHOW_POTTERY_ITEM_TOOL_NAME: "show_pottery_item",
-  SHOW_TRIP_CARD_TOOL_NAME: "show_trip_card",
-  SUGGEST_CLOTHING_LAYERS_TOOL_NAME: "suggest_clothing_layers",
-  WEB_SEARCH_TOOL_NAME: "web_search",
-}));
+vi.mock("./planner-tool-catalog", () => buildPlannerToolCatalogMock());
 
 vi.mock("./household-counts", () => ({
   queryHouseholdData: vi.fn().mockResolvedValue("0 items"),

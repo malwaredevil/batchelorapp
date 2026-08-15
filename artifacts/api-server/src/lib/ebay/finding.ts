@@ -6,12 +6,29 @@
  * directly as the SECURITY-APPNAME header.
  *
  * Docs: https://developer.ebay.com/devzone/finding/callref/index.html
+ *
+ * Troubleshooting 418 / empty-body errors from svcs.ebay.com
+ * -----------------------------------------------------------
+ * eBay's WAF blocks headless fetch calls that lack a User-Agent header. All
+ * requests here set `User-Agent: Batchelor-App/1.0` to avoid bot-detection
+ * rejections. If you still see 418 or 403 responses:
+ *   1. Verify EBAY_APP_ID is current and active in the eBay Developer Portal.
+ *   2. Check the eBay Developer site for Finding API deprecation notices.
+ *   3. Use the /api/admin/integrations/health endpoint to run a live probe.
  */
 
 import { env } from "../env";
 import { logger } from "../logger";
 
 const FINDING_BASE = "https://svcs.ebay.com/services/search/FindingService/v1";
+
+/**
+ * User-Agent sent with every Finding API request.
+ * eBay's WAF rejects requests without a recognisable User-Agent, returning
+ * 418 or 403 with an empty body. A fixed string is sufficient to pass the
+ * check — we do not need to impersonate a browser.
+ */
+const FINDING_USER_AGENT = "Batchelor-App/1.0";
 
 /** eBay Finding API arrays always wrap a single value — unwrap it. */
 function first<T>(arr: T[] | undefined): T | undefined {
@@ -147,12 +164,32 @@ export async function findCompletedItems(
 
   const url = `${FINDING_BASE}?${params.toString()}`;
   const resp = await fetch(url, {
-    headers: { "X-EBAY-SOA-SECURITY-APPNAME": appId },
+    headers: {
+      "X-EBAY-SOA-SECURITY-APPNAME": appId,
+      // eBay's WAF rejects headless requests without a User-Agent, returning
+      // 418 with an empty body. Providing a fixed string bypasses the block.
+      "User-Agent": FINDING_USER_AGENT,
+    },
     signal: AbortSignal.timeout(30_000),
   });
 
   if (!resp.ok) {
     const text = await resp.text();
+    logger.error(
+      {
+        status: resp.status,
+        statusText: resp.statusText,
+        query,
+        // Avoid leaking the full app ID in logs; show only the prefix
+        appIdPrefix: appId.slice(0, 8) + "…",
+        responseBody: text.slice(0, 500),
+        hint:
+          resp.status === 418 || resp.status === 403
+            ? "WAF/bot-detection block — verify EBAY_APP_ID in the Developer Portal and check the integrations health panel"
+            : undefined,
+      },
+      "ebay finding: non-ok response from findCompletedItems",
+    );
     throw new Error(
       `eBay Finding API error (${resp.status}): ${text.slice(0, 300)}`,
     );
@@ -219,12 +256,29 @@ export async function findItemsByUpc(
 
   const url = `${FINDING_BASE}?${params.toString()}`;
   const resp = await fetch(url, {
-    headers: { "X-EBAY-SOA-SECURITY-APPNAME": appId },
+    headers: {
+      "X-EBAY-SOA-SECURITY-APPNAME": appId,
+      "User-Agent": FINDING_USER_AGENT,
+    },
     signal: AbortSignal.timeout(30_000),
   });
 
   if (!resp.ok) {
     const text = await resp.text();
+    logger.error(
+      {
+        status: resp.status,
+        statusText: resp.statusText,
+        upc,
+        appIdPrefix: appId.slice(0, 8) + "…",
+        responseBody: text.slice(0, 500),
+        hint:
+          resp.status === 418 || resp.status === 403
+            ? "WAF/bot-detection block — verify EBAY_APP_ID in the Developer Portal and check the integrations health panel"
+            : undefined,
+      },
+      "ebay finding: non-ok response from findItemsByProduct",
+    );
     throw new Error(
       `eBay Finding API (findItemsByProduct) error (${resp.status}): ${text.slice(0, 300)}`,
     );
@@ -255,4 +309,71 @@ export async function findItemsByUpc(
 
   logger.info({ upc, found: listings.length }, "ebay finding: findItemsByUpc");
   return listings;
+}
+
+/**
+ * Lightweight probe for the Finding API health check.
+ *
+ * Sends a minimal `findCompletedItems` request (1 result, simple keyword) and
+ * returns `{ ok, status, detail }`. Never throws — designed to be called from
+ * the integrations-health endpoint without disrupting other checks.
+ *
+ * This exercises the actual Finding API endpoint end-to-end, not just OAuth,
+ * so it catches WAF blocks and quota exhaustion that the OAuth check misses.
+ */
+export async function probeFindingApi(appId: string): Promise<{
+  ok: boolean;
+  status?: number;
+  detail?: string;
+}> {
+  const params = new URLSearchParams({
+    "OPERATION-NAME": "findCompletedItems",
+    "SERVICE-VERSION": "1.13.0",
+    "SECURITY-APPNAME": appId,
+    "RESPONSE-DATA-FORMAT": "JSON",
+    keywords: "Hallmark ornament",
+    "itemFilter(0).name": "SoldItemsOnly",
+    "itemFilter(0).value": "true",
+    "paginationInput.entriesPerPage": "1",
+  });
+
+  try {
+    const resp = await fetch(`${FINDING_BASE}?${params.toString()}`, {
+      headers: {
+        "X-EBAY-SOA-SECURITY-APPNAME": appId,
+        "User-Agent": FINDING_USER_AGENT,
+      },
+      signal: AbortSignal.timeout(15_000),
+    });
+
+    if (!resp.ok) {
+      const text = await resp.text();
+      return {
+        ok: false,
+        status: resp.status,
+        detail: `HTTP ${resp.status}: ${text.slice(0, 200) || resp.statusText}`,
+      };
+    }
+
+    const data = (await resp.json()) as Record<string, unknown>;
+    const response = first(
+      data["findCompletedItemsResponse"] as
+        | Record<string, unknown[]>[]
+        | undefined,
+    );
+    const ack = first(response?.["ack"] as string[] | undefined);
+    if (ack === "Success" || ack === "Warning") {
+      return { ok: true, status: resp.status };
+    }
+    return {
+      ok: false,
+      status: resp.status,
+      detail: `ack=${ack ?? "missing"} — app ID may be invalid or quota exceeded`,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      detail: err instanceof Error ? err.message : String(err),
+    };
+  }
 }

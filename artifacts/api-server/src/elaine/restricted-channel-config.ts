@@ -205,9 +205,139 @@ export const RESTRICTED_EXCLUDED_ACTION_TYPES_SOURCE: readonly string[] = [
   // execute_app_operation: high-risk automation; requires the owner to be
   // looking at the Control Panel and explicitly choosing the operation.
   "execute_app_operation",
+  // add_photo_to_pottery / add_photo_to_quilting / add_photo_to_ornaments:
+  // require an image attachment from the current message; restricted channels
+  // (SMS, voice, email, Slack) do not carry image attachments into Elaine's
+  // context so these actions are meaningless outside the web UI.
+  "add_photo_to_pottery",
+  "add_photo_to_quilting",
+  "add_photo_to_ornaments",
 ];
 
 /** Runtime Set derived from the source array — use for O(1) membership tests. */
 export const RESTRICTED_EXCLUDED_ACTION_TYPES = new Set<string>(
   RESTRICTED_EXCLUDED_ACTION_TYPES_SOURCE,
 );
+
+/**
+ * Source array for action types that ARE allowed in restricted channels
+ * (SMS/voice/email/Slack).  Together with RESTRICTED_EXCLUDED_ACTION_TYPES_SOURCE
+ * these two lists form a complete bipartite coverage of every known action type:
+ * each type must appear in EXACTLY ONE of the two arrays.
+ *
+ * Exported as a readonly array for the same duplicate-detection reason as the
+ * excluded list above.  The CI guard in check-domain-composition.ts (Scan J)
+ * reads both lists from this file's source text and verifies:
+ *   1. Every action type found in any action schema file or planner-tool-catalog.ts
+ *      ACTION_TOOLS section appears in exactly one list.
+ *   2. No type appears in both lists.
+ *   3. No list contains duplicates.
+ *
+ * When you add a new action type to ANY action schema file or to the
+ * ACTION_TOOLS array in planner-tool-catalog.ts:
+ *   - Add it here if it is safe to expose over SMS/voice/email/Slack.
+ *   - Add it to RESTRICTED_EXCLUDED_ACTION_TYPES_SOURCE if it is NOT safe
+ *     (requires a live browser UI, exact on-screen IDs, or could create a
+ *     delivery loop over the inbound channel).
+ *   - If you leave it in neither list, Scan J fails CI with an "uncovered"
+ *     violation naming the new type.
+ */
+export const RESTRICTED_ALLOWED_ACTION_TYPES_SOURCE: readonly string[] = [
+  // ── Travels: trip lifecycle ──────────────────────────────────────────────
+  "create_trip",
+  "update_trip_status",
+  "update_trip_details",
+  "cancel_trip",
+  // ── Travels: packing & wishlist ──────────────────────────────────────────
+  "add_packing_item",
+  "remove_packing_item",
+  "add_wishlist",
+  "mark_wishlist_done",
+  "remove_wishlist_item",
+  "update_wishlist_item",
+  // ── Travels: diary ───────────────────────────────────────────────────────
+  "add_diary_entry",
+  "delete_diary_entry",
+  "edit_diary_entry",
+  // ── Travels: reminders (trip-scoped) ────────────────────────────────────
+  // These are trip reminder CRUD actions defined in planner-tool-catalog.ts,
+  // distinct from create_reminder / snooze_reminder (reminder-actions.ts)
+  // which are excluded from email due to the spoofable-From-header risk.
+  "add_reminder",
+  "edit_reminder",
+  "delete_reminder",
+  // ── Travels: itinerary ───────────────────────────────────────────────────
+  "add_itinerary_day",
+  "regenerate_itinerary_day",
+  "generate_itinerary",
+  "confirm_itinerary_activity",
+  "remove_itinerary_activity",
+  // ── Travels: calendar & documents ────────────────────────────────────────
+  // add_connected_calendar is excluded (requires browser OAuth redirect).
+  "disconnect_calendar",
+  "rescan_document",
+  // ── Travels: sharing & media ─────────────────────────────────────────────
+  "generate_trip_share_link",
+  "revoke_trip_share_link",
+  "delete_trip_photo",
+  // ── Travels: email (outbound only — not the inbound webhook channel) ─────
+  "send_email",
+  // ── Communication: restricted-channel-safe actions ───────────────────────
+  // call_contact / message_contact are excluded from email (spoofable From).
+  // broadcast_message is excluded (would loop back to the originating channel).
+  // create_reminder / snooze_reminder are excluded from email (same spoofing risk).
+  // cancel_scheduled_contact and continue_in_channel are safe on all channels.
+  // call_me dials back the requesting user — safe because the channel already
+  // verified their phone number (E.164 HMAC / Slack OAuth).
+  "cancel_scheduled_contact",
+  "continue_in_channel",
+  "call_me",
+  // ── Pottery ──────────────────────────────────────────────────────────────
+  "update_pottery_item",
+  "delete_pottery_item",
+  "create_pottery_category",
+  "delete_pottery_category",
+  "lock_pottery_field",
+  "update_pottery_item_categories",
+  "delete_pottery_photo",
+  "promote_pottery_photo",
+  "merge_pottery_categories",
+  "bulk_reanalyze_pottery",
+  // ── Quilting ─────────────────────────────────────────────────────────────
+  "create_block",
+  "delete_block",
+  "create_layout",
+  "delete_layout",
+  "delete_fabric",
+  "update_fabric",
+  "remove_fabric_creases",
+  "create_pattern",
+  "update_pattern",
+  "delete_pattern",
+  "delete_quilt",
+  "create_quilting_category",
+  "delete_quilting_category",
+  "rename_quilting_category",
+  "merge_quilting_categories",
+  "bulk_reanalyze_quilting",
+  "create_shopping_item",
+  "update_shopping_item",
+  "delete_shopping_item",
+  // ── Ornaments ────────────────────────────────────────────────────────────
+  "update_ornament_item",
+  "delete_ornament_item",
+  "lock_ornament_field",
+  "update_ornament_item_categories",
+  "create_ornament_category",
+  "delete_ornament_category",
+  "merge_ornament_categories",
+  "delete_ornament_photo",
+  "promote_ornament_photo",
+  "bulk_reanalyze_ornaments",
+  // ── Universal ────────────────────────────────────────────────────────────
+  // update_notification_state / bulk_update_notifications /
+  // update_notification_preferences are excluded (in-app settings UI required).
+  "create_note",
+  "update_note",
+  "delete_note",
+];

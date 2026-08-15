@@ -1,7 +1,7 @@
 import { z } from "zod/v4";
 import type OpenAI from "openai";
-import { eq } from "drizzle-orm";
-import { db, appUsers, reminders } from "@workspace/db";
+import { and, eq, gt, isNull, sql } from "drizzle-orm";
+import { db, appUsers, reminders, travelsTrips } from "@workspace/db";
 import { logger } from "../lib/logger";
 import {
   resolveRelativeTime,
@@ -16,6 +16,151 @@ import {
   listManageableReminders,
   snoozeReminder,
 } from "../lib/reminders-management";
+
+// ---------------------------------------------------------------------------
+// Duplicate-detection constants — mirror the values used in
+// communication-actions.ts for call_contact / message_contact so the two
+// surfaces behave identically.
+// ---------------------------------------------------------------------------
+
+/** Half-width of the due-time window used to identify a near-duplicate. */
+const DUPLICATE_DUE_WINDOW_MS = 30 * 60 * 1000; // ±30 min
+/** How far back we look for a pre-existing reminder that matches. */
+const DUPLICATE_LOOKBACK_MS = 2 * 60 * 60 * 1000; // 2 h
+
+interface DuplicatePersonalReminderMatch {
+  id: number;
+  dueAt: Date;
+}
+
+/**
+ * Looks for an active, non-deleted personal reminder (entityType IS NULL —
+ * i.e. not an elaine_action scheduled contact) created by this user within
+ * the last two hours whose title matches and whose due time falls within
+ * ±30 minutes of the requested due time.  Returns null when no such row
+ * exists.  "Surface, not block" — the caller always creates the new row
+ * regardless of the return value; the match is only used to append a warning
+ * to the confirmation message.
+ */
+async function findDuplicatePersonalReminder(params: {
+  userId: number;
+  title: string;
+  dueAt: Date;
+}): Promise<DuplicatePersonalReminderMatch | null> {
+  const { userId, title, dueAt } = params;
+  const windowStart = new Date(dueAt.getTime() - DUPLICATE_DUE_WINDOW_MS);
+  const windowEnd = new Date(dueAt.getTime() + DUPLICATE_DUE_WINDOW_MS);
+  const createdAfter = new Date(Date.now() - DUPLICATE_LOOKBACK_MS);
+
+  const [match] = await db
+    .select({ id: reminders.id, dueAt: reminders.dueAt })
+    .from(reminders)
+    .where(
+      and(
+        eq(reminders.createdByUserId, userId),
+        eq(reminders.status, "active"),
+        isNull(reminders.deletedAt),
+        isNull(reminders.entityType),
+        gt(reminders.createdAt, createdAfter),
+        sql`${reminders.dueAt} between ${windowStart} and ${windowEnd}`,
+        sql`lower(${reminders.title}) = lower(${title})`,
+      ),
+    )
+    .limit(1);
+
+  return match?.dueAt ? { id: match.id, dueAt: match.dueAt } : null;
+}
+
+/** Short user-facing clause appended to a create_reminder confirmation when a
+ * near-duplicate personal reminder already exists — mirrors the wording used
+ * for communication-action duplicates so the two surfaces are consistent. */
+function personalReminderDuplicateWarningClause(
+  duplicate: DuplicatePersonalReminderMatch,
+): string {
+  return ` Heads up — you already had a near-identical reminder scheduled for ${formatScheduledTime(duplicate.dueAt.toISOString())} (reminder #${duplicate.id}). I've left both in place; let me know if you'd like me to cancel one.`;
+}
+
+// ---------------------------------------------------------------------------
+// Duplicate-detection for trip-scoped add_reminder (bell-icon flow).
+//
+// Same "surface, not block" philosophy as findDuplicatePersonalReminder above:
+// the caller always inserts the new row; this only identifies a pre-existing
+// match so a warning can be appended to the confirmation.
+// ---------------------------------------------------------------------------
+
+interface DuplicateTripReminderMatch {
+  id: number;
+  dueAt: Date | null;
+}
+
+/**
+ * Looks for an active, non-deleted trip-scoped reminder (entityType =
+ * "travels_trip", entityId = tripId) created by this user within the last
+ * two hours whose title matches.  When a dueAt is provided the due time must
+ * fall within ±30 minutes of it; when dueAt is null (no due date set) the
+ * check matches only on title + trip, ignoring the time window.  Returns null
+ * when no such row exists.
+ */
+export async function findDuplicateTripReminder(params: {
+  userId: number;
+  tripId: number;
+  title: string;
+  dueAt: Date | null;
+}): Promise<DuplicateTripReminderMatch | null> {
+  const { userId, tripId, title, dueAt } = params;
+  const createdAfter = new Date(Date.now() - DUPLICATE_LOOKBACK_MS);
+
+  const baseConditions = and(
+    eq(reminders.createdByUserId, userId),
+    eq(reminders.status, "active"),
+    isNull(reminders.deletedAt),
+    eq(reminders.entityType, "travels_trip"),
+    eq(reminders.entityId, tripId),
+    gt(reminders.createdAt, createdAfter),
+    sql`lower(${reminders.title}) = lower(${title})`,
+  );
+
+  let rows: Array<{ id: number; dueAt: Date | null }>;
+
+  if (dueAt !== null) {
+    const windowStart = new Date(dueAt.getTime() - DUPLICATE_DUE_WINDOW_MS);
+    const windowEnd = new Date(dueAt.getTime() + DUPLICATE_DUE_WINDOW_MS);
+    rows = await db
+      .select({ id: reminders.id, dueAt: reminders.dueAt })
+      .from(reminders)
+      .where(
+        and(
+          baseConditions,
+          sql`${reminders.dueAt} between ${windowStart} and ${windowEnd}`,
+        ),
+      )
+      .limit(1);
+  } else {
+    // No due date: match on title + trip only (both rows have no due date).
+    rows = await db
+      .select({ id: reminders.id, dueAt: reminders.dueAt })
+      .from(reminders)
+      .where(and(baseConditions, isNull(reminders.dueAt)))
+      .limit(1);
+  }
+
+  const match = rows[0];
+  return match !== undefined
+    ? { id: match.id, dueAt: match.dueAt ?? null }
+    : null;
+}
+
+/** Short user-facing warning appended to an add_reminder result when a
+ * near-duplicate trip-scoped reminder already exists. */
+export function tripReminderDuplicateWarningClause(
+  duplicate: DuplicateTripReminderMatch,
+): string {
+  const timeStr =
+    duplicate.dueAt !== null
+      ? ` scheduled for ${formatScheduledTime(duplicate.dueAt.toISOString())}`
+      : "";
+  return `Heads up — you already had a near-identical reminder${timeStr} for this trip (reminder #${duplicate.id}). I've left both in place; let me know if you'd like me to cancel one.`;
+}
 
 // ---------------------------------------------------------------------------
 // Natural-language reminder creation (issue #526).
@@ -133,6 +278,15 @@ export const reminderActionExecutors: Record<
       .from(appUsers)
       .where(eq(appUsers.id, userId));
 
+    // Duplicate check MUST complete before the insert so the lookup can't
+    // accidentally match the row we're about to write (and so a resubmission
+    // that races with a prior insert is visible to the second lookup).
+    const duplicate = await findDuplicatePersonalReminder({
+      userId,
+      title: payload.title,
+      dueAt,
+    });
+
     const [row] = await db
       .insert(reminders)
       .values({
@@ -157,8 +311,11 @@ export const reminderActionExecutors: Record<
         userId,
         dueAt: dueAt.toISOString(),
         channels,
+        duplicateOfReminderId: duplicate?.id,
       },
-      "elaine: created natural-language reminder",
+      duplicate
+        ? "elaine: created natural-language reminder — near-duplicate of an existing reminder"
+        : "elaine: created natural-language reminder",
     );
 
     const formattedTime = formatScheduledTime(dueAt.toISOString());
@@ -171,7 +328,8 @@ export const reminderActionExecutors: Record<
           id: row?.id,
           dueAt: dueAt.toISOString(),
           channels,
-          confirmationMessage: `Got it — I'll remind you "${payload.title}" at ${formattedTime} via ${channelLabel}.`,
+          ...(duplicate ? { duplicateOfReminderId: duplicate.id } : {}),
+          confirmationMessage: `Got it — I'll remind you "${payload.title}" at ${formattedTime} via ${channelLabel}.${duplicate ? personalReminderDuplicateWarningClause(duplicate) : ""}`,
         },
       },
     };
@@ -333,6 +491,95 @@ export const reminderActionTools: OpenAI.Chat.Completions.ChatCompletionTool[] =
       },
     },
   ];
+
+// ---------------------------------------------------------------------------
+// add_reminder executor — extracted so it can be unit-tested independently
+// of the full elaine router.  index.ts delegates to this function.
+// ---------------------------------------------------------------------------
+
+/** Zod schema for the bell-icon add_reminder action payload. */
+export const AddReminderActionPayload = z.object({
+  tripId: z.number().int().positive(),
+  title: z.string().min(1).max(200),
+  description: z.string().max(2000).optional(),
+  dueDate: z.string().max(20).optional(),
+  recipientEmails: z.array(z.email()).max(20).optional(),
+});
+
+/**
+ * Executes the add_reminder action: looks up the trip, runs the
+ * duplicate-detection check BEFORE the insert, inserts the new reminder row,
+ * and returns `{ status, body }`.  When a near-duplicate already exists, the
+ * body includes `duplicateOfReminderId` and `duplicateWarning` alongside the
+ * normal row fields — the "surface, not block" policy.
+ */
+export async function executeAddReminderAction(
+  payload: z.infer<typeof AddReminderActionPayload>,
+  userId: number,
+): Promise<{ status: number; body: unknown }> {
+  const [trip] = await db
+    .select({ id: travelsTrips.id, title: travelsTrips.title })
+    .from(travelsTrips)
+    .where(eq(travelsTrips.id, payload.tripId));
+  if (!trip) return { status: 404, body: { error: "Trip not found" } };
+
+  const dueAt = payload.dueDate
+    ? new Date(`${payload.dueDate}T00:01:00.000Z`)
+    : null;
+
+  // Duplicate check MUST complete before the insert so the lookup can't
+  // accidentally match the row we're about to write.  "Surface, not block"
+  // — the new row is always created; the match only adds a warning.
+  const duplicate = await findDuplicateTripReminder({
+    userId,
+    tripId: payload.tripId,
+    title: payload.title,
+    dueAt,
+  });
+
+  const [row] = await db
+    .insert(reminders)
+    .values({
+      entityType: "travels_trip",
+      entityId: payload.tripId,
+      createdByUserId: userId,
+      title: payload.title,
+      description: payload.description ?? null,
+      dueAt,
+      status: "active",
+      emailRecipients: payload.recipientEmails ?? [],
+    })
+    .returning();
+
+  logger.info(
+    {
+      reminderId: row?.id,
+      userId,
+      tripId: payload.tripId,
+      dueAt: dueAt?.toISOString() ?? null,
+      duplicateOfReminderId: duplicate?.id,
+    },
+    duplicate
+      ? "elaine: created trip reminder — near-duplicate of an existing reminder"
+      : "elaine: created trip reminder",
+  );
+
+  return {
+    status: 201,
+    body: {
+      type: "add_reminder",
+      result: {
+        ...row,
+        ...(duplicate
+          ? {
+              duplicateOfReminderId: duplicate.id,
+              duplicateWarning: tripReminderDuplicateWarningClause(duplicate),
+            }
+          : {}),
+      },
+    },
+  };
+}
 
 // ---------------------------------------------------------------------------
 // list_reminders: a read-only "soft" tool (no confirmation card) mirroring

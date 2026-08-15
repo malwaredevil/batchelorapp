@@ -320,6 +320,13 @@ vi.mock("./runtime", () => ({
   evaluateForecastDateCoverage: vi.fn().mockReturnValue(true),
   findElaineSatisfiedFallback: vi.fn().mockReturnValue(null),
   aggregateElaineTraceEvaluations: vi.fn().mockReturnValue([]),
+  isReminderDoubtMessage: vi.fn().mockReturnValue(false),
+  isSchedulingDoubtMessage: vi.fn().mockReturnValue(false),
+  buildSelfHealLessonInput: vi.fn().mockReturnValue(null),
+  detectClaimedCheckWithoutToolCall: vi.fn().mockReturnValue(null),
+  selfHealPatternKey: vi.fn().mockReturnValue("self_heal:mock"),
+  buildClassifierDoubtLessonInput: vi.fn().mockReturnValue(null),
+  classifierDoubtPatternKey: vi.fn().mockReturnValue("classifier_doubt:mock"),
   decideElaineModelStreamRecovery: vi.fn().mockReturnValue("abort"),
   loadElaineTurnTracesForMessages: vi.fn().mockResolvedValue([]),
   mapWithConcurrency: vi

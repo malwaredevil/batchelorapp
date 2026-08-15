@@ -189,6 +189,23 @@ vi.mock("../lib/elaine-cross-channel", () => ({
   appendCrossChannelEntry: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("../lib/elaine-lessons", () => ({
+  ELAINE_LESSON_DOMAINS: [
+    "travels",
+    "pottery",
+    "quilting",
+    "ornaments",
+    "office",
+    "reminders",
+    "memory",
+    "general",
+  ],
+  getRelevantElaineLessons: vi
+    .fn()
+    .mockResolvedValue({ lessons: [], evidenceBlock: "" }),
+  recordElaineLesson: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock("../lib/app-config", () => ({
   getAllConfig: vi.fn().mockResolvedValue([]),
   getConfig: vi.fn().mockResolvedValue(null),
@@ -310,6 +327,7 @@ vi.mock("../lib/env", () => ({
 // Module under test — imported AFTER all vi.mock() declarations.
 // ---------------------------------------------------------------------------
 import { runMessengerElaineTurn } from "./index";
+import { getRelevantElaineLessons } from "../lib/elaine-lessons";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -402,5 +420,68 @@ describe("runMessengerElaineTurn — model tier selection", () => {
     // The Responses path is disabled by the mock; callModel must still run.
     expect(isOpenAIResponsesConfigured).toHaveBeenCalled();
     expect(callModelSpy).toHaveBeenCalled();
+  });
+});
+
+describe("runMessengerElaineTurn — past lessons reach the planner", () => {
+  it("passes lesson evidence to generateElainePlan when the request needs structured planning", async () => {
+    // Arrange: return specific lesson evidence from the lessons lookup.
+    const lessonEvidence =
+      "Past lesson: always confirm a flight number before adding to packing list";
+    vi.mocked(getRelevantElaineLessons).mockResolvedValue({
+      lessons: [],
+      evidenceBlock: lessonEvidence,
+    });
+
+    // Capture the messages sent to every callModel invocation by running the
+    // real callback against a minimal stub client. This lets us assert the
+    // planning prompt (one of the callModel calls) contains the lesson text.
+    const capturedPrompts: string[] = [];
+    callModelSpy.mockImplementation(
+      async (
+        _model: string,
+        callback: (
+          client: unknown,
+          model: string,
+        ) => Promise<{
+          choices: { message: { content: string; tool_calls: [] } }[];
+        }>,
+      ) => {
+        const stubClient = {
+          chat: {
+            completions: {
+              create: (params: {
+                messages: Array<{ role: string; content: string }>;
+              }) => {
+                for (const msg of params.messages) {
+                  capturedPrompts.push(msg.content);
+                }
+                return Promise.resolve({
+                  choices: [{ message: { content: "{}", tool_calls: [] } }],
+                });
+              },
+            },
+          },
+        };
+        return callback(stubClient, _model);
+      },
+    );
+
+    // Act: use an action-class message that classifyElaineRequest routes to
+    // a non-answer kind, so requestNeedsStructuredPlan returns true and the
+    // planner runs.
+    await runMessengerElaineTurn({
+      userId: 1,
+      conversationId: 1,
+      inputText: "Add a reminder for my dentist appointment on Friday at 3pm",
+      senderName: "Alice",
+    });
+
+    // Assert: the lesson evidence appears in at least one captured prompt
+    // (the planner prompt, which buildPlannerPrompt embeds it into).
+    const plannerPromptHit = capturedPrompts.some((p) =>
+      p.includes(lessonEvidence),
+    );
+    expect(plannerPromptHit).toBe(true);
   });
 });

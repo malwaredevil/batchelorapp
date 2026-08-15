@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, asc, isNull } from "drizzle-orm";
+import { and, eq, asc, desc, isNull } from "drizzle-orm";
 import { logActivity } from "../../lib/soft-delete";
 import multer from "multer";
 import { multerLimitForPrefix } from "../../lib/upload-limits";
@@ -92,12 +92,23 @@ type ItineraryActivity = {
   sourceField?: string;
   /** Stored alongside each activity so dedup comparisons work across resync calls. */
   dataRichness?: number;
-  /** References a travels_trip_photos row the user manually attached to this
-   *  activity. Only ever set on manually-added activities — document sync
-   *  never sets it, but must preserve it if it replaces a legacy activity
-   *  that already had one attached. */
+  /** @deprecated Scalar photo reference. Use photoIds instead.
+   *  Kept so legacy rows written before task #708 can still be read. */
   photoId?: number;
+  /** Canonical multi-photo references (task #708+). Document sync never sets
+   *  these, but must preserve them when rebuilding an activity that the user
+   *  already attached photos to. */
+  photoIds?: number[];
 };
+
+/** Normalises both legacy scalar `photoId` and canonical `photoIds` into a
+ *  single array, matching the client-side getActivityPhotoIds helper. */
+function getActivityPhotoIds(a: ItineraryActivity | undefined): number[] {
+  if (!a) return [];
+  if (a.photoIds && a.photoIds.length > 0) return a.photoIds;
+  if (a.photoId != null) return [a.photoId];
+  return [];
+}
 
 type ItineraryDay = {
   date: string;
@@ -545,13 +556,24 @@ export async function syncItineraryFromDocument(
       // Compare dataRichness (count of genuine booking-detail fields);
       // existing activities without dataRichness (old rows) default to 0,
       // so any newly-synced candidate automatically wins over them.
+      //
+      // Photo precedence: prefer the photos the user previously attached to
+      // THIS document's representation of the event (previousForDoc), then
+      // fall back to whatever photos are already on the winning slot — so
+      // user-attached photos are never silently lost regardless of which doc wins.
+      const prevPhotoIds = getActivityPhotoIds(
+        previousForDoc.get(c.sourceField)?.activity,
+      );
       if (c.dataRichness > (existing.activity.dataRichness ?? 0)) {
         // New candidate is richer: replace the existing activity in-place.
-        // Carry over any user-attached photo so a resync never silently
-        // detaches it.
-        const replacement: ItineraryActivity = existing.activity.photoId
-          ? { ...newActivity, photoId: existing.activity.photoId }
-          : newActivity;
+        const inheritedPhotoIds =
+          prevPhotoIds.length > 0
+            ? prevPhotoIds
+            : getActivityPhotoIds(existing.activity);
+        const replacement: ItineraryActivity =
+          inheritedPhotoIds.length > 0
+            ? { ...newActivity, photoIds: inheritedPhotoIds }
+            : newActivity;
         existing.day.activities = existing.day.activities.map((a) =>
           a === existing.activity ? replacement : a,
         );
@@ -560,6 +582,17 @@ export async function syncItineraryFromDocument(
           dateStr: c.dateStr,
           activity: replacement,
         });
+      } else if (prevPhotoIds.length > 0) {
+        // Existing is richer (or equal) — it wins, but if this document
+        // previously had user-attached photos for this event, migrate them
+        // onto the winning slot so they aren't silently lost.
+        const merged = [
+          ...new Set([
+            ...getActivityPhotoIds(existing.activity),
+            ...prevPhotoIds,
+          ]),
+        ];
+        existing.activity.photoIds = merged;
       }
       // Existing is richer (or equal): skip this candidate entirely.
     } else {
@@ -572,11 +605,19 @@ export async function syncItineraryFromDocument(
       if (legacyExisting) {
         if (c.dataRichness >= (legacyExisting.activity.dataRichness ?? 0)) {
           // Replace legacy ghost with the new properly-tracked activity.
-          // Carry over any user-attached photo so a resync never silently
-          // detaches it.
-          const replacement: ItineraryActivity = legacyExisting.activity.photoId
-            ? { ...newActivity, photoId: legacyExisting.activity.photoId }
-            : newActivity;
+          // Prefer this document's previously-attached photos; fall back to
+          // whatever photos were on the legacy slot being replaced.
+          const prevPhotoIdsLegacy = getActivityPhotoIds(
+            previousForDoc.get(c.sourceField)?.activity,
+          );
+          const inheritedPhotoIds =
+            prevPhotoIdsLegacy.length > 0
+              ? prevPhotoIdsLegacy
+              : getActivityPhotoIds(legacyExisting.activity);
+          const replacement: ItineraryActivity =
+            inheritedPhotoIds.length > 0
+              ? { ...newActivity, photoIds: inheritedPhotoIds }
+              : newActivity;
           legacyExisting.day.activities = legacyExisting.day.activities.map(
             (a) => (a === legacyExisting.activity ? replacement : a),
           );
@@ -596,16 +637,25 @@ export async function syncItineraryFromDocument(
         // Legacy is richer: skip this candidate entirely.
       } else {
         // No duplicate — add normally.
+        // Carry over any user-attached photos from the previous sync of this
+        // document so a routine resync never silently detaches photos the
+        // user pinned to this activity.
+        const prevEntry = previousForDoc.get(c.sourceField);
+        const prevPhotoIdsFresh = getActivityPhotoIds(prevEntry?.activity);
+        const activityToAdd: ItineraryActivity =
+          prevPhotoIdsFresh.length > 0
+            ? { ...newActivity, photoIds: prevPhotoIdsFresh }
+            : newActivity;
         let day = itinerary.days.find((d) => d.date === c.dateStr);
         if (!day) {
           day = { date: c.dateStr, title: "Travel Day", activities: [] };
           itinerary.days.push(day);
         }
-        day.activities.push(newActivity);
-        existingByKey.set(key, { day, activity: newActivity });
+        day.activities.push(activityToAdd);
+        existingByKey.set(key, { day, activity: activityToAdd });
         committedForDoc.set(c.sourceField, {
           dateStr: c.dateStr,
-          activity: newActivity,
+          activity: activityToAdd,
         });
       }
     }
@@ -709,7 +759,7 @@ router.get("/trips/:id/documents", async (req, res) => {
 
 router.post("/trips/:id/documents", upload.single("file"), async (req, res) => {
   const userId = req.session.userId!;
-  const tripId = parseInt(req.params.id as string, 10);
+  const tripId = parseInt(req.params["id"] as string, 10);
   if (isNaN(tripId)) {
     res.status(400).json({ error: "Invalid id" });
     return;
@@ -777,7 +827,7 @@ router.post("/trips/:id/documents", upload.single("file"), async (req, res) => {
       extractedData = result.data;
       docSourceSpans = result.sourceSpans;
     } else {
-      const result = await extractFromImage(uploadBuffer, sniffedMime);
+      const result = await extractFromImage(buffer, sniffedMime);
       extractedData = result.data;
       docSourceSpans = result.sourceSpans;
       // For images, synthesize a text blob from the extracted structured data
@@ -803,12 +853,13 @@ router.post("/trips/:id/documents", upload.single("file"), async (req, res) => {
       tripId,
       userId,
       storagePath,
+      originalFilename: originalname,
       title: userTitle ?? aiTitle,
       documentType: (extractedData.documentType as string | undefined) ?? null,
-      originalFilename: originalname,
       extractedData,
       sourceSpans: docSourceSpans,
       rawText,
+      status: "processed",
     })
     .returning();
 
@@ -1053,20 +1104,20 @@ router.delete("/trips/:id/documents/:docId", async (req, res) => {
         eq(travelsTripDocuments.tripId, tripId),
       ),
     );
-
   if (!doc) {
     res.status(404).json({ error: "Not found" });
     return;
   }
 
   // Delete embedding chunks first — they have no deleted_at column and must
-  // be hard-deleted now to avoid polluting semantic search results.
+  // be hard-deleted now, or Elaine's semantic document search can keep
+  // returning a soft-deleted document's contents during the recycle-bin
+  // window.
   await db
     .delete(travelsDocChunks)
     .where(eq(travelsDocChunks.tripDocumentId, docId));
 
-  // Soft-delete the document — storage cleanup deferred to purge job so the
-  // document remains recoverable from the recycle bin for 30 days.
+  // Soft-delete the document — storage cleanup deferred to purge job.
   await db
     .update(travelsTripDocuments)
     .set({ deletedAt: new Date() })
@@ -1078,34 +1129,37 @@ router.delete("/trips/:id/documents/:docId", async (req, res) => {
     );
 
   // Strip the sourceDocumentId link from any itinerary activities that were
-  // derived from this document, but keep the activities themselves — the user
-  // may have already confirmed or edited them and shouldn't lose that work.
-  try {
-    const [tripRow] = await db
-      .select({ itinerary: travelsTrips.itinerary })
-      .from(travelsTrips)
-      .where(eq(travelsTrips.id, tripId));
-    if (tripRow && isItinerary(tripRow.itinerary)) {
-      const itinerary: Itinerary = {
-        days: tripRow.itinerary.days.map((day) => ({
-          ...day,
-          activities: (day.activities ?? []).map((a) =>
-            a.sourceDocumentId === docId
-              ? { ...a, sourceDocumentId: undefined, sourceField: undefined }
-              : a,
-          ),
-        })),
-      };
-      await db
-        .update(travelsTrips)
-        .set({ itinerary })
-        .where(eq(travelsTrips.id, tripId));
+  // derived from this document.  The purge job performs the same clearing as
+  // a universal fallback, but doing it here keeps the itinerary consistent
+  // for the entire 30-day recycle-bin window.
+  if (doc.tripId != null) {
+    try {
+      const [tripRow] = await db
+        .select({ itinerary: travelsTrips.itinerary })
+        .from(travelsTrips)
+        .where(eq(travelsTrips.id, doc.tripId));
+      if (tripRow && isItinerary(tripRow.itinerary)) {
+        const itinerary: Itinerary = {
+          days: tripRow.itinerary.days.map((day) => ({
+            ...day,
+            activities: (day.activities ?? []).map((a) =>
+              a.sourceDocumentId === docId
+                ? { ...a, sourceDocumentId: undefined, sourceField: undefined }
+                : a,
+            ),
+          })),
+        };
+        await db
+          .update(travelsTrips)
+          .set({ itinerary })
+          .where(eq(travelsTrips.id, doc.tripId));
+      }
+    } catch (err) {
+      req.log.warn(
+        { err },
+        "Failed to detach itinerary activities from deleted document",
+      );
     }
-  } catch (err) {
-    req.log.warn(
-      { err },
-      "Failed to detach itinerary activities from deleted document",
-    );
   }
 
   // If this document was created by linking a Gmail email, that email's
@@ -1265,6 +1319,40 @@ router.delete("/documents/:docId", async (req, res) => {
     .update(travelsTripDocuments)
     .set({ deletedAt: new Date() })
     .where(eq(travelsTripDocuments.id, docId));
+
+  // Strip the sourceDocumentId link from any itinerary activities that were
+  // derived from this document.  The purge job performs the same clearing as
+  // a universal fallback, but doing it here keeps the itinerary consistent
+  // for the entire 30-day recycle-bin window.
+  if (doc.tripId != null) {
+    try {
+      const [tripRow] = await db
+        .select({ itinerary: travelsTrips.itinerary })
+        .from(travelsTrips)
+        .where(eq(travelsTrips.id, doc.tripId));
+      if (tripRow && isItinerary(tripRow.itinerary)) {
+        const itinerary: Itinerary = {
+          days: tripRow.itinerary.days.map((day) => ({
+            ...day,
+            activities: (day.activities ?? []).map((a) =>
+              a.sourceDocumentId === docId
+                ? { ...a, sourceDocumentId: undefined, sourceField: undefined }
+                : a,
+            ),
+          })),
+        };
+        await db
+          .update(travelsTrips)
+          .set({ itinerary })
+          .where(eq(travelsTrips.id, doc.tripId));
+      }
+    } catch (err) {
+      req.log.warn(
+        { err },
+        "Failed to detach itinerary activities from deleted document",
+      );
+    }
+  }
 
   res.status(204).send();
   void logActivity({

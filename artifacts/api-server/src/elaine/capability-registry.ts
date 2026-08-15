@@ -83,12 +83,39 @@ export const NARROW_READ_CHANNEL_JUSTIFICATIONS: Readonly<
   // Task management UIs (progress view, cancel button) only exist on the web;
   // a structured task-list or task-detail response cannot be rendered usefully
   // over SMS / voice / email / Slack.
+  remember_lesson:
+    "Elaine's outcome-memory (lessons about her own past mistakes/successes) " +
+    "is a web-chat-only feature for now — restricted channels have no " +
+    "automatic correction-detection flow yet, and the write path is an " +
+    "explicit tool meant to be exercised from the web chat UI. Widen once " +
+    "restricted-channel correction detection ships.",
   list_elaine_tasks:
     "Task list UI only exists on the web; the structured list response cannot " +
     "be rendered usefully over SMS/voice/email/Slack.",
   get_elaine_task:
     "Task detail UI only exists on the web; the structured detail response " +
     "cannot be rendered usefully over SMS/voice/email/Slack.",
+  // Ad-hoc chat-photo analysis tools: restricted channels (SMS/voice/email/
+  // Slack) have no photo-attachment support today, so there is never an
+  // image for these tools to analyze there. Widen once a restricted channel
+  // gains photo attachments.
+  analyze_pottery_photo:
+    "Restricted channels (SMS/voice/email/Slack) have no photo-attachment " +
+    "support today, so there is no attached image for this tool to analyze " +
+    "there. Widen once a restricted channel supports photo attachments.",
+  analyze_fabric_photo:
+    "Restricted channels (SMS/voice/email/Slack) have no photo-attachment " +
+    "support today, so there is no attached image for this tool to analyze " +
+    "there. Widen once a restricted channel supports photo attachments.",
+  analyze_ornament_photo:
+    "Restricted channels (SMS/voice/email/Slack) have no photo-attachment " +
+    "support today, so there is no attached image for this tool to analyze " +
+    "there. Widen once a restricted channel supports photo attachments.",
+  lookup_book_value:
+    "Shipped alongside the web-only ad-hoc photo-analysis tools above and " +
+    "scoped to web chat for the same launch; unlike the others it only takes " +
+    "text parameters, so it can be widened to ALL_READ_CHANNELS separately " +
+    "once restricted-channel book-value requests are verified end-to-end.",
 };
 
 const WEB_AND_TRUSTED_CHANNELS = ["web", "sms", "voice"] as const;
@@ -162,6 +189,14 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
     ],
     { ...ACTION_DEFAULTS, domain: "pottery", executorPrefix: "potteryAction" },
   ),
+  // add_photo_to_pottery: web-only because it requires an image attachment
+  // which restricted channels (SMS, voice, email, Slack) do not support.
+  ...policies(["add_photo_to_pottery"], {
+    ...ACTION_DEFAULTS,
+    domain: "pottery",
+    executorPrefix: "potteryAction",
+    channels: ["web"],
+  }),
   ...policies(
     [
       "update_fabric",
@@ -190,6 +225,14 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
       executorPrefix: "quiltingAction",
     },
   ),
+  // add_photo_to_quilting: web-only because it requires an image attachment
+  // which restricted channels (SMS, voice, email, Slack) do not support.
+  ...policies(["add_photo_to_quilting"], {
+    ...ACTION_DEFAULTS,
+    domain: "quilting",
+    executorPrefix: "quiltingAction",
+    channels: ["web"],
+  }),
   ...policies(
     [
       "update_ornament_item",
@@ -209,6 +252,14 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
       executorPrefix: "ornamentAction",
     },
   ),
+  // add_photo_to_ornaments: web-only because it requires an image attachment
+  // which restricted channels (SMS, voice, email, Slack) do not support.
+  ...policies(["add_photo_to_ornaments"], {
+    ...ACTION_DEFAULTS,
+    domain: "ornaments",
+    executorPrefix: "ornamentAction",
+    channels: ["web"],
+  }),
   ...policies(["create_note", "update_note", "delete_note", "send_email"], {
     ...ACTION_DEFAULTS,
     domain: "office",
@@ -429,6 +480,20 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
     retry: "read_only",
     channels: ALL_READ_CHANNELS,
   }),
+  // analyze_pottery_photo: ad-hoc vision analysis of a chat-attached photo
+  // (not a saved collection item). Scoped to web chat only — see
+  // NARROW_READ_CHANNEL_JUSTIFICATIONS.
+  ...policies(["analyze_pottery_photo"], {
+    domain: "pottery",
+    kind: "read",
+    risk: "none",
+    auth: "session",
+    confirmation: "never",
+    executorPrefix: "collectionRead",
+    audit: "runtime_observation",
+    retry: "read_only",
+    channels: ["web"],
+  }),
   ...policies(["show_fabric_swatch", "calculate_yardage"], {
     domain: "quilting",
     kind: "read",
@@ -439,6 +504,20 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
     audit: "runtime_observation",
     retry: "read_only",
     channels: ALL_READ_CHANNELS,
+  }),
+  // analyze_fabric_photo: ad-hoc vision analysis of a chat-attached photo
+  // (not a saved stash item). Scoped to web chat only — see
+  // NARROW_READ_CHANNEL_JUSTIFICATIONS.
+  ...policies(["analyze_fabric_photo"], {
+    domain: "quilting",
+    kind: "read",
+    risk: "none",
+    auth: "session",
+    confirmation: "never",
+    executorPrefix: "quiltingRead",
+    audit: "runtime_observation",
+    retry: "read_only",
+    channels: ["web"],
   }),
   ...policies(
     ["show_ornament_item", "search_hallmark", "lookup_product_barcode"],
@@ -454,6 +533,20 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
       channels: ALL_READ_CHANNELS,
     },
   ),
+  // analyze_ornament_photo / lookup_book_value: ad-hoc vision analysis and
+  // the real two-source book-value lookup, both scoped to web chat only —
+  // see NARROW_READ_CHANNEL_JUSTIFICATIONS.
+  ...policies(["analyze_ornament_photo", "lookup_book_value"], {
+    domain: "ornaments",
+    kind: "read",
+    risk: "none",
+    auth: "session",
+    confirmation: "never",
+    executorPrefix: "ornamentRead",
+    audit: "runtime_observation",
+    retry: "read_only",
+    channels: ["web"],
+  }),
   ...policies(["list_notes", "get_note"], {
     domain: "office",
     kind: "read",
@@ -507,6 +600,20 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
     audit: "runtime_observation",
     retry: "safe",
     channels: ALL_READ_CHANNELS,
+  }),
+  // remember_lesson: Elaine's own outcome-memory (mistakes/successes about
+  // her own behavior), distinct from remember_household_fact above. Scoped
+  // to web chat only for now — see NARROW_READ_CHANNEL_JUSTIFICATIONS.
+  ...policies(["remember_lesson"], {
+    domain: "memory",
+    kind: "utility",
+    risk: "low",
+    auth: "session",
+    confirmation: "never",
+    executorPrefix: "lesson",
+    audit: "runtime_observation",
+    retry: "safe",
+    channels: ["web"],
   }),
   ...policies(["correct_memory", "forget_memory"], {
     ...ACTION_DEFAULTS,

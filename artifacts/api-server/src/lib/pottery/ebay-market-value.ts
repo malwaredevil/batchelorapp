@@ -7,6 +7,14 @@
  *
  * For ornament lookups, also calls the Browse API to retrieve structured
  * item attributes (year, artist, series, theme) via aspect refinements.
+ *
+ * Fallback behaviour
+ * ------------------
+ * When the Finding API is unavailable (e.g. 418 WAF block, quota exhaustion,
+ * or API deprecation), `lookupEbayMarketValue` falls back to the Browse API's
+ * active-listing prices. Results from this fallback are marked
+ * `sourceType: "active_listing"` so callers can display appropriate wording
+ * ("current asking prices" instead of "recent sold prices").
  */
 
 import { env } from "../env";
@@ -36,6 +44,13 @@ export interface EbayMarketValueResult {
   listingCount: number;
   listings: EbayListing[];
   cachedAt: string;
+  /**
+   * Indicates whether prices came from real sold/completed listings ("sold") or
+   * from the Browse API's active-listing fallback ("active_listing"). Callers
+   * should adjust copy accordingly — e.g. "recent sold prices" vs "current
+   * asking prices". Defaults to "sold" when the Finding API works normally.
+   */
+  sourceType: "sold" | "active_listing";
   /** Structured item attributes from Browse API aspect refinements (ornament lookups only). */
   itemSpecifics?: Record<string, string>;
 }
@@ -88,12 +103,20 @@ export async function lookupEbayMarketValue(
     throw new Error("eBay API not configured (EBAY_APP_ID missing)");
   }
 
-  // If a UPC / item-number is provided, run both the UPC keyword search and the
-  // text query in parallel; use whichever returns more results (UPC search is
-  // usually more precise when the value matches a real eBay product page).
   const upcQuery = opts.upc?.trim();
+
+  // Run Finding API searches + aspect lookup in parallel.
+  // Both the primary keyword search and the UPC search are non-fatal:
+  // if the Finding API is blocked (e.g. 418 WAF) we fall back to Browse API
+  // active-listing prices rather than propagating the error to the caller.
   const [primaryResults, upcResults, aspectResult] = await Promise.all([
-    findCompletedItems(query, 20),
+    findCompletedItems(query, 20).catch((err: unknown) => {
+      logger.warn(
+        { err, query },
+        "ebay finding: primary keyword search failed (will attempt Browse API fallback)",
+      );
+      return [] as FindingListing[];
+    }),
     upcQuery && upcQuery !== query
       ? findCompletedItems(upcQuery, 20).catch((err: unknown) => {
           logger.warn(
@@ -120,7 +143,51 @@ export async function lookupEbayMarketValue(
       ? upcResults
       : primaryResults;
 
-  if (findingResults.length === 0) return null;
+  // ── Finding API fallback: use Browse API active-listing prices ──────────────
+  // When the Finding API returns nothing (API down, WAF block, quota exceeded,
+  // or genuine zero results), try the Browse API for current asking prices.
+  // This keeps the feature working with degraded data rather than failing hard.
+  if (findingResults.length === 0) {
+    const browseResult = await searchActiveListingPrices(upcQuery ?? query, {
+      limit: 20,
+    }).catch((err: unknown) => {
+      logger.warn(
+        { err, query },
+        "ebay browse active-listing fallback also failed",
+      );
+      return null;
+    });
+
+    if (!browseResult || browseResult.listings.length === 0) return null;
+
+    logger.info(
+      { query, found: browseResult.listings.length },
+      "ebay finding: using Browse API active-listing fallback (Finding API returned 0 results)",
+    );
+
+    const listings: EbayListing[] = browseResult.listings.map((l) => ({
+      title: l.title,
+      soldPrice: l.price, // repurposed field: asking price, not sold price
+      currency: l.currency,
+      soldDate: null,
+      condition: l.condition,
+      imageUrl: l.imageUrl,
+      itemUrl: l.itemUrl,
+    }));
+
+    const prices = listings.map((l) => l.soldPrice);
+    return {
+      priceMinUsd: browseResult.priceMinUsd,
+      priceMaxUsd: browseResult.priceMaxUsd,
+      priceMedianUsd: median(prices),
+      listingCount: listings.length,
+      listings: listings.slice(0, 10),
+      cachedAt: new Date().toISOString(),
+      sourceType: "active_listing",
+      itemSpecifics: aspectResult ? topAspectValues(aspectResult) : undefined,
+    };
+  }
+  // ───────────────────────────────────────────────────────────────────────────
 
   const listings: EbayListing[] = findingResults.map((l) => ({
     title: l.title,
@@ -140,6 +207,7 @@ export async function lookupEbayMarketValue(
     listingCount: listings.length,
     listings: listings.slice(0, 10),
     cachedAt: new Date().toISOString(),
+    sourceType: "sold",
     itemSpecifics: aspectResult ? topAspectValues(aspectResult) : undefined,
   };
 }

@@ -1383,6 +1383,7 @@ export interface ElaineThresholdsConfig {
   openAIResponsesMaxOutputTokens: number;
   openAICompactionThresholdTokens: number;
   openAIStateMaxAgeDays: number;
+  codeDiagnosisRecurrenceThreshold: number;
 }
 
 export interface ElaineGlobalConfig {

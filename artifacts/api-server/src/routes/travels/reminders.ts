@@ -14,6 +14,10 @@ import { getValidAccessToken } from "../../lib/google-calendar-tokens";
 import { getCalendarEvent } from "../../lib/google-calendar";
 import { logger } from "../../lib/logger";
 import { filterVerifiedPhoneUserIds } from "../../lib/reminder-recipients";
+import {
+  findDuplicateTripReminder,
+  tripReminderDuplicateWarningClause,
+} from "../../elaine/reminder-actions";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -320,6 +324,16 @@ router.post("/trips/:id/reminders", async (req, res) => {
         body.alertDaysBefore ?? DEFAULT_ALERT_DAYS_BEFORE,
       );
 
+  // Duplicate check — same ±30 min / same-title logic as the Elaine
+  // add_reminder action executor. "Surface, not block": always create the row,
+  // but include a warning in the 201 body so the UI can inform the user.
+  const duplicate = await findDuplicateTripReminder({
+    userId,
+    tripId,
+    title: body.title,
+    dueAt,
+  });
+
   const [row] = await db
     .insert(reminders)
     .values({
@@ -349,7 +363,28 @@ router.post("/trips/:id/reminders", async (req, res) => {
     })
     .returning();
 
-  res.status(201).json(toWireShape(row));
+  logger.info(
+    {
+      reminderId: row?.id,
+      tripId,
+      userId,
+      dueAt: dueAt?.toISOString() ?? null,
+      duplicateOfReminderId: duplicate?.id,
+    },
+    duplicate
+      ? "travels reminders: created trip reminder — near-duplicate of an existing reminder"
+      : "travels reminders: created trip reminder",
+  );
+
+  const wireRow = toWireShape(row);
+  if (duplicate) {
+    res.status(201).json({
+      ...wireRow,
+      duplicateWarning: tripReminderDuplicateWarningClause(duplicate),
+    });
+  } else {
+    res.status(201).json(wireRow);
+  }
 });
 
 // PATCH /trips/:id/reminders/:reminderId

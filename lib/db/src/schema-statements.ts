@@ -946,6 +946,79 @@ export const STATEMENTS: string[] = [
   `CREATE UNIQUE INDEX IF NOT EXISTS elaine_nudges_user_id_nudge_key_idx
      ON elaine_nudges (user_id, nudge_key)`,
 
+  // Elaine's own operational memory (mistakes corrected / approaches that
+  // worked well) — distinct from elaine_memory (household facts) above.
+  // See lib/db/src/schema/elaine.ts for the full rationale.
+  `CREATE TABLE IF NOT EXISTS elaine_lessons (
+    id                  SERIAL PRIMARY KEY,
+    outcome             TEXT NOT NULL,
+    domain              TEXT NOT NULL DEFAULT 'general',
+    situation           TEXT NOT NULL,
+    takeaway            TEXT NOT NULL,
+    tags                JSONB NOT NULL DEFAULT '[]'::jsonb,
+    active              BOOLEAN NOT NULL DEFAULT true,
+    source              TEXT NOT NULL DEFAULT 'explicit_assistant',
+    created_by_user_id  INTEGER NOT NULL,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE elaine_lessons ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS elaine_lessons_domain_active_idx
+     ON elaine_lessons (domain, active)`,
+  `CREATE INDEX IF NOT EXISTS elaine_lessons_created_at_idx
+     ON elaine_lessons (created_at)`,
+  // How many times this exact lesson has recurred (see
+  // lib/db/src/schema/elaine.ts for the full rationale) — feeds the #895
+  // code-diagnosis recurrence threshold.
+  `ALTER TABLE elaine_lessons ADD COLUMN IF NOT EXISTS occurrence_count INTEGER NOT NULL DEFAULT 1`,
+
+  // Code-grounded diagnosis suggestions (#895) — see lib/db/src/schema/elaine.ts
+  // for the full rationale on why this is a separate table from elaine_lessons
+  // and elaine_nudges.
+  `CREATE TABLE IF NOT EXISTS elaine_code_suggestions (
+    id                    SERIAL PRIMARY KEY,
+    pattern_key           TEXT NOT NULL,
+    lesson_id             INTEGER REFERENCES elaine_lessons(id) ON DELETE SET NULL,
+    occurrence_count      INTEGER NOT NULL,
+    observed_pattern      TEXT NOT NULL,
+    files_reviewed        JSONB NOT NULL DEFAULT '[]'::jsonb,
+    hypothesis            TEXT NOT NULL,
+    status                TEXT NOT NULL DEFAULT 'pending',
+    created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    decided_at            TIMESTAMPTZ,
+    decided_by_user_id    INTEGER
+  )`,
+  `ALTER TABLE elaine_code_suggestions ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS elaine_code_suggestions_status_created_idx
+     ON elaine_code_suggestions (status, created_at)`,
+  `CREATE INDEX IF NOT EXISTS elaine_code_suggestions_pattern_key_idx
+     ON elaine_code_suggestions (pattern_key)`,
+  // Rate-limit/dedup: only one pending suggestion may exist per pattern at a
+  // time, so a recurring issue doesn't spam a new suggestion on every
+  // occurrence once one is already awaiting review.
+  `CREATE UNIQUE INDEX IF NOT EXISTS elaine_code_suggestions_pending_pattern_idx
+     ON elaine_code_suggestions (pattern_key) WHERE status = 'pending'`,
+  // linkedTaskRef (#913): project-task ref the owner linked after accepting
+  `ALTER TABLE elaine_code_suggestions ADD COLUMN IF NOT EXISTS linked_task_ref TEXT`,
+  // Code tasks (#913) — in-app action items created one-click from an accepted
+  // suggestion. The unique index on created_from_suggestion_id prevents a
+  // re-click from producing a duplicate task.
+  `CREATE TABLE IF NOT EXISTS elaine_code_tasks (
+    id                          SERIAL PRIMARY KEY,
+    title                       TEXT NOT NULL,
+    description                 TEXT NOT NULL,
+    status                      TEXT NOT NULL DEFAULT 'open',
+    created_from_suggestion_id  INTEGER REFERENCES elaine_code_suggestions(id) ON DELETE SET NULL,
+    created_by_user_id          INTEGER NOT NULL,
+    created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE elaine_code_tasks ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS elaine_code_tasks_status_created_idx
+     ON elaine_code_tasks (status, created_at)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS elaine_code_tasks_suggestion_idx
+     ON elaine_code_tasks (created_from_suggestion_id)`,
+
   // Single-row (id=1) global config, admin-editable (app owner only). Started
   // as Elaine-only config; now also the whole app's global AI configuration
   // (models/timeouts/features/thresholds for Pottery, Quilting, Travels) —
@@ -1096,6 +1169,7 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE elaine_history_conversations ADD COLUMN IF NOT EXISTS openai_last_response_id text`,
   `ALTER TABLE elaine_history_conversations ADD COLUMN IF NOT EXISTS openai_state_model text`,
   `ALTER TABLE elaine_history_conversations ADD COLUMN IF NOT EXISTS openai_state_updated_at timestamptz`,
+  `ALTER TABLE elaine_history_conversations ADD COLUMN IF NOT EXISTS stated_location text`,
   `CREATE UNIQUE INDEX IF NOT EXISTS elaine_history_conversations_widget_default_idx ON elaine_history_conversations (user_id) WHERE is_widget_default = true`,
 
   `CREATE TABLE IF NOT EXISTS elaine_history_messages (

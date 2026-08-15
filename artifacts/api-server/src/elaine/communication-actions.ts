@@ -1,6 +1,6 @@
 import { z } from "zod/v4";
 import type OpenAI from "openai";
-import { and, count, eq, gt, ilike, lte, min, sql } from "drizzle-orm";
+import { and, count, eq, gt, ilike, isNull, lte, min, sql } from "drizzle-orm";
 import {
   db,
   appUsers,
@@ -191,10 +191,7 @@ async function checkBroadcastRateLimit(userId: number): Promise<{
   });
 }
 
-// ---------------------------------------------------------------------------
-// Channel health + availability helpers
-// ---------------------------------------------------------------------------
-
+const DUPLICATE_DUE_WINDOW_MS = 30 * 60 * 1000;
 /** Synchronous read of the last-known AgentPhone health from the 30-min cache. */
 function isAgentPhoneHealthy(): boolean {
   return isServiceHealthy("AgentPhone");
@@ -399,6 +396,7 @@ const CallMePayload = z.object({
     .describe(
       "Opening words Elaine says when the call connects. Omit for the default warm greeting.",
     ),
+  scheduleAt: scheduleAtField,
 });
 
 export const communicationActionSchemas = [
@@ -562,6 +560,95 @@ export async function fireCallContact(
     return {
       status: 500,
       body: { error: "Failed to place the call. Please try again." },
+    };
+  }
+}
+
+/**
+ * Places the actual outbound call to the requesting user's own verified
+ * phone number — the phone-number/verification/opt-out guardrails and
+ * default-greeting logic shared by the immediate `call_me` executor and the
+ * scheduler's dispatch of a deferred `call_me` reminder (see
+ * dispatchElaineActionReminder in reminders-scheduler.ts). Re-resolves the
+ * user's current phone/verification/opt-out state every time it's called so
+ * a scheduled call fired later re-checks these, not just at scheduling time.
+ */
+export async function fireCallMe(
+  userId: number,
+  greeting?: string,
+): Promise<{ status: number; body: unknown }> {
+  const [user] = await db
+    .select({
+      phoneNumber: appUsers.phoneNumber,
+      phoneVerified: appUsers.phoneVerified,
+      smsOptedOutAt: appUsers.smsOptedOutAt,
+      displayName: appUsers.displayName,
+    })
+    .from(appUsers)
+    .where(eq(appUsers.id, userId));
+
+  if (!user) {
+    return { status: 404, body: { error: "User account not found." } };
+  }
+  if (!user.phoneNumber) {
+    return {
+      status: 422,
+      body: {
+        error:
+          "You don't have a phone number on file. Add and verify one in your account settings, then ask me to call you again.",
+      },
+    };
+  }
+  if (!user.phoneVerified) {
+    return {
+      status: 422,
+      body: {
+        error:
+          "Your phone number hasn't been verified yet. Verify it in your account settings first.",
+      },
+    };
+  }
+  if (user.smsOptedOutAt) {
+    return {
+      status: 409,
+      body: {
+        error:
+          "You've opted out of SMS and voice calls. Text START to the Batchelor App number to re-subscribe, then ask me to call you again.",
+      },
+    };
+  }
+
+  const resolvedGreeting =
+    greeting ??
+    (user.displayName
+      ? `Hi ${user.displayName}, it's Elaine from the Batchelor app calling. How can I help you?`
+      : "Hi, it's Elaine from the Batchelor app. How can I help you?");
+
+  try {
+    const { callId } = await initiateOutboundCall({
+      toNumber: user.phoneNumber,
+      initialGreeting: resolvedGreeting,
+      callScreeningPurpose: "Elaine callback request",
+    });
+    logger.info(
+      { callId, toNumber: user.phoneNumber, userId },
+      "elaine: initiated self-callback call",
+    );
+    return {
+      status: 200,
+      body: {
+        type: "call_me",
+        result: {
+          callId,
+          confirmationMessage: "Calling you now — pick up in a moment!",
+        },
+      },
+    };
+  } catch (err) {
+    logger.error({ err }, "elaine: failed to initiate self-callback call");
+    return {
+      status: 500,
+      body: { error: "Failed to place the call. Please try again shortly." },
     };
   }
 }
@@ -830,6 +917,13 @@ export const communicationActionExecutors: Record<
         contactName: payload.contactName,
         message: payload.message,
       };
+      const duplicate = await findDuplicateScheduledReminder({
+        userId,
+        elaineActionType: "call_contact",
+        contactName: payload.contactName,
+        message: payload.message,
+        dueAt: new Date(scheduledFor),
+      });
       const [row] = await db
         .insert(reminders)
         .values({
@@ -848,8 +942,11 @@ export const communicationActionExecutors: Record<
           scheduledActionId: row?.id,
           scheduledFor,
           contactName: payload.contactName,
+          duplicateOfReminderId: duplicate?.id,
         },
-        "elaine: scheduled outbound call",
+        duplicate
+          ? "elaine: scheduled outbound call — near-duplicate of an existing reminder"
+          : "elaine: scheduled outbound call",
       );
       return {
         status: 200,
@@ -860,7 +957,8 @@ export const communicationActionExecutors: Record<
             scheduledActionId: row?.id,
             scheduledFor,
             contactName: contact?.displayName ?? payload.contactName,
-            confirmationMessage: `Got it — I'll call ${contact?.displayName ?? payload.contactName} at ${formattedTime}.`,
+            ...(duplicate ? { duplicateOfReminderId: duplicate.id } : {}),
+            confirmationMessage: `Got it — I'll call ${contact?.displayName ?? payload.contactName} at ${formattedTime}.${duplicate ? duplicateWarningClause(duplicate) : ""}`,
           },
         },
       };
@@ -904,6 +1002,13 @@ export const communicationActionExecutors: Record<
             message: payload.message,
             channel: payload.channel,
           };
+          const duplicate = await findDuplicateScheduledReminder({
+            userId,
+            elaineActionType: "message_contact",
+            contactName: name,
+            message: payload.message,
+            dueAt: new Date(scheduledFor),
+          });
           const [row] = await db
             .insert(reminders)
             .values({
@@ -921,14 +1026,27 @@ export const communicationActionExecutors: Record<
               scheduledActionId: row?.id,
               scheduledFor,
               contactName: name,
+              duplicateOfReminderId: duplicate?.id,
             },
-            "elaine: scheduled contact message",
+            duplicate
+              ? "elaine: scheduled contact message — near-duplicate of an existing reminder"
+              : "elaine: scheduled contact message",
           );
-          return { name: contact?.displayName ?? name, id: row?.id };
+          return { name: contact?.displayName ?? name, id: row?.id, duplicate };
         }),
       );
 
       const recipientList = rows.map((r) => r.name).join(", ");
+      const duplicates = rows.filter(
+        (r): r is typeof r & { duplicate: DuplicateReminderMatch } =>
+          r.duplicate !== null,
+      );
+      const duplicateNote =
+        duplicates.length === 0
+          ? ""
+          : duplicates.length === 1
+            ? duplicateWarningClause(duplicates[0]!.duplicate)
+            : ` Heads up — some of these (${duplicates.map((d) => d.name).join(", ")}) already had a near-identical message scheduled moments ago (reminder #${duplicates.map((d) => d.duplicate.id).join(", #")}). I've left both in place for each; let me know if you'd like me to cancel any.`;
       return {
         status: 200,
         body: {
@@ -938,7 +1056,12 @@ export const communicationActionExecutors: Record<
             scheduledActionIds: rows.map((r) => r.id),
             scheduledFor,
             recipients: rows.map((r) => r.name),
-            confirmationMessage: `Got it — I'll message ${recipientList} at ${formattedTime}.`,
+            ...(duplicates.length > 0
+              ? {
+                  duplicateOfReminderIds: duplicates.map((d) => d.duplicate.id),
+                }
+              : {}),
+            confirmationMessage: `Got it — I'll message ${recipientList} at ${formattedTime}.${duplicateNote}`,
           },
         },
       };
@@ -1307,81 +1430,58 @@ export const communicationActionExecutors: Record<
   }) as ActionExecutor,
 
   call_me: (async (payload: z.infer<typeof CallMePayload>, userId: number) => {
-    // Look up the requesting user's own verified phone number.
-    const [user] = await db
-      .select({
-        phoneNumber: appUsers.phoneNumber,
-        phoneVerified: appUsers.phoneVerified,
-        smsOptedOutAt: appUsers.smsOptedOutAt,
-        displayName: appUsers.displayName,
-      })
-      .from(appUsers)
-      .where(eq(appUsers.id, userId));
-
-    if (!user) {
-      return { status: 404, body: { error: "User account not found." } };
-    }
-    if (!user.phoneNumber) {
-      return {
-        status: 422,
-        body: {
-          error:
-            "You don't have a phone number on file. Add and verify one in your account settings, then ask me to call you again.",
-        },
-      };
-    }
-    if (!user.phoneVerified) {
-      return {
-        status: 422,
-        body: {
-          error:
-            "Your phone number hasn't been verified yet. Verify it in your account settings first.",
-        },
-      };
-    }
-    if (user.smsOptedOutAt) {
-      return {
-        status: 409,
-        body: {
-          error:
-            "You've opted out of SMS and voice calls. Text START to the Batchelor App number to re-subscribe, then ask me to call you again.",
-        },
-      };
-    }
-
-    const greeting =
-      payload.greeting ??
-      (user.displayName
-        ? `Hi ${user.displayName}, it's Elaine from the Batchelor app calling. How can I help you?`
-        : "Hi, it's Elaine from the Batchelor app. How can I help you?");
-
-    try {
-      const { callId } = await initiateOutboundCall({
-        toNumber: user.phoneNumber,
-        initialGreeting: greeting,
-        callScreeningPurpose: "Elaine callback request",
-      });
+    if (payload.scheduleAt) {
+      let scheduledFor: string;
+      try {
+        scheduledFor = await resolveScheduleAt(payload.scheduleAt, userId);
+      } catch (err) {
+        if (err instanceof RelativeTimeResolutionError) {
+          return {
+            status: 400,
+            body: {
+              error: `I couldn't work out exactly when you mean (${err.message}). Could you give me a specific day and time?`,
+            },
+          };
+        }
+        throw err;
+      }
+      // Deferred — write a row to the generic reminders table (entityType
+      // 'elaine_action'), same pattern as scheduled call_contact/
+      // message_contact. The scheduler re-runs the full phone-number/
+      // verification/opt-out checks via fireCallMe at fire time, not just
+      // now — see dispatchElaineActionReminder in reminders-scheduler.ts.
+      const storedPayload = { greeting: payload.greeting };
+      const [row] = await db
+        .insert(reminders)
+        .values({
+          entityType: "elaine_action",
+          createdByUserId: userId,
+          title: "Call me back",
+          dueAt: new Date(scheduledFor),
+          leadTimes: [{ value: 0, unit: "minutes" }],
+          elaineActionType: "call_me",
+          elaineActionPayload: storedPayload,
+        })
+        .returning({ id: reminders.id });
+      const formattedTime = formatScheduledTime(scheduledFor);
       logger.info(
-        { callId, toNumber: user.phoneNumber, userId },
-        "elaine: initiated self-callback call",
+        { scheduledActionId: row?.id, scheduledFor, userId },
+        "elaine: scheduled self-callback call",
       );
       return {
         status: 200,
         body: {
           type: "call_me",
           result: {
-            callId,
-            confirmationMessage: "Calling you now — pick up in a moment!",
+            scheduled: true,
+            scheduledActionId: row?.id,
+            scheduledFor,
+            confirmationMessage: `Got it — I'll call you at ${formattedTime}.`,
           },
         },
       };
-    } catch (err) {
-      logger.error({ err }, "elaine: failed to initiate self-callback call");
-      return {
-        status: 500,
-        body: { error: "Failed to place the call. Please try again shortly." },
-      };
     }
+    return fireCallMe(userId, payload.greeting);
   }) as ActionExecutor,
 
   cancel_scheduled_contact: (async (
@@ -1446,7 +1546,10 @@ export const communicationActionExecutors: Record<
       };
     }
 
-    const p = existing.elaineActionPayload as { contactName?: string } | null;
+    const { contactName } = describeScheduledElaineAction(
+      existing.elaineActionType,
+      existing.elaineActionPayload,
+    );
     logger.info(
       { scheduledActionId: payload.scheduledActionId },
       "elaine: cancelled scheduled contact",
@@ -1457,12 +1560,42 @@ export const communicationActionExecutors: Record<
         type: "cancel_scheduled_contact",
         result: {
           scheduledActionId: payload.scheduledActionId,
-          contactName: p?.contactName ?? "unknown",
+          contactName,
         },
       },
     };
   }) as ActionExecutor,
 };
+
+// ---------------------------------------------------------------------------
+// Shared display helper for a scheduled `elaine_action` reminder — used by
+// both list_scheduled_contacts and cancel_scheduled_contact so the two
+// surfaces describe the same row identically. `call_me` has no contactName
+// in its stored payload (it's always the requesting user themselves), so it
+// gets its own branch rather than falling into the "unknown" default.
+// ---------------------------------------------------------------------------
+
+function describeScheduledElaineAction(
+  actionType: string | null,
+  payload: unknown,
+): { label: string; contactName: string } {
+  const p = (payload ?? {}) as {
+    contactName?: string;
+    channel?: string;
+  } | null;
+  if (actionType === "call_me") {
+    return { label: "Call you back", contactName: "you" };
+  }
+  if (actionType === "message_contact") {
+    const via = p?.channel && p.channel !== "auto" ? ` via ${p.channel}` : "";
+    const who = p?.contactName ?? "unknown";
+    return { label: `Message ${who}${via}`, contactName: who };
+  }
+  // call_contact and any unrecognized future type — default to the
+  // call_contact-style "Call {name}" label.
+  const who = p?.contactName ?? "unknown";
+  return { label: `Call ${who}`, contactName: who };
+}
 
 // ---------------------------------------------------------------------------
 // Soft-tool: list_scheduled_contacts — no confirmation needed, returns the
@@ -1497,11 +1630,6 @@ export async function executeListScheduledContacts(
   }
 
   const lines = rows.map((r) => {
-    const p = r.actionPayload as {
-      contactName?: string;
-      message?: string;
-      channel?: string;
-    } | null;
     const when = r.scheduledFor
       ? new Date(r.scheduledFor).toLocaleString("en-US", {
           month: "short",
@@ -1511,13 +1639,11 @@ export async function executeListScheduledContacts(
           hour12: true,
         })
       : "unknown time";
-    const verb = r.actionType === "call_contact" ? "Call" : "Message";
-    const who = p?.contactName ?? "unknown";
-    const via =
-      r.actionType === "message_contact" && p?.channel && p.channel !== "auto"
-        ? ` via ${p.channel}`
-        : "";
-    return `• [#${r.id}] ${verb} ${who}${via} at ${when}`;
+    const { label } = describeScheduledElaineAction(
+      r.actionType,
+      r.actionPayload,
+    );
+    return `• [#${r.id}] ${label} at ${when}`;
   });
 
   return `Pending scheduled contacts (${rows.length}):\n${lines.join("\n")}`;
@@ -1653,6 +1779,14 @@ export async function buildCommunicationActionLabel(action: {
       return `Continue conversation on ${channelLabels[payload.targetChannel]}`;
     }
     case "call_me": {
+      const payload = CallMePayload.parse(action.payload);
+      if (payload.scheduleAt) {
+        const when =
+          typeof payload.scheduleAt === "string"
+            ? formatScheduledTime(payload.scheduleAt)
+            : "the resolved time";
+        return `Schedule a call-back at ${when}`;
+      }
       return "Call me back on my phone";
     }
     case "broadcast_message": {
@@ -1863,10 +1997,18 @@ export const communicationActionTools: OpenAI.Chat.Completions.ChatCompletionToo
         description:
           "Initiate an outbound voice call to THE REQUESTING USER'S OWN verified phone number. " +
           "Use this when the user says 'call me back', 'give me a call', 'can you call me?', " +
-          "'I'd rather talk — call my phone', 'I'm driving, call me', or any similar request. " +
+          "'I'd rather talk — call my phone', 'I'm driving, call me', or any similar request — " +
+          "whether they want the call right now or at a future time. " +
           "This calls THE SAME USER who is chatting, never another household member — use call_contact for that. " +
           "Available on web and SMS channels. NOT available over email. " +
-          "After proposing, confirm in your reply that Elaine is calling them. " +
+          "If the user wants the call at a future time (e.g. 'call me at 2:30', 'call me in an hour', " +
+          "'call me tomorrow morning and remind me to X'), include `scheduleAt` — either an exact ISO 8601 " +
+          "datetime, or (preferred whenever the user speaks relatively, e.g. 'tomorrow', 'in an hour') the " +
+          "structured relative-time spec described on that field; never compute the datetime yourself from a " +
+          "relative phrase. Put any reminder content the user wants ('remind me to pick up X') into `greeting` " +
+          "so Elaine says it as soon as the call connects. " +
+          "When scheduling: confirm the resolved time in your visible reply before calling this tool. " +
+          "After proposing, confirm in your reply that Elaine is calling them (now, or at the scheduled time). " +
           "If they have no verified phone number, the executor returns an error message you should relay.",
         parameters: {
           type: "object",
@@ -1876,9 +2018,68 @@ export const communicationActionTools: OpenAI.Chat.Completions.ChatCompletionToo
               description:
                 "Optional opening words Elaine says when the call connects (1–2 warm sentences). Omit to use the default greeting.",
             },
+            scheduleAt: {
+              oneOf: [
+                {
+                  type: "string",
+                  description:
+                    "Exact ISO 8601 datetime to fire the call at (e.g. '2026-08-01T15:45:00+02:00').",
+                },
+                RELATIVE_TIME_SPEC_JSON_SCHEMA,
+              ],
+              description:
+                "Optional. Omit to call immediately. Otherwise either an exact ISO datetime or a relative-time spec — prefer the relative-time spec whenever the user spoke relatively.",
+            },
           },
           required: [],
         },
       },
     },
   ];
+
+async function findDuplicateScheduledReminder(params: {
+  userId: number;
+  elaineActionType: "call_contact" | "message_contact";
+  contactName: string;
+  message: string;
+  dueAt: Date;
+}): Promise<DuplicateReminderMatch | null> {
+  const { userId, elaineActionType, contactName, message, dueAt } = params;
+  const windowStart = new Date(dueAt.getTime() - DUPLICATE_DUE_WINDOW_MS);
+  const windowEnd = new Date(dueAt.getTime() + DUPLICATE_DUE_WINDOW_MS);
+  const createdAfter = new Date(Date.now() - DUPLICATE_LOOKBACK_MS);
+  const [match] = await db
+    .select({ id: reminders.id, dueAt: reminders.dueAt })
+    .from(reminders)
+    .where(
+      and(
+        eq(reminders.entityType, "elaine_action"),
+        eq(reminders.elaineActionType, elaineActionType),
+        eq(reminders.createdByUserId, userId),
+        eq(reminders.status, "active"),
+        isNull(reminders.deletedAt),
+        gt(reminders.createdAt, createdAfter),
+        sql`${reminders.dueAt} between ${windowStart} and ${windowEnd}`,
+        sql`${reminders.elaineActionPayload} ->> 'contactName' = ${contactName}`,
+        sql`${reminders.elaineActionPayload} ->> 'message' = ${message}`,
+      ),
+    )
+    .limit(1);
+  return match?.dueAt ? { id: match.id, dueAt: match.dueAt } : null;
+}
+
+interface DuplicateReminderMatch {
+  id: number;
+  dueAt: Date;
+}
+
+/** Short, user-facing clause appended to a scheduling confirmation when
+ * findDuplicateScheduledReminder found a near-identical reminder already
+ * scheduled moments ago — points the user at both list_scheduled_contacts
+ * and cancel_scheduled_contact so they can resolve it themselves rather than
+ * Elaine silently guessing which one (if either) to remove. */
+function duplicateWarningClause(duplicate: DuplicateReminderMatch): string {
+  return ` Heads up — you already had a near-identical one scheduled for ${formatScheduledTime(duplicate.dueAt.toISOString())} (reminder #${duplicate.id}). I've left both in place; let me know if you'd like me to cancel one.`;
+}
+
+const DUPLICATE_LOOKBACK_MS = 2 * 60 * 60 * 1000;

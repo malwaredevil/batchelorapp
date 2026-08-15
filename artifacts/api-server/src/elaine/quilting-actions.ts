@@ -19,7 +19,16 @@ import {
   detectCreasesFromBuffer,
   removeCreasesFromBuffer,
 } from "../lib/crease-removal";
-import { bulkReanalyzeFabrics } from "../routes/quilting/fabrics";
+import {
+  bulkReanalyzeFabrics,
+  createFabricFromBuffer,
+} from "../routes/quilting/fabrics";
+import { env } from "../lib/env";
+import { consumeAiRateLimit } from "../middleware/rateLimit";
+
+export const AddPhotoToQuiltingPayload = z.object({
+  attachmentUrl: z.string().url().max(2000),
+});
 import { bulkReanalyzePatterns } from "../routes/quilting/patterns";
 import {
   bulkReanalyzeQuilts,
@@ -267,6 +276,10 @@ export const quiltingActionSchemas = [
     type: z.literal("remove_fabric_creases"),
     payload: RemoveFabricCreasesPayload,
   }),
+  z.object({
+    type: z.literal("add_photo_to_quilting"),
+    payload: AddPhotoToQuiltingPayload,
+  }),
 ] as const;
 
 export type QuiltingActionType =
@@ -288,7 +301,8 @@ export type QuiltingActionType =
   | "create_layout"
   | "delete_layout"
   | "bulk_reanalyze_quilting"
-  | "remove_fabric_creases";
+  | "remove_fabric_creases"
+  | "add_photo_to_quilting";
 
 async function getFabricLabelInfo(
   fabricId: number,
@@ -953,6 +967,61 @@ export const quiltingActionExecutors: Record<
       body: { type: "bulk_reanalyze_quilting", result },
     };
   }) as ActionExecutor,
+
+  add_photo_to_quilting: (async (
+    payload: z.infer<typeof AddPhotoToQuiltingPayload>,
+    userId: number,
+  ) => {
+    // Enforce the AI rate limit before starting expensive vision/embedding
+    // pipelines — same cap as the POST /fabrics upload route.
+    const { limited } = await consumeAiRateLimit(userId);
+    if (limited) {
+      return {
+        status: 429,
+        body: { error: "Too many AI requests, please try again later." },
+      };
+    }
+    // Validate URL is from this application's Supabase storage to prevent SSRF
+    if (!payload.attachmentUrl.startsWith(env.supabaseUrl + "/storage/")) {
+      return {
+        status: 400,
+        body: {
+          error: "Attachment URL is not from this application's storage",
+        },
+      };
+    }
+    let buffer: Buffer;
+    try {
+      const response = await fetch(payload.attachmentUrl);
+      if (!response.ok) {
+        return {
+          status: 502,
+          body: { error: "Failed to fetch attachment from storage" },
+        };
+      }
+      buffer = Buffer.from(await response.arrayBuffer());
+    } catch {
+      return {
+        status: 502,
+        body: { error: "Failed to fetch attachment from storage" },
+      };
+    }
+    try {
+      const result = await createFabricFromBuffer(userId, buffer);
+      return {
+        status: 201,
+        body: { type: "add_photo_to_quilting", result },
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      const rawStatus = (err as { status?: unknown }).status;
+      const errStatus =
+        typeof rawStatus === "number" && rawStatus >= 400 && rawStatus < 600
+          ? rawStatus
+          : 500;
+      return { status: errStatus, body: { error: message } };
+    }
+  }) as ActionExecutor,
 };
 
 export async function buildQuiltingActionLabel(action: {
@@ -1113,6 +1182,9 @@ export async function buildQuiltingActionLabel(action: {
       return payload.setAsDefault
         ? `Remove creases from fabric ${payload.fabricId} and set as default photo`
         : `Remove creases from fabric ${payload.fabricId}`;
+    }
+    case "add_photo_to_quilting": {
+      return "Add this photo to your quilting fabric stash (runs full AI cataloguing)";
     }
   }
 }
@@ -1441,6 +1513,25 @@ export const quiltingActionTools: OpenAI.Chat.Completions.ChatCompletionTool[] =
             },
           },
           required: ["fabricId"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "add_photo_to_quilting",
+        description:
+          "Propose adding the photo the user already attached to this message straight into their quilting fabric stash — runs the exact same full AI cataloguing pipeline (print type, fabric line, designer, manufacturer, colorway, fiber content, colours, description) as uploading via the Quilting page. ONLY call this when the user explicitly asks to add or save the attached photo to their fabric stash. Pass the exact signed URL of the attached image as attachmentUrl. Never call this automatically, speculatively, or without a clear user request.",
+        parameters: {
+          type: "object",
+          properties: {
+            attachmentUrl: {
+              type: "string",
+              description:
+                "The exact signed URL of the image the user attached to this message",
+            },
+          },
+          required: ["attachmentUrl"],
         },
       },
     },

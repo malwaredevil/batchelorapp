@@ -343,6 +343,59 @@ export const KNOWN_SCHEDULER_NAMES = new Set([
 ]);
 
 /**
+ * Builds the PostgreSQL `ARRAY[...]::text[]` exclusion expression used in the
+ * DELETE statement issued by reconcileSchedulerRuns(). The result is injected
+ * via sql.raw() so the names appear verbatim (properly single-quote–escaped)
+ * rather than as bind parameters — `name != ALL($1)` with an array bind does
+ * not work across all PostgreSQL driver / connection-pooler combinations.
+ *
+ * Exported for unit testing only — call reconcileSchedulerRuns() in
+ * application code.
+ * @internal
+ */
+export function buildReconcileExclusionArray(knownNames: string[]): string {
+  return (
+    "ARRAY[" +
+    knownNames.map((n) => `'${n.replace(/'/g, "''")}'`).join(",") +
+    "]::text[]"
+  );
+}
+
+/**
+ * Narrow execute-function type accepted by _reconcileSchedulerRunsCore.
+ * Using a plain function alias (not a generic interface method) avoids the
+ * structural mismatch between Drizzle's `QueryResult<Assume<T, QueryResultRow>>`
+ * return shape and a plain `{ rows: T[] }` object when the real `db` is passed.
+ * Unit tests satisfy this by providing an inline async function that returns
+ * `{ rows: Array<Record<string, unknown>> }`.
+ * @internal
+ */
+export type ReconcileExecuteFn = (
+  query: ReturnType<typeof sql>,
+) => Promise<{ rows: Array<Record<string, unknown>> }>;
+
+/**
+ * Core reconcile logic: issues the DELETE … RETURNING query via the supplied
+ * execute function and returns the names of deleted rows.
+ *
+ * Separated from reconcileSchedulerRuns() so that unit tests can inject a
+ * mock execute function and assert on the returned names without needing a
+ * live database.
+ * @internal
+ */
+export async function _reconcileSchedulerRunsCore(
+  executeFn: ReconcileExecuteFn,
+  knownNames: string[],
+): Promise<string[]> {
+  const result = await executeFn(sql`
+    DELETE FROM scheduler_runs
+    WHERE name != ALL(${sql.raw(buildReconcileExclusionArray(knownNames))})
+    RETURNING name
+  `);
+  return result.rows.map((r) => String(r["name"]));
+}
+
+/**
  * Deletes any `scheduler_runs` row whose name is NOT in KNOWN_SCHEDULER_NAMES.
  * Call this once at server startup (after migrations, before the heartbeat
  * starts) so that a renamed or removed scheduler cannot leave a permanently-
@@ -354,16 +407,10 @@ export const KNOWN_SCHEDULER_NAMES = new Set([
 export async function reconcileSchedulerRuns(): Promise<void> {
   try {
     const knownNames = [...KNOWN_SCHEDULER_NAMES];
-    const result = await db.execute<{ name: string }>(sql`
-      DELETE FROM scheduler_runs
-      WHERE name != ALL(${sql.raw(
-        "ARRAY[" +
-          knownNames.map((n) => `'${n.replace(/'/g, "''")}'`).join(",") +
-          "]::text[]",
-      )})
-      RETURNING name
-    `);
-    const deleted = result.rows.map((r) => r.name);
+    const deleted = await _reconcileSchedulerRunsCore(
+      (q) => db.execute(q),
+      knownNames,
+    );
     if (deleted.length > 0) {
       logger.warn(
         { deleted },

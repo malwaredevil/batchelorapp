@@ -2,10 +2,15 @@ import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
 import cookieParser from "cookie-parser";
+import { PgDialect } from "drizzle-orm/pg-core";
 import {
   makeEagerSelectBuilder,
   createTrackedMutationBuilders,
 } from "../../test-helpers/db-mock";
+import {
+  extractFromPdf,
+  extractFromImage,
+} from "../../lib/travel-document-extraction";
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -22,8 +27,22 @@ const {
   makeDeleteBuilder,
 } = createTrackedMutationBuilders();
 
+// Records the raw condition object passed to every db.select().where(...)
+// call, so tests can assert which columns a query actually scoped on (e.g.
+// that a trip-scoped lookup filters by tripId, not just by id) without a
+// real database. See columnNamesIn() below for how these are inspected.
+const selectWhereCalls: unknown[] = [];
+
 const dbMock = {
-  select: vi.fn(() => makeEagerSelectBuilder(selectQueue)),
+  select: vi.fn(() => {
+    const builder = makeEagerSelectBuilder(selectQueue);
+    const originalWhere = builder.where.bind(builder);
+    builder.where = (...args: unknown[]) => {
+      selectWhereCalls.push(args[0]);
+      return originalWhere();
+    };
+    return builder;
+  }),
   update: vi.fn((table: unknown) => makeUpdateBuilder(table)),
   delete: vi.fn((table: unknown) => makeDeleteBuilder(table)),
   insert: vi.fn((table: unknown) => makeInsertBuilder(table)),
@@ -97,10 +116,12 @@ const silentLog = {
 // itself exhausts the default 5 s per-test timeout before the assertion runs.
 import type { IRouter } from "express";
 let documentsRouter: IRouter;
+let syncItineraryFromDocument: (typeof import("./documents"))["syncItineraryFromDocument"];
 
 beforeAll(async () => {
   const mod = await import("./documents");
   documentsRouter = mod.default;
+  syncItineraryFromDocument = mod.syncItineraryFromDocument;
 }, 30_000);
 
 function buildApp(): Express {
@@ -151,6 +172,7 @@ function buildUnauthApp(): Express {
 
 beforeEach(() => {
   selectQueue.length = 0;
+  selectWhereCalls.length = 0;
   insertCalls.length = 0;
   updateCalls.length = 0;
   deleteCalls.length = 0;
@@ -159,6 +181,182 @@ beforeEach(() => {
   deleteDocument.mockResolvedValue(undefined);
   resendConfiguredMock = true;
   sendItinerarySyncEmail.mockClear();
+});
+
+/**
+ * Recursively walk a Drizzle SQL condition's queryChunks and collect the db
+ * column names it references (e.g. "id", "trip_id"). Used to assert that a
+ * trip-scoped query actually filters by tripId, not just by the row id —
+ * guarding against a regression where a `.where(eq(id, docId))` lookup
+ * silently drops its `and(eq(tripId, tripId))` clause and lets one trip's
+ * document be read/deleted/downloaded through another trip's URL.
+ */
+function columnNamesIn(condition: unknown): Set<string> {
+  const names = new Set<string>();
+  function walk(node: unknown): void {
+    if (node == null || typeof node !== "object") return;
+    const name = (node as { name?: unknown }).name;
+    if (typeof name === "string" && "table" in (node as object)) {
+      names.add(name);
+    }
+    const chunks = (node as { queryChunks?: unknown[] }).queryChunks;
+    if (Array.isArray(chunks)) {
+      for (const c of chunks) walk(c);
+    }
+  }
+  walk(condition);
+  return names;
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/travels/trips/:id/documents
+// ---------------------------------------------------------------------------
+
+describe("GET /api/travels/trips/:id/documents", () => {
+  it("returns 400 for a non-numeric trip id", async () => {
+    const app = await buildApp();
+
+    const res = await request(app).get("/api/travels/trips/nope/documents");
+
+    expect(res.status).toBe(400);
+  });
+
+  it("404s when the trip does not exist", async () => {
+    selectQueue.push([]); // tripExists → not found
+    const app = await buildApp();
+
+    const res = await request(app).get("/api/travels/trips/999/documents");
+
+    expect(res.status).toBe(404);
+  });
+
+  it("scopes the document query to this trip (not just non-deleted rows)", async () => {
+    selectQueue.push([{ id: 5 }]); // tripExists → found
+    selectQueue.push([{ id: 1, tripId: 5 }]); // docs list
+    const app = await buildApp();
+
+    const res = await request(app).get("/api/travels/trips/5/documents");
+
+    expect(res.status).toBe(200);
+    // The docs-list select must be the second .where() call (after
+    // tripExists) and must filter on tripId, not just deletedAt — otherwise
+    // every trip's Documents page would show every other trip's documents.
+    const docsListCondition = selectWhereCalls[1];
+    expect(columnNamesIn(docsListCondition)).toContain("trip_id");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /api/travels/trips/:id/documents/:docId
+// ---------------------------------------------------------------------------
+
+describe("DELETE /api/travels/trips/:id/documents/:docId", () => {
+  it("returns 400 when tripId is not numeric", async () => {
+    const app = await buildApp();
+
+    const res = await request(app).delete(
+      "/api/travels/trips/nope/documents/1",
+    );
+
+    expect(res.status).toBe(400);
+  });
+
+  it("404s when the document does not belong to this trip", async () => {
+    selectQueue.push([]); // scoped lookup finds nothing for this trip
+    const app = await buildApp();
+
+    const res = await request(app).delete("/api/travels/trips/5/documents/10");
+
+    expect(res.status).toBe(404);
+  });
+
+  it("scopes both the lookup and the soft-delete by tripId, not just docId", async () => {
+    const doc = {
+      id: 10,
+      tripId: 5,
+      userId: TEST_USER_ID,
+      storagePath: "travels/doc.pdf",
+      originalFilename: "doc.pdf",
+    };
+    selectQueue.push([doc]); // scoped document lookup
+    const app = await buildApp();
+
+    const res = await request(app).delete("/api/travels/trips/5/documents/10");
+
+    expect(res.status).toBe(200);
+    // Guard against a regression where the lookup (and the update it gates)
+    // only filters by id, which would let a document from a different trip
+    // be deleted via this trip's URL.
+    expect(columnNamesIn(selectWhereCalls[0])).toContain("trip_id");
+    expect(updateCalls.length).toBeGreaterThan(0);
+  });
+
+  it("hard-deletes the document's embedding chunks so Elaine's semantic search can't keep surfacing them", async () => {
+    const { travelsDocChunks } = await import("@workspace/db");
+    const doc = {
+      id: 10,
+      tripId: 5,
+      userId: TEST_USER_ID,
+      storagePath: "travels/doc.pdf",
+      originalFilename: "doc.pdf",
+    };
+    selectQueue.push([doc]); // scoped document lookup
+    const app = await buildApp();
+
+    const res = await request(app).delete("/api/travels/trips/5/documents/10");
+
+    expect(res.status).toBe(200);
+    // travelsDocChunks rows have no deleted_at column, so a soft-deleted
+    // document's chunks would otherwise remain searchable indefinitely.
+    expect(deleteCalls.some((c) => c.table === travelsDocChunks)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/travels/trips/:id/documents/:docId/download
+// ---------------------------------------------------------------------------
+
+describe("GET /api/travels/trips/:id/documents/:docId/download", () => {
+  it("returns 400 when tripId is not numeric", async () => {
+    const app = await buildApp();
+
+    const res = await request(app).get(
+      "/api/travels/trips/nope/documents/1/download",
+    );
+
+    expect(res.status).toBe(400);
+  });
+
+  it("404s when the document does not belong to this trip", async () => {
+    selectQueue.push([]); // scoped lookup finds nothing for this trip
+    const app = await buildApp();
+
+    const res = await request(app).get(
+      "/api/travels/trips/5/documents/10/download",
+    );
+
+    expect(res.status).toBe(404);
+  });
+
+  it("scopes the lookup by tripId, not just docId, before serving the file", async () => {
+    const doc = {
+      id: 10,
+      tripId: 5,
+      storagePath: "travels/doc.pdf",
+      originalFilename: "doc.pdf",
+    };
+    selectQueue.push([doc]); // scoped document lookup
+    const app = await buildApp();
+
+    const res = await request(app).get(
+      "/api/travels/trips/5/documents/10/download",
+    );
+
+    expect(res.status).toBe(200);
+    // Guard against a document from a different trip being downloadable
+    // through this trip's URL.
+    expect(columnNamesIn(selectWhereCalls[0])).toContain("trip_id");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -243,6 +441,98 @@ describe("GET /api/travels/documents/unmatched/count", () => {
 });
 
 // ---------------------------------------------------------------------------
+// POST /api/travels/trips/:id/documents — upload + extraction
+//
+// Regression coverage for a merge-introduced corruption where this handler
+// called rescanTripDocument(tripId, docId, ...) — which requires an already
+// -existing row and needs a real docId — before any document had been
+// inserted, then tried to look the "document" up with a bare select() using
+// that (always-undefined) docId instead of inserting a new row. The fix
+// calls extractFromPdf/extractFromImage directly on the uploaded buffer and
+// performs a real insert().values().returning().
+// ---------------------------------------------------------------------------
+
+const PDF_MAGIC = Buffer.from("%PDF-1.4 this is a fake pdf file for testing");
+
+describe("POST /api/travels/trips/:id/documents", () => {
+  it("returns 401 without a session", async () => {
+    const app = await buildUnauthApp();
+
+    const res = await request(app)
+      .post("/api/travels/trips/7/documents")
+      .attach("file", PDF_MAGIC, {
+        filename: "ticket.pdf",
+        contentType: "application/pdf",
+      });
+
+    expect(res.status).toBe(401);
+  });
+
+  it("404s when the target trip does not exist", async () => {
+    selectQueue.push([]); // tripExists → not found
+    const app = await buildApp();
+
+    const res = await request(app)
+      .post("/api/travels/trips/999/documents")
+      .attach("file", PDF_MAGIC, {
+        filename: "ticket.pdf",
+        contentType: "application/pdf",
+      });
+
+    expect(res.status).toBe(404);
+  });
+
+  it("400s when no file is attached", async () => {
+    selectQueue.push([{ id: 7 }]); // tripExists → found
+    const app = await buildApp();
+
+    const res = await request(app).post("/api/travels/trips/7/documents");
+
+    expect(res.status).toBe(400);
+  });
+
+  it("extracts data directly from the uploaded buffer and inserts a new document row (not a rescan of a non-existent row)", async () => {
+    vi.mocked(extractFromPdf).mockResolvedValueOnce({
+      data: {},
+      sourceSpans: { source: "pdf_text", textLength: 0, fieldOffsets: [] },
+    });
+    selectQueue.push([{ id: 7 }]); // tripExists → found
+    selectQueue.push([]); // syncItineraryFromDocument trip lookup → not found, returns early
+    const insertedDoc = {
+      id: 10,
+      tripId: 7,
+      userId: TEST_USER_ID,
+      storagePath: "travels/mock-path.pdf",
+      title: null,
+      documentType: null,
+      extractedData: {},
+      sourceSpans: null,
+      rawText: null,
+      status: "processed",
+    };
+    lastReturning.value = [insertedDoc];
+    const app = await buildApp();
+
+    const res = await request(app)
+      .post("/api/travels/trips/7/documents")
+      .attach("file", PDF_MAGIC, {
+        filename: "ticket.pdf",
+        contentType: "application/pdf",
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.id).toBe(10);
+    expect(extractFromPdf).toHaveBeenCalledTimes(1);
+    expect(extractFromImage).not.toHaveBeenCalled();
+    expect(insertCalls).toHaveLength(1);
+    const values = insertCalls[0]!.values as Record<string, unknown>;
+    expect(values.tripId).toBe(7);
+    expect(values.userId).toBe(TEST_USER_ID);
+    expect(values.status).toBe("processed");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // PATCH /api/travels/trips/:id/documents/:docId — itinerary categorization
 // and post-sync notification email
 // ---------------------------------------------------------------------------
@@ -253,6 +543,51 @@ describe("PATCH /api/travels/trips/:id/documents/:docId", () => {
       (c) => c.set && typeof c.set === "object" && "itinerary" in c.set,
     );
   }
+
+  it("returns 400 for a non-numeric tripId or docId", async () => {
+    const app = buildApp();
+
+    const res = await request(app).patch("/api/travels/trips/nope/documents/1");
+
+    expect(res.status).toBe(400);
+  });
+
+  it("404s when the document does not belong to this trip", async () => {
+    // Simulate the scoped lookup (id = docId AND tripId = :id) finding
+    // nothing — which is what happens when the docId exists on a DIFFERENT
+    // trip than the one in the URL.
+    selectQueue.push([]); // scoped lookup returns empty
+    const app = buildApp();
+
+    const res = await request(app)
+      .patch("/api/travels/trips/5/documents/10")
+      .send({ title: "Changed title" });
+
+    expect(res.status).toBe(404);
+  });
+
+  it("scopes the document lookup by tripId, not just docId", async () => {
+    // Guard against a regression where a document belonging to trip B
+    // could be mutated through trip A's URL.
+    const existingDoc = {
+      id: 10,
+      tripId: 5,
+      extractedData: {},
+      lockedFields: [],
+    };
+    selectQueue.push([existingDoc]); // scoped lookup finds the doc
+    lastReturning.value = [existingDoc];
+    const app = buildApp();
+
+    const res = await request(app)
+      .patch("/api/travels/trips/5/documents/10")
+      .send({ title: "Updated" });
+
+    expect(res.status).toBe(200);
+    // The initial SELECT must filter on both id and trip_id.
+    expect(columnNamesIn(selectWhereCalls[0])).toContain("trip_id");
+    expect(columnNamesIn(selectWhereCalls[0])).toContain("id");
+  });
 
   it("labels an airport_transfer document as rideshare, not rental car, and emails the household", async () => {
     const existingDoc = {
@@ -656,5 +991,328 @@ describe("DELETE /api/travels/documents/:docId", () => {
     // Gmail scan-decision cleanup runs only in the trip-scoped route.
     expect(deleteCalls.length).toBe(0);
     expect(updateCalls.length).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /api/travels/trips/:id/documents/:docId
+// ---------------------------------------------------------------------------
+
+describe("DELETE /api/travels/trips/:id/documents/:docId", () => {
+  it("detaches the itinerary sourceDocumentId link after a successful delete", async () => {
+    // The document lookup is scoped by both id AND tripId, so doc.tripId
+    // always equals the route's :id after a successful lookup.
+    // Regression guard: the itinerary write must target the correct tripId.
+    const TRIP_ID = 16;
+    const DOC_ID = 77;
+    const doc = {
+      id: DOC_ID,
+      tripId: TRIP_ID,
+      userId: TEST_USER_ID,
+      originalFilename: "boarding-pass.pdf",
+    };
+    const activity = {
+      time: "10:00",
+      name: "Flight BA123: LHR → JFK",
+      description: "British Airways",
+      proximity: "✈️",
+      tip: "",
+      status: "tentative" as const,
+      sourceDocumentId: DOC_ID,
+      sourceField: "departureDateTime",
+      dataRichness: 5,
+    };
+    selectQueue.push([doc]); // trip-scoped document lookup
+    selectQueue.push([
+      {
+        itinerary: {
+          days: [
+            {
+              date: "2026-09-01",
+              title: "Travel Day",
+              activities: [activity],
+            },
+          ],
+        },
+      },
+    ]); // trip itinerary lookup
+
+    const app = buildApp();
+
+    const res = await request(app).delete(
+      `/api/travels/trips/${TRIP_ID}/documents/${DOC_ID}`,
+    );
+
+    expect(res.status).toBe(200);
+
+    const itineraryUpdate = updateCalls.find(
+      (c) => c.set && typeof c.set === "object" && "itinerary" in c.set,
+    );
+    expect(itineraryUpdate).toBeDefined();
+
+    // The write must target the correct tripId. Use drizzle-orm's own
+    // public SQL-compile path (PgDialect.sqlToQuery) so this stays valid
+    // across internal drizzle-orm representation changes.
+    const dialect = new PgDialect();
+    const params = dialect.sqlToQuery(
+      itineraryUpdate!.where as Parameters<typeof dialect.sqlToQuery>[0],
+    ).params;
+    expect(params).toContain(TRIP_ID);
+
+    // The activity's sourceDocumentId link was actually stripped.
+    const itinerary = (
+      itineraryUpdate!.set as {
+        itinerary: { days: { activities: any[] }[] };
+      }
+    ).itinerary;
+    const activities = itinerary.days.flatMap((d) => d.activities);
+    expect(activities[0].sourceDocumentId).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// syncItineraryFromDocument — photo carry-over across all three branches
+// ---------------------------------------------------------------------------
+
+type TestActivity = {
+  time: string;
+  name: string;
+  description: string;
+  proximity: string;
+  tip: string;
+  status?: string;
+  sourceDocumentId?: number;
+  sourceField?: string;
+  dataRichness?: number;
+  /** @deprecated legacy scalar */
+  photoId?: number;
+  /** canonical multi-photo array (task #708+) */
+  photoIds?: number[];
+};
+
+type TestDay = { date: string; title: string; activities: TestActivity[] };
+type TestItinerary = { days: TestDay[] };
+
+/** Pull the itinerary value from the most recent db.update({ itinerary }) call. */
+function lastWrittenItinerary(): TestItinerary {
+  for (let i = updateCalls.length - 1; i >= 0; i--) {
+    const s = updateCalls[i]?.set;
+    if (s && typeof s === "object" && "itinerary" in (s as object)) {
+      return (s as { itinerary: TestItinerary }).itinerary;
+    }
+  }
+  throw new Error("No itinerary update found in updateCalls");
+}
+
+/** Mirror of the server helper — normalises both legacy photoId and photoIds. */
+function getPhotoIds(a: TestActivity | undefined): number[] {
+  if (!a) return [];
+  if (a.photoIds && a.photoIds.length > 0) return a.photoIds;
+  if (a.photoId != null) return [a.photoId];
+  return [];
+}
+
+describe("syncItineraryFromDocument — photo carry-over", () => {
+  const TRIP_ID = 1;
+  const DOC_ID = 10;
+
+  // Rich flight data that generates exactly one departure activity.
+  const flightExtractedData = {
+    departureDateTime: "2026-09-01T10:00:00",
+    flightNumber: "BA123",
+    fromLocation: "LHR",
+    toLocation: "JFK",
+    providerName: "British Airways",
+    arrivalDateTime: "2026-09-01T13:00:00",
+    referenceNumber: "ABCDEF",
+    seatNumbers: ["12A"],
+    passengerNames: ["Alice"],
+  };
+
+  // ── fresh-add branch ────────────────────────────────────────────────────
+
+  it("fresh-add branch: single photoIds entry survives an idempotent resync", async () => {
+    // First sync: empty itinerary → activity added fresh.
+    selectQueue.push([
+      { itinerary: { days: [] }, title: "NYC Trip", destination: "New York" },
+    ]);
+    selectQueue.push([{ email: "alice@example.com" }]); // notifyItinerarySync
+
+    await syncItineraryFromDocument(TRIP_ID, DOC_ID, flightExtractedData);
+
+    const afterFirst = lastWrittenItinerary();
+    expect(afterFirst.days).toHaveLength(1);
+    const act = afterFirst.days[0]!.activities[0]!;
+    expect(act.sourceDocumentId).toBe(DOC_ID);
+
+    // User pins one photo (canonical array shape from task #708).
+    act.photoIds = [999];
+
+    // Second sync: same extractedData → idempotent, photoIds must survive.
+    updateCalls.length = 0;
+    selectQueue.push([
+      { itinerary: afterFirst, title: "NYC Trip", destination: "New York" },
+    ]);
+
+    await syncItineraryFromDocument(TRIP_ID, DOC_ID, flightExtractedData);
+
+    const afterSecond = lastWrittenItinerary();
+    const activities = afterSecond.days.flatMap((d) => d.activities);
+    expect(activities).toHaveLength(1);
+    expect(getPhotoIds(activities[0]!)).toEqual([999]);
+  });
+
+  it("fresh-add branch: multiple photoIds all survive an idempotent resync", async () => {
+    // First sync: empty itinerary.
+    selectQueue.push([
+      { itinerary: { days: [] }, title: "NYC Trip", destination: "New York" },
+    ]);
+    selectQueue.push([{ email: "alice@example.com" }]);
+
+    await syncItineraryFromDocument(TRIP_ID, DOC_ID, flightExtractedData);
+
+    const afterFirst = lastWrittenItinerary();
+    const act = afterFirst.days[0]!.activities[0]!;
+
+    // User attaches three photos.
+    act.photoIds = [11, 22, 33];
+
+    updateCalls.length = 0;
+    selectQueue.push([
+      { itinerary: afterFirst, title: "NYC Trip", destination: "New York" },
+    ]);
+
+    await syncItineraryFromDocument(TRIP_ID, DOC_ID, flightExtractedData);
+
+    const afterSecond = lastWrittenItinerary();
+    const activities = afterSecond.days.flatMap((d) => d.activities);
+    expect(getPhotoIds(activities[0]!)).toEqual([11, 22, 33]);
+  });
+
+  it("fresh-add branch: legacy scalar photoId is normalised to photoIds on resync", async () => {
+    // Simulate an activity written by old code (scalar photoId).
+    selectQueue.push([
+      { itinerary: { days: [] }, title: "NYC Trip", destination: "New York" },
+    ]);
+    selectQueue.push([{ email: "alice@example.com" }]);
+
+    await syncItineraryFromDocument(TRIP_ID, DOC_ID, flightExtractedData);
+
+    const afterFirst = lastWrittenItinerary();
+    const act = afterFirst.days[0]!.activities[0]!;
+    // Old code wrote scalar photoId instead of photoIds.
+    act.photoId = 777;
+
+    updateCalls.length = 0;
+    selectQueue.push([
+      { itinerary: afterFirst, title: "NYC Trip", destination: "New York" },
+    ]);
+
+    await syncItineraryFromDocument(TRIP_ID, DOC_ID, flightExtractedData);
+
+    const afterSecond = lastWrittenItinerary();
+    const activities = afterSecond.days.flatMap((d) => d.activities);
+    // Legacy scalar must be read and re-written as photoIds array.
+    expect(getPhotoIds(activities[0]!)).toEqual([777]);
+  });
+
+  // ── rich-wins replace branch ────────────────────────────────────────────
+
+  it("rich-wins replace branch: photoIds survive when the same doc out-richnesses a rival", async () => {
+    // Itinerary has a low-richness rival (docId=99) and our own activity
+    // (docId=10) with photoIds already attached.  On resync our richer doc
+    // replaces the rival slot; photoIds from previousForDoc must be preserved.
+    const rivalActivity: TestActivity = {
+      time: "10:00",
+      name: "Flight BA123: LHR → JFK",
+      description: "British Airways",
+      proximity: "✈️",
+      tip: "",
+      status: "tentative",
+      sourceDocumentId: 99,
+      sourceField: "departureDateTime",
+      dataRichness: 1,
+    };
+    const ownActivity: TestActivity = {
+      time: "10:00",
+      name: "Flight BA123: LHR → JFK",
+      description: "British Airways",
+      proximity: "✈️",
+      tip: "",
+      status: "tentative",
+      sourceDocumentId: DOC_ID,
+      sourceField: "departureDateTime",
+      dataRichness: 5,
+      photoIds: [101, 102],
+    };
+    const setupItinerary: TestItinerary = {
+      days: [
+        {
+          date: "2026-09-01",
+          title: "Travel Day",
+          activities: [rivalActivity, ownActivity],
+        },
+      ],
+    };
+
+    selectQueue.push([
+      { itinerary: setupItinerary, title: "NYC Trip", destination: "New York" },
+    ]);
+
+    await syncItineraryFromDocument(TRIP_ID, DOC_ID, flightExtractedData);
+
+    const result = lastWrittenItinerary();
+    const activities = result.days.flatMap((d) => d.activities);
+    const ours = activities.find((a) => a.sourceDocumentId === DOC_ID);
+    expect(ours).toBeDefined();
+    expect(getPhotoIds(ours!)).toEqual([101, 102]);
+  });
+
+  // ── legacy-dedup replace branch ─────────────────────────────────────────
+
+  it("legacy-dedup replace branch: photoIds survive when a legacy (untracked) activity is upgraded", async () => {
+    // Legacy activities have a proximity emoji but no sourceField /
+    // sourceDocumentId.  The sync must replace the legacy slot and carry the
+    // photoIds from the previous docId=10 activity.
+    const legacyActivity: TestActivity = {
+      time: "10:00",
+      name: "Flight BA123: LHR → JFK",
+      description: "British Airways",
+      proximity: "✈️",
+      tip: "",
+    };
+    const ownActivity: TestActivity = {
+      time: "10:00",
+      name: "Flight BA123: LHR → JFK",
+      description: "British Airways",
+      proximity: "✈️",
+      tip: "",
+      status: "tentative",
+      sourceDocumentId: DOC_ID,
+      sourceField: "departureDateTime",
+      dataRichness: 5,
+      photoIds: [55, 66],
+    };
+    const setupItinerary: TestItinerary = {
+      days: [
+        {
+          date: "2026-09-01",
+          title: "Travel Day",
+          activities: [legacyActivity, ownActivity],
+        },
+      ],
+    };
+
+    selectQueue.push([
+      { itinerary: setupItinerary, title: "NYC Trip", destination: "New York" },
+    ]);
+
+    await syncItineraryFromDocument(TRIP_ID, DOC_ID, flightExtractedData);
+
+    const result = lastWrittenItinerary();
+    const activities = result.days.flatMap((d) => d.activities);
+    const ours = activities.find((a) => a.sourceDocumentId === DOC_ID);
+    expect(ours).toBeDefined();
+    expect(getPhotoIds(ours!)).toEqual([55, 66]);
   });
 });

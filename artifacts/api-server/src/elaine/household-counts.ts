@@ -97,7 +97,7 @@ export async function queryHouseholdData(include: string[]): Promise<string> {
           inArray(travelsTrips.status, [
             "planning",
             "booked",
-            "in_progress",
+            "active",
           ] as string[]),
         ),
       )

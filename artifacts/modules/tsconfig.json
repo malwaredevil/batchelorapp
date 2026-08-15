@@ -12,7 +12,8 @@
     // test run can catch one mid-existence and fail on an intentionally
     // invalid fixture instead of a real error.
     "src/_temp_composition_guard_test_fixture.ts",
-    "src/_temp_composition_guard_test_c_fixture.tsx"
+    "src/_temp_composition_guard_test_c_fixture.tsx",
+    "src/_temp_composition_guard_test_f_fixture.tsx"
   ],
   "compilerOptions": {
     "incremental": true,

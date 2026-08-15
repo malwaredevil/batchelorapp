@@ -1,4 +1,4 @@
-import rateLimit from "express-rate-limit";
+import rateLimit, { type Options } from "express-rate-limit";
 import { PostgresRateLimitStore } from "./pgRateLimitStore";
 
 const jsonLimitMessage = {
@@ -137,6 +137,33 @@ export const apiLimiter = rateLimit({
     req.path === "/health/live" ||
     req.path === "/health/ready",
 });
+
+// Programmatic AI budget for action executors (add_photo_to_* tools) that run
+// outside the Express middleware stack. Same cap as aiLimiter (100/15 min),
+// keyed by userId rather than IP because executors have no request context.
+// Uses a separate prefix ("ai-action") so the per-user action budget and the
+// per-IP route budget are tracked independently in the same rate_limits table.
+const AI_ACTION_WINDOW_MS = 15 * 60 * 1000;
+const AI_ACTION_MAX = 100;
+const aiActionStore = new PostgresRateLimitStore("ai-action");
+aiActionStore.init({ windowMs: AI_ACTION_WINDOW_MS } as Options);
+
+/**
+ * Increment the AI rate-limit counter for an action executor and return
+ * whether the caller has exceeded the cap. Fails closed (returns limited:true)
+ * if the Postgres store is temporarily unavailable, matching passOnStoreError:
+ * false behaviour on the route-level aiLimiter.
+ */
+export async function consumeAiRateLimit(
+  userId: number,
+): Promise<{ limited: boolean }> {
+  try {
+    const { totalHits } = await aiActionStore.increment(String(userId));
+    return { limited: totalHits > AI_ACTION_MAX };
+  } catch {
+    return { limited: true };
+  }
+}
 
 // Admin/owner-only operational routes (jobs dashboard, operations telemetry).
 // Generous cap since they are already gated behind requireOwner, but still

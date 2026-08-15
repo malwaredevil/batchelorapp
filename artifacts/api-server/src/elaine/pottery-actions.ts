@@ -18,10 +18,13 @@ import {
   runItemAnalysis,
   bulkReanalyzePotteryItems,
   promotePotteryImageToPrimary,
+  createPotteryItemFromBuffer,
 } from "../routes/pottery/pottery";
 import { mergePotteryCategories } from "../routes/pottery/categories";
 import { deleteImage } from "../lib/pottery/storage";
 import { logActivity } from "../lib/soft-delete";
+import { env } from "../lib/env";
+import { consumeAiRateLimit } from "../middleware/rateLimit";
 
 // Elaine's write-actions for the Pottery app. Creating a brand-new item isn't
 // offered here since every pottery item requires an uploaded photo
@@ -118,6 +121,10 @@ export const BulkReanalyzePotteryActionPayload = z.object({
   itemIds: z.array(z.number().int().positive()).max(20).optional(),
 });
 
+export const AddPhotoToPotteryPayload = z.object({
+  attachmentUrl: z.string().url().max(2000),
+});
+
 export const potteryActionSchemas = [
   z.object({
     type: z.literal("update_pottery_item"),
@@ -159,6 +166,10 @@ export const potteryActionSchemas = [
     type: z.literal("bulk_reanalyze_pottery"),
     payload: BulkReanalyzePotteryActionPayload,
   }),
+  z.object({
+    type: z.literal("add_photo_to_pottery"),
+    payload: AddPhotoToPotteryPayload,
+  }),
 ] as const;
 
 export type PotteryActionType =
@@ -171,7 +182,8 @@ export type PotteryActionType =
   | "delete_pottery_photo"
   | "promote_pottery_photo"
   | "merge_pottery_categories"
-  | "bulk_reanalyze_pottery";
+  | "bulk_reanalyze_pottery"
+  | "add_photo_to_pottery";
 
 async function getPotteryItemLabelInfo(
   itemId: number,
@@ -446,6 +458,61 @@ export const potteryActionExecutors: Record<PotteryActionType, ActionExecutor> =
         body: { type: "bulk_reanalyze_pottery", result },
       };
     }) as ActionExecutor,
+
+    add_photo_to_pottery: (async (
+      payload: z.infer<typeof AddPhotoToPotteryPayload>,
+      userId: number,
+    ) => {
+      // Enforce the AI rate limit before starting expensive vision/embedding
+      // pipelines — same cap as the POST /items upload route.
+      const { limited } = await consumeAiRateLimit(userId);
+      if (limited) {
+        return {
+          status: 429,
+          body: { error: "Too many AI requests, please try again later." },
+        };
+      }
+      // Validate URL is from this application's Supabase storage to prevent SSRF
+      if (!payload.attachmentUrl.startsWith(env.supabaseUrl + "/storage/")) {
+        return {
+          status: 400,
+          body: {
+            error: "Attachment URL is not from this application's storage",
+          },
+        };
+      }
+      let buffer: Buffer;
+      try {
+        const response = await fetch(payload.attachmentUrl);
+        if (!response.ok) {
+          return {
+            status: 502,
+            body: { error: "Failed to fetch attachment from storage" },
+          };
+        }
+        buffer = Buffer.from(await response.arrayBuffer());
+      } catch {
+        return {
+          status: 502,
+          body: { error: "Failed to fetch attachment from storage" },
+        };
+      }
+      try {
+        const result = await createPotteryItemFromBuffer(userId, buffer);
+        return {
+          status: 201,
+          body: { type: "add_photo_to_pottery", result },
+        };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Unknown error";
+        const rawStatus = (err as { status?: unknown }).status;
+        const errStatus =
+          typeof rawStatus === "number" && rawStatus >= 400 && rawStatus < 600
+            ? rawStatus
+            : 500;
+        return { status: errStatus, body: { error: message } };
+      }
+    }) as ActionExecutor,
   };
 
 export async function buildPotteryActionLabel(action: {
@@ -536,6 +603,9 @@ export async function buildPotteryActionLabel(action: {
       return payload.itemIds && payload.itemIds.length > 0
         ? `Run AI re-analysis on ${payload.itemIds.length} pottery item(s)`
         : `Run AI re-analysis on every pottery item that needs it`;
+    }
+    case "add_photo_to_pottery": {
+      return "Add this photo to your pottery collection (runs full AI cataloguing)";
     }
   }
 }
@@ -703,6 +773,25 @@ export const potteryActionTools: OpenAI.Chat.Completions.ChatCompletionTool[] =
           properties: {
             itemIds: { type: "array", items: { type: "integer" } },
           },
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "add_photo_to_pottery",
+        description:
+          "Propose adding the photo the user already attached to this message straight into their pottery collection — runs the exact same full AI cataloguing pipeline (style, shape, maker/backstamp, glaze, dimensions, colours, description) as uploading via the Pottery page. ONLY call this when the user explicitly asks to add or save the attached photo to their pottery collection. Pass the exact signed URL of the attached image as attachmentUrl. Never call this automatically, speculatively, or without a clear user request.",
+        parameters: {
+          type: "object",
+          properties: {
+            attachmentUrl: {
+              type: "string",
+              description:
+                "The exact signed URL of the image the user attached to this message",
+            },
+          },
+          required: ["attachmentUrl"],
         },
       },
     },

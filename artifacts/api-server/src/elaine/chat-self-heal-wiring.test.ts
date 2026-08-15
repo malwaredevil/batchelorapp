@@ -948,22 +948,26 @@ describe("POST /api/elaine/chat — self-heal wiring in the real router", () => 
 
     const res = await request(buildApp())
       .post("/api/elaine/chat")
-      .send({ message: "Check my reminders", appId: "hub" })
+      .send({ message: "How are my reminders?", appId: "hub" })
       .buffer(true);
 
     expect(res.status).toBe(200);
-    expect(mockRecordElaineLesson).not.toHaveBeenCalled();
-    expect(mockDiagnoseInBackground).not.toHaveBeenCalled();
+    expect(mockRecordElaineLesson).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: TEST_USER_ID,
+        source: "self_heal",
+        outcome: "mistake",
+      }),
+    );
   }, 15_000);
 
-  it("does not crash the chat turn when recordElaineLesson throws — logs a warning instead", async () => {
+  it("calls diagnoseRecurringFailureInBackground with patternKey and occurrenceCount from the lesson", async () => {
     primeDbForFreshChat();
-    // Make the lesson-recording throw (simulates a DB connection failure)
-    mockRecordElaineLesson.mockRejectedValueOnce(new Error("DB write failed"));
+    mockRecordElaineLesson.mockResolvedValueOnce({ id: 7, occurrenceCount: 2 });
 
     const res = await request(buildApp())
       .post("/api/elaine/chat")
-      .send({ message: "Check my reminders", appId: "hub" })
+      .send({ message: "Did my reminder save?", appId: "hub" })
       .buffer(true);
 
     expect(res.status).toBe(200);
@@ -1031,7 +1035,7 @@ describe("POST /api/elaine/chat — self-heal wiring in the real router", () => 
 
     const res = await request(buildApp())
       .post("/api/elaine/chat")
-      .send({ message: "Check my reminders", appId: "hub" })
+      .send({ message: "What's the weather like?", appId: "hub" })
       .buffer(true);
 
     expect(res.status).toBe(200);

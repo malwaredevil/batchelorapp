@@ -987,101 +987,81 @@ describe("POST /api/elaine/chat — grounded photo/lookup tools (task 858)", () 
   it("analyze_pottery_photo: calls the real pottery vision pipeline and feeds its structured result back to the model", async () => {
     primeDbForFreshChat();
     const getCapturedBodies = setUpToolCallThenCapture(
-      "lookup_book_value",
-      JSON.stringify({
-        name: "Snoopy and Woodstock Skating",
-        seriesOrCollection: "Peanuts",
-        year: 1999,
-      }),
+      "analyze_pottery_photo",
+      "{}",
     );
 
     const res = await request(buildApp())
       .post("/api/elaine/chat")
       .send({
-        message: "What's the book value of my Snoopy and Woodstock ornament?",
-        appId: "ornaments",
+        message: "What style is this pottery piece?",
+        appId: "pottery",
+        attachmentUrls: [TEST_PHOTO_URL],
       })
       .buffer(true);
 
     expect(res.status).toBe(200);
 
-    // The real two-source lookup was called with the model-supplied args —
-    // not the separate search_hallmark catalog/Apify path.
-    expect(mockLookupBookValue).toHaveBeenCalledWith({
-      name: "Snoopy and Woodstock Skating",
-      seriesOrCollection: "Peanuts",
-      year: 1999,
-    });
+    // The real pipeline function(s) were actually invoked with the attached
+    // photo URL — not skipped in favor of raw model vision/guessing.
+    expect(mockAnalyzePotteryPhoto).toHaveBeenCalledWith([TEST_PHOTO_URL]);
+    expect(mockAnalyzePotteryZones).toHaveBeenCalledWith([TEST_PHOTO_URL]);
 
+    // The tool result fed back to the model must contain the exact fixture
+    // fields the mocked pipeline returned, proving the answer is grounded in
+    // that real analysis rather than a plausible-sounding guess.
     const toolResult = findToolResultContent(getCapturedBodies());
-    expect(toolResult).toContain("Peanuts");
-    expect(toolResult).toContain("071277123456");
+    expect(toolResult).toContain("Blue-and-white Transferware");
+    expect(toolResult).toContain("Royal Sphinx Holland");
+    expect(toolResult).toContain("Transferware Glaze");
+    // Must explicitly disclose this is a non-destructive, ad-hoc lookup.
     expect(toolResult.toLowerCase()).toContain("nothing was saved");
   }, 15_000);
 
-  it("lookup_book_value: calls the real two-source book-value lookup, not search_hallmark, and reports its exact value/source", async () => {
+  it("analyze_fabric_photo: calls the real quilting fabric analysis pipeline and feeds its structured result back to the model", async () => {
     primeDbForFreshChat();
     const getCapturedBodies = setUpToolCallThenCapture(
-      "lookup_book_value",
-      JSON.stringify({
-        name: "Snoopy and Woodstock Skating",
-        seriesOrCollection: "Peanuts",
-        year: 1999,
-      }),
+      "analyze_fabric_photo",
+      "{}",
     );
 
     const res = await request(buildApp())
       .post("/api/elaine/chat")
       .send({
-        message: "What's the book value of my Snoopy and Woodstock ornament?",
-        appId: "ornaments",
+        message: "Can you identify this fabric print?",
+        appId: "quilting",
+        attachmentUrls: [TEST_PHOTO_URL],
       })
       .buffer(true);
 
     expect(res.status).toBe(200);
-
-    // The real two-source lookup was called with the model-supplied args —
-    // not the separate search_hallmark catalog/Apify path.
-    expect(mockLookupBookValue).toHaveBeenCalledWith({
-      name: "Snoopy and Woodstock Skating",
-      seriesOrCollection: "Peanuts",
-      year: 1999,
-    });
+    expect(mockAnalyzeFabricPhoto).toHaveBeenCalledWith([TEST_PHOTO_URL]);
 
     const toolResult = findToolResultContent(getCapturedBodies());
-    expect(toolResult).toContain("Peanuts");
-    expect(toolResult).toContain("071277123456");
+    expect(toolResult).toContain("Jane Sassaman");
+    expect(toolResult).toContain("Harvest Moon");
+    expect(toolResult).toContain("Novelty Print");
     expect(toolResult.toLowerCase()).toContain("nothing was saved");
   }, 15_000);
 
-  it("lookup_book_value: calls the real two-source book-value lookup, not search_hallmark, and reports its exact value/source", async () => {
+  it("analyze_ornament_photo: calls the real ornament vision pipeline and feeds its structured result (incl. UPC) back to the model", async () => {
     primeDbForFreshChat();
     const getCapturedBodies = setUpToolCallThenCapture(
-      "lookup_book_value",
-      JSON.stringify({
-        name: "Snoopy and Woodstock Skating",
-        seriesOrCollection: "Peanuts",
-        year: 1999,
-      }),
+      "analyze_ornament_photo",
+      "{}",
     );
 
     const res = await request(buildApp())
       .post("/api/elaine/chat")
       .send({
-        message: "What's the book value of my Snoopy and Woodstock ornament?",
+        message: "What ornament is this?",
         appId: "ornaments",
+        attachmentUrls: [TEST_PHOTO_URL],
       })
       .buffer(true);
 
     expect(res.status).toBe(200);
-
-    // The real two-source lookup was called with the model-supplied args —
-    // not the separate search_hallmark catalog/Apify path.
-    expect(mockLookupBookValue).toHaveBeenCalledWith({
-      name: "Snoopy and Woodstock Skating",
-      seriesOrCollection: "Peanuts",
-      year: 1999,
-    });
+    expect(mockAnalyzeOrnamentPhoto).toHaveBeenCalledWith([TEST_PHOTO_URL]);
 
     const toolResult = findToolResultContent(getCapturedBodies());
     expect(toolResult).toContain("Peanuts");

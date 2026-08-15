@@ -445,16 +445,15 @@ describe("recordElaineLesson → maybeScheduleExplicitLessonDiagnosis", () => {
       source: "explicit_assistant",
     });
 
-    // The scheduler IS called (non-empty tags → non-null key), but
-    // maybeDiagnoseRecurringFailure returns null because there is no allowlist
-    // entry for this pattern → no elaineCodeSuggestions row is inserted.
-    const diagnosisResult = await new Promise<unknown>((resolve) => {
-      maybeScheduleExplicitLessonDiagnosis(lesson, (input) => {
-        maybeDiagnoseRecurringFailure(input).then(resolve, resolve);
-      });
-    });
+    // The pattern key has no CODE_DIAGNOSIS_FILE_ALLOWLIST entry, so
+    // maybeScheduleExplicitLessonDiagnosis's own guard skips the scheduler
+    // callback entirely — maybeDiagnoseRecurringFailure is never reached, and
+    // no spurious background model invocation happens for an unconfigured
+    // pattern.
+    const scheduleSpy = vi.fn();
+    maybeScheduleExplicitLessonDiagnosis(lesson, scheduleSpy);
 
-    expect(diagnosisResult).toBeNull();
+    expect(scheduleSpy).not.toHaveBeenCalled();
     // Only the lesson insert happened (from recordElaineLesson), not a suggestion insert.
     // The lesson insert uses elaineLessons; no second insert for elaineCodeSuggestions.
     expect(dbMock.insert).toHaveBeenCalledOnce();

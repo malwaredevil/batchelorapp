@@ -17,6 +17,8 @@ import {
   getListElaineConversationsQueryKey,
   getUploadErrorMessage,
   getElaineConversationMessagesFn,
+  signalElaineTurnHandoff,
+  resumeElaineTurnStream,
   type AssistantMessage,
   type AssistantAction,
   type ExecutedAssistantAction,
@@ -59,6 +61,20 @@ interface QueuedSend {
   }>;
 }
 
+/** Minimal state stashed by the widget on maximize so the full Elaine app can
+ *  open the exact same conversation and (when a turn was in flight) attach to
+ *  the still-running generation without any visible restart. */
+export interface ElaineHandoffState {
+  /** Null only in the rare case the server couldn't resolve a conversation
+   *  for the in-flight turn — hydration then relies on the resume stream's
+   *  terminal event to learn the id. */
+  conversationId: number | null;
+  /** Non-null when a turn was mid-flight at maximize time. */
+  turnId: string | null;
+  /** The just-sent (not yet persisted) user message, for instant rendering. */
+  userMessage: string | null;
+}
+
 const DOC_MIME_TO_TYPE: Record<string, "csv" | "docx" | "xlsx"> = {
   "text/csv": "csv",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
@@ -76,9 +92,14 @@ const DOC_MIME_TO_TYPE: Record<string, "csv" | "docx" | "xlsx"> = {
 export function useElaineChat({
   appId,
   active,
+  handoff = null,
 }: {
   appId: ElaineAppId;
   active: boolean;
+  /** When set (full Elaine app opened via the widget's maximize button),
+   *  hydrate from this conversation — and, if a turn id is present, attach to
+   *  the in-progress turn instead of doing the default conversation load. */
+  handoff?: ElaineHandoffState | null;
 }) {
   const [, navigate] = useLocation();
   const qc = useQueryClient();
@@ -130,6 +151,30 @@ export function useElaineChat({
   // Cancels the in-flight `streamElaineMessage` fetch when the user clicks
   // Stop. Null whenever no turn is streaming.
   const currentAbortControllerRef = useRef<AbortController | null>(null);
+  // Stable id of the turn currently streaming (surfaced by the server's
+  // `turn` SSE event as soon as the turn starts). Used by beginHandoff() so
+  // the widget's maximize button can hand the in-flight turn to the full app.
+  const currentTurnIdRef = useRef<string | null>(null);
+  // Authoritative conversation id for the turn currently streaming, from the
+  // same `turn` SSE event. Matters when the turn started a brand-new
+  // conversation: the hook's `conversationId` state is still null until the
+  // terminal `done` event, but a maximize handoff needs the real id now.
+  const currentTurnConversationIdRef = useRef<number | null>(null);
+  // Waiters registered by beginHandoff() when the user maximizes before the
+  // `turn` SSE event has arrived (send just started). Resolved with the turn
+  // info as soon as it lands, or null when the turn ends without one.
+  const turnIdWaitersRef = useRef<
+    Array<
+      (info: { turnId: string; conversationId: number | null } | null) => void
+    >
+  >([]);
+  function flushTurnIdWaiters(
+    info: { turnId: string; conversationId: number | null } | null,
+  ) {
+    const waiters = turnIdWaitersRef.current;
+    turnIdWaitersRef.current = [];
+    for (const w of waiters) w(info);
+  }
   // Synchronous "a turn is actively being sent" flag. `isStreaming` state is
   // not safe to gate on here: React can batch/delay the re-render that would
   // make it true, so two handleSend calls in the same tick (e.g. queueing
@@ -279,7 +324,9 @@ export function useElaineChat({
   const { data: conversation, refetch: refetchConversation } =
     useGetElaineConversation({
       query: {
-        enabled: active && !initialized,
+        // A maximize handoff hydrates its own specific conversation below —
+        // the default (widget-thread) load must not race/clobber it.
+        enabled: active && !initialized && handoff === null,
         queryKey: getGetElaineConversationQueryKey(),
       },
     });
@@ -323,6 +370,203 @@ export function useElaineChat({
     return () =>
       document.removeEventListener("visibilitychange", onVisibilityChange);
   }, [active, refetchConversation]);
+
+  // ── Maximize-handoff hydration ────────────────────────────────────────────
+  // When the full app was opened via the widget's maximize button, load the
+  // exact conversation the widget was showing and — if a turn was mid-flight —
+  // attach to the still-running generation so planning/streaming continues
+  // seamlessly. Consumed exactly once; every failure path falls back silently
+  // to plain persisted history (never an error for a maximize).
+  const handoffConsumedRef = useRef(false);
+  useEffect(() => {
+    if (!active || handoff === null || initialized) return;
+    if (handoffConsumedRef.current) return;
+    handoffConsumedRef.current = true;
+    let cancelled = false;
+
+    const mapMsgs = (msgs: ConversationMessage[]): AssistantMessage[] =>
+      msgs.map((m) => ({
+        id: m.id,
+        role: m.role as "user" | "assistant",
+        content: m.content,
+        attachmentUrls:
+          m.attachmentUrls.length > 0 ? m.attachmentUrls : undefined,
+        ...(m.runtimeTrace ? { runtimeTrace: m.runtimeTrace } : {}),
+        ...(m.reasoningSummary ? { reasoningSummary: m.reasoningSummary } : {}),
+        ...(m.reasoningDurationMs != null
+          ? { reasoningDurationMs: m.reasoningDurationMs }
+          : {}),
+        ...(m.stopped ? { stopped: true } : {}),
+        createdAt: m.createdAt,
+      })) as AssistantMessage[];
+
+    void (async () => {
+      if (handoff.conversationId !== null) {
+        setConversationId(handoff.conversationId);
+        try {
+          const page = await getElaineConversationMessagesFn(
+            handoff.conversationId,
+          );
+          if (cancelled) return;
+          setMessages(mapMsgs(page.messages));
+          setHasOlderMessages(page.hasMore);
+        } catch {
+          // Start from an empty list — the resume stream (or a later refetch)
+          // fills in what it can; a maximize must never surface an error.
+        }
+      }
+      if (cancelled) return;
+      setInitialized(true);
+
+      if (!handoff.turnId) return;
+
+      // Show the just-sent (not yet persisted) user message instantly while
+      // attaching to the in-progress turn.
+      const tempId = -++tempIdCounterRef.current;
+      if (handoff.userMessage !== null) {
+        setMessages((prev) => [
+          ...prev,
+          { id: tempId, role: "user", content: handoff.userMessage! },
+        ]);
+      }
+      isSendingRef.current = true;
+      setIsStreaming(true);
+      turnStartRef.current = Date.now();
+      hadReasoningRef.current = false;
+      const pendingWidgets: ChatWidget[] = [];
+      try {
+        await resumeElaineTurnStream(handoff.turnId, {
+          onDelta: (text) => {
+            setStatusMessage("");
+            streamingContentRef.current += text;
+            setStreamingContent((prev) => prev + text);
+          },
+          onReasoningSummaryDelta: (delta) => {
+            hadReasoningRef.current = true;
+            setReasoningActive(true);
+            setStreamingReasoningSummary((prev) => prev + delta);
+          },
+          onResponseReset: () => {
+            streamingContentRef.current = "";
+            setStreamingContent("");
+          },
+          onAction: (action) => setPendingActions((prev) => [...prev, action]),
+          onStatus: (msg) => setStatusMessage(msg),
+          onWidget: (widget) => pendingWidgets.push(widget as ChatWidget),
+          onRuntime: ({ trace }) => setRuntimeTrace(trace),
+          onDone: (res) => {
+            if (hadReasoningRef.current) setReasoningActive(false);
+            const assistantMsg: AssistantMessage = {
+              id: res.assistantMessageId ?? undefined,
+              role: "assistant",
+              content: res.content,
+              runtimeTrace: res.runtimeTrace,
+              ...(res.reasoningSummary
+                ? { reasoningSummary: res.reasoningSummary }
+                : {}),
+              ...(hadReasoningRef.current
+                ? { reasoningDurationMs: Date.now() - turnStartRef.current }
+                : {}),
+            };
+            setMessages((prev) => {
+              // If the turn had already finished before our history fetch,
+              // its persisted rows are in the fetched page — dedupe by id so
+              // the replayed `done` never duplicates them.
+              const withoutOptimistic = prev.filter((m) => m.id !== tempId);
+              if (
+                res.assistantMessageId != null &&
+                withoutOptimistic.some((m) => m.id === res.assistantMessageId)
+              ) {
+                return withoutOptimistic;
+              }
+              const hasUserRow =
+                res.userMessageId != null &&
+                withoutOptimistic.some((m) => m.id === res.userMessageId);
+              const userMsg: AssistantMessage = {
+                id: res.userMessageId ?? undefined,
+                role: "user",
+                content: handoff.userMessage ?? "",
+              };
+              const includeUser =
+                !hasUserRow &&
+                (handoff.userMessage !== null || res.userMessageId != null);
+              return [
+                ...withoutOptimistic,
+                ...(includeUser ? [userMsg] : []),
+                assistantMsg,
+              ];
+            });
+            if (pendingWidgets.length > 0 && assistantMsg.id !== undefined) {
+              const widgetKey = assistantMsg.id;
+              setMessageWidgets((prev) => {
+                const next = new Map(prev);
+                next.set(widgetKey, pendingWidgets);
+                return next;
+              });
+            }
+            if (res.navigate) setPendingNavigate(res.navigate);
+            if (res.actions.length > 0) setPendingActions(res.actions);
+            if (res.executedActions.length > 0) {
+              setExecutedActions(res.executedActions);
+              invalidateActionQueries();
+            }
+            if (res.conversationId !== undefined) {
+              setConversationId(res.conversationId);
+              qc.invalidateQueries({
+                queryKey: getListElaineConversationsQueryKey(),
+              });
+              qc.invalidateQueries({
+                queryKey: getInfiniteElaineConversationsQueryKey(),
+              });
+            }
+            setRuntimeTrace(null);
+          },
+        });
+      } catch {
+        // Turn expired/unknown or the stream broke — reconcile quietly
+        // against persisted history (which, if the turn finished, already
+        // contains the final message).
+        try {
+          if (handoff.conversationId === null) throw new Error("no conv");
+          const page = await getElaineConversationMessagesFn(
+            handoff.conversationId,
+          );
+          if (!cancelled) {
+            setMessages(mapMsgs(page.messages));
+            setHasOlderMessages(page.hasMore);
+          }
+        } catch {
+          if (!cancelled) {
+            setMessages((prev) => prev.filter((m) => m.id !== tempId));
+          }
+        }
+      } finally {
+        if (!cancelled) {
+          if (hadReasoningRef.current) {
+            await new Promise((resolve) => setTimeout(resolve, 400));
+          }
+          setStreamingContent("");
+          streamingContentRef.current = "";
+          setStreamingReasoningSummary("");
+          setStatusMessage("");
+          setRuntimeTrace(null);
+          setIsStreaming(false);
+          currentTurnIdRef.current = null;
+          currentTurnConversationIdRef.current = null;
+          flushTurnIdWaiters(null);
+          isSendingRef.current = false;
+          // Anything the user queued while the resumed turn was streaming
+          // sends now, exactly like the normal post-turn queue drain.
+          const next = queueRef.current.shift();
+          if (next) void runSend(next);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot hydration; runSend & setters are stable for its purposes
+  }, [active, handoff, initialized]);
 
   useEffect(() => {
     if (conversation && !initialized) {
@@ -633,6 +877,11 @@ export function useElaineChat({
             : {}),
         },
         {
+          onTurnId: (info) => {
+            currentTurnIdRef.current = info.turnId;
+            currentTurnConversationIdRef.current = info.conversationId;
+            flushTurnIdWaiters(info);
+          },
           onDelta: (text) => {
             setStatusMessage("");
             streamingContentRef.current += text;
@@ -806,6 +1055,9 @@ export function useElaineChat({
       setRuntimeTrace(null);
       setIsStreaming(false);
       currentAbortControllerRef.current = null;
+      currentTurnIdRef.current = null;
+      currentTurnConversationIdRef.current = null;
+      flushTurnIdWaiters(null);
       isSendingRef.current = false;
 
       // Drain the queue: the moment this turn is done (normally or via
@@ -1033,6 +1285,69 @@ export function useElaineChat({
     setPendingActions([]);
   }
 
+  /** Called by the widget's maximize button right before navigating to the
+   *  full Elaine app. When a turn is mid-flight it signals the server to keep
+   *  generating despite the imminent disconnect — the promise resolves only
+   *  after the server has acknowledged, so navigating on resolution can't
+   *  race the socket close — and returns the minimal state the full app
+   *  needs to hydrate seamlessly. If the user maximizes in the instant
+   *  between pressing Send and the server's `turn` event arriving, this
+   *  waits (bounded) for the turn id rather than navigating as an
+   *  unsignaled in-flight turn. When idle, only the conversation id is
+   *  returned so the full app opens the same conversation. */
+  async function beginHandoff(): Promise<{
+    conversationId: number | null;
+    turnId: string | null;
+    userMessage: string | null;
+  }> {
+    if (!isSendingRef.current) {
+      return { conversationId, turnId: null, userMessage: null };
+    }
+    let turnId = currentTurnIdRef.current;
+    let turnConvId = currentTurnConversationIdRef.current;
+    if (turnId === null) {
+      // Send already started but the `turn` SSE event hasn't reached us yet
+      // — wait for it (bounded) so the handoff can still be signaled. The
+      // waiter is also flushed (with null) if the turn ends/errors first.
+      const info = await new Promise<{
+        turnId: string;
+        conversationId: number | null;
+      } | null>((resolve) => {
+        const timer = setTimeout(() => resolve(null), 5000);
+        turnIdWaitersRef.current.push((i) => {
+          clearTimeout(timer);
+          resolve(i);
+        });
+      });
+      turnId = info?.turnId ?? currentTurnIdRef.current;
+      turnConvId = info?.conversationId ?? currentTurnConversationIdRef.current;
+    }
+    if (turnId === null) {
+      // Timed out / turn ended without an id — nothing to hand off; treat as
+      // an idle maximize so the full app at least opens the conversation.
+      return { conversationId, turnId: null, userMessage: null };
+    }
+    let userMessage: string | null = null;
+    for (let i = messagesRef.current.length - 1; i >= 0; i--) {
+      const m = messagesRef.current[i];
+      if (m && m.role === "user") {
+        userMessage = m.content;
+        break;
+      }
+    }
+    // Await the server's acknowledgement BEFORE the caller navigates —
+    // otherwise the disconnect could win the race and abort the turn.
+    await signalElaineTurnHandoff(turnId);
+    // Prefer the streaming turn's authoritative conversation id (from the
+    // `turn` SSE event) — for a turn that started a brand-new conversation,
+    // the hook's `conversationId` state is still null until `done`.
+    return {
+      conversationId: turnConvId ?? conversationId,
+      turnId,
+      userMessage,
+    };
+  }
+
   return {
     settings,
     updateSettings,
@@ -1072,6 +1387,7 @@ export function useElaineChat({
     handleSkipAction,
     handleConfirmAll,
     handleCancelAll,
+    beginHandoff,
   };
 }
 

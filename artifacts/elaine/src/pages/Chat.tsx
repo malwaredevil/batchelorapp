@@ -41,6 +41,7 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useFullChat } from "@/lib/useFullChat";
+import { type ElaineHandoffState } from "@workspace/elaine-ui";
 import { FullChatPanel } from "@/components/FullChatPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -82,6 +83,46 @@ function useSurfacedContent(
   }, [messages, magnetResult]);
 }
 
+/**
+ * Reads (and clears) widget→full-app maximize handoff state. The widget puts
+ * the conversation id (and, mid-turn, the turn id) in the URL query and
+ * stashes the just-sent user message in sessionStorage. Consumed exactly once
+ * on load; the URL is cleaned so a refresh is a plain, non-handoff visit.
+ */
+function consumeMaximizeHandoff(): ElaineHandoffState | null {
+  const params = new URLSearchParams(window.location.search);
+  const conversationRaw = params.get("conversation");
+  const turnId = params.get("turn");
+  let userMessage: string | null = null;
+  try {
+    const raw = sessionStorage.getItem("elaineHandoff");
+    if (raw !== null) {
+      sessionStorage.removeItem("elaineHandoff");
+      const parsed = JSON.parse(raw) as {
+        turnId?: string | null;
+        userMessage?: string | null;
+      };
+      if (turnId !== null && parsed.turnId === turnId) {
+        userMessage = parsed.userMessage ?? null;
+      }
+    }
+  } catch {
+    // sessionStorage unavailable / corrupt stash — URL params are enough.
+  }
+  // A handoff needs at least one of the two ids: a conversation to open, or
+  // an in-flight turn to resume (whose terminal event carries the
+  // conversation id in the rare case the URL lacks one).
+  const parsed = conversationRaw === null ? NaN : Number(conversationRaw);
+  const conversationId = Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+  if (conversationId === null && turnId === null) return null;
+  // Strip the handoff params so refresh/bookmark behaves like a plain visit.
+  const cleaned = new URL(window.location.href);
+  cleaned.searchParams.delete("conversation");
+  cleaned.searchParams.delete("turn");
+  window.history.replaceState(null, "", cleaned.toString());
+  return { conversationId, turnId, userMessage };
+}
+
 function formatConversationDate(iso: string): string {
   const date = new Date(iso);
   const now = new Date();
@@ -105,7 +146,10 @@ function formatConversationDate(iso: string): string {
  * unless the conversation touches travel/magnet data.
  */
 export default function Chat() {
-  const chat = useFullChat({ active: true });
+  // Read once, before the first render, so the chat hook hydrates straight
+  // from the handoff instead of the default widget-thread conversation.
+  const [handoff] = useState<ElaineHandoffState | null>(consumeMaximizeHandoff);
+  const chat = useFullChat({ active: true, handoff });
   const { links, images } = useSurfacedContent(
     chat.messages,
     chat.magnetResult,
@@ -115,6 +159,15 @@ export default function Chat() {
 
   // Sidebar starts collapsed — user can open it with the toggle button.
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Keep the active conversation visible in the sidebar — matters after a
+  // maximize handoff selected a conversation that may sit far down the list.
+  useEffect(() => {
+    if (!sidebarOpen || chat.conversationId === null) return;
+    document
+      .getElementById(`elaine-conv-${chat.conversationId}`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [sidebarOpen, chat.conversationId]);
 
   // Right "Elaine surfaced" panel — starts open, user can close/reopen it.
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
@@ -350,6 +403,7 @@ export default function Chat() {
                   return (
                     <div
                       key={conv.id}
+                      id={`elaine-conv-${conv.id}`}
                       className={`group relative flex cursor-pointer items-start gap-2 px-3 py-2 transition-colors hover:bg-muted/60 ${
                         isActive ? "bg-muted" : ""
                       }`}

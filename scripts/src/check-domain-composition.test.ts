@@ -16,7 +16,13 @@
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync, writeFileSync, unlinkSync } from "node:fs";
+import {
+  existsSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+  unlinkSync,
+} from "node:fs";
 import { join, resolve } from "node:path";
 import {
   hasSentryInit,
@@ -24,6 +30,7 @@ import {
   hasInlineContextListBuilding,
   hasLabeledEntityIdInContext,
   hasBareEntityIdInContext,
+  hasInlinedElaineLessonsMock,
   extractSharedLibImports,
   extractPlannerToolCatalogImports,
   checkRequirementContents,
@@ -50,6 +57,22 @@ import {
   extractActionTypeDiscriminants,
   extractActionToolNamesFromCatalogSection,
   extractStringArrayExport,
+  extractUniversalReadDispatchBody,
+  findUniversalReadDispatchGaps,
+  stripSourceComments,
+  stripSimpleStringLiterals,
+  stripTemplateLiterals,
+  stripAllStringLiteralContent,
+  KNOWN_EXECUTOR_PREFIXES,
+  extractPolicyRowExecutorPrefixes,
+  findPhantomExecutorPrefixes,
+  scanNViolations,
+  hasInlineSentryMock,
+  hasInlineRateLimitMock,
+  ACTION_CLASS_EXECUTOR_MAP,
+  extractActionExecutorSpreads,
+  findStaleActionClassPrefixes,
+  scanOViolations,
 } from "./check-domain-composition.js";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -562,8 +585,104 @@ function runScript() {
   });
 }
 
+/**
+ * All known temp fixture paths that integration tests write into the workspace.
+ * Kept as a module-level constant so cleanupKnownTempFixtures and
+ * runScriptExpectingZero share a single source of truth.
+ */
+const KNOWN_TEMP_FIXTURES: string[] = [
+  join(root, "artifacts/modules/src/_temp_composition_guard_test_fixture.ts"),
+  join(
+    root,
+    "artifacts/api-server/src/routes/_temp_composition_guard_test_b_fixture.ts",
+  ),
+  join(
+    root,
+    "artifacts/modules/src/_temp_composition_guard_test_c_fixture.tsx",
+  ),
+  join(
+    root,
+    "artifacts/modules/src/_temp_composition_guard_test_f_fixture.tsx",
+  ),
+  join(
+    root,
+    "artifacts/api-server/src/elaine/_temp_composition_guard_test_g_value_fixture.test.ts",
+  ),
+  join(
+    root,
+    "artifacts/api-server/src/elaine/_temp_composition_guard_test_g_fixture.test.ts",
+  ),
+  join(
+    root,
+    "artifacts/api-server/src/elaine/_temp_composition_guard_test_g_inline_fixture.test.ts",
+  ),
+  join(
+    root,
+    "artifacts/api-server/src/elaine/_temp-composition-guard-test-j-actions.ts",
+  ),
+  join(
+    root,
+    "artifacts/api-server/src/elaine/_temp-composition-guard-test-j-inline-actions.ts",
+  ),
+  join(
+    root,
+    "artifacts/api-server/src/elaine/_temp_composition_guard_test_runtime_fixture.test.ts",
+  ),
+  join(
+    root,
+    "artifacts/api-server/src/elaine/_temp_composition_guard_test_scan_o_fixture.test.ts",
+  ),
+  // Scan O action-executor e2e: a temp copy of index.ts with a stale spread injected.
+  // Written to a temp path and supplied to the script via CHECK_DOMAIN_SCAN_O_INDEX_PATH
+  // so the real index.ts is never mutated.
+  join(
+    root,
+    "artifacts/api-server/src/elaine/_temp_scan_o_action_executor_index_fixture.ts",
+  ),
+];
+
+/**
+ * Delete every known temp fixture file that integration tests write to the
+ * workspace, optionally skipping files the caller owns for this test run.
+ * These files are normally cleaned up by each test's finally block, but a
+ * concurrent task's CI run can leave them behind.
+ */
+function cleanupKnownTempFixtures(
+  preserve: ReadonlySet<string> = new Set(),
+): void {
+  for (const p of KNOWN_TEMP_FIXTURES) {
+    if (preserve.has(p)) continue;
+    try {
+      unlinkSync(p);
+    } catch {
+      // already gone — fine
+    }
+  }
+}
+
+/**
+ * Run the check-domain-composition script and expect exit 0.
+ *
+ * In concurrent CI environments another task's integration tests may create a
+ * temp fixture between our cleanup call and the spawnSync call, causing a false
+ * non-zero exit.  This helper retries once — re-cleaning and re-running —
+ * before returning the final result.  Pass `preservedFiles` for any temp
+ * fixtures the caller deliberately wrote and wants to keep across the retry.
+ */
+function runScriptExpectingZero(
+  preservedFiles: string[] = [],
+): ReturnType<typeof runScript> {
+  const preserve = new Set(preservedFiles);
+  cleanupKnownTempFixtures(preserve);
+  const first = runScript();
+  if (first.status === 0) return first;
+  // First attempt failed — clean up any concurrently-created fixtures and retry.
+  cleanupKnownTempFixtures(preserve);
+  return runScript();
+}
+
 test("script exits 0 against the real (clean) repo", () => {
-  const result = runScript();
+  const result = runScriptExpectingZero();
   if (result.status !== 0) {
     const stderr = result.stderr?.trim() ?? "";
     const stdout = result.stdout?.trim() ?? "";
@@ -1924,7 +2043,9 @@ test("script exits 0 when SOFT_TOOLS mock uses real imported-action tool names (
     "utf8",
   );
   try {
-    const result = runScript();
+    // runScriptExpectingZero retries once if a concurrent CI run left a stale
+    // temp fixture, while preserving our own fixture.
+    const result = runScriptExpectingZero([TEMP_STALE_INLINE_TOOL_FILE]);
     assert.equal(
       result.status,
       0,
@@ -2484,7 +2605,8 @@ test("script exits 0 when a *-actions.ts file in the elaine dir has NO *_TOOL_NA
     "utf8",
   );
   try {
-    const result = runScript();
+    // runScriptExpectingZero cleans + retries once while preserving our fixture.
+    const result = runScriptExpectingZero([TEMP_UNENROLLED_ACTIONS_FILE]);
     assert.equal(
       result.status,
       0,
@@ -3349,7 +3471,9 @@ test("script exits 0 when ./runtime mock provides all required exports", () => {
     "utf8",
   );
   try {
-    const result = runScript();
+    // runScriptExpectingZero retries once if a concurrent CI run left a stale
+    // temp fixture, while preserving our own fixture.
+    const result = runScriptExpectingZero([TEMP_RUNTIME_MOCK_VIOLATION_FILE]);
     assert.equal(
       result.status,
       0,
@@ -3361,6 +3485,55 @@ test("script exits 0 when ./runtime mock provides all required exports", () => {
     } catch {
       // best-effort cleanup
     }
+  }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Integration — Scan L: uncovered runtime import exits non-zero
+//
+// Scan L reads the real index.ts and verifies that every non-type named import
+// from ./runtime is present in RUNTIME_REQUIRED_EXPORTS.  The unit test
+// "RUNTIME_REQUIRED_EXPORTS flags a synthetic uncovered import" (above) verifies
+// the detection logic in isolation; THIS integration test verifies that the full
+// script exits non-zero when the failure mode actually occurs — i.e. when a
+// developer adds a new export to the runtime module and imports it in index.ts
+// but forgets to update RUNTIME_REQUIRED_EXPORTS.
+// ────────────────────────────────────────────────────────────────────────────
+
+console.log(
+  "\ncheck-domain-composition.test: Integration — Scan L: uncovered runtime import",
+);
+
+test("script exits non-zero when index.ts imports a name from ./runtime that is not in RUNTIME_REQUIRED_EXPORTS", () => {
+  // Strategy: temporarily append a fake import from ./runtime to the real
+  // elaine/index.ts.  Scan L will read the file, find FAKE_RUNTIME_EXPORT_SCAN_L
+  // is absent from RUNTIME_REQUIRED_EXPORTS, and emit a violation → non-zero exit.
+  // The file is always restored in the finally block.
+  const indexPath = join(root, "artifacts/api-server/src/elaine/index.ts");
+  const original = readFileSync(indexPath, "utf8");
+  // Append a fake import that will not match any RUNTIME_REQUIRED_EXPORTS entry.
+  const modified =
+    original +
+    "\n// Temporary test fixture — injected by check-domain-composition.test.ts\n" +
+    'import { FAKE_RUNTIME_EXPORT_SCAN_L } from "./runtime";\n';
+  writeFileSync(indexPath, modified, "utf8");
+  try {
+    const result = runScript();
+    assert.notEqual(
+      result.status,
+      0,
+      `Expected non-zero exit when index.ts imports FAKE_RUNTIME_EXPORT_SCAN_L ` +
+        `(a name absent from RUNTIME_REQUIRED_EXPORTS), but script exited ${result.status}.\n` +
+        `stdout: ${result.stdout}\nstderr: ${result.stderr}`,
+    );
+    // Confirm the violation message names the uncovered import.
+    const output = result.stdout + result.stderr;
+    assert.ok(
+      output.includes("FAKE_RUNTIME_EXPORT_SCAN_L"),
+      `Violation message should name "FAKE_RUNTIME_EXPORT_SCAN_L" as uncovered.\nOutput: ${output}`,
+    );
+  } finally {
+    writeFileSync(indexPath, original, "utf8");
   }
 });
 
@@ -3771,44 +3944,7 @@ test("script exits 0 when the clean repo has all action types covered (Scan J)",
   // This is already verified by the general "script exits 0 against the real
   // (clean) repo" test.  This specific test documents which scan is responsible
   // and provides a labelled assertion for debugging.
-  //
-  // Guard: delete any temp fixture files that a previous aborted validation run
-  // may have left on disk, so stale violations don't cause a false failure here.
-  const knownTempFixtures = [
-    join(root, "artifacts/modules/src/_temp_composition_guard_test_fixture.ts"),
-    join(
-      root,
-      "artifacts/api-server/src/routes/_temp_composition_guard_test_b_fixture.ts",
-    ),
-    join(
-      root,
-      "artifacts/modules/src/_temp_composition_guard_test_c_fixture.tsx",
-    ),
-    join(
-      root,
-      "artifacts/modules/src/_temp_composition_guard_test_f_fixture.tsx",
-    ),
-    join(
-      root,
-      "artifacts/api-server/src/elaine/_temp_composition_guard_test_g_value_fixture.test.ts",
-    ),
-    join(
-      root,
-      "artifacts/api-server/src/elaine/_temp_composition_guard_test_g_fixture.test.ts",
-    ),
-    join(
-      root,
-      "artifacts/api-server/src/elaine/_temp_composition_guard_test_g_inline_fixture.test.ts",
-    ),
-  ];
-  for (const p of knownTempFixtures) {
-    try {
-      unlinkSync(p);
-    } catch {
-      // already gone — fine
-    }
-  }
-  const result = runScript();
+  const result = runScriptExpectingZero();
   if (result.status !== 0) {
     const output = result.stdout + result.stderr;
     throw new Error(
@@ -3816,6 +3952,1604 @@ test("script exits 0 when the clean repo has all action types covered (Scan J)",
     );
   }
   assert.equal(result.status, 0);
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Scan M — universal-read-tools.ts dispatch completeness
+// ────────────────────────────────────────────────────────────────────────────
+
+console.log(
+  "\ncheck-domain-composition.test: Scan M — universal-read-tools dispatch gaps",
+);
+
+// ── stripSourceComments ───────────────────────────────────────────────────────
+
+console.log(
+  "\ncheck-domain-composition.test: Scan M helpers — stripSourceComments",
+);
+
+test("stripSourceComments removes a line comment", () => {
+  const source = `const x = 1; // this is a comment`;
+  assert.ok(!stripSourceComments(source).includes("this is a comment"));
+  assert.ok(stripSourceComments(source).includes("const x = 1;"));
+});
+
+test("stripSourceComments removes a block comment", () => {
+  const source = `const x = /* block comment */ 1;`;
+  assert.ok(!stripSourceComments(source).includes("block comment"));
+  assert.ok(stripSourceComments(source).includes("const x ="));
+});
+
+test("stripSourceComments preserves newlines when stripping block comments", () => {
+  const source = `line1\n/* multi\nline\ncomment */\nline2`;
+  const stripped = stripSourceComments(source);
+  assert.equal(
+    stripped.split("\n").length,
+    source.split("\n").length,
+    "line count must be preserved",
+  );
+  assert.ok(stripped.includes("line1"));
+  assert.ok(stripped.includes("line2"));
+});
+
+test("stripSourceComments removes a line comment that mentions a dispatch pattern", () => {
+  // This is the key false-negative case: a commented-out branch must NOT
+  // satisfy the dispatch check.
+  const source = `// if (name === GET_NOTE_TOOL_NAME) { return "note"; }`;
+  const stripped = stripSourceComments(source);
+  assert.ok(
+    !stripped.includes("name === GET_NOTE_TOOL_NAME"),
+    "the dispatch pattern must not appear after comment stripping",
+  );
+});
+
+// ── stripSimpleStringLiterals ─────────────────────────────────────────────────
+
+console.log(
+  "\ncheck-domain-composition.test: Scan M helpers — stripSimpleStringLiterals",
+);
+
+test("stripSimpleStringLiterals blanks double-quoted string content", () => {
+  const source = `const x = "hello {world}";`;
+  const stripped = stripSimpleStringLiterals(source);
+  assert.ok(
+    !stripped.includes("{world}"),
+    "brace inside string must be blanked",
+  );
+  // Content is replaced with spaces (not removed entirely), so quote chars remain
+  // but the string is NOT collapsed to "". Check delimiters are present and
+  // the brace is gone.
+  assert.ok(stripped.includes('"'), "quote delimiters must still be present");
+  assert.ok(!stripped.includes("{"), "braces must not appear after stripping");
+});
+
+test("stripSimpleStringLiterals blanks single-quoted string content", () => {
+  const source = `const x = '{unclosed';`;
+  const stripped = stripSimpleStringLiterals(source);
+  assert.ok(
+    !stripped.includes("{unclosed"),
+    "brace inside single-quoted string must be blanked",
+  );
+});
+
+test("stripSimpleStringLiterals handles escaped quotes inside strings", () => {
+  const source = `const x = "he said \\"hello {world}\\"";`;
+  const stripped = stripSimpleStringLiterals(source);
+  assert.ok(!stripped.includes("{world}"));
+});
+
+// ── stripTemplateLiterals ─────────────────────────────────────────────────────
+
+console.log(
+  "\ncheck-domain-composition.test: Scan M helpers — stripTemplateLiterals",
+);
+
+test("stripTemplateLiterals blanks template literal content", () => {
+  const source = "const x = `name === FOO_TOOL_NAME`;";
+  const stripped = stripTemplateLiterals(source);
+  assert.ok(
+    !stripped.includes("FOO_TOOL_NAME"),
+    "content inside backtick string must be blanked",
+  );
+  assert.ok(stripped.includes("`"), "backtick delimiters must remain");
+});
+
+test("stripTemplateLiterals blanks curly braces inside template literals", () => {
+  const source = "const x = `hello {world}`;";
+  const stripped = stripTemplateLiterals(source);
+  assert.ok(!stripped.includes("{world}"));
+});
+
+// ── stripAllStringLiteralContent ──────────────────────────────────────────────
+
+console.log(
+  "\ncheck-domain-composition.test: Scan M helpers — stripAllStringLiteralContent",
+);
+
+test("stripAllStringLiteralContent strips double-quoted, single-quoted, and template literals", () => {
+  const source = `
+    const a = "name === FOO_TOOL_NAME";
+    const b = 'name === BAR_TOOL_NAME';
+    const c = \`name === BAZ_TOOL_NAME\`;
+  `;
+  const stripped = stripAllStringLiteralContent(source);
+  assert.ok(
+    !stripped.includes("FOO_TOOL_NAME"),
+    "double-quoted content stripped",
+  );
+  assert.ok(
+    !stripped.includes("BAR_TOOL_NAME"),
+    "single-quoted content stripped",
+  );
+  assert.ok(
+    !stripped.includes("BAZ_TOOL_NAME"),
+    "template literal content stripped",
+  );
+});
+
+// ── extractUniversalReadDispatchBody ─────────────────────────────────────────
+
+console.log(
+  "\ncheck-domain-composition.test: Scan M — extractUniversalReadDispatchBody",
+);
+
+test("extractUniversalReadDispatchBody returns null when function is absent", () => {
+  assert.equal(extractUniversalReadDispatchBody("const x = 1;"), null);
+});
+
+test("extractUniversalReadDispatchBody returns null on empty source", () => {
+  assert.equal(extractUniversalReadDispatchBody(""), null);
+});
+
+test("extractUniversalReadDispatchBody extracts a simple function body", () => {
+  const source = `
+export async function executeUniversalReadTool(
+  name: string,
+  args: string,
+  userId: number,
+): Promise<string | null> {
+  if (name === FOO_TOOL_NAME) { return "foo"; }
+  return null;
+}
+`;
+  const body = extractUniversalReadDispatchBody(source);
+  assert.notEqual(body, null, "expected a non-null body");
+  assert.ok(body!.startsWith("{"), "body should start with {");
+  assert.ok(body!.endsWith("}"), "body should end with }");
+  assert.ok(
+    body!.includes("FOO_TOOL_NAME"),
+    "body should contain FOO_TOOL_NAME",
+  );
+  assert.ok(body!.includes("return null;"), "body should contain return null");
+});
+
+test("extractUniversalReadDispatchBody handles nested braces correctly", () => {
+  const source = `
+export async function executeUniversalReadTool(name: string, args: string, userId: number): Promise<string | null> {
+  if (name === LIST_NOTES_TOOL_NAME) {
+    const notes = await listOfficeNotes();
+    return JSON.stringify({ notes, returned: notes.length });
+  }
+  return null;
+}
+`;
+  const body = extractUniversalReadDispatchBody(source);
+  assert.notEqual(body, null);
+  assert.ok(body!.includes("LIST_NOTES_TOOL_NAME"));
+  assert.ok(body!.includes("listOfficeNotes"));
+});
+
+test("extractUniversalReadDispatchBody is not corrupted by braces inside string literals", () => {
+  // A string literal like JSON.parse(args || "{}") contains balancing braces
+  // that must NOT shift the depth counter and truncate the body early.
+  const source = `
+export async function executeUniversalReadTool(name: string, args: string, userId: number): Promise<string | null> {
+  const input = JSON.parse(args || "{}") as unknown;
+  if (name === LIST_NOTES_TOOL_NAME) { return "notes"; }
+  return null;
+}
+`;
+  const body = extractUniversalReadDispatchBody(source);
+  assert.notEqual(body, null);
+  // The body must include the dispatch branch that comes AFTER the string literal.
+  assert.ok(
+    body!.includes("LIST_NOTES_TOOL_NAME"),
+    "body must extend past the string-literal brace pair",
+  );
+});
+
+// ── findUniversalReadDispatchGaps ────────────────────────────────────────────
+
+console.log(
+  "\ncheck-domain-composition.test: Scan M — findUniversalReadDispatchGaps",
+);
+
+test("findUniversalReadDispatchGaps returns empty map when constant dispatched by reference", () => {
+  const source = `
+export const LIST_NOTES_TOOL_NAME = "list_notes";
+export async function executeUniversalReadTool(name: string, args: string, userId: number): Promise<string | null> {
+  if (name === LIST_NOTES_TOOL_NAME) { return "notes"; }
+  return null;
+}
+`;
+  const gaps = findUniversalReadDispatchGaps(source);
+  assert.equal(gaps.size, 0);
+});
+
+test("findUniversalReadDispatchGaps reports a gap when constant is dispatched only by string literal (reference form is required)", () => {
+  // The string-literal dispatch form (`name === "value"`) is intentionally NOT
+  // supported — it is indistinguishable from a pattern embedded in an error
+  // message or log string after necessary string stripping.  Dispatch branches
+  // must always reference the exported constant name.
+  const source = `
+export const LIST_NOTES_TOOL_NAME = "list_notes";
+export async function executeUniversalReadTool(name: string, args: string, userId: number): Promise<string | null> {
+  if (name === "list_notes") { return "notes"; }
+  return null;
+}
+`;
+  const gaps = findUniversalReadDispatchGaps(source);
+  assert.equal(
+    gaps.size,
+    1,
+    "string-literal-only dispatch must NOT satisfy the check; constant reference is required",
+  );
+  assert.ok(gaps.has("LIST_NOTES_TOOL_NAME"));
+});
+
+test("findUniversalReadDispatchGaps detects a constant absent from the dispatch function", () => {
+  const source = `
+export const LIST_NOTES_TOOL_NAME = "list_notes";
+export const GET_NOTE_TOOL_NAME = "get_note";
+export async function executeUniversalReadTool(name: string, args: string, userId: number): Promise<string | null> {
+  if (name === LIST_NOTES_TOOL_NAME) { return "notes"; }
+  return null;
+}
+`;
+  const gaps = findUniversalReadDispatchGaps(source);
+  assert.equal(gaps.size, 1, "expected exactly one gap");
+  assert.ok(
+    gaps.has("GET_NOTE_TOOL_NAME"),
+    "GET_NOTE_TOOL_NAME should be reported as missing",
+  );
+  assert.equal(gaps.get("GET_NOTE_TOOL_NAME"), "get_note");
+});
+
+test("findUniversalReadDispatchGaps does NOT pass when dispatch is only in a line comment", () => {
+  // A commented-out branch must NOT satisfy the check — this is the key
+  // false-negative the comment-stripping was introduced to prevent.
+  const source = `
+export const GET_NOTE_TOOL_NAME = "get_note";
+export async function executeUniversalReadTool(name: string, args: string, userId: number): Promise<string | null> {
+  // if (name === GET_NOTE_TOOL_NAME) { return "note"; }
+  return null;
+}
+`;
+  const gaps = findUniversalReadDispatchGaps(source);
+  assert.equal(
+    gaps.size,
+    1,
+    "a commented-out dispatch branch must not satisfy the check",
+  );
+  assert.ok(gaps.has("GET_NOTE_TOOL_NAME"));
+});
+
+test("findUniversalReadDispatchGaps does NOT pass when dispatch is only in a block comment", () => {
+  const source = `
+export const GET_NOTE_TOOL_NAME = "get_note";
+export async function executeUniversalReadTool(name: string, args: string, userId: number): Promise<string | null> {
+  /* name === GET_NOTE_TOOL_NAME is handled somewhere else */
+  return null;
+}
+`;
+  const gaps = findUniversalReadDispatchGaps(source);
+  assert.equal(
+    gaps.size,
+    1,
+    "a block-comment reference must not satisfy the check",
+  );
+  assert.ok(gaps.has("GET_NOTE_TOOL_NAME"));
+});
+
+test("findUniversalReadDispatchGaps reports all constants when dispatch function is absent", () => {
+  // If executeUniversalReadTool is missing entirely, every constant is a gap.
+  const source = `
+export const LIST_NOTES_TOOL_NAME = "list_notes";
+export const GET_NOTE_TOOL_NAME = "get_note";
+// No executeUniversalReadTool defined.
+`;
+  const gaps = findUniversalReadDispatchGaps(source);
+  assert.equal(gaps.size, 2, "expected both constants to be flagged");
+  assert.ok(gaps.has("LIST_NOTES_TOOL_NAME"));
+  assert.ok(gaps.has("GET_NOTE_TOOL_NAME"));
+});
+
+test("findUniversalReadDispatchGaps returns empty map when file has no *_TOOL_NAME exports", () => {
+  const source = `
+export async function executeUniversalReadTool(name: string, args: string, userId: number): Promise<string | null> {
+  return null;
+}
+`;
+  const gaps = findUniversalReadDispatchGaps(source);
+  assert.equal(gaps.size, 0);
+});
+
+test("real universal-read-tools.ts has 0 dispatch gaps", () => {
+  const filePath = resolve(
+    import.meta.dirname,
+    "../../artifacts/api-server/src/elaine/universal-read-tools.ts",
+  );
+  const source = readFileSync(filePath, "utf8");
+  const gaps = findUniversalReadDispatchGaps(source);
+  assert.equal(
+    gaps.size,
+    0,
+    `Expected 0 gaps in the real universal-read-tools.ts but found: ${[...gaps.keys()].join(", ")}`,
+  );
+});
+
+// ── Negative tests: false-negative patterns that must NOT satisfy the check ──
+
+console.log(
+  "\ncheck-domain-composition.test: Scan M — false-negative guard tests",
+);
+
+test("findUniversalReadDispatchGaps does NOT pass when pattern is inside a template literal", () => {
+  // A template literal like `throw new Error(\`name === FOO_TOOL_NAME\`)` must
+  // NOT be treated as a real dispatch branch.
+  const source = `
+export const GET_NOTE_TOOL_NAME = "get_note";
+export async function executeUniversalReadTool(name: string, args: string, userId: number): Promise<string | null> {
+  throw new Error(\`name === GET_NOTE_TOOL_NAME has no handler yet\`);
+}
+`;
+  const gaps = findUniversalReadDispatchGaps(source);
+  assert.equal(
+    gaps.size,
+    1,
+    "pattern inside a template literal must not satisfy the dispatch check",
+  );
+  assert.ok(gaps.has("GET_NOTE_TOOL_NAME"));
+});
+
+test("findUniversalReadDispatchGaps does NOT pass when pattern is inside a string literal", () => {
+  // A string literal like `throw new Error("name === FOO_TOOL_NAME is missing")`
+  // must NOT be treated as a real dispatch branch.
+  const source = `
+export const GET_NOTE_TOOL_NAME = "get_note";
+export async function executeUniversalReadTool(name: string, args: string, userId: number): Promise<string | null> {
+  throw new Error("name === GET_NOTE_TOOL_NAME has no handler yet");
+}
+`;
+  const gaps = findUniversalReadDispatchGaps(source);
+  assert.equal(
+    gaps.size,
+    1,
+    "pattern inside a string literal must not satisfy the dispatch check",
+  );
+  assert.ok(gaps.has("GET_NOTE_TOOL_NAME"));
+});
+
+test("findUniversalReadDispatchGaps does NOT pass when a non-name identifier precedes the comparator", () => {
+  // `toolname === FOO_TOOL_NAME` must not match — word boundary on `name` is required.
+  const source = `
+export const GET_NOTE_TOOL_NAME = "get_note";
+export async function executeUniversalReadTool(name: string, args: string, userId: number): Promise<string | null> {
+  if (toolname === GET_NOTE_TOOL_NAME) { return "note"; }
+  return null;
+}
+`;
+  const gaps = findUniversalReadDispatchGaps(source);
+  assert.equal(
+    gaps.size,
+    1,
+    "`toolname === CONST` must not satisfy the check; word boundary on `name` required",
+  );
+  assert.ok(gaps.has("GET_NOTE_TOOL_NAME"));
+});
+
+// ── Integration: script exits non-zero for an undispatched constant ───────────
+
+console.log(
+  "\ncheck-domain-composition.test: Scan M — integration exit-code test",
+);
+
+test("script exits non-zero when a *_TOOL_NAME constant in universal-read-tools.ts has no dispatch branch (Scan M)", () => {
+  // Temporarily inject an extra exported constant that has no dispatch branch.
+  // Uses the real file (not a separate fixture) so Scan M's fixed path is hit.
+  const filePath = resolve(
+    import.meta.dirname,
+    "../../artifacts/api-server/src/elaine/universal-read-tools.ts",
+  );
+  const original = readFileSync(filePath, "utf8");
+  // Inject a new export at the top of the constant block.
+  const modified = original.replace(
+    /^(export const [A-Z][A-Z0-9_]*_TOOL_NAME\s*=)/m,
+    'export const TEMP_UNDISPATCHED_XYZZY_TOOL_NAME = "temp_undispatched_xyzzy";\n$1',
+  );
+  // Guard: if the injection didn't work, skip rather than give a false pass.
+  assert.ok(
+    modified !== original,
+    "precondition: injection into universal-read-tools.ts must produce a changed file",
+  );
+  writeFileSync(filePath, modified, "utf8");
+  try {
+    const result = spawnSync(
+      "node",
+      ["--import", "tsx", "./src/check-domain-composition.ts"],
+      { cwd: join(import.meta.dirname, ".."), encoding: "utf8" },
+    );
+    assert.notEqual(
+      result.status,
+      0,
+      "script must exit non-zero when an undispatched *_TOOL_NAME constant is present",
+    );
+    const output = (result.stdout ?? "") + (result.stderr ?? "");
+    assert.ok(
+      output.includes("TEMP_UNDISPATCHED_XYZZY_TOOL_NAME"),
+      `violation message must name the undispatched constant; got: ${output.slice(0, 400)}`,
+    );
+  } finally {
+    writeFileSync(filePath, original, "utf8");
+  }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Scan N — extractPolicyRowExecutorPrefixes / findPhantomExecutorPrefixes
+// ────────────────────────────────────────────────────────────────────────────
+
+console.log(
+  "\ncheck-domain-composition.test: Scan N — POLICY_ROWS → executor prefix cross-check",
+);
+
+// extractPolicyRowExecutorPrefixes tests
+
+test("extractPolicyRowExecutorPrefixes: extracts a single prefix from a one-call policy block", () => {
+  const source = `...policies(["create_trip"], { executorPrefix: 'travelAction' })`;
+  const result = extractPolicyRowExecutorPrefixes(source);
+  assert.deepEqual(result, ["travelAction"]);
+});
+
+test("extractPolicyRowExecutorPrefixes: extracts multiple distinct prefixes from multiple policies() calls", () => {
+  const source = [
+    `...policies(["create_trip"], { executorPrefix: "travelAction" }),`,
+    `...policies(["update_pottery_item"], { executorPrefix: "potteryAction" }),`,
+  ].join("\n");
+  const result = extractPolicyRowExecutorPrefixes(source);
+  assert.ok(result.includes("travelAction"), "should include travelAction");
+  assert.ok(result.includes("potteryAction"), "should include potteryAction");
+  assert.equal(result.length, 2);
+});
+
+test("extractPolicyRowExecutorPrefixes: deduplicates the same prefix used across multiple calls", () => {
+  const source = [
+    `...policies(["update_pottery_item"], { executorPrefix: "potteryAction" }),`,
+    `...policies(["add_photo_to_pottery"], { executorPrefix: "potteryAction", channels: ["web"] }),`,
+  ].join("\n");
+  const result = extractPolicyRowExecutorPrefixes(source);
+  assert.equal(
+    result.filter((p) => p === "potteryAction").length,
+    1,
+    "potteryAction should appear exactly once",
+  );
+  assert.equal(result.length, 1);
+});
+
+test("extractPolicyRowExecutorPrefixes: handles single-quoted prefix values", () => {
+  const source = `...policies(["list_reminders"], { executorPrefix: 'reminderRead' })`;
+  const result = extractPolicyRowExecutorPrefixes(source);
+  assert.deepEqual(result, ["reminderRead"]);
+});
+
+test("extractPolicyRowExecutorPrefixes: handles multi-line policy block syntax", () => {
+  const source = [
+    "...policies(",
+    '  ["create_trip", "cancel_trip"],',
+    "  {",
+    "    ...ACTION_DEFAULTS,",
+    "    domain: 'travels',",
+    "    executorPrefix: 'travelAction',",
+    "  },",
+    "),",
+  ].join("\n");
+  const result = extractPolicyRowExecutorPrefixes(source);
+  assert.deepEqual(result, ["travelAction"]);
+});
+
+test("extractPolicyRowExecutorPrefixes: returns empty array when no executorPrefix values are present", () => {
+  const source = `const x = { kind: "action", risk: "medium", domain: "travels" };`;
+  assert.deepEqual(extractPolicyRowExecutorPrefixes(source), []);
+});
+
+test("extractPolicyRowExecutorPrefixes: returns empty array for empty source", () => {
+  assert.deepEqual(extractPolicyRowExecutorPrefixes(""), []);
+});
+
+test("extractPolicyRowExecutorPrefixes: does not capture unrelated quoted camelCase strings", () => {
+  // Keys like "kind", "auth", "domain" that happen to be quoted in the defaults
+  // object must not be mistaken for executor prefixes.
+  const source = [
+    `...policies(["create_trip"], {`,
+    `  kind: "action",`,
+    `  domain: "travels",`,
+    `  executorPrefix: "travelAction",`,
+    `}),`,
+  ].join("\n");
+  const result = extractPolicyRowExecutorPrefixes(source);
+  assert.deepEqual(result, ["travelAction"]);
+});
+
+// findPhantomExecutorPrefixes tests
+
+test("findPhantomExecutorPrefixes: returns empty array when all prefixes are known", () => {
+  const known = new Set(["travelAction", "potteryAction", "reminderRead"]);
+  assert.deepEqual(
+    findPhantomExecutorPrefixes(
+      ["travelAction", "potteryAction", "reminderRead"],
+      known,
+    ),
+    [],
+  );
+});
+
+test("findPhantomExecutorPrefixes: returns phantom prefixes not in the known set", () => {
+  const known = new Set(["travelAction", "potteryAction"]);
+  const result = findPhantomExecutorPrefixes(
+    ["travelAction", "potteryAction", "ghostExecutor"],
+    known,
+  );
+  assert.deepEqual(result, ["ghostExecutor"]);
+});
+
+test("findPhantomExecutorPrefixes: returns all prefixes when none are known", () => {
+  const result = findPhantomExecutorPrefixes(["prefixA", "prefixB"], new Set());
+  assert.deepEqual(result.sort(), ["prefixA", "prefixB"]);
+});
+
+test("findPhantomExecutorPrefixes: returns empty array for empty policy prefix list", () => {
+  const known = new Set(["travelAction"]);
+  assert.deepEqual(findPhantomExecutorPrefixes([], known), []);
+});
+
+test("findPhantomExecutorPrefixes: returns empty array when both inputs are empty", () => {
+  assert.deepEqual(findPhantomExecutorPrefixes([], new Set()), []);
+});
+
+test("findPhantomExecutorPrefixes: only reports each phantom once", () => {
+  const known = new Set(["travelAction"]);
+  const result = findPhantomExecutorPrefixes(
+    ["travelAction", "unknownPrefix"],
+    known,
+  );
+  assert.equal(result.length, 1);
+  assert.ok(result.includes("unknownPrefix"));
+});
+
+// KNOWN_EXECUTOR_PREFIXES sanity checks
+
+test("KNOWN_EXECUTOR_PREFIXES: contains every prefix used in the real capability-registry.ts", () => {
+  const source = readFileSync(
+    resolve(
+      import.meta.dirname,
+      "../../artifacts/api-server/src/elaine/capability-registry.ts",
+    ),
+    "utf8",
+  );
+  const extracted = extractPolicyRowExecutorPrefixes(source);
+  assert.ok(
+    extracted.length > 0,
+    "extractPolicyRowExecutorPrefixes should find at least one prefix in capability-registry.ts",
+  );
+  const phantoms = findPhantomExecutorPrefixes(
+    extracted,
+    KNOWN_EXECUTOR_PREFIXES,
+  );
+  assert.deepEqual(
+    phantoms,
+    [],
+    `Real capability-registry.ts uses executor prefix(es) not in KNOWN_EXECUTOR_PREFIXES: ${phantoms.join(", ")}. ` +
+      "Add each to KNOWN_EXECUTOR_PREFIXES in check-domain-composition.ts.",
+  );
+});
+
+test("KNOWN_EXECUTOR_PREFIXES: all entries are camelCase strings starting with a lowercase letter", () => {
+  const CAMEL_RE = /^[a-z][a-zA-Z0-9]*$/;
+  for (const prefix of KNOWN_EXECUTOR_PREFIXES) {
+    assert.ok(
+      CAMEL_RE.test(prefix),
+      `KNOWN_EXECUTOR_PREFIXES entry "${prefix}" does not look like a camelCase executor prefix`,
+    );
+  }
+});
+
+// scanNViolations end-to-end tests (pure helper, no filesystem mutation)
+
+test("scanNViolations: returns empty array when all policy prefixes are known", () => {
+  const source = [
+    `...policies(["create_trip"], { executorPrefix: "travelAction" }),`,
+    `...policies(["update_trip"], { executorPrefix: "travelAction" }),`,
+  ].join("\n");
+  const violations = scanNViolations(
+    source,
+    new Set(["travelAction"]),
+    "fake/path.ts",
+  );
+  assert.deepEqual(violations, []);
+});
+
+test("scanNViolations: returns a violation string naming the phantom prefix", () => {
+  const source = `...policies(["create_trip"], { executorPrefix: "ghostPrefix" })`;
+  const violations = scanNViolations(
+    source,
+    new Set(["travelAction", "potteryAction"]),
+    "fake/capability-registry.ts",
+  );
+  assert.equal(violations.length, 1, "expected exactly one violation");
+  assert.ok(
+    violations[0].includes("ghostPrefix"),
+    `violation must name the phantom prefix; got: ${violations[0].slice(0, 200)}`,
+  );
+  assert.ok(
+    violations[0].includes("FIX:"),
+    "violation must include a FIX: clause",
+  );
+  assert.ok(
+    violations[0].includes("fake/capability-registry.ts"),
+    "violation must include the file path",
+  );
+});
+
+test("scanNViolations: names all phantom prefixes when multiple are present", () => {
+  const source = [
+    `...policies(["a"], { executorPrefix: "travelAction" }),`,
+    `...policies(["b"], { executorPrefix: "phantomOne" }),`,
+    `...policies(["c"], { executorPrefix: "phantomTwo" }),`,
+  ].join("\n");
+  const violations = scanNViolations(
+    source,
+    new Set(["travelAction"]),
+    "fake/path.ts",
+  );
+  assert.equal(violations.length, 1);
+  assert.ok(violations[0].includes("phantomOne"), "must name phantomOne");
+  assert.ok(violations[0].includes("phantomTwo"), "must name phantomTwo");
+  assert.ok(
+    !violations[0].includes("travelAction"),
+    "must not name the known prefix",
+  );
+});
+
+test("scanNViolations: returns empty array for source with no executorPrefix fields", () => {
+  const source = `const x = { kind: "read", domain: "travels" };`;
+  const violations = scanNViolations(source, new Set(["travelAction"]), "p.ts");
+  assert.deepEqual(violations, []);
+});
+
+test("scanNViolations: real capability-registry.ts produces no violations against KNOWN_EXECUTOR_PREFIXES", () => {
+  const source = readFileSync(
+    resolve(
+      import.meta.dirname,
+      "../../artifacts/api-server/src/elaine/capability-registry.ts",
+    ),
+    "utf8",
+  );
+  const violations = scanNViolations(
+    source,
+    KNOWN_EXECUTOR_PREFIXES,
+    "capability-registry.ts",
+  );
+  assert.deepEqual(
+    violations,
+    [],
+    `Scan N found unexpected violations in the real repo:\n${violations.join("\n")}`,
+  );
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Scan I — hasInlinedElaineLessonsMock
+// ────────────────────────────────────────────────────────────────────────────
+
+console.log(
+  "\ncheck-domain-composition.test: Scan I — hasInlinedElaineLessonsMock",
+);
+
+test("flags a file that vi.mocks elaine-lessons without importing from the scaffold", () => {
+  const source = [
+    'import { describe, it } from "vitest";',
+    'vi.mock("../lib/elaine-lessons", () => ({',
+    "  getRelevantElaineLessons: vi.fn().mockResolvedValue({ lessons: [], evidenceBlock: '' }),",
+    "}));",
+  ].join("\n");
+  assert.equal(hasInlinedElaineLessonsMock(source), true);
+});
+
+test("does not flag a file that vi.mocks elaine-lessons AND imports elaineLessonsMockFactory from the scaffold", () => {
+  const source = [
+    'import { elaineLessonsMockFactory } from "./test-helpers/standard-mock-scaffold";',
+    'vi.mock("../lib/elaine-lessons", () => elaineLessonsMockFactory());',
+  ].join("\n");
+  assert.equal(hasInlinedElaineLessonsMock(source), false);
+});
+
+test("does not flag a file that only mentions getRelevantElaineLessons in a comment", () => {
+  // lesson-prompt-injection.test.ts pattern: string appears only in a comment,
+  // no vi.mock call targeting the module.
+  const source = [
+    "// getRelevantElaineLessons is the real implementation here",
+    'import { recordElaineLesson } from "../lib/elaine-lessons";',
+  ].join("\n");
+  assert.equal(hasInlinedElaineLessonsMock(source), false);
+});
+
+test("does not flag a file that imports from elaine-lessons without vi.mock", () => {
+  // self-heal-pipeline.test.ts pattern: direct import of the real function,
+  // no inline mock factory.
+  const source = [
+    'import { recordElaineLesson } from "../lib/elaine-lessons";',
+    "// no vi.mock call for this module",
+  ].join("\n");
+  assert.equal(hasInlinedElaineLessonsMock(source), false);
+});
+
+test("flags a file using single-quoted vi.mock path without scaffold", () => {
+  const source = [
+    "vi.mock('../lib/elaine-lessons', () => ({",
+    "  getRelevantElaineLessons: vi.fn(),",
+    "}));",
+  ].join("\n");
+  assert.equal(hasInlinedElaineLessonsMock(source), true);
+});
+
+test("flags vi.mock with extra whitespace before the path string", () => {
+  // Whitespace-tolerant regex must catch: vi.mock( "../lib/elaine-lessons", ...
+  const source = [
+    'vi.mock( "../lib/elaine-lessons", () => ({',
+    "  getRelevantElaineLessons: vi.fn().mockResolvedValue({ lessons: [] }),",
+    "}));",
+  ].join("\n");
+  assert.equal(hasInlinedElaineLessonsMock(source), true);
+});
+
+test("does not accept a scaffold path that appears only in a comment", () => {
+  // If the scaffold path is mentioned in a comment but the factory body is
+  // still inline, the file must be flagged.
+  const source = [
+    "// FIX: import elaineLessonsMockFactory from ./test-helpers/standard-mock-scaffold",
+    'vi.mock("../lib/elaine-lessons", () => ({',
+    "  getRelevantElaineLessons: vi.fn(),",
+    "}));",
+  ].join("\n");
+  assert.equal(hasInlinedElaineLessonsMock(source), true);
+});
+
+test("does not accept an unrelated scaffold import paired with an inline lessons mock", () => {
+  // A file that imports a DIFFERENT scaffold helper (e.g. loggerMockFactory)
+  // but still writes an inline elaine-lessons factory must still be flagged.
+  const source = [
+    'import { loggerMockFactory } from "./test-helpers/standard-mock-scaffold";',
+    'vi.mock("../lib/logger", () => loggerMockFactory());',
+    'vi.mock("../lib/elaine-lessons", () => ({',
+    "  getRelevantElaineLessons: vi.fn().mockResolvedValue({ lessons: [] }),",
+    "}));",
+  ].join("\n");
+  assert.equal(hasInlinedElaineLessonsMock(source), true);
+});
+
+test("does not accept elaineLessonsMockFactory appearing only in a later unrelated mock", () => {
+  // The unbounded-regex false-negative: elaineLessonsMockFactory appears after
+  // the elaine-lessons vi.mock but in a completely different mock call.
+  // The detector must be bounded to the specific vi.mock call.
+  const source = [
+    'vi.mock("../lib/elaine-lessons", () => ({',
+    "  getRelevantElaineLessons: vi.fn().mockResolvedValue({ lessons: [] }),",
+    "}));",
+    'vi.mock("../lib/other", () => elaineLessonsMockFactory());',
+  ].join("\n");
+  assert.equal(hasInlinedElaineLessonsMock(source), true);
+});
+
+test("does not accept elaineLessonsMockFactory appearing only in a comment inside the mock", () => {
+  // A comment mentioning the factory name inside the inline mock body must
+  // NOT satisfy the check.
+  const source = [
+    'vi.mock("../lib/elaine-lessons", () => ({',
+    "  // TODO: replace with elaineLessonsMockFactory()",
+    "  getRelevantElaineLessons: vi.fn(),",
+    "}));",
+  ].join("\n");
+  assert.equal(hasInlinedElaineLessonsMock(source), true);
+});
+
+test("does not flag an empty file", () => {
+  assert.equal(hasInlinedElaineLessonsMock(""), false);
+});
+
+test("flags a locally-declared function named elaineLessonsMockFactory (not from scaffold)", () => {
+  // A file can define a local function with the same name to bypass a naive
+  // call-text check.  The import requirement catches this.
+  const source = [
+    "function elaineLessonsMockFactory() {",
+    "  return { getRelevantElaineLessons: vi.fn() };",
+    "}",
+    'vi.mock("../lib/elaine-lessons", () => elaineLessonsMockFactory());',
+  ].join("\n");
+  assert.equal(hasInlinedElaineLessonsMock(source), true);
+});
+
+test("flags elaineLessonsMockFactory imported from an unrelated module", () => {
+  // Importing from a different path should not satisfy the scaffold requirement.
+  const source = [
+    'import { elaineLessonsMockFactory } from "./other-helpers";',
+    'vi.mock("../lib/elaine-lessons", () => elaineLessonsMockFactory());',
+  ].join("\n");
+  assert.equal(hasInlinedElaineLessonsMock(source), true);
+});
+
+test("does not flag a commented-out vi.mock targeting elaine-lessons", () => {
+  // The entire vi.mock call is inside a // comment — it should not be treated
+  // as an active mock and must not trigger the guard.
+  const source = [
+    'import { elaineLessonsMockFactory } from "./test-helpers/standard-mock-scaffold";',
+    '// vi.mock("../lib/elaine-lessons", () => ({',
+    "//   getRelevantElaineLessons: vi.fn(),",
+    "// }));",
+  ].join("\n");
+  assert.equal(hasInlinedElaineLessonsMock(source), false);
+});
+
+test("does not flag a compliant call where a string literal contains unbalanced parens before the factory reference", () => {
+  // Parentheses inside a string literal must not skew the balanced-paren
+  // walker and cause it to cut the call short, missing the factory reference.
+  const source = [
+    'import { elaineLessonsMockFactory } from "./test-helpers/standard-mock-scaffold";',
+    'vi.mock("../lib/elaine-lessons", () => ({',
+    '  label: "starts (here",', // unbalanced open paren in string
+    "  ...elaineLessonsMockFactory(),",
+    "}));",
+  ].join("\n");
+  assert.equal(hasInlinedElaineLessonsMock(source), false);
+});
+
+test("flags a file where the factory call result is discarded and an inline mock is returned", () => {
+  // Calling elaineLessonsMockFactory() but not returning its result — the
+  // actual mock returned is still wholly inline and must be flagged.
+  const source = [
+    'import { elaineLessonsMockFactory } from "./test-helpers/standard-mock-scaffold";',
+    'vi.mock("../lib/elaine-lessons", () => {',
+    "  elaineLessonsMockFactory();",
+    "  return { getRelevantElaineLessons: vi.fn().mockResolvedValue([]) };",
+    "});",
+  ].join("\n");
+  assert.equal(hasInlinedElaineLessonsMock(source), true);
+});
+
+test("flags a file where the factory is referenced only as an object property value, not spread or returned", () => {
+  // Placing the factory identifier as a property value does not make the
+  // effective mock use the scaffold — the returned object is still inline.
+  const source = [
+    'import { elaineLessonsMockFactory } from "./test-helpers/standard-mock-scaffold";',
+    'vi.mock("../lib/elaine-lessons", () => ({',
+    "  _factory: elaineLessonsMockFactory,",
+    "  getRelevantElaineLessons: vi.fn(),",
+    "}));",
+  ].join("\n");
+  assert.equal(hasInlinedElaineLessonsMock(source), true);
+});
+
+test("flags a file where a compliant first mock is followed by an inline second mock", () => {
+  // If a file has two vi.mock("../lib/elaine-lessons", …) calls and only the
+  // first is compliant, the second (which Vitest hoists and applies) must
+  // still be caught.  Checking only the first mock would miss this.
+  const source = [
+    'import { elaineLessonsMockFactory } from "./test-helpers/standard-mock-scaffold";',
+    'vi.mock("../lib/elaine-lessons", () => elaineLessonsMockFactory());',
+    "// The effective mock overrides the first:",
+    'vi.mock("../lib/elaine-lessons", () => ({',
+    "  getRelevantElaineLessons: vi.fn().mockResolvedValue({ lessons: [] }),",
+    "}));",
+  ].join("\n");
+  assert.equal(hasInlinedElaineLessonsMock(source), true);
+});
+
+test("flags a file where the canonical import is commented out and a local factory is defined", () => {
+  // A commented-out import must not satisfy the scaffold-import gate; the
+  // gate must be checked against comment-stripped source.
+  const source = [
+    "// import { elaineLessonsMockFactory } from './test-helpers/standard-mock-scaffold';",
+    "function elaineLessonsMockFactory() {",
+    "  return { getRelevantElaineLessons: vi.fn() };",
+    "}",
+    'vi.mock("../lib/elaine-lessons", () => elaineLessonsMockFactory());',
+  ].join("\n");
+  assert.equal(hasInlinedElaineLessonsMock(source), true);
+});
+
+test("flags a file where the factory name only appears inside a string literal in the mock call", () => {
+  // A string literal that mentions the factory name must not satisfy the
+  // factory-reference check; eraseStringContents prevents this bypass.
+  const source = [
+    'import { elaineLessonsMockFactory } from "./test-helpers/standard-mock-scaffold";',
+    'vi.mock("../lib/elaine-lessons", () => ({',
+    '  label: "use elaineLessonsMockFactory instead",',
+    "  getRelevantElaineLessons: vi.fn(),",
+    "}));",
+  ].join("\n");
+  assert.equal(hasInlinedElaineLessonsMock(source), true);
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Scan O — hasInlineSentryMock / hasInlineRateLimitMock
+// ────────────────────────────────────────────────────────────────────────────
+
+console.log(
+  "\ncheck-domain-composition.test: Scan O — hasInlineSentryMock / hasInlineRateLimitMock",
+);
+
+// ── hasInlineSentryMock ──────────────────────────────────────────────────────
+
+test("hasInlineSentryMock: detects a single-line inline @sentry/node mock body", () => {
+  const source = `vi.mock("@sentry/node", () => ({ init: vi.fn(), captureException: vi.fn() }));`;
+  assert.equal(hasInlineSentryMock(source), true);
+});
+
+test("hasInlineSentryMock: detects a multi-line inline @sentry/node mock body", () => {
+  const source = `
+vi.mock("@sentry/node", () => ({
+  init: vi.fn(),
+  captureException: vi.fn(),
+  withScope: vi.fn(),
+}));
+`;
+  assert.equal(hasInlineSentryMock(source), true);
+});
+
+test("hasInlineSentryMock: detects inline mock even when sentryMockFactory appears elsewhere in the file", () => {
+  // e.g. imported but not used as the vi.mock factory, or mentioned in a comment
+  const source = `
+// sentryMockFactory() is the preferred pattern — use it instead
+import { sentryMockFactory } from "./test-helpers/standard-mock-scaffold";
+vi.mock("@sentry/node", () => ({ init: vi.fn() }));
+`;
+  assert.equal(hasInlineSentryMock(source), true);
+});
+
+test("hasInlineSentryMock: detects inline mock using single-quoted module path", () => {
+  const source = `vi.mock('@sentry/node', () => ({ init: vi.fn() }));`;
+  assert.equal(hasInlineSentryMock(source), true);
+});
+
+test("hasInlineSentryMock: detects async importOriginal inline factory", () => {
+  const source = `
+vi.mock("@sentry/node", async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, init: vi.fn() };
+});
+`;
+  assert.equal(hasInlineSentryMock(source), true);
+});
+
+test("hasInlineSentryMock: does NOT flag a delegation to sentryMockFactory()", () => {
+  const source = `vi.mock("@sentry/node", () => sentryMockFactory());`;
+  assert.equal(hasInlineSentryMock(source), false);
+});
+
+test("hasInlineSentryMock: does NOT flag a multi-line delegation to sentryMockFactory()", () => {
+  const source = `
+vi.mock("@sentry/node", () =>
+  sentryMockFactory()
+);
+`;
+  assert.equal(hasInlineSentryMock(source), false);
+});
+
+test("hasInlineSentryMock: does NOT flag a file that does not mock @sentry/node at all", () => {
+  const source = `
+import { sentryMockFactory } from "./test-helpers/standard-mock-scaffold";
+vi.mock("../lib/logger", loggerMockFactory);
+`;
+  assert.equal(hasInlineSentryMock(source), false);
+});
+
+test("hasInlineSentryMock: does NOT flag an empty file", () => {
+  assert.equal(hasInlineSentryMock(""), false);
+});
+
+test("hasInlineSentryMock: flags inline mock even when a separate delegation call also exists in the same file", () => {
+  // A file that has BOTH an inline body AND a delegation — the inline one must
+  // still be caught (the delegation cannot mask it).
+  const source = `
+vi.mock("@sentry/node", () => ({ init: vi.fn(), captureException: vi.fn() }));
+vi.mock("@sentry/node", () => sentryMockFactory());
+`;
+  assert.equal(hasInlineSentryMock(source), true);
+});
+
+// ── hasInlineRateLimitMock ───────────────────────────────────────────────────
+
+test("hasInlineRateLimitMock: detects a single-line inline rateLimit mock body", () => {
+  const source = `vi.mock("../middleware/rateLimit", () => ({ apiLimiter: passthrough }));`;
+  assert.equal(hasInlineRateLimitMock(source), true);
+});
+
+test("hasInlineRateLimitMock: detects a multi-line inline rateLimit mock body", () => {
+  const source = `
+vi.mock("../middleware/rateLimit", () => ({
+  loginLimiter: passthrough,
+  apiLimiter: passthrough,
+  aiLimiter: passthrough,
+}));
+`;
+  assert.equal(hasInlineRateLimitMock(source), true);
+});
+
+test("hasInlineRateLimitMock: detects inline mock even when rateLimitMockFactory appears elsewhere in the file", () => {
+  // rateLimitMockFactory is in an import or comment but NOT as the vi.mock factory
+  const source = `
+// rateLimitMockFactory() is the preferred pattern — use it instead
+import { rateLimitMockFactory } from "./test-helpers/standard-mock-scaffold";
+vi.mock("../middleware/rateLimit", () => ({ apiLimiter: vi.fn() }));
+`;
+  assert.equal(hasInlineRateLimitMock(source), true);
+});
+
+test("hasInlineRateLimitMock: detects inline mock using single-quoted module path", () => {
+  const source = `vi.mock('../middleware/rateLimit', () => ({ apiLimiter: passthrough }));`;
+  assert.equal(hasInlineRateLimitMock(source), true);
+});
+
+test("hasInlineRateLimitMock: detects inline mock from a nested subdirectory path (../../middleware/rateLimit)", () => {
+  const source = `vi.mock("../../middleware/rateLimit", () => ({ apiLimiter: passthrough }));`;
+  assert.equal(hasInlineRateLimitMock(source), true);
+});
+
+test("hasInlineRateLimitMock: detects async importOriginal inline factory", () => {
+  const source = `
+vi.mock("../middleware/rateLimit", async (importOriginal) => {
+  const actual = await importOriginal();
+  return { ...actual, aiLimiter: passthrough };
+});
+`;
+  assert.equal(hasInlineRateLimitMock(source), true);
+});
+
+test("hasInlineRateLimitMock: does NOT flag a delegation to rateLimitMockFactory()", () => {
+  const source = `vi.mock("../middleware/rateLimit", () => rateLimitMockFactory());`;
+  assert.equal(hasInlineRateLimitMock(source), false);
+});
+
+test("hasInlineRateLimitMock: does NOT flag a multi-line delegation to rateLimitMockFactory()", () => {
+  const source = `
+vi.mock("../middleware/rateLimit", () =>
+  rateLimitMockFactory()
+);
+`;
+  assert.equal(hasInlineRateLimitMock(source), false);
+});
+
+test("hasInlineRateLimitMock: does NOT flag delegation from a nested subdirectory path", () => {
+  const source = `vi.mock("../../middleware/rateLimit", () => rateLimitMockFactory());`;
+  assert.equal(hasInlineRateLimitMock(source), false);
+});
+
+test("hasInlineRateLimitMock: does NOT flag a file that does not mock rateLimit at all", () => {
+  const source = `
+import { rateLimitMockFactory } from "./test-helpers/standard-mock-scaffold";
+vi.mock("../lib/logger", loggerMockFactory);
+`;
+  assert.equal(hasInlineRateLimitMock(source), false);
+});
+
+test("hasInlineRateLimitMock: does NOT flag an empty file", () => {
+  assert.equal(hasInlineRateLimitMock(""), false);
+});
+
+test("hasInlineRateLimitMock: flags inline mock even when a separate delegation call also exists in the same file", () => {
+  // A file that has BOTH an inline body AND a delegation — the inline one must
+  // still be caught (the delegation cannot mask it).
+  const source = `
+vi.mock("../middleware/rateLimit", () => ({ apiLimiter: passthrough }));
+vi.mock("../middleware/rateLimit", () => rateLimitMockFactory());
+`;
+  assert.equal(hasInlineRateLimitMock(source), true);
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Integration — Scan O runner exit-code tests
+// ────────────────────────────────────────────────────────────────────────────
+
+console.log(
+  "\ncheck-domain-composition.test: Integration — Scan O runner exit codes",
+);
+
+const TEMP_SENTRY_RATELIMIT_VIOLATION_FILE = join(
+  root,
+  "artifacts/api-server/src/elaine/_temp_composition_guard_test_scan_o_fixture.test.ts",
+);
+
+test("script exits non-zero when an inline @sentry/node mock is injected (Scan O)", () => {
+  writeFileSync(
+    TEMP_SENTRY_RATELIMIT_VIOLATION_FILE,
+    [
+      "// Temporary test fixture injected by check-domain-composition.test.ts",
+      "// This file is cleaned up after the test regardless of outcome.",
+      'import { vi } from "vitest";',
+      'vi.mock("@sentry/node", () => ({ init: vi.fn(), captureException: vi.fn() }));',
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  try {
+    const result = runScript();
+    assert.notEqual(
+      result.status,
+      0,
+      `Expected non-zero exit for inline @sentry/node mock, but script exited ${result.status}.\nstdout: ${result.stdout}\nstderr: ${result.stderr}`,
+    );
+    assert.ok(
+      result.stderr.includes("@sentry/node") ||
+        result.stdout.includes("@sentry/node"),
+      "Violation message must mention @sentry/node",
+    );
+  } finally {
+    try {
+      unlinkSync(TEMP_SENTRY_RATELIMIT_VIOLATION_FILE);
+    } catch {
+      // best-effort cleanup
+    }
+  }
+});
+
+test("script exits non-zero when an inline rateLimit mock is injected (Scan O)", () => {
+  writeFileSync(
+    TEMP_SENTRY_RATELIMIT_VIOLATION_FILE,
+    [
+      "// Temporary test fixture injected by check-domain-composition.test.ts",
+      "// This file is cleaned up after the test regardless of outcome.",
+      'import { vi } from "vitest";',
+      'vi.mock("../middleware/rateLimit", () => ({ apiLimiter: vi.fn() }));',
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  try {
+    const result = runScript();
+    assert.notEqual(
+      result.status,
+      0,
+      `Expected non-zero exit for inline rateLimit mock, but script exited ${result.status}.\nstdout: ${result.stdout}\nstderr: ${result.stderr}`,
+    );
+    assert.ok(
+      result.stderr.includes("rateLimit") ||
+        result.stdout.includes("rateLimit"),
+      "Violation message must mention rateLimit",
+    );
+  } finally {
+    try {
+      unlinkSync(TEMP_SENTRY_RATELIMIT_VIOLATION_FILE);
+    } catch {
+      // best-effort cleanup
+    }
+  }
+});
+
+test("script exits 0 when both mocks delegate to the scaffold factories (Scan O)", () => {
+  writeFileSync(
+    TEMP_SENTRY_RATELIMIT_VIOLATION_FILE,
+    [
+      "// Temporary test fixture injected by check-domain-composition.test.ts",
+      "// This file is cleaned up after the test regardless of outcome.",
+      'import { vi } from "vitest";',
+      'import { sentryMockFactory, rateLimitMockFactory } from "./test-helpers/standard-mock-scaffold";',
+      'vi.mock("@sentry/node", () => sentryMockFactory());',
+      'vi.mock("../middleware/rateLimit", () => rateLimitMockFactory());',
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  try {
+    // runScriptExpectingZero cleans + retries once while preserving our fixture.
+    const result = runScriptExpectingZero([
+      TEMP_SENTRY_RATELIMIT_VIOLATION_FILE,
+    ]);
+    assert.equal(
+      result.status,
+      0,
+      `Expected exit 0 for scaffold-delegating mocks, but script exited ${result.status}.\nstdout: ${result.stdout}\nstderr: ${result.stderr}`,
+    );
+  } finally {
+    try {
+      unlinkSync(TEMP_SENTRY_RATELIMIT_VIOLATION_FILE);
+    } catch {
+      // best-effort cleanup
+    }
+  }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Scan O (action-executor reverse) — extractActionExecutorSpreads / findStaleActionClassPrefixes / scanOViolations
+// ────────────────────────────────────────────────────────────────────────────
+
+console.log(
+  "\ncheck-domain-composition.test: Scan O — KNOWN_EXECUTOR_PREFIXES action-class reverse check",
+);
+
+// extractActionExecutorSpreads tests
+
+test("extractActionExecutorSpreads: extracts a single spread from a minimal ACTION_EXECUTORS block", () => {
+  const source = `
+const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
+  ...potteryActionExecutors,
+};
+`;
+  const result = extractActionExecutorSpreads(source);
+  assert.ok(
+    result.has("potteryActionExecutors"),
+    "expected potteryActionExecutors",
+  );
+  assert.equal(result.size, 1);
+});
+
+test("extractActionExecutorSpreads: extracts multiple spreads", () => {
+  const source = `
+const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
+  ...TRAVEL_ACTION_EXECUTORS,
+  ...potteryActionExecutors,
+  ...quiltingActionExecutors,
+};
+`;
+  const result = extractActionExecutorSpreads(source);
+  assert.ok(result.has("TRAVEL_ACTION_EXECUTORS"));
+  assert.ok(result.has("potteryActionExecutors"));
+  assert.ok(result.has("quiltingActionExecutors"));
+  assert.equal(result.size, 3);
+});
+
+test("extractActionExecutorSpreads: ignores non-spread entries (computed properties)", () => {
+  const source = `
+const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
+  ...potteryActionExecutors,
+  [EXECUTE_APP_OPERATION_TOOL_NAME]: executeAppOperationAction as ActionExecutor,
+};
+`;
+  const result = extractActionExecutorSpreads(source);
+  assert.ok(result.has("potteryActionExecutors"));
+  // The computed key identifier should NOT appear in spread results
+  assert.ok(!result.has("EXECUTE_APP_OPERATION_TOOL_NAME"));
+});
+
+test("extractActionExecutorSpreads: returns empty Set when ACTION_EXECUTORS is not present", () => {
+  const source = `const SOMETHING_ELSE = { foo: "bar" };`;
+  const result = extractActionExecutorSpreads(source);
+  assert.equal(result.size, 0);
+});
+
+test("extractActionExecutorSpreads: is not confused by braces inside comments", () => {
+  const source = `
+// ACTION_EXECUTORS used to be: { ...legacyExecutors }
+const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
+  ...potteryActionExecutors,
+};
+`;
+  const result = extractActionExecutorSpreads(source);
+  assert.ok(result.has("potteryActionExecutors"));
+  assert.ok(!result.has("legacyExecutors"));
+});
+
+test("extractActionExecutorSpreads: is not confused by braces inside string literals", () => {
+  const source = `
+const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
+  ...potteryActionExecutors,
+  /* note: "{ ...fakeSpread }" is just a comment string */
+};
+`;
+  const result = extractActionExecutorSpreads(source);
+  assert.ok(result.has("potteryActionExecutors"));
+  assert.ok(!result.has("fakeSpread"));
+});
+
+test("extractActionExecutorSpreads: real index.ts contains the expected executor spreads", () => {
+  const source = readFileSync(
+    resolve(
+      import.meta.dirname,
+      "../../artifacts/api-server/src/elaine/index.ts",
+    ),
+    "utf8",
+  );
+  const spreads = extractActionExecutorSpreads(source);
+  const expected = [
+    "TRAVEL_ACTION_EXECUTORS",
+    "potteryActionExecutors",
+    "quiltingActionExecutors",
+    "ornamentActionExecutors",
+    "universalActionExecutors",
+    "adaptiveActionExecutors",
+    "communicationActionExecutors",
+    "reminderActionExecutors",
+  ];
+  for (const name of expected) {
+    assert.ok(
+      spreads.has(name),
+      `extractActionExecutorSpreads should find "${name}" in real index.ts`,
+    );
+  }
+});
+
+// findStaleActionClassPrefixes tests
+
+test("findStaleActionClassPrefixes: returns empty array when all executor vars are present", () => {
+  const knownMap = new Map([
+    ["potteryAction", "potteryActionExecutors"],
+    ["quiltingAction", "quiltingActionExecutors"],
+  ]);
+  const spreads = new Set([
+    "potteryActionExecutors",
+    "quiltingActionExecutors",
+  ]);
+  const result = findStaleActionClassPrefixes(knownMap, spreads);
+  assert.deepEqual(result, []);
+});
+
+test("findStaleActionClassPrefixes: flags a prefix whose executor var is absent", () => {
+  const knownMap = new Map([
+    ["potteryAction", "potteryActionExecutors"],
+    ["oldAction", "renamedExecutors"],
+  ]);
+  const spreads = new Set(["potteryActionExecutors"]);
+  const result = findStaleActionClassPrefixes(knownMap, spreads);
+  assert.equal(result.length, 1);
+  assert.ok(result.includes("oldAction"), "expected 'oldAction' to be flagged");
+});
+
+test("findStaleActionClassPrefixes: flags all prefixes when spreads set is empty", () => {
+  const knownMap = new Map([
+    ["potteryAction", "potteryActionExecutors"],
+    ["quiltingAction", "quiltingActionExecutors"],
+  ]);
+  const result = findStaleActionClassPrefixes(knownMap, new Set());
+  assert.equal(result.length, 2);
+});
+
+test("findStaleActionClassPrefixes: returns empty array when knownMap is empty", () => {
+  const spreads = new Set(["potteryActionExecutors"]);
+  const result = findStaleActionClassPrefixes(new Map(), spreads);
+  assert.deepEqual(result, []);
+});
+
+// scanOViolations tests
+
+test("scanOViolations: returns empty array when all action-class spreads are present", () => {
+  const source = `
+const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
+  ...potteryActionExecutors,
+  ...quiltingActionExecutors,
+};
+`;
+  const knownMap = new Map([
+    ["potteryAction", "potteryActionExecutors"],
+    ["quiltingAction", "quiltingActionExecutors"],
+  ]);
+  const violations = scanOViolations(source, knownMap, "fake/index.ts");
+  assert.deepEqual(violations, []);
+});
+
+test("scanOViolations: returns a violation when a prefix's executor var is absent", () => {
+  const source = `
+const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
+  ...potteryActionExecutors,
+};
+`;
+  const knownMap = new Map([
+    ["potteryAction", "potteryActionExecutors"],
+    ["oldAction", "removedActionExecutors"],
+  ]);
+  const violations = scanOViolations(source, knownMap, "fake/index.ts");
+  assert.equal(violations.length, 1, "expected exactly one violation");
+  assert.ok(
+    violations[0].includes("oldAction"),
+    `violation must name the stale prefix; got: ${violations[0].slice(0, 200)}`,
+  );
+  assert.ok(
+    violations[0].includes("removedActionExecutors"),
+    "violation must name the missing executor var",
+  );
+  assert.ok(
+    violations[0].includes("FIX:"),
+    "violation must include a FIX: clause",
+  );
+  assert.ok(
+    violations[0].includes("fake/index.ts"),
+    "violation must include the file path",
+  );
+});
+
+test("scanOViolations: names all stale prefixes when multiple are present", () => {
+  const source = `
+const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
+  ...potteryActionExecutors,
+};
+`;
+  const knownMap = new Map([
+    ["potteryAction", "potteryActionExecutors"],
+    ["oldActionA", "removedExecutorsA"],
+    ["oldActionB", "removedExecutorsB"],
+  ]);
+  const violations = scanOViolations(source, knownMap, "fake/index.ts");
+  assert.equal(violations.length, 1);
+  assert.ok(violations[0].includes("oldActionA"), "must name oldActionA");
+  assert.ok(violations[0].includes("oldActionB"), "must name oldActionB");
+  assert.ok(
+    !violations[0].includes("potteryAction"),
+    "must not name the present prefix",
+  );
+});
+
+test("scanOViolations: returns a structural error when ACTION_EXECUTORS cannot be parsed", () => {
+  const source = `const SOMETHING_ELSE = {};`;
+  const knownMap = new Map([["potteryAction", "potteryActionExecutors"]]);
+  const violations = scanOViolations(source, knownMap, "fake/index.ts");
+  assert.equal(
+    violations.length,
+    1,
+    "expected exactly one structural-error violation",
+  );
+  assert.ok(
+    violations[0].includes("FIX:"),
+    "structural error must include a FIX: clause",
+  );
+});
+
+test("scanOViolations: real index.ts produces no violations against ACTION_CLASS_EXECUTOR_MAP", () => {
+  const source = readFileSync(
+    resolve(
+      import.meta.dirname,
+      "../../artifacts/api-server/src/elaine/index.ts",
+    ),
+    "utf8",
+  );
+  const violations = scanOViolations(
+    source,
+    ACTION_CLASS_EXECUTOR_MAP,
+    "artifacts/api-server/src/elaine/index.ts",
+  );
+  assert.deepEqual(
+    violations,
+    [],
+    `Scan O found unexpected violations in the real repo:\n${violations.join("\n")}`,
+  );
+});
+
+// ACTION_CLASS_EXECUTOR_MAP sanity checks
+
+test("ACTION_CLASS_EXECUTOR_MAP: all keys are present in KNOWN_EXECUTOR_PREFIXES", () => {
+  for (const prefix of ACTION_CLASS_EXECUTOR_MAP.keys()) {
+    assert.ok(
+      KNOWN_EXECUTOR_PREFIXES.has(prefix),
+      `ACTION_CLASS_EXECUTOR_MAP key "${prefix}" is not in KNOWN_EXECUTOR_PREFIXES. ` +
+        "Add it to KNOWN_EXECUTOR_PREFIXES or remove it from ACTION_CLASS_EXECUTOR_MAP.",
+    );
+  }
+});
+
+test("ACTION_CLASS_EXECUTOR_MAP: all values match a real spread in the current index.ts", () => {
+  const source = readFileSync(
+    resolve(
+      import.meta.dirname,
+      "../../artifacts/api-server/src/elaine/index.ts",
+    ),
+    "utf8",
+  );
+  const spreads = extractActionExecutorSpreads(source);
+  for (const [prefix, executorVar] of ACTION_CLASS_EXECUTOR_MAP) {
+    assert.ok(
+      spreads.has(executorVar),
+      `ACTION_CLASS_EXECUTOR_MAP entry "${prefix}" → "${executorVar}" does not match any ` +
+        "spread in ACTION_EXECUTORS in the real index.ts. " +
+        "Update ACTION_CLASS_EXECUTOR_MAP to match the current variable name.",
+    );
+  }
+});
+
+test("ACTION_CLASS_EXECUTOR_MAP: every spread in the real ACTION_EXECUTORS block is listed as a value (bidirectional coverage)", () => {
+  // This guards the reverse direction: if a new executor group is added to
+  // ACTION_EXECUTORS in index.ts AND to KNOWN_EXECUTOR_PREFIXES, but
+  // ACTION_CLASS_EXECUTOR_MAP is not updated, Scan N-reverse is blind to
+  // that group.  Every spread found in ACTION_EXECUTORS must appear as a
+  // value in ACTION_CLASS_EXECUTOR_MAP so that the guardrail covers it.
+  const source = readFileSync(
+    resolve(
+      import.meta.dirname,
+      "../../artifacts/api-server/src/elaine/index.ts",
+    ),
+    "utf8",
+  );
+  const spreads = extractActionExecutorSpreads(source);
+  const mapValues = new Set(ACTION_CLASS_EXECUTOR_MAP.values());
+  const uncovered: string[] = [];
+  for (const spread of spreads) {
+    if (!mapValues.has(spread)) {
+      uncovered.push(spread);
+    }
+  }
+  assert.deepEqual(
+    uncovered,
+    [],
+    `The following ACTION_EXECUTORS spreads are not listed as values in ACTION_CLASS_EXECUTOR_MAP: ` +
+      uncovered.join(", ") +
+      ". Add each missing mapping to ACTION_CLASS_EXECUTOR_MAP in check-domain-composition.ts.",
+  );
+});
+// ── Scan O (action-executor reverse) end-to-end integration test ─────────────
+//
+// Temporarily renames one executor variable spread in the real index.ts so the
+// Scan O runner (which reads the actual file) fires a violation.  The original
+// file is always restored in the finally block.
+
+console.log(
+  "\ncheck-domain-composition.test: Scan O (action-executor reverse) — end-to-end integration",
+);
+
+// Temp path for the Scan O action-executor e2e fixture.  A copy of index.ts
+// with a stale spread is written here; the real index.ts is never modified.
+const TEMP_SCAN_O_INDEX_FIXTURE = join(
+  root,
+  "artifacts/api-server/src/elaine/_temp_scan_o_action_executor_index_fixture.ts",
+);
+
+test("script exits non-zero when an executor variable in ACTION_EXECUTORS is renamed (Scan O action-executor)", () => {
+  const realIndexPath = join(root, "artifacts/api-server/src/elaine/index.ts");
+  const original = readFileSync(realIndexPath, "utf8");
+
+  // Rename the potteryActionExecutors spread to a stale name to simulate a
+  // rename that was not reflected in ACTION_CLASS_EXECUTOR_MAP.  We write
+  // the modified source to a TEMP COPY so the real index.ts is never touched.
+  const REAL_SPREAD = "...potteryActionExecutors,";
+  const STALE_SPREAD = "...staleRenamedPotteryActionExecutors_xyzzy,";
+  const modified = original.replace(REAL_SPREAD, STALE_SPREAD);
+  if (modified === original) {
+    throw new Error(
+      `Could not find "${REAL_SPREAD}" in index.ts — update this test if the spread was renamed.`,
+    );
+  }
+
+  // Remove any leftover temp fixture files from prior test runs before
+  // invoking the script, so they cannot inject spurious violations that
+  // mask the expected "potteryAction" message.  Preserve our own fixture
+  // so we can write it right after.
+  cleanupKnownTempFixtures(new Set([TEMP_SCAN_O_INDEX_FIXTURE]));
+  writeFileSync(TEMP_SCAN_O_INDEX_FIXTURE, modified, "utf8");
+  try {
+    // Pass the temp copy path to the script via env var so Scan O reads from
+    // it instead of the real index.ts; no shared-source mutation required.
+    const result = spawnSync("node", ["--import", "tsx", scriptPath], {
+      cwd: scriptsCwd,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        CHECK_DOMAIN_SCAN_O_INDEX_PATH: TEMP_SCAN_O_INDEX_FIXTURE,
+      },
+    });
+    assert.notEqual(
+      result.status,
+      0,
+      `Expected non-zero exit when potteryActionExecutors is renamed in ACTION_EXECUTORS, ` +
+        `but script exited ${result.status}.\nstdout: ${result.stdout}\nstderr: ${result.stderr}`,
+    );
+    const output = result.stdout + result.stderr;
+    assert.ok(
+      output.includes("potteryAction"),
+      `Violation message must mention the stale prefix "potteryAction".\nstdout: ${result.stdout}\nstderr: ${result.stderr}`,
+    );
+    assert.ok(
+      output.includes("FIX:"),
+      `Violation message must include a FIX: clause.\nstdout: ${result.stdout}\nstderr: ${result.stderr}`,
+    );
+  } finally {
+    try {
+      unlinkSync(TEMP_SCAN_O_INDEX_FIXTURE);
+    } catch {
+      // best-effort cleanup
+    }
+  }
 });
 
 // ────────────────────────────────────────────────────────────────────────────

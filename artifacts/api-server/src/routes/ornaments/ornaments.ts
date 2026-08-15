@@ -1445,6 +1445,9 @@ export async function runItemAnalysis(id: number): Promise<unknown> {
 // #214 — eBay sold-listings fallback (any brand, not just Hallmark)
 // ---------------------------------------------------------------------------
 
+/** Cached eBay data (sold-price scraper + Browse API) is reused for 7 days. */
+const EBAY_CACHE_STALE_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
+
 router.post("/items/:id/ebay-price-lookup", aiLimiter, async (req, res) => {
   const { id } = GetOrnamentParams.parse(req.params);
 
@@ -1461,12 +1464,67 @@ router.post("/items/:id/ebay-price-lookup", aiLimiter, async (req, res) => {
       seriesOrCollection: ornamentsItems.seriesOrCollection,
       year: ornamentsItems.year,
       barcodeValue: ornamentsItems.barcodeValue,
+      ebayPriceCachedAt: ornamentsItems.ebayPriceCachedAt,
+      ebayPriceMinUsd: ornamentsItems.ebayPriceMinUsd,
+      ebayPriceMaxUsd: ornamentsItems.ebayPriceMaxUsd,
+      ebayPriceListings: ornamentsItems.ebayPriceListings,
+      ebayLastSoldPriceUsd: ornamentsItems.ebayLastSoldPriceUsd,
+      ebayLastSoldDate: ornamentsItems.ebayLastSoldDate,
     })
     .from(ornamentsItems)
     .where(eq(ornamentsItems.id, id));
 
   if (!item) {
     res.status(404).json({ error: "Ornament not found." });
+    return;
+  }
+
+  const force = (req.body as { force?: boolean } | undefined)?.force === true;
+
+  // Return cached eBay data immediately when still fresh — avoids a paid
+  // Apify sold-price scraper run on every user-initiated refresh.
+  // When `force: true` is passed the cache is bypassed and a fresh run fires.
+  const cacheAgeMs = item.ebayPriceCachedAt
+    ? Date.now() - item.ebayPriceCachedAt.getTime()
+    : Infinity;
+  if (
+    !force &&
+    cacheAgeMs < EBAY_CACHE_STALE_AFTER_MS &&
+    (item.ebayPriceMinUsd != null || item.ebayLastSoldPriceUsd != null)
+  ) {
+    const cachedListings = item.ebayPriceListings as unknown[] | null;
+    const searchQuery = buildEbayQuery(item.name, {
+      brand: item.brand,
+      seriesOrCollection: item.seriesOrCollection,
+      year: item.year,
+    });
+    logger.info(
+      { id, cacheAgeMs: Math.round(cacheAgeMs / 1000 / 60) + "min" },
+      "ornaments: returning cached eBay data (skipping paid Apify run)",
+    );
+    res.json({
+      forSale:
+        item.ebayPriceMinUsd != null
+          ? {
+              priceMinUsd: Number(item.ebayPriceMinUsd),
+              priceMaxUsd: item.ebayPriceMaxUsd
+                ? Number(item.ebayPriceMaxUsd)
+                : null,
+              listingCount: cachedListings?.length ?? 0,
+              listings: cachedListings ?? [],
+            }
+          : null,
+      lastSold: item.ebayLastSoldPriceUsd
+        ? {
+            priceUsd: Number(item.ebayLastSoldPriceUsd),
+            soldDate: item.ebayLastSoldDate?.toISOString() ?? null,
+            listingCount: null,
+          }
+        : null,
+      searchQuery,
+      cachedAt: item.ebayPriceCachedAt!.toISOString(),
+      fromCache: true,
+    });
     return;
   }
 

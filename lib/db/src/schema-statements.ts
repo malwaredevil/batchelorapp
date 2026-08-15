@@ -3231,6 +3231,20 @@ END $$`,
      last_updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
 
+  // ── Sentry seen issues (Task #1025) ──────────────────────────────────────
+  // Dedup ledger for proactive Sentry error nudges: one row per Sentry issue
+  // id ever announced. last_status tracks unresolved/resolved so a reopened
+  // issue (resolved → unresolved) can be announced again exactly once.
+  // No RLS: admin/ops data, not user-scoped.
+  `CREATE TABLE IF NOT EXISTS sentry_seen_issues (
+     issue_id         TEXT PRIMARY KEY,
+     last_status      TEXT NOT NULL DEFAULT 'unresolved',
+     alert_generation INTEGER NOT NULL DEFAULT 1,
+     first_alerted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     last_updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `ALTER TABLE sentry_seen_issues ADD COLUMN IF NOT EXISTS alert_generation INTEGER NOT NULL DEFAULT 1`,
+
   // ── Generic cross-app reminder system (issue #513) ────────────────────────
   // Replaces travels_reminders/travels_reminder_alert_log/
   // travels_reminder_alert_deliveries (Travels-only) and

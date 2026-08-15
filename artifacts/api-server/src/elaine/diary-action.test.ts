@@ -11,33 +11,23 @@ import express, { type Express } from "express";
 import request from "supertest";
 import { makeEagerSelectBuilder } from "../test-helpers/db-mock";
 import { buildPlannerToolCatalogMock } from "./test-helpers/planner-tool-catalog-mock";
+import { buildRuntimeMock } from "./test-helpers/runtime-mock";
+import {
+  sentryMockFactory,
+  rateLimitMockFactory,
+} from "./test-helpers/standard-mock-scaffold";
 
 // ============================================================================
 // Mocks — ALL vi.mock() calls must be hoisted before any dynamic imports.
 // ============================================================================
 
-vi.mock("@sentry/node", () => ({
-  init: vi.fn(),
-  setUser: vi.fn(),
-  captureException: vi.fn(),
-  withScope: vi.fn(),
-  startSpan: vi.fn((_o: unknown, cb: () => unknown) => cb()),
-  Scope: class {},
-}));
+vi.mock("@sentry/node", () => sentryMockFactory());
 
 vi.mock("../lib/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-vi.mock("../middleware/rateLimit", () => ({
-  phoneVerifyLimiter: (_req: unknown, _res: unknown, next: () => void) =>
-    next(),
-  aiLimiter: (_req: unknown, _res: unknown, next: () => void) => next(),
-  webhookLimiter: (_req: unknown, _res: unknown, next: () => void) => next(),
-  authLimiter: (_req: unknown, _res: unknown, next: () => void) => next(),
-  apiLimiter: (_req: unknown, _res: unknown, next: () => void) => next(),
-  adminLimiter: (_req: unknown, _res: unknown, next: () => void) => next(),
-}));
+vi.mock("../middleware/rateLimit", () => rateLimitMockFactory());
 
 vi.mock("../middleware/auth", () => ({
   requireAuth: (
@@ -239,50 +229,30 @@ vi.mock("./planner-tool-catalog", () => buildPlannerToolCatalogMock());
 
 // ── runtime sub-module ────────────────────────────────────────────────────────
 
-vi.mock("./runtime", () => ({
-  assertElaineToolFamilyCoverage: vi.fn(),
-  aggregateElaineTraceEvaluations: vi.fn().mockReturnValue([]),
-  buildElaineSourceRoute: vi.fn().mockReturnValue(""),
-  classifyElaineRequest: vi.fn().mockResolvedValue("general"),
-  isReminderDoubtMessage: vi.fn().mockReturnValue(false),
-  isSchedulingDoubtMessage: vi.fn().mockReturnValue(false),
-  buildSelfHealLessonInput: vi.fn().mockReturnValue(null),
-  detectClaimedCheckWithoutToolCall: vi.fn().mockReturnValue(null),
-  selfHealPatternKey: vi.fn().mockReturnValue("self_heal:mock"),
-  buildClassifierDoubtLessonInput: vi.fn().mockReturnValue(null),
-  classifierDoubtPatternKey: vi.fn().mockReturnValue("classifier_doubt:mock"),
-  completedActionAcknowledgement: vi.fn().mockReturnValue(""),
-  createElaineTurnTrace: vi.fn().mockReturnValue({}),
-  createFallbackPlan: vi.fn().mockReturnValue({}),
-  decideElaineModelStreamRecovery: vi.fn().mockReturnValue("abort"),
-  ELAINE_READ_CONCURRENCY: 3,
-  ElaineTurnRuntime: class {
-    on() {
-      return this;
-    }
-    run() {
-      return Promise.resolve({});
-    }
-  },
-  evaluateForecastDateCoverage: vi.fn().mockResolvedValue({}),
-  evaluateElaineTrace: vi.fn().mockResolvedValue({}),
-  findElaineSatisfiedFallback: vi.fn().mockReturnValue(null),
-  finishElaineTurnTrace: vi.fn().mockResolvedValue(undefined),
-  generateElainePlan: vi.fn().mockResolvedValue({}),
-  loadElaineTurnTracesForMessages: vi.fn().mockResolvedValue([]),
-  mapWithConcurrency: vi.fn().mockResolvedValue([]),
-  MODEL_VISIBLE_HARD_TOOL_NAMES: new Set<string>(),
-  MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS: {},
-  persistElaineTraceBestEffort: vi.fn().mockResolvedValue(undefined),
-  preparedActionAcknowledgement: vi.fn().mockReturnValue(""),
-  provenanceForTool: vi.fn().mockReturnValue(null),
-  requestNeedsStructuredPlan: vi.fn().mockReturnValue(false),
-  sanitizeRuntimeText: vi.fn((t: string) => t),
-  selectElaineReplanTool: vi.fn().mockReturnValue(null),
-  isReusableElaineResponseState: vi.fn().mockReturnValue(false),
-  selectElaineOpenAIRole: vi.fn().mockReturnValue("assistant"),
-  stripElaineCitationMetadata: vi.fn((t: string) => t),
-}));
+vi.mock("./runtime", () =>
+  buildRuntimeMock({
+    buildClassifierDoubtLessonInput: vi.fn().mockReturnValue(null),
+    buildElaineSourceRoute: vi.fn().mockReturnValue(""),
+    buildSelfHealLessonInput: vi.fn().mockReturnValue(null),
+    classifyElaineRequest: vi.fn().mockResolvedValue("general"),
+    createElaineTurnTrace: vi.fn().mockReturnValue({}),
+    createFallbackPlan: vi.fn().mockReturnValue({}),
+    decideElaineModelStreamRecovery: vi.fn().mockReturnValue("abort"),
+    ElaineTurnRuntime: class {
+      on() {
+        return this;
+      }
+      run() {
+        return Promise.resolve({});
+      }
+    },
+    generateElainePlan: vi.fn().mockResolvedValue({}),
+    loadElaineTurnTracesForMessages: vi.fn().mockResolvedValue([]),
+    mapWithConcurrency: vi.fn().mockResolvedValue([]),
+    MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS: {},
+    persistElaineTraceBestEffort: vi.fn().mockResolvedValue(undefined),
+  }),
+);
 
 // ── capability-registry ───────────────────────────────────────────────────────
 

@@ -19,6 +19,11 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
+import { buildRuntimeMock } from "./test-helpers/runtime-mock";
+import {
+  sentryMockFactory,
+  rateLimitMockFactory,
+} from "./test-helpers/standard-mock-scaffold";
 
 // ---------------------------------------------------------------------------
 // Module mocks — suppress import-time side effects from ./index.
@@ -28,12 +33,7 @@ vi.mock("../lib/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-vi.mock("@sentry/node", () => ({
-  setConversationId: vi.fn(),
-  captureException: vi.fn(),
-  withActiveSpan: vi.fn((_span: unknown, fn: () => unknown) => fn()),
-  startSpan: vi.fn((_opts: unknown, fn: () => unknown) => fn()),
-}));
+vi.mock("@sentry/node", () => sentryMockFactory());
 
 vi.mock("@workspace/db", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@workspace/db")>();
@@ -114,16 +114,7 @@ vi.mock("../lib/openai-responses", () => ({
   streamOpenAIResponseRound: vi.fn(),
 }));
 
-vi.mock("../middleware/rateLimit", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("../middleware/rateLimit")>();
-  const passthrough = (_r: unknown, _s: unknown, next: () => void) => next();
-  return Object.fromEntries(
-    Object.entries(actual).map(([k, v]) =>
-      typeof v === "function" ? [k, passthrough] : [k, v],
-    ),
-  );
-});
+vi.mock("../middleware/rateLimit", () => rateLimitMockFactory());
 
 vi.mock("../middleware/auth", () => ({
   requireAuth: (_r: unknown, _s: unknown, next: () => void) => next(),
@@ -242,48 +233,7 @@ vi.mock("./runtime/tool-families", () => ({
   ELAINE_TOOL_FAMILIES: {},
 }));
 
-vi.mock("./runtime", () => ({
-  buildElaineSourceRoute: vi.fn().mockReturnValue("test"),
-  classifyElaineRequest: vi.fn().mockResolvedValue({ label: "action" }),
-  completedActionAcknowledgement: vi.fn().mockReturnValue("Done."),
-  preparedActionAcknowledgement: vi.fn().mockReturnValue("Ready."),
-  createElaineTurnTrace: vi.fn().mockResolvedValue({ id: "trace-1" }),
-  finishElaineTurnTrace: vi.fn().mockResolvedValue(undefined),
-  generateElainePlan: vi.fn().mockResolvedValue({ tools: [], reasoning: "" }),
-  createFallbackPlan: vi.fn().mockReturnValue({ tools: [], reasoning: "" }),
-  persistElaineTraceBestEffort: vi.fn(),
-  requestNeedsStructuredPlan: vi.fn().mockReturnValue(false),
-  evaluateElaineTrace: vi.fn().mockResolvedValue({ score: 1 }),
-  evaluateForecastDateCoverage: vi.fn().mockReturnValue(true),
-  findElaineSatisfiedFallback: vi.fn().mockReturnValue(null),
-  aggregateElaineTraceEvaluations: vi.fn().mockReturnValue([]),
-  isReminderDoubtMessage: vi.fn().mockReturnValue(false),
-  isSchedulingDoubtMessage: vi.fn().mockReturnValue(false),
-  buildSelfHealLessonInput: vi.fn().mockReturnValue(null),
-  detectClaimedCheckWithoutToolCall: vi.fn().mockReturnValue(null),
-  selfHealPatternKey: vi.fn().mockReturnValue("self_heal:mock"),
-  buildClassifierDoubtLessonInput: vi.fn().mockReturnValue(null),
-  classifierDoubtPatternKey: vi.fn().mockReturnValue("classifier_doubt:mock"),
-  decideElaineModelStreamRecovery: vi.fn().mockReturnValue("abort"),
-  loadElaineTurnTracesForMessages: vi.fn().mockResolvedValue([]),
-  mapWithConcurrency: vi
-    .fn()
-    .mockImplementation(
-      async (items: unknown[], fn: (item: unknown) => Promise<unknown>) =>
-        Promise.all(items.map(fn)),
-    ),
-  sanitizeRuntimeText: vi.fn().mockImplementation((t: string) => t),
-  selectElaineReplanTool: vi.fn().mockReturnValue(null),
-  isReusableElaineResponseState: vi.fn().mockReturnValue(false),
-  selectElaineOpenAIRole: vi.fn().mockReturnValue("assistant"),
-  stripElaineCitationMetadata: vi.fn().mockImplementation((t: string) => t),
-  provenanceForTool: vi.fn().mockReturnValue(null),
-  assertElaineToolFamilyCoverage: vi.fn(),
-  MODEL_VISIBLE_HARD_TOOL_NAMES: new Set<string>(),
-  MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS: {},
-  ELAINE_READ_CONCURRENCY: 3,
-  ElaineTurnRuntime: class {},
-}));
+vi.mock("./runtime", () => buildRuntimeMock());
 
 vi.mock("./capability-registry", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./capability-registry")>();

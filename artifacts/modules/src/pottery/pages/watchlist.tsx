@@ -358,8 +358,8 @@ export default function PotteryWatchlist() {
           <h1 className="text-xl font-semibold">Pottery Watchlist</h1>
         </div>
         <p className="text-sm text-muted-foreground">
-          Track keywords on eBay sold listings and get alerted when matching
-          pieces appear.
+          Track keywords on eBay listings and get alerted when matching pieces
+          appear for sale.
         </p>
       </div>
 
@@ -385,7 +385,7 @@ export default function PotteryWatchlist() {
           <Bell className="h-10 w-10 mx-auto mb-3 opacity-30" />
           <p className="text-sm">No watchlist items yet.</p>
           <p className="text-xs mt-1">
-            Add a keyword above to start tracking eBay sold listings.
+            Add a keyword above to start tracking eBay listings.
           </p>
         </div>
       )}

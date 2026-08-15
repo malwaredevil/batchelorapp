@@ -181,8 +181,9 @@ router.post("/watchlist/:id/scan", aiLimiter, async (req, res) => {
     return true;
   });
 
-  // For active-listing fallback results (Finding API unavailable), soldDate is
-  // always null — don't store a soldAt timestamp that didn't happen.
+  // Results are always current active listings (asking prices) now that the
+  // Finding API is retired, so soldDate is always null — don't store a
+  // soldAt timestamp that didn't happen.
   const isActiveListing = result.sourceType === "active_listing";
 
   let newAlerts = 0;

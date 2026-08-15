@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type OpenAI from "openai";
+import { RESTRICTED_EXCLUDED_ACTION_TYPES_SOURCE } from "./restricted-channel-config";
 import {
   buildElaineCapabilityRegistry,
   buildPlannerCatalogFromCapabilities,
@@ -85,5 +86,30 @@ describe("Elaine capability registry", () => {
       confirmation: "action_mode",
       channels: ["web"],
     });
+  });
+
+  it("registers estimate_pottery_market_value as web-only action", () => {
+    expect(ELAINE_TOOL_POLICIES["estimate_pottery_market_value"]).toMatchObject(
+      {
+        kind: "action",
+        channels: ["web"],
+      },
+    );
+  });
+
+  it("registers ornament_ebay_price_lookup as web-only action", () => {
+    expect(ELAINE_TOOL_POLICIES["ornament_ebay_price_lookup"]).toMatchObject({
+      kind: "action",
+      channels: ["web"],
+    });
+  });
+
+  it("excludes eBay lookup tools from restricted channels (SMS/voice/email/Slack)", () => {
+    expect(RESTRICTED_EXCLUDED_ACTION_TYPES_SOURCE).toContain(
+      "estimate_pottery_market_value",
+    );
+    expect(RESTRICTED_EXCLUDED_ACTION_TYPES_SOURCE).toContain(
+      "ornament_ebay_price_lookup",
+    );
   });
 });

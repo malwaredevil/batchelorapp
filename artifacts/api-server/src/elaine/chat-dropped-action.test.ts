@@ -23,14 +23,28 @@
  * to allow or veto that call.
  */
 
-import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  beforeAll,
+} from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
 import { buildPlannerToolCatalogMock } from "./test-helpers/planner-tool-catalog-mock";
+import {
+  elaineLessonsMockFactory,
+  loggerMockFactory,
+  sentryMockFactory,
+  rateLimitMockFactory,
+} from "./test-helpers/standard-mock-scaffold";
+import { buildRuntimeMock } from "./test-helpers/runtime-mock";
 
 // ── Hoisted mock controls ────────────────────────────────────────────────────
 // These must be hoisted before any vi.mock() factory references them.
-
 const {
   mockRegisterToolCalls,
   mockRecordModelRound,
@@ -118,30 +132,11 @@ const {
 
 // ── vi.mock() declarations ────────────────────────────────────────────────────
 
-vi.mock("@sentry/node", () => ({
-  init: vi.fn(),
-  setUser: vi.fn(),
-  captureException: vi.fn(),
-  withScope: vi.fn(),
-  startSpan: vi.fn((_o: unknown, cb: () => unknown) => cb()),
-  setConversationId: vi.fn(),
-  Scope: class {},
-}));
+vi.mock("@sentry/node", () => sentryMockFactory());
 
-vi.mock("../lib/logger", () => ({
-  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
-}));
+vi.mock("../lib/logger", () => loggerMockFactory());
 
-vi.mock("../middleware/rateLimit", () => ({
-  loginLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  passwordResetLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  phoneVerifyLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  authLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  apiLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  adminLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  webhookLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  aiLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-}));
+vi.mock("../middleware/rateLimit", () => rateLimitMockFactory());
 
 vi.mock("../middleware/auth", () => ({
   requireAuth: (
@@ -421,16 +416,7 @@ vi.mock("../lib/elaine-tasks", () => ({
 // unresolvable state before headers are sent.  Mock it out so the
 // queue stays aligned with primeDbForFreshChat's 5-slot layout.
 vi.mock("../lib/elaine-lessons", () => ({
-  ELAINE_LESSON_DOMAINS: [
-    "travels",
-    "pottery",
-    "quilting",
-    "ornaments",
-    "general",
-  ],
-  getRelevantElaineLessons: vi
-    .fn()
-    .mockResolvedValue({ lessons: [], evidenceBlock: "" }),
+  ...elaineLessonsMockFactory(),
   maybeScheduleExplicitLessonDiagnosis: vi.fn(),
   recordElaineLesson: mockRecordElaineLesson,
 }));
@@ -446,96 +432,23 @@ vi.mock("./office-actions", () => ({
   SUMMARIZE_INBOX_TOOL_NAME: "summarize_inbox",
 }));
 
-vi.mock("./runtime", () => ({
-  assertElaineToolFamilyCoverage: vi.fn(),
-  aggregateElaineTraceEvaluations: vi.fn().mockReturnValue([]),
-  // Self-heal detector — controlled per-test via mockDetectClaimedCheckWithoutToolCall.
-  detectClaimedCheckWithoutToolCall: mockDetectClaimedCheckWithoutToolCall,
-  buildSelfHealLessonInput: mockBuildSelfHealLessonInput,
-  selfHealPatternKey: vi
-    .fn()
-    .mockImplementation((kind: string) => `self_heal:${kind}`),
-  buildClassifierDoubtLessonInput: vi.fn().mockReturnValue({
-    outcome: "mistake",
-    domain: "general",
-    situation: "mock situation",
-    takeaway: "mock takeaway",
-    tags: ["classifier-doubt"],
-  }),
-  classifierDoubtPatternKey: vi.fn().mockReturnValue("classifier_doubt:mock"),
-  buildElaineSourceRoute: vi.fn().mockReturnValue({
-    preferredKinds: [],
-    fallbackKinds: [],
-    sourceKind: "direct",
-    sourceName: "current page context",
-    confidence: "high",
-  }),
-  classifyElaineRequest: vi.fn().mockReturnValue({
-    type: "conversational",
-    scope: "none",
-    intent: "chat",
-  }),
-  isSchedulingDoubtMessage: vi.fn().mockReturnValue(false),
-  isReminderDoubtMessage: vi.fn().mockReturnValue(false),
-  completedActionAcknowledgement: vi.fn().mockReturnValue(""),
-  createElaineTurnTrace: vi.fn().mockResolvedValue({ id: 1 }),
-  createFallbackPlan: vi.fn().mockReturnValue({
-    goal: "Answer the user",
-    steps: [],
-    assumptions: [],
-    completionCriteria: ["User receives a helpful reply"],
-  }),
-  decideElaineModelStreamRecovery: vi.fn().mockReturnValue({
-    retry: false,
-    suppressTools: false,
-    resetPartialContent: false,
-  }),
-  ELAINE_READ_CONCURRENCY: 3,
-  ElaineTurnRuntime: class {
-    registerToolCalls = mockRegisterToolCalls;
-    recordModelRound = mockRecordModelRound;
-    snapshot = mockSnapshot;
-    verify = mockVerify;
-    complete = mockComplete;
-    setTraceAvailable = mockSetTraceAvailable;
-    markFailedReadStepsAdjusted = mockMarkFailedReadStepsAdjusted;
-    recordObservation = mockRecordObservation;
-  },
-  evaluateForecastDateCoverage: vi.fn().mockResolvedValue({}),
-  evaluateElaineTrace: vi.fn().mockResolvedValue({}),
-  findElaineSatisfiedFallback: vi.fn().mockReturnValue(null),
-  finishElaineTurnTrace: vi.fn().mockResolvedValue(undefined),
-  generateElainePlan: vi.fn().mockResolvedValue({
-    plan: {
-      goal: "Answer the user",
-      steps: [],
-      assumptions: [],
-      completionCriteria: ["User receives a helpful reply"],
+vi.mock("./runtime", () =>
+  buildRuntimeMock({
+    // Self-heal detector — controlled per-test via mockDetectClaimedCheckWithoutToolCall.
+    detectClaimedCheckWithoutToolCall: mockDetectClaimedCheckWithoutToolCall,
+    buildSelfHealLessonInput: mockBuildSelfHealLessonInput,
+    ElaineTurnRuntime: class {
+      registerToolCalls = mockRegisterToolCalls;
+      recordModelRound = mockRecordModelRound;
+      snapshot = mockSnapshot;
+      verify = mockVerify;
+      complete = mockComplete;
+      setTraceAvailable = mockSetTraceAvailable;
+      markFailedReadStepsAdjusted = mockMarkFailedReadStepsAdjusted;
+      recordObservation = mockRecordObservation;
     },
-    source: "generated",
   }),
-  loadElaineTurnTracesForMessages: vi.fn().mockResolvedValue(new Map()),
-  mapWithConcurrency: vi
-    .fn()
-    .mockImplementation(
-      async <T>(
-        items: T[],
-        _concurrency: number,
-        fn: (item: T) => Promise<unknown>,
-      ) => Promise.all(items.map(fn)),
-    ),
-  MODEL_VISIBLE_HARD_TOOL_NAMES: new Set<string>(),
-  MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS: new Map<string, string>(),
-  persistElaineTraceBestEffort: vi.fn().mockResolvedValue(false),
-  preparedActionAcknowledgement: vi.fn().mockReturnValue(""),
-  provenanceForTool: vi.fn().mockReturnValue(null),
-  requestNeedsStructuredPlan: vi.fn().mockReturnValue(false),
-  sanitizeRuntimeText: vi.fn().mockImplementation((t: string) => t),
-  selectElaineReplanTool: vi.fn().mockReturnValue(null),
-  isReusableElaineResponseState: vi.fn().mockReturnValue(false),
-  selectElaineOpenAIRole: vi.fn().mockReturnValue("assistant"),
-  stripElaineCitationMetadata: vi.fn().mockImplementation((t: string) => t),
-}));
+);
 
 vi.mock("./capability-registry", () => ({
   buildElaineCapabilityRegistry: vi.fn().mockReturnValue({ capabilities: [] }),
@@ -960,6 +873,25 @@ function primeDbForAutoRunChat() {
   });
 }
 
+/**
+ * Asserts that every selectQueue slot added by primeDb* was consumed during
+ * the test.  A leftover slot means the handler issued fewer db.select() calls
+ * than the queue was primed for — the primeDb* helper is out of date.  A
+ * slot deficit (ECONNRESET / wrong-data during the test) means the handler
+ * gained a new db.select() call that was not added to primeDb*.
+ *
+ * Call this in afterEach so drift is surfaced with a clear failure message
+ * rather than a cryptic ECONNRESET or mismatched data in a later test.
+ */
+function assertSelectQueueDrained() {
+  expect(
+    selectQueue.length,
+    `selectQueue has ${selectQueue.length} unconsumed slot(s) after the test — ` +
+      `update primeDbForFreshChat / primeDbForAutoRunChat to match the ` +
+      `current db.select() call order in the chat handler (index.ts)`,
+  ).toBe(0);
+}
+
 // ── Shared setup ──────────────────────────────────────────────────────────────
 
 beforeEach(() => {
@@ -1038,6 +970,10 @@ beforeEach(() => {
   );
 });
 
+afterEach(() => {
+  assertSelectQueueDrained();
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Tests
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1045,12 +981,10 @@ beforeEach(() => {
 describe("POST /api/elaine/chat — dropped-action corrective text", () => {
   it("Scenario A: runtime veto (schedule.allowed=false) → corrective sentence in SSE delta, no action event", async () => {
     primeDbForFreshChat();
-    // Model produces a create_trip tool call
     setUpStreamingToolCall(
       "create_trip",
       JSON.stringify({ title: "Test Trip", destination: "Paris" }),
     );
-    // Scheduler vetoes the call
     mockRegisterToolCalls.mockReturnValue([
       {
         id: "tc-test-1",
@@ -1070,20 +1004,16 @@ describe("POST /api/elaine/chat — dropped-action corrective text", () => {
     expect(res.status).toBe(200);
     const { allDeltaText, eventTypes } = parseSseResponse(res.text);
 
-    // Corrective sentence must appear
     expect(allDeltaText).toContain(
       "I wasn't actually able to prepare that as a confirmable action just now",
     );
     expect(allDeltaText).toContain("nothing was scheduled or changed");
-    // No action proposal should have been sent
     expect(eventTypes).not.toContain("action");
   }, 15_000);
 
   it("Scenario B: tryBuildAction null (malformed JSON args) → corrective sentence in SSE delta, no action event", async () => {
     primeDbForFreshChat();
-    // Model produces a create_trip call with invalid (unparseable) JSON
     setUpStreamingToolCall("create_trip", "NOT_VALID_JSON{{{");
-    // Scheduler allows the call — so it reaches tryBuildAction
     mockRegisterToolCalls.mockReturnValue([
       {
         id: "tc-test-1",
@@ -1103,19 +1033,16 @@ describe("POST /api/elaine/chat — dropped-action corrective text", () => {
     expect(res.status).toBe(200);
     const { allDeltaText, eventTypes } = parseSseResponse(res.text);
 
-    // Corrective sentence must appear
     expect(allDeltaText).toContain(
       "I wasn't actually able to prepare that as a confirmable action just now",
     );
     expect(allDeltaText).toContain("nothing was scheduled or changed");
-    // No action proposal should have been sent
     expect(eventTypes).not.toContain("action");
   }, 15_000);
 
   it("Scenario D: two create_trip calls both vetoed → plural corrective sentence in SSE delta, no action event", async () => {
     primeDbForFreshChat();
 
-    // Model produces TWO create_trip tool calls in the same round.
     mockCallModelWithSubagent.mockImplementation(
       async (
         _model: string,
@@ -1184,7 +1111,6 @@ describe("POST /api/elaine/chat — dropped-action corrective text", () => {
       },
     );
 
-    // Scheduler vetoes BOTH calls.
     mockRegisterToolCalls.mockReturnValue([
       {
         id: "tc-multi-1",
@@ -1214,23 +1140,19 @@ describe("POST /api/elaine/chat — dropped-action corrective text", () => {
     expect(res.status).toBe(200);
     const { allDeltaText, eventTypes } = parseSseResponse(res.text);
 
-    // The plural corrective sentence must appear (both drops in one round).
     expect(allDeltaText).toContain(
       "I wasn't actually able to prepare some of those as confirmable actions just now",
     );
     expect(allDeltaText).toContain("nothing was scheduled or changed for them");
-    // No action proposal should have been sent for either call.
     expect(eventTypes).not.toContain("action");
   }, 15_000);
 
   it("Scenario C: valid tool call, scheduler allows it → action SSE event emitted, NO corrective text", async () => {
     primeDbForFreshChat();
-    // Model produces a create_trip call with well-formed, schema-valid args
     setUpStreamingToolCall(
       "create_trip",
       JSON.stringify({ title: "Test Trip", destination: "Paris" }),
     );
-    // Scheduler allows the call
     mockRegisterToolCalls.mockReturnValue([
       {
         id: "tc-test-1",
@@ -1250,9 +1172,7 @@ describe("POST /api/elaine/chat — dropped-action corrective text", () => {
     expect(res.status).toBe(200);
     const { allDeltaText, eventTypes } = parseSseResponse(res.text);
 
-    // An action confirmation card must have been proposed
     expect(eventTypes).toContain("action");
-    // Corrective sentence must NOT appear
     expect(allDeltaText).not.toContain(
       "I wasn't actually able to prepare that as a confirmable action just now",
     );
@@ -1270,19 +1190,12 @@ describe("POST /api/elaine/chat — dropped-action corrective text", () => {
 
 describe("POST /api/elaine/chat — auto_run executor failure corrective text", () => {
   it("Scenario E: auto_run action executor returns non-2xx → corrective delta streams, no action event", async () => {
-    // Prime the queue with actionConfirmationMode: "auto_run" in settings (slot
-    // 5) and an empty result for the executor's trip lookup (slot 6 → 404).
     primeDbForAutoRunChat();
 
-    // Model produces a valid update_trip_status call; the executor will return
-    // 404 because the trip select (slot 6) returns nothing.
     setUpStreamingToolCall(
       "update_trip_status",
       JSON.stringify({ tripId: 99, status: "active" }),
     );
-    // Scheduler allows the call — so execution reaches the executor.
-    // The id must match the "tc-test-1" emitted by makeToolCallStream /
-    // setUpStreamingToolCall so the scheduleByCallId lookup succeeds.
     mockRegisterToolCalls.mockReturnValue([
       {
         id: "tc-test-1",
@@ -1302,27 +1215,13 @@ describe("POST /api/elaine/chat — auto_run executor failure corrective text", 
     expect(res.status).toBe(200);
     const { allDeltaText, eventTypes } = parseSseResponse(res.text);
 
-    // Corrective note must appear — the executor returned 404, so nothing was
-    // actually changed.
     expect(allDeltaText).toContain(
       "I wasn't actually able to prepare that as a confirmable action just now",
     );
     expect(allDeltaText).toContain("nothing was scheduled or changed");
-    // auto_run never emits an "action" card — the action was executed (or
-    // attempted) server-side, not proposed to the user for confirmation.
     expect(eventTypes).not.toContain("action");
   }, 15_000);
 });
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Scenario F — self-heal corrective delta + lesson write
-// ─────────────────────────────────────────────────────────────────────────────
-// When Elaine's reply spontaneously claims a check or action outcome
-// ("I checked…", "I already saved that") without any real tool call this turn,
-// the route must (a) stream a corrective self-heal delta and (b) write a lesson
-// row with source "self_heal" so the same mistake shape is retrievable next
-// time via getRelevantElaineLessons.
-// ─────────────────────────────────────────────────────────────────────────────
 
 describe("POST /api/elaine/chat — self-heal corrective text and lesson write", () => {
   it("Scenario F: reply claims a check with no tool calls → self-heal delta streamed and lesson written with source self_heal", async () => {
@@ -1330,59 +1229,22 @@ describe("POST /api/elaine/chat — self-heal corrective text and lesson write",
 
     // Model produces a plain text reply that claims to have checked something —
     // no tool calls, so there are no observations to ground the claim.
-    const claimText =
-      "I checked and everything looks good — your reminder is all set!";
+    const claimText = "I checked and your reminder looks all set!";
     setUpStreamingContent(claimText);
 
-    // No tool calls this turn, so registerToolCalls is never consulted.  The
-    // default mockRegisterToolCalls return (undefined) is fine.
-
-    // Self-heal detector: configured to fire for the claim in claimText.
-    mockDetectClaimedCheckWithoutToolCall.mockReturnValue({
+    // Detector must fire for this scenario: mock it to return a mismatch.
+    mockDetectClaimedCheckWithoutToolCall.mockReturnValueOnce({
       kind: "claimed_check_without_tool_call" as const,
       claimedPhrase: "I checked",
     });
-    // recordElaineLesson returns a row with an id so diagnoseRecurring... can
-    // read lesson.id and lesson.occurrenceCount without crashing.
-    mockRecordElaineLesson.mockResolvedValue({ id: 7, occurrenceCount: 2 });
+
+    // recordElaineLesson must be callable (real buildSelfHealLessonInput still
+    // mocked, so lesson payload construction is stable).
+    mockRecordElaineLesson.mockResolvedValue({ id: 9, occurrenceCount: 1 });
 
     const res = await request(buildApp())
       .post("/api/elaine/chat")
-      .send({ message: "Did you check on my reminder?", appId: "hub" })
-      .buffer(true);
-
-    expect(res.status).toBe(200);
-    const { allDeltaText } = parseSseResponse(res.text);
-
-    // The self-heal correction sentence must be appended after the model reply.
-    expect(allDeltaText).toContain(
-      "Actually, I need to be careful here — I haven't actually verified that yet",
-    );
-
-    // recordElaineLesson must have been called exactly once with source "self_heal".
-    expect(mockRecordElaineLesson).toHaveBeenCalledTimes(1);
-    expect(mockRecordElaineLesson).toHaveBeenCalledWith(
-      expect.objectContaining({ source: "self_heal" }),
-    );
-  }, 15_000);
-
-  it("Scenario G: reply claims an action outcome without a tool call → self-heal delta streamed", async () => {
-    primeDbForFreshChat();
-
-    // Model claims the action already happened without actually executing it.
-    setUpStreamingContent(
-      "I've already saved that reminder for you — you're all set!",
-    );
-
-    mockDetectClaimedCheckWithoutToolCall.mockReturnValue({
-      kind: "claimed_action_outcome_without_tool_call" as const,
-      claimedPhrase: "I've already saved",
-    });
-    mockRecordElaineLesson.mockResolvedValue({ id: 8, occurrenceCount: 1 });
-
-    const res = await request(buildApp())
-      .post("/api/elaine/chat")
-      .send({ message: "Can you save that for me?", appId: "hub" })
+      .send({ message: "Did you check my reminder?", appId: "hub" })
       .buffer(true);
 
     expect(res.status).toBe(200);
@@ -1406,7 +1268,7 @@ describe("POST /api/elaine/chat — self-heal corrective text and lesson write",
 
     const res = await request(buildApp())
       .post("/api/elaine/chat")
-      .send({ message: "Is my calendar clear?", appId: "hub" })
+      .send({ message: "Did you check my reminder?", appId: "hub" })
       .buffer(true);
 
     expect(res.status).toBe(200);
@@ -1414,5 +1276,50 @@ describe("POST /api/elaine/chat — self-heal corrective text and lesson write",
 
     expect(allDeltaText).not.toContain("Actually, I need to be careful here");
     expect(mockRecordElaineLesson).not.toHaveBeenCalled();
+  }, 15_000);
+
+  it("Scenario I: real detector fires on CLAIMED_CHECK_RE phrase with empty observations → self-heal delta and lesson written (real detector, not mocked)", async () => {
+    // Bypass the module-level mock for detectClaimedCheckWithoutToolCall so
+    // the actual CLAIMED_CHECK_RE / CLAIMED_ACTION_OUTCOME_RE regex logic is
+    // exercised through the full route, not a stub return value.  The rest of
+    // the ./runtime mock (ElaineTurnRuntime, classify, etc.) stays in place.
+    const { detectClaimedCheckWithoutToolCall: realDetect } =
+      await vi.importActual<typeof import("./runtime/self-heal-policy")>(
+        "./runtime/self-heal-policy",
+      );
+    mockDetectClaimedCheckWithoutToolCall.mockImplementation(realDetect);
+
+    primeDbForFreshChat();
+
+    // A phrase that genuinely matches CLAIMED_CHECK_RE:
+    //   /\bi(?:'ve| have)?\s+(?:just\s+|already\s+)?(?:checked|...)\b/gi
+    // The default MOCK_TRACE has observations: [] so nothing grounds the claim.
+    const claimText = "I checked and your reminder looks all set!";
+    setUpStreamingContent(claimText);
+
+    // recordElaineLesson must be callable (real buildSelfHealLessonInput still
+    // mocked, so lesson payload construction is stable).
+    mockRecordElaineLesson.mockResolvedValue({ id: 9, occurrenceCount: 1 });
+
+    const res = await request(buildApp())
+      .post("/api/elaine/chat")
+      .send({ message: "Did you check my reminder?", appId: "hub" })
+      .buffer(true);
+
+    expect(res.status).toBe(200);
+    const { allDeltaText } = parseSseResponse(res.text);
+
+    // The real CLAIMED_CHECK_RE regex matches "I checked" in claimText, and
+    // the empty observation list means the claim is ungrounded, so the route
+    // must stream the corrective self-heal sentence.
+    expect(allDeltaText).toContain(
+      "Actually, I need to be careful here — I haven't actually verified that yet",
+    );
+
+    // A lesson row must be written with source "self_heal".
+    expect(mockRecordElaineLesson).toHaveBeenCalledTimes(1);
+    expect(mockRecordElaineLesson).toHaveBeenCalledWith(
+      expect.objectContaining({ source: "self_heal" }),
+    );
   }, 15_000);
 });

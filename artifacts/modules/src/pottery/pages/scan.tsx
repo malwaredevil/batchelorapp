@@ -167,6 +167,75 @@ function DetectedAttributes({ result }: { result: CompareResult }) {
 
 type CameraFacing = "environment" | "user";
 
+/**
+ * Camera failures are NOT all "permission denied". A DOMException from
+ * getUserMedia carries a `.name` that tells you what actually happened —
+ * treating every failure as a permissions problem hides the real cause
+ * (e.g. "camera in use by another app", which is common right after an
+ * installed PWA is backgrounded/resumed and Android hasn't released the
+ * previous session's camera track yet).
+ */
+type CameraErrorKind =
+  | "denied"
+  | "busy"
+  | "not-found"
+  | "unsupported"
+  | "other";
+
+interface CameraError {
+  kind: CameraErrorKind;
+  message: string;
+}
+
+const DOM_EXCEPTION_KIND: Record<string, CameraErrorKind> = {
+  NotAllowedError: "denied",
+  PermissionDeniedError: "denied",
+  NotReadableError: "busy",
+  TrackStartError: "busy",
+  NotFoundError: "not-found",
+  DevicesNotFoundError: "not-found",
+  OverconstrainedError: "unsupported",
+  ConstraintNotSatisfiedError: "unsupported",
+  SecurityError: "unsupported",
+};
+
+function classifyCameraError(err: unknown): CameraError {
+  const name = err instanceof DOMException ? err.name : "";
+  const message = err instanceof Error ? err.message : String(err);
+  return { kind: DOM_EXCEPTION_KIND[name] ?? "other", message };
+}
+
+const CAMERA_ERROR_COPY: Record<
+  CameraErrorKind,
+  { title: string; body: string; action: "reload" | "retry" }
+> = {
+  denied: {
+    title: "Camera access required",
+    body: "Allow camera access in your browser settings, then reload the page.",
+    action: "reload",
+  },
+  busy: {
+    title: "Camera is in use",
+    body: "Another app or browser tab is using the camera. Close it, then try again.",
+    action: "retry",
+  },
+  "not-found": {
+    title: "No camera found",
+    body: "This device doesn't have a camera available for scanning.",
+    action: "retry",
+  },
+  unsupported: {
+    title: "Camera unavailable",
+    body: "The camera couldn't be started with the required settings.",
+    action: "retry",
+  },
+  other: {
+    title: "Couldn't start the camera",
+    body: "Something went wrong starting the camera. Try again.",
+    action: "retry",
+  },
+};
+
 export default function Scan() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -174,7 +243,7 @@ export default function Scan() {
 
   const [facing, setFacing] = useState<CameraFacing>("environment");
   const [cameraReady, setCameraReady] = useState(false);
-  const [permissionDenied, setPermissionDenied] = useState(false);
+  const [cameraError, setCameraError] = useState<CameraError | null>(null);
   const [captured, setCaptured] = useState<string | null>(null);
   const [capturedFile, setCapturedFile] = useState<File | null>(null);
 
@@ -192,7 +261,16 @@ export default function Scan() {
   const startCamera = useCallback(
     async (facingMode: CameraFacing) => {
       stopStream();
-      setPermissionDenied(false);
+      setCameraError(null);
+
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setCameraError({
+          kind: "unsupported",
+          message: "getUserMedia is not available in this browser context.",
+        });
+        return;
+      }
+
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
@@ -202,8 +280,13 @@ export default function Scan() {
           videoRef.current.srcObject = stream;
           videoRef.current.onloadedmetadata = () => setCameraReady(true);
         }
-      } catch {
-        setPermissionDenied(true);
+      } catch (err) {
+        const classified = classifyCameraError(err);
+        // Surfaces the *real* getUserMedia failure reason in the console so
+        // it isn't hidden behind a generic "permission" message during field
+        // debugging.
+        console.error("[pottery/scan] camera start failed:", classified, err);
+        setCameraError(classified);
       }
     },
     [stopStream],
@@ -213,6 +296,25 @@ export default function Scan() {
     void startCamera(facing);
     return () => stopStream();
   }, [facing, startCamera, stopStream]);
+
+  // Installed PWAs get suspended (not unmounted) when backgrounded. Android
+  // can reclaim the camera from a suspended session, so resuming without
+  // releasing/reacquiring the stream leads to a stale track and a
+  // "NotReadableError: could not start video source" on the next capture —
+  // which used to render as the generic "camera access required" screen.
+  // Releasing on hide and restarting on show keeps the stream valid.
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        stopStream();
+      } else if (!captured && !result) {
+        void startCamera(facing);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () =>
+      document.removeEventListener("visibilitychange", handleVisibility);
+  }, [captured, result, facing, startCamera, stopStream]);
 
   const handleCapture = () => {
     const video = videoRef.current;
@@ -264,8 +366,8 @@ export default function Scan() {
 
   usePageAssistantContext(
     "pottery-scan",
-    permissionDenied
-      ? "Scan page: camera access was denied, cannot capture a photo."
+    cameraError
+      ? `Scan page: camera unavailable (${cameraError.kind}), cannot capture a photo.`
       : result
         ? `Scan page: analysis complete. Summary: ${result.summary} Owns same pattern: ${result.ownsSamePattern}. Owns exact piece: ${result.ownsExactPiece}. ${result.matches.length} closest match(es): ${formatElaineContextList(result.matches, { label: "Matches", formatItem: (m) => formatElaineContextEntity({ entity: "item", id: m.item.id, label: m.item.name }), emptyLabel: "none" })}.`
         : compare.isPending
@@ -275,27 +377,37 @@ export default function Scan() {
 
   return (
     <div className="flex min-h-[calc(100vh-8rem)] flex-col">
-      {/* ── Permission denied state ── */}
-      {permissionDenied && (
+      {/* ── Camera error state ── */}
+      {cameraError && (
         <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
           <div className="rounded-full bg-muted p-4">
             <AlertTriangle className="h-8 w-8 text-muted-foreground" />
           </div>
           <div>
-            <p className="font-semibold">Camera access required</p>
+            <p className="font-semibold">
+              {CAMERA_ERROR_COPY[cameraError.kind].title}
+            </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Allow camera access in your browser settings, then reload the
-              page.
+              {CAMERA_ERROR_COPY[cameraError.kind].body}
             </p>
           </div>
-          <Button onClick={() => window.location.reload()} variant="outline">
-            Reload
+          <Button
+            onClick={() =>
+              CAMERA_ERROR_COPY[cameraError.kind].action === "reload"
+                ? window.location.reload()
+                : void startCamera(facing)
+            }
+            variant="outline"
+          >
+            {CAMERA_ERROR_COPY[cameraError.kind].action === "reload"
+              ? "Reload"
+              : "Try again"}
           </Button>
         </div>
       )}
 
       {/* ── Results view ── */}
-      {!permissionDenied && result && (
+      {!cameraError && result && (
         <div className="mx-auto w-full max-w-sm space-y-4 px-4 py-4">
           <VerdictSummary result={result} />
           <VerdictDetails result={result} />
@@ -309,7 +421,7 @@ export default function Scan() {
       )}
 
       {/* ── Analyzing spinner ── */}
-      {!permissionDenied && !result && compare.isPending && (
+      {!cameraError && !result && compare.isPending && (
         <div className="flex flex-1 flex-col items-center justify-center gap-4">
           <Loader2 className="h-10 w-10 animate-spin text-primary" />
           <p className="font-medium">Analyzing…</p>
@@ -320,7 +432,7 @@ export default function Scan() {
       )}
 
       {/* ── Camera / preview ── */}
-      {!permissionDenied && !result && !compare.isPending && (
+      {!cameraError && !result && !compare.isPending && (
         <div className="relative flex flex-1 flex-col overflow-hidden rounded-2xl bg-black">
           {/* Video stream — hidden when photo captured */}
           <video

@@ -624,6 +624,17 @@ CREATE TABLE IF NOT EXISTS integrations_health_state (
   last_updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Sentry seen issues (Task #1025): dedup ledger for proactive Sentry error
+-- nudges so an announced issue stays quiet unless it reopens after a resolve.
+CREATE TABLE IF NOT EXISTS sentry_seen_issues (
+  issue_id         TEXT PRIMARY KEY,
+  last_status      TEXT NOT NULL DEFAULT 'unresolved',
+  alert_generation INTEGER NOT NULL DEFAULT 1,
+  first_alerted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE sentry_seen_issues ADD COLUMN IF NOT EXISTS alert_generation INTEGER NOT NULL DEFAULT 1;
+
 -- Generic cross-app reminder system (see lib/db/src/schema/reminders.ts).
 CREATE TABLE IF NOT EXISTS reminders (
   id                          SERIAL PRIMARY KEY,
@@ -3978,6 +3989,18 @@ async function main() {
     table: "integrations_health_state",
     columns: ["service", "consecutive_error_count", "last_updated_at"],
     orderBy: "service",
+  });
+
+  summary["sentry_seen_issues"] = await copyTable(source, dest, {
+    table: "sentry_seen_issues",
+    columns: [
+      "issue_id",
+      "last_status",
+      "alert_generation",
+      "first_alerted_at",
+      "last_updated_at",
+    ],
+    orderBy: "issue_id",
   });
 
   // ── App configuration ─────────────────────────────────────────────────────

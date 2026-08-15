@@ -301,3 +301,25 @@ export const integrationsHealthState = pgTable("integrations_health_state", {
 
 export type IntegrationsHealthStateRow =
   typeof integrationsHealthState.$inferSelect;
+
+// ── Sentry seen issues ────────────────────────────────────────────────────────
+// Dedup ledger for proactive Sentry error nudges. One row per Sentry issue id
+// that has ever been announced to the owner. `lastStatus` tracks whether the
+// issue was last observed unresolved or resolved in Sentry — an issue that
+// reappears in the unresolved list after being marked resolved has "reopened"
+// and is announced again. No RLS: admin/ops data, not user-scoped.
+export const sentrySeenIssues = pgTable("sentry_seen_issues", {
+  issueId: text("issue_id").primaryKey(),
+  lastStatus: text("last_status").notNull().default("unresolved"),
+  // Incremented each time the issue is (re-)announced, so a reopen gets a
+  // distinct nudge key even within the same UTC day.
+  alertGeneration: integer("alert_generation").notNull().default(1),
+  firstAlertedAt: timestamp("first_alerted_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  lastUpdatedAt: timestamp("last_updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export type SentrySeenIssueRow = typeof sentrySeenIssues.$inferSelect;

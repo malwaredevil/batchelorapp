@@ -15,7 +15,15 @@
  *   • .from().where().orderBy().limit() → resolves
  */
 
-import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  beforeAll,
+} from "vitest";
 import express, {
   type Express,
   type Request,
@@ -24,6 +32,11 @@ import express, {
 } from "express";
 import request from "supertest";
 import { buildPlannerToolCatalogMock } from "./test-helpers/planner-tool-catalog-mock";
+import { buildRuntimeMock } from "./test-helpers/runtime-mock";
+import {
+  sentryMockFactory,
+  rateLimitMockFactory,
+} from "./test-helpers/standard-mock-scaffold";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -100,30 +113,13 @@ const dbMock = {
 // with minimal empty factories so the 8 000-line index.ts can be imported.
 // ---------------------------------------------------------------------------
 
-vi.mock("@sentry/node", () => ({
-  init: vi.fn(),
-  captureException: vi.fn(),
-  withScope: vi.fn((_cb: (s: unknown) => void) =>
-    _cb({ setTag: vi.fn(), setExtra: vi.fn() }),
-  ),
-  startSpan: vi.fn((_opts: unknown, cb: () => unknown) => cb()),
-  setUser: vi.fn(),
-}));
+vi.mock("@sentry/node", () => sentryMockFactory());
 
 vi.mock("../lib/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-vi.mock("../middleware/rateLimit", () => ({
-  loginLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  passwordResetLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  phoneVerifyLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  authLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  apiLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  adminLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  webhookLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-  aiLimiter: (_r: unknown, _s: unknown, n: () => void) => n(),
-}));
+vi.mock("../middleware/rateLimit", () => rateLimitMockFactory());
 
 vi.mock("../lib/env", () => ({
   env: {
@@ -384,53 +380,18 @@ vi.mock("./office-actions", () => ({
   SUMMARIZE_INBOX_TOOL_NAME: "summarize_inbox",
 }));
 
-vi.mock("./runtime", () => ({
-  assertElaineToolFamilyCoverage: vi.fn(),
-  aggregateElaineTraceEvaluations: vi.fn(),
-  buildElaineSourceRoute: vi.fn().mockReturnValue("web"),
-  classifyElaineRequest: vi.fn(),
-  isReminderDoubtMessage: vi.fn().mockReturnValue(false),
-  isSchedulingDoubtMessage: vi.fn().mockReturnValue(false),
-  buildSelfHealLessonInput: vi.fn().mockReturnValue(null),
-  detectClaimedCheckWithoutToolCall: vi.fn().mockReturnValue(null),
-  selfHealPatternKey: vi.fn().mockReturnValue("self_heal:mock"),
-  buildClassifierDoubtLessonInput: vi.fn().mockReturnValue(null),
-  classifierDoubtPatternKey: vi.fn().mockReturnValue("classifier_doubt:mock"),
-  completedActionAcknowledgement: vi.fn().mockReturnValue("Done."),
-  createElaineTurnTrace: vi.fn().mockResolvedValue({ id: 1 }),
-  createFallbackPlan: vi.fn(),
-  decideElaineModelStreamRecovery: vi.fn(),
-  ELAINE_READ_CONCURRENCY: 3,
-  ElaineTurnRuntime: class {},
-  evaluateForecastDateCoverage: vi.fn(),
-  evaluateElaineTrace: vi.fn(),
-  findElaineSatisfiedFallback: vi.fn(),
-  finishElaineTurnTrace: vi.fn(),
-  generateElainePlan: vi.fn(),
-  // The key mock for pagination tests: never throws, returns an empty Map
-  // so mapHistoryMessageRows completes without touching real Sentry or DB.
-  loadElaineTurnTracesForMessages: vi.fn().mockResolvedValue(new Map()),
-  mapWithConcurrency: vi
-    .fn()
-    .mockImplementation(
-      async <T>(
-        items: T[],
-        _concurrency: number,
-        fn: (item: T) => Promise<unknown>,
-      ) => Promise.all(items.map(fn)),
-    ),
-  MODEL_VISIBLE_HARD_TOOL_NAMES: new Set<string>(),
-  MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS: new Map<string, string>(),
-  persistElaineTraceBestEffort: vi.fn(),
-  preparedActionAcknowledgement: vi.fn().mockReturnValue("Preparing…"),
-  provenanceForTool: vi.fn().mockReturnValue("direct"),
-  requestNeedsStructuredPlan: vi.fn().mockReturnValue(false),
-  sanitizeRuntimeText: vi.fn().mockImplementation((t: string) => t),
-  selectElaineReplanTool: vi.fn(),
-  isReusableElaineResponseState: vi.fn().mockReturnValue(false),
-  selectElaineOpenAIRole: vi.fn().mockReturnValue("assistant"),
-  stripElaineCitationMetadata: vi.fn().mockImplementation((t: string) => t),
-}));
+vi.mock("./runtime", () =>
+  buildRuntimeMock({
+    buildElaineSourceRoute: vi.fn().mockReturnValue("web"),
+    completedActionAcknowledgement: vi.fn().mockReturnValue("Done."),
+    // The key mock for pagination tests: never throws, returns an empty Map
+    // so mapHistoryMessageRows completes without touching real Sentry or DB.
+    loadElaineTurnTracesForMessages: vi.fn().mockResolvedValue(new Map()),
+    preparedActionAcknowledgement: vi.fn().mockReturnValue("Preparing…"),
+    provenanceForTool: vi.fn().mockReturnValue("direct"),
+    ElaineTurnRuntime: class {},
+  }),
+);
 
 vi.mock("./capability-registry", () => ({
   buildElaineCapabilityRegistry: vi.fn().mockReturnValue({ capabilities: [] }),
@@ -544,6 +505,25 @@ function makeMessageRow(id: number, role: "user" | "assistant" = "user") {
 // Tests
 // ---------------------------------------------------------------------------
 
+/**
+ * Asserts that every selectQueue slot pushed by a test was consumed during the
+ * request.  A leftover slot means the handler issued fewer db.select() calls
+ * than the queue was primed for — the test setup is out of date.  A slot
+ * deficit (wrong data / ECONNRESET mid-test) means the handler gained a new
+ * db.select() call that was not added to the queue.
+ *
+ * Called in afterEach so drift is surfaced with a clear failure message rather
+ * than a cryptic data-mismatch in a later test.
+ */
+function assertSelectQueueDrained() {
+  expect(
+    selectQueue.length,
+    `selectQueue has ${selectQueue.length} unconsumed slot(s) after the test — ` +
+      `update the test's selectQueue pushes to match the current db.select() ` +
+      `call order in the conversation-pagination handlers (index.ts)`,
+  ).toBe(0);
+}
+
 beforeEach(() => {
   selectQueue.length = 0;
   vi.clearAllMocks();
@@ -552,6 +532,10 @@ beforeEach(() => {
     makeInsertReturningBuilder([{ id: 7 }]),
   );
   dbMock.update.mockImplementation(() => makeUpdateBuilder());
+});
+
+afterEach(() => {
+  assertSelectQueueDrained();
 });
 
 // ── GET /conversation ────────────────────────────────────────────────────────

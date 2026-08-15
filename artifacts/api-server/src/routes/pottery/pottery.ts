@@ -1345,6 +1345,9 @@ router.post("/items/:id/set-primary-image", aiLimiter, async (req, res) => {
 // #213 — eBay market-value estimate (on-demand)
 // ---------------------------------------------------------------------------
 
+/** Cached eBay data (sold-price scraper + Browse API) is reused for 7 days. */
+const EBAY_CACHE_STALE_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
+
 router.post("/items/:id/estimate-market-value", aiLimiter, async (req, res) => {
   const { id } = GetPotteryParams.parse(req.params);
 
@@ -1359,12 +1362,58 @@ router.post("/items/:id/estimate-market-value", aiLimiter, async (req, res) => {
       name: potteryItems.name,
       maker: potteryItems.maker,
       style: potteryItems.style,
+      ebayPriceCachedAt: potteryItems.ebayPriceCachedAt,
+      ebayPriceMinUsd: potteryItems.ebayPriceMinUsd,
+      ebayPriceMaxUsd: potteryItems.ebayPriceMaxUsd,
+      ebayPriceMedianUsd: potteryItems.ebayPriceMedianUsd,
+      ebayPriceListings: potteryItems.ebayPriceListings,
     })
     .from(potteryItems)
     .where(eq(potteryItems.id, id));
 
   if (!item) {
     res.status(404).json({ error: "Item not found." });
+    return;
+  }
+
+  const force = (req.body as { force?: boolean } | undefined)?.force === true;
+
+  // Return cached eBay data immediately when it is still fresh — this avoids
+  // a paid Apify sold-price scraper run on every user-initiated refresh.
+  // When `force: true` is passed the cache is bypassed and a fresh run fires.
+  const cacheAgeMs = item.ebayPriceCachedAt
+    ? Date.now() - item.ebayPriceCachedAt.getTime()
+    : Infinity;
+  if (
+    !force &&
+    cacheAgeMs < EBAY_CACHE_STALE_AFTER_MS &&
+    item.ebayPriceMinUsd != null
+  ) {
+    const cached = item.ebayPriceListings as {
+      sourceType?: string;
+      items?: unknown[];
+    } | null;
+    const searchQuery = buildEbayQuery(item.name, {
+      maker: item.maker,
+      style: item.style,
+    });
+    logger.info(
+      { id, cacheAgeMs: Math.round(cacheAgeMs / 1000 / 60) + "min" },
+      "pottery: returning cached eBay data (skipping paid Apify run)",
+    );
+    res.json({
+      priceMinUsd: Number(item.ebayPriceMinUsd),
+      priceMaxUsd: item.ebayPriceMaxUsd ? Number(item.ebayPriceMaxUsd) : null,
+      priceMedianUsd: item.ebayPriceMedianUsd
+        ? Number(item.ebayPriceMedianUsd)
+        : null,
+      cachedAt: item.ebayPriceCachedAt!.toISOString(),
+      listingCount: cached?.items?.length ?? 0,
+      listings: cached?.items ?? [],
+      sourceType: cached?.sourceType ?? "active_listing",
+      searchQuery,
+      fromCache: true,
+    });
     return;
   }
 

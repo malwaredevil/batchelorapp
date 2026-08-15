@@ -5,6 +5,7 @@ import { provisionAllBuckets } from "./lib/bucket-provisioning";
 import { startRemindersScheduler } from "./lib/reminders-scheduler";
 import { startNudgeScheduler } from "./lib/travels-nudges";
 import { startIntegrationsHealthNudgeScheduler } from "./lib/integrations-health-nudges";
+import { startSentryErrorNudgeScheduler } from "./lib/sentry-error-nudges";
 import { startCalendarTripScanScheduler } from "./lib/travels-calendar-scan";
 import { startGmailScanScheduler } from "./lib/gmail-scan";
 import { startErrorRateSummary } from "./lib/error-tracker";
@@ -89,6 +90,7 @@ async function initializeRuntime(): Promise<void> {
     startCommCheckScheduler(),
     startWebhookSideEffectCleanupScheduler(),
     startIntegrationsHealthNudgeScheduler(),
+    startSentryErrorNudgeScheduler(),
     startSchedulerHeartbeat(),
   );
   startJobWorker("slack");

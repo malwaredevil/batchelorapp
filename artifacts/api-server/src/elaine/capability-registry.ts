@@ -197,6 +197,16 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
     executorPrefix: "potteryAction",
     channels: ["web"],
   }),
+  // estimate_pottery_market_value: web-only because it requires the item's
+  // numeric id to be visible on screen (page context), and force:true can
+  // trigger a paid Apify scraper run that should only be user-initiated from
+  // the web UI.
+  ...policies(["estimate_pottery_market_value"], {
+    ...ACTION_DEFAULTS,
+    domain: "pottery",
+    executorPrefix: "potteryAction",
+    channels: ["web"],
+  }),
   ...policies(
     [
       "update_fabric",
@@ -255,6 +265,16 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
   // add_photo_to_ornaments: web-only because it requires an image attachment
   // which restricted channels (SMS, voice, email, Slack) do not support.
   ...policies(["add_photo_to_ornaments"], {
+    ...ACTION_DEFAULTS,
+    domain: "ornaments",
+    executorPrefix: "ornamentAction",
+    channels: ["web"],
+  }),
+  // ornament_ebay_price_lookup: web-only because it requires the item's
+  // numeric id to be visible on screen (page context), and force:true can
+  // trigger a paid Apify scraper run that should only be user-initiated from
+  // the web UI.
+  ...policies(["ornament_ebay_price_lookup"], {
     ...ACTION_DEFAULTS,
     domain: "ornaments",
     executorPrefix: "ornamentAction",
@@ -727,6 +747,17 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
     channels: ["web"],
   }),
   ...policies(["check_integrations_health"], {
+    domain: "admin",
+    kind: "read",
+    risk: "none",
+    auth: "session_and_owner",
+    confirmation: "never",
+    executorPrefix: "adminRead",
+    audit: "runtime_observation",
+    retry: "read_only",
+    channels: ["web"],
+  }),
+  ...policies(["list_sentry_issues"], {
     domain: "admin",
     kind: "read",
     risk: "none",

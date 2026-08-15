@@ -170,6 +170,193 @@ export const elaineNudges = pgTable(
 export type ElaineNudgeRow = typeof elaineNudges.$inferSelect;
 export type InsertElaineNudge = typeof elaineNudges.$inferInsert;
 
+// Elaine's own operational memory — distinct from elaine_memory above, which
+// stores HOUSEHOLD FACTS ("the dog's name is Rex"). This table stores
+// lessons about ELAINE'S OWN PAST BEHAVIOR: something she got wrong and how
+// it was corrected, or an approach that worked well and is worth repeating.
+// Never conflate the two when reading or writing.
+//
+// Written today only via an explicit remember_lesson tool call in web chat
+// (see RECORD_LESSON_TOOL_NAME in planner-tool-catalog.ts); a future
+// self-heal flow may also write here when Elaine detects her own wrong
+// outcome without being told. Read-side retrieval
+// (getRelevantElaineLessons in lib/elaine-lessons.ts) ranks and caps the
+// rows so the prompt only ever sees a small relevant slice, not the whole
+// table — kept bounded/tagged rather than an unbounded free-text dump.
+export const elaineLessons = pgTable(
+  "elaine_lessons",
+  {
+    id: serial("id").primaryKey(),
+    // 'mistake' — something Elaine got wrong that was corrected
+    // 'success' — an approach that worked well and is worth repeating
+    outcome: text("outcome").notNull(),
+    // Conventional-but-freeform bucket ("travels", "reminders", "memory",
+    // "general", ...) used to narrow candidates before ranking by text
+    // relevance — validated against ELAINE_LESSON_DOMAINS at the write layer.
+    domain: text("domain").notNull().default("general"),
+    // What was attempted / the situation that produced the outcome.
+    situation: text("situation").notNull(),
+    // Short, reusable takeaway to apply next time a similar situation arises.
+    takeaway: text("takeaway").notNull(),
+    // Extra freeform keywords for retrieval beyond the domain bucket.
+    tags: jsonb("tags")
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    active: boolean("active").notNull().default(true),
+    // 'explicit_assistant' — Elaine recorded it herself mid-conversation
+    // 'explicit_user'      — the user asked Elaine to remember the lesson
+    // 'self_heal'          — a self-detected-correction flow wrote this
+    source: text("source").notNull().default("explicit_assistant"),
+    // How many times this exact (userId, outcome, situation, takeaway)
+    // lesson has recurred — starts at 1 on insert, incremented each time
+    // recordElaineLesson's dedup path touches the row instead of inserting
+    // a new one. Used by the code-diagnosis flow (#895) to decide when a
+    // *behavioral* correction has recurred often enough that the real cause
+    // is likely a gap in the code itself, not something a better prompt can
+    // fix — see maybeDiagnoseRecurringFailure in lib/elaine-code-diagnosis.ts.
+    occurrenceCount: integer("occurrence_count").notNull().default(1),
+    createdByUserId: integer("created_by_user_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("elaine_lessons_domain_active_idx").on(table.domain, table.active),
+    index("elaine_lessons_created_at_idx").on(table.createdAt),
+    index("elaine_lessons_user_active_idx").on(
+      table.createdByUserId,
+      table.active,
+    ),
+  ],
+).enableRLS();
+
+export type ElaineLessonRow = typeof elaineLessons.$inferSelect;
+export type InsertElaineLesson = typeof elaineLessons.$inferInsert;
+
+// Code-grounded diagnosis suggestions (#895) — materially different from
+// both tables above:
+//   - elaine_lessons is BEHAVIORAL memory, private to Elaine's own prompt
+//     context: "I should ask before assuming X." It is never shown to a
+//     human and never references actual source code.
+//   - elaine_nudges is a proactive household FYI with no review workflow —
+//     it just appears in chat and gets marked seen.
+// This table is neither: when the *same* self-heal lesson has recurred at
+// least a configured number of times (see
+// thresholds.codeDiagnosisRecurrenceThreshold in lib/elaine-config.ts),
+// Elaine is given a narrow, read-only, secret-excluding tool to look at the
+// specific source file(s) tied to that failure pattern (see
+// CODE_DIAGNOSIS_FILE_ALLOWLIST in lib/elaine-code-diagnosis.ts) and form a
+// hypothesis grounded in the real code — not just a repeat of the
+// behavioral lesson. Elaine never edits or ships code herself; this row is
+// a suggestion a human reviews (accept/dismiss) in the Owner Panel and, if
+// accepted, may turn into a real follow-up task. Nothing here is ever
+// auto-applied.
+export const elaineCodeSuggestions = pgTable(
+  "elaine_code_suggestions",
+  {
+    id: serial("id").primaryKey(),
+    // Stable identity for the recurring failure shape (e.g.
+    // "self_heal:claimed_check_without_tool_call") — used both to look up
+    // the narrow file allowlist for this pattern and to dedup/rate-limit:
+    // only one 'pending' suggestion may exist per pattern key at a time
+    // (enforced by a partial unique index in schema-statements.ts), so a
+    // recurring issue doesn't spam a new suggestion on every occurrence
+    // once one is already awaiting review.
+    patternKey: text("pattern_key").notNull(),
+    // The elaine_lessons row this suggestion was generated from. Nullable
+    // (set null) since a lesson can later be edited/deactivated without
+    // invalidating the historical suggestion record.
+    lessonId: integer("lesson_id").references(() => elaineLessons.id, {
+      onDelete: "set null",
+    }),
+    // Snapshot of the lesson's recurrence count at the moment this
+    // suggestion was generated, for the reviewer's context.
+    occurrenceCount: integer("occurrence_count").notNull(),
+    // Plain-language description of the recurring failure pattern observed
+    // (drawn from the lesson's situation/takeaway).
+    observedPattern: text("observed_pattern").notNull(),
+    // The specific file paths (relative to repo root) Elaine actually read
+    // while forming this hypothesis — always a subset of the pattern's
+    // allowlist, never arbitrary paths.
+    filesReviewed: jsonb("files_reviewed")
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    // Plain-language description of what Elaine thinks should change in the
+    // code, grounded in the files reviewed above.
+    hypothesis: text("hypothesis").notNull(),
+    // 'pending' — awaiting owner review
+    // 'accepted' — owner agreed there's a real gap worth acting on
+    // 'dismissed' — owner reviewed and declined
+    status: text("status").notNull().default("pending"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    decidedByUserId: integer("decided_by_user_id"),
+    // Optional reference to the project task (e.g. "#920") the owner created
+    // from this suggestion — populated via the owner panel's "link task" flow
+    // after accepting. Null until the owner explicitly links one. Stored as a
+    // short ref string so it can be displayed as "→ Task #NNN" in the panel.
+    linkedTaskRef: text("linked_task_ref"),
+  },
+  (table) => [
+    index("elaine_code_suggestions_status_created_idx").on(
+      table.status,
+      table.createdAt,
+    ),
+    index("elaine_code_suggestions_pattern_key_idx").on(table.patternKey),
+  ],
+).enableRLS();
+
+export type ElaineCodeSuggestionRow = typeof elaineCodeSuggestions.$inferSelect;
+export type InsertElaineCodeSuggestion =
+  typeof elaineCodeSuggestions.$inferInsert;
+
+// Code tasks (#913) — lightweight action items the owner creates from an
+// accepted code-diagnosis suggestion with one click. These are distinct from
+// the Replit agent task system (which is not reachable from the running app
+// server) and from elaine_nudges / elaine_lessons. Each row has a stable
+// sequential id that becomes the display ref shown in the panel as "#NNN".
+// One suggestion may produce at most one task (enforced by the unique index
+// on created_from_suggestion_id so re-clicking never duplicates).
+export const elaineCodeTasks = pgTable(
+  "elaine_code_tasks",
+  {
+    id: serial("id").primaryKey(),
+    title: text("title").notNull(),
+    description: text("description").notNull(),
+    // 'open' — created, not yet acted on
+    // 'done' — owner has resolved the underlying code gap
+    status: text("status").notNull().default("open"),
+    createdFromSuggestionId: integer("created_from_suggestion_id").references(
+      () => elaineCodeSuggestions.id,
+      { onDelete: "set null" },
+    ),
+    createdByUserId: integer("created_by_user_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("elaine_code_tasks_status_created_idx").on(
+      table.status,
+      table.createdAt,
+    ),
+    uniqueIndex("elaine_code_tasks_suggestion_idx").on(
+      table.createdFromSuggestionId,
+    ),
+  ],
+).enableRLS();
+
+export type ElaineCodeTaskRow = typeof elaineCodeTasks.$inferSelect;
+export type InsertElaineCodeTask = typeof elaineCodeTasks.$inferInsert;
+
 // Single-row (id fixed at 1) global config, editable only by the app owner.
 // Originally Elaine-only (chatModel/subagentModel/requestTimeoutMs/
 // maxResponseTokens); now doubles as the whole Batchelor app's global AI
@@ -245,6 +432,12 @@ export const elaineHistoryConversations = pgTable(
     openaiStateUpdatedAt: timestamp("openai_state_updated_at", {
       withTimezone: true,
     }),
+    // Ephemeral travel-companion location — the last place the user stated
+    // they were in ("I'm in Gion", "just arrived in Kyoto"). Only meaningful
+    // for Travels-app turns; never shown to other sessions or persisted beyond
+    // this conversation. Cleared if a new explicit location is stated; kept
+    // until then so the user doesn't have to repeat themselves every turn.
+    statedLocation: text("stated_location"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

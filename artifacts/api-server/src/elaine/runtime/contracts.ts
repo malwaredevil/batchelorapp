@@ -78,12 +78,37 @@ export interface ElainePlanStep extends ElainePlanStepInput {
   attempts: number;
 }
 
+export interface ElainePlanSelection {
+  /** Short label for the approach that was ultimately chosen. */
+  chosenApproach: string;
+  /** Short labels for the other candidate approach(es) that were rejected. */
+  alternativeApproaches: string[];
+  /** Concrete, user-safe reason the chosen approach beat the alternative(s). */
+  reason: string;
+  /**
+   * Zero-based index of the chosen candidate in the original ordered list
+   * produced by the planner. Index 0 means the first/default candidate was
+   * kept; any higher value means a non-default approach was selected.
+   * Absent on traces written before this field was added.
+   */
+  chosenIndex?: number;
+}
+
 export interface ElainePlan {
   version: 1;
   goal: string;
   assumptions: string[];
   completionCriteria: string[];
   steps: ElainePlanStep[];
+  /**
+   * Present when this plan was picked among >=2 candidate approaches by the
+   * multi-path planning step (only runs for requests that already trigger
+   * structured planning — see `requestNeedsStructuredPlan`). Riding along on
+   * the plan itself means the existing plan-progress trace shows the
+   * comparison for free, with no schema/DB migration since `plan` is stored
+   * as jsonb as-is.
+   */
+  planSelection?: ElainePlanSelection;
 }
 
 export const ElaineObservationSchema = z.object({
@@ -91,6 +116,13 @@ export const ElaineObservationSchema = z.object({
   stepId: z.string().min(1).max(48).nullable(),
   toolName: z.string().min(1).max(100),
   success: z.boolean(),
+  // True when this observation is a proposed-but-not-yet-confirmed action
+  // (e.g. a confirmation card was sent to the user) rather than an action
+  // that actually executed. `success: true` alone does not mean "this
+  // happened" for these — the self-heal detector in self-heal-policy.ts
+  // relies on this to avoid treating a pending confirmation card as proof
+  // that "I already saved/sent/scheduled that" is true.
+  waitingConfirmation: z.boolean().optional(),
   errorCategory: z.string().max(80).optional(),
   evidenceSummary: z.string().max(220),
   resultReference: z.string().max(240).optional(),
@@ -157,6 +189,7 @@ export type ElaineTerminalStatus = z.infer<typeof ElaineTerminalStatusSchema>;
 export const ElaineRuntimeEventTypeSchema = z.enum([
   "turn_started",
   "plan_created",
+  "plan_compared",
   "plan_revised",
   "step_updated",
   "observation",
@@ -222,6 +255,14 @@ export interface ElaineRuntimeTrace {
   completedAt: string | null;
   usage: ElaineRuntimeUsage;
 }
+
+/**
+ * The exact string that `sanitizeRuntimeText` substitutes when the entire
+ * value is a hidden-reasoning block (e.g. `<think>…</think>`).
+ * Exported so callers can detect a pure-reasoning result without duplicating
+ * the literal string.
+ */
+export const PRIVATE_REASONING_SENTINEL = "[private reasoning omitted]";
 
 const SECRET_ASSIGNMENT_RE =
   /\b(api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret|authorization)\b\s*[:=]\s*["']?[^,\s"']+/gi;

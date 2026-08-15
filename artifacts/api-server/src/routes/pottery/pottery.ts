@@ -1376,13 +1376,17 @@ router.post("/items/:id/estimate-market-value", aiLimiter, async (req, res) => {
   const result = await lookupEbayMarketValue(query);
   if (!result) {
     res.status(422).json({
-      error:
-        "No eBay sold listings found for this item. Try refining the search.",
+      error: "No eBay listings found for this item. Try refining the search.",
     });
     return;
   }
 
-  // Cache result on the item
+  // Cache result on the item. Store the listings array alongside sourceType so
+  // the UI can display accurate wording ("sold prices" vs "asking prices").
+  const listingsWithSource = {
+    sourceType: result.sourceType,
+    items: result.listings,
+  };
   const [updated] = await db
     .update(potteryItems)
     .set({
@@ -1390,7 +1394,10 @@ router.post("/items/:id/estimate-market-value", aiLimiter, async (req, res) => {
       ebayPriceMaxUsd: String(result.priceMaxUsd),
       ebayPriceMedianUsd: String(result.priceMedianUsd),
       ebayPriceCachedAt: new Date(),
-      ebayPriceListings: result.listings as unknown as Record<string, unknown>,
+      ebayPriceListings: listingsWithSource as unknown as Record<
+        string,
+        unknown
+      >,
     })
     .where(eq(potteryItems.id, id))
     .returning({
@@ -1413,8 +1420,125 @@ router.post("/items/:id/estimate-market-value", aiLimiter, async (req, res) => {
     cachedAt: updated.ebayPriceCachedAt?.toISOString() ?? null,
     listingCount: result.listingCount,
     listings: result.listings,
+    sourceType: result.sourceType,
     searchQuery: query,
   });
 });
+
+/**
+ * Create a new pottery item from raw image bytes, running the same analysis
+ * pipeline as the POST /items route. Called by Elaine's add_photo_to_pottery
+ * action when the user explicitly asks to file an already-uploaded attachment
+ * straight into the collection.
+ */
+export async function createPotteryItemFromBuffer(
+  userId: number,
+  buffer: Buffer,
+): Promise<{ id: number; name: string | null }> {
+  const sniffed = sniffImageType(buffer);
+  if (!sniffed || !isImageMimeType(sniffed)) {
+    throw Object.assign(
+      new Error("Unsupported image type — must be JPEG, PNG, or WEBP"),
+      { status: 400 },
+    );
+  }
+  const contentType = sniffed;
+  const cleanBuffer = await stripMetadata(buffer, contentType);
+  const dataUrl = toDataUrl(cleanBuffer, contentType);
+  const analysisModel = (await getModels()).fastVision;
+
+  const [analysisTrace, visualEmbedding, surfaceZones] = await Promise.all([
+    runAnalysisWithEvidenceTrace(
+      {
+        module: "pottery",
+        feature: "catalogue-image",
+        targetType: "pottery_item",
+        userId,
+        model: analysisModel,
+      },
+      () => analyzeImage([dataUrl]),
+    ),
+    generateVisualEmbedding(cleanBuffer).catch(() => null),
+    analyzePotteryZones([dataUrl]).catch(() => null),
+  ]);
+  const { result: analysis, runId: analysisRunId } = analysisTrace;
+
+  const [embedding, zoneEmbedding] = await Promise.all([
+    embedText(buildEmbeddingText(analysis)),
+    generateZoneEmbedding(cleanBuffer).catch(() => null),
+  ]);
+
+  if (!analysis.maker) {
+    const backstampResult = await locateBackstampAndEnhanceMaker([
+      dataUrl,
+    ]).catch(() => null);
+    if (backstampResult?.maker) {
+      analysis.maker = backstampResult.maker;
+      analysis.makerInfo = backstampResult.makerInfo ?? analysis.makerInfo;
+    }
+  }
+
+  const imagePath = await uploadImage(cleanBuffer, contentType);
+  const today = new Date().toISOString().slice(0, 10);
+
+  try {
+    const [row] = await db
+      .insert(potteryItems)
+      .values({
+        userId,
+        name: analysis.name,
+        quantity: 1,
+        dimensions: analysis.dimensions,
+        patternDescription: analysis.patternDescription,
+        style: analysis.style,
+        shape: analysis.shape,
+        maker: analysis.maker,
+        makerInfo: analysis.makerInfo,
+        dominantColors: analysis.dominantColors,
+        motifs: analysis.motifs,
+        aiDescription: analysis.aiDescription,
+        acquiredAt: today,
+        imagePath,
+        embedding,
+        visualEmbedding,
+        glazeType: analysis.glazeType,
+        surfaceZones: surfaceZones ?? undefined,
+        ...(zoneEmbedding ? { zoneEmbedding } : {}),
+      })
+      .returning();
+
+    await assignGenerationRunTarget(analysisRunId, row.id);
+
+    const allCats = await db
+      .select({ id: categories.id, name: categories.name })
+      .from(categories);
+    const autoCategoryIds = matchCategoryIds(allCats, [
+      analysis.name,
+      analysis.style,
+      analysis.shape,
+      analysis.patternDescription,
+      analysis.dimensions,
+      analysis.motifs,
+    ]);
+    const allCategoryIds = mergeExistingCategoryIds(
+      allCats,
+      autoCategoryIds,
+      [],
+    );
+    if (allCategoryIds.length > 0) {
+      await db.insert(itemCategories).values(
+        allCategoryIds.map((catId) => ({
+          itemId: row.id,
+          categoryId: catId,
+        })),
+      );
+    }
+
+    return { id: row.id, name: row.name };
+  } catch (err) {
+    await deleteImage(imagePath).catch(() => {});
+    throw err;
+  }
+}
 
 export default router;

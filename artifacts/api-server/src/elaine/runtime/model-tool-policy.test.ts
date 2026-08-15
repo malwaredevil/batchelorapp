@@ -33,6 +33,7 @@ const IMPLEMENTED_MAIN_CHAT_HARD_TOOLS = [
   "list_notes",
   "get_note",
   "list_reminders",
+  "list_scheduled_contacts",
   "list_notifications",
   "get_notification_counts",
   "get_notification_preferences",
@@ -40,12 +41,17 @@ const IMPLEMENTED_MAIN_CHAT_HARD_TOOLS = [
   "list_elaine_tasks",
   "get_elaine_task",
   "remember_household_fact",
+  "remember_lesson",
   "search_trip_documents",
   "show_destination_card",
   "get_exchange_rate",
   "suggest_clothing_layers",
   "check_integrations_health",
   "generate_document",
+  "analyze_pottery_photo",
+  "analyze_fabric_photo",
+  "analyze_ornament_photo",
+  "lookup_book_value",
 ].sort();
 
 describe("model-visible hard-tool policy", () => {

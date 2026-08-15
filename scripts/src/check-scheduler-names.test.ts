@@ -802,6 +802,67 @@ async function run() {
   },
 );
 
+// ── Reverse check: retired name in KNOWN_SCHEDULER_NAMES with no call sites ─
+
+const GUARD_FILE = join(
+  REPO_ROOT,
+  "artifacts",
+  "api-server",
+  "src",
+  "lib",
+  "scheduler-guard.ts",
+);
+
+import { readFileSync as _readFileSync } from "node:fs";
+
+itest(
+  "script exits non-zero when KNOWN_SCHEDULER_NAMES contains a name with no call sites (retired scheduler)",
+  () => {
+    // Inject a sentinel name into KNOWN_SCHEDULER_NAMES that has no call
+    // sites anywhere in api-server/src.  The reverse check must detect this
+    // and exit 1 with a clear "retire this name" message naming the sentinel.
+    const original = _readFileSync(GUARD_FILE, "utf8");
+    const RETIRED_SENTINEL = "retired-sentinel-ci-check-xyz-99999";
+    // Insert the sentinel as the first entry so the regex that parses the Set
+    // contents picks it up reliably.
+    const patched = original.replace(
+      /KNOWN_SCHEDULER_NAMES\s*=\s*new\s+Set\s*\(\s*\[/,
+      `KNOWN_SCHEDULER_NAMES = new Set([\n  "${RETIRED_SENTINEL}",`,
+    );
+    assert.notEqual(
+      patched,
+      original,
+      "Patch must modify the guard file (regex must match)",
+    );
+    writeFileSync(GUARD_FILE, patched, "utf8");
+    try {
+      const result = spawnSync(
+        TSX_BIN,
+        ["scripts/src/check-scheduler-names.ts"],
+        { cwd: REPO_ROOT, encoding: "utf8", timeout: 30_000 },
+      );
+      assert.notEqual(
+        result.status,
+        0,
+        "Script should exit non-zero when a name in KNOWN_SCHEDULER_NAMES has no call sites",
+      );
+      const output = result.stderr + result.stdout;
+      assert.ok(
+        output.includes(RETIRED_SENTINEL),
+        `Output should name the retired sentinel; got:\n${output}`,
+      );
+      assert.ok(
+        output.toLowerCase().includes("retire") ||
+          output.toLowerCase().includes("stale") ||
+          output.toLowerCase().includes("no call"),
+        `Output should explain the retire-this-name action; got:\n${output}`,
+      );
+    } finally {
+      writeFileSync(GUARD_FILE, original, "utf8");
+    }
+  },
+);
+
 // ────────────────────────────────────────────────────────────────────────────
 // Summary
 // ────────────────────────────────────────────────────────────────────────────

@@ -106,6 +106,12 @@ export const AdminConfigBody = z.object({
         .max(900000)
         .optional(),
       openAIStateMaxAgeDays: z.number().int().min(1).max(29).optional(),
+      codeDiagnosisRecurrenceThreshold: z
+        .number()
+        .int()
+        .min(2)
+        .max(20)
+        .optional(),
     })
     .partial()
     .optional(),

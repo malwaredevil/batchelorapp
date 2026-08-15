@@ -37,6 +37,7 @@
  *   Messenger: messenger_conversations, messenger_messages, messenger_attachments,
  *              messenger_link_previews, messenger_reactions
  *   Elaine:   elaine_conversations, elaine_settings, elaine_memory, elaine_nudges,
+ *             elaine_lessons, elaine_code_suggestions,
  *             elaine_global_config, elaine_history_conversations, elaine_history_messages
  *             (shared assistant, not namespaced per-app)
  *
@@ -823,6 +824,54 @@ CREATE TABLE IF NOT EXISTS elaine_nudges (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   seen_at     TIMESTAMPTZ
 );
+
+CREATE TABLE IF NOT EXISTS elaine_lessons (
+  id                  SERIAL PRIMARY KEY,
+  outcome             TEXT NOT NULL,
+  domain              TEXT NOT NULL DEFAULT 'general',
+  situation           TEXT NOT NULL,
+  takeaway            TEXT NOT NULL,
+  tags                JSONB NOT NULL DEFAULT '[]'::jsonb,
+  active              BOOLEAN NOT NULL DEFAULT true,
+  source              TEXT NOT NULL DEFAULT 'explicit_assistant',
+  occurrence_count    INTEGER NOT NULL DEFAULT 1,
+  created_by_user_id  INTEGER NOT NULL,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+ALTER TABLE elaine_lessons ADD COLUMN IF NOT EXISTS occurrence_count INTEGER NOT NULL DEFAULT 1;
+
+-- Human-reviewed, code-grounded suggestions Elaine forms when the same
+-- elaine_lessons pattern recurs at least the configured threshold — never
+-- auto-applied, reviewed via the owner-panel "Elaine Suggestions" tab.
+CREATE TABLE IF NOT EXISTS elaine_code_suggestions (
+  id                    SERIAL PRIMARY KEY,
+  pattern_key           TEXT NOT NULL,
+  lesson_id             INTEGER,
+  occurrence_count      INTEGER NOT NULL,
+  observed_pattern      TEXT NOT NULL,
+  files_reviewed        JSONB NOT NULL DEFAULT '[]'::jsonb,
+  hypothesis            TEXT NOT NULL,
+  status                TEXT NOT NULL DEFAULT 'pending',
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  decided_at            TIMESTAMPTZ,
+  decided_by_user_id    INTEGER,
+  linked_task_ref       TEXT
+);
+ALTER TABLE elaine_code_suggestions ADD COLUMN IF NOT EXISTS linked_task_ref TEXT;
+
+CREATE TABLE IF NOT EXISTS elaine_code_tasks (
+  id                          SERIAL PRIMARY KEY,
+  title                       TEXT NOT NULL,
+  description                 TEXT NOT NULL,
+  status                      TEXT NOT NULL DEFAULT 'open',
+  created_from_suggestion_id  INTEGER REFERENCES elaine_code_suggestions(id) ON DELETE SET NULL,
+  created_by_user_id          INTEGER NOT NULL,
+  created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS elaine_code_tasks_suggestion_idx
+  ON elaine_code_tasks (created_from_suggestion_id);
 
 CREATE TABLE IF NOT EXISTS elaine_history_conversations (
   id                       SERIAL PRIMARY KEY,
@@ -2836,6 +2885,64 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "elaine_nudges", "id");
+
+  summary["elaine_lessons"] = await copyTable(source, dest, {
+    table: "elaine_lessons",
+    columns: [
+      "id",
+      "outcome",
+      "domain",
+      "situation",
+      "takeaway",
+      "tags",
+      "active",
+      "source",
+      "occurrence_count",
+      "created_by_user_id",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+    jsonbColumns: ["tags"],
+  });
+  await resetSequence(dest, "elaine_lessons", "id");
+
+  summary["elaine_code_suggestions"] = await copyTable(source, dest, {
+    table: "elaine_code_suggestions",
+    columns: [
+      "id",
+      "pattern_key",
+      "lesson_id",
+      "occurrence_count",
+      "observed_pattern",
+      "files_reviewed",
+      "hypothesis",
+      "status",
+      "created_at",
+      "decided_at",
+      "decided_by_user_id",
+      "linked_task_ref",
+    ],
+    orderBy: "id",
+    jsonbColumns: ["files_reviewed"],
+  });
+  await resetSequence(dest, "elaine_code_suggestions", "id");
+
+  summary["elaine_code_tasks"] = await copyTable(source, dest, {
+    table: "elaine_code_tasks",
+    columns: [
+      "id",
+      "title",
+      "description",
+      "status",
+      "created_from_suggestion_id",
+      "created_by_user_id",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "elaine_code_tasks", "id");
 
   summary["elaine_global_config"] = await copyTable(source, dest, {
     table: "elaine_global_config",

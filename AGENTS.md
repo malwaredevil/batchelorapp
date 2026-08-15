@@ -239,6 +239,43 @@ Deep-read everything added or changed. Verify it works as intended, not just tha
 typechecks. Diff Replit vs GitHub (`git diff`) if unsure what changed. Check for
 architectural duplication — search for sibling implementations before adding new ones.
 
+### 3e. Unrelated issues discovered while working
+
+Stay scoped: do not fix code outside your assigned task just because you noticed it.
+But "out of scope to fix" is never "out of scope to report." Triage anything you notice
+in code you touch or in check output (lint/typecheck/test) you run:
+
+- **Cosmetic or stylistic** (formatting, a complexity/style lint rule, a naming
+  nitpick) — skip silently. Not worth a task.
+- **A real bug, security issue, data-correctness risk, or a check that is silently
+  passing when it shouldn't be** — never just note it in your own reasoning and move
+  on. Call `proposeFollowUpTasks` (see the `follow-up-tasks` skill) before marking your
+  task complete, even though it's unrelated to what you were asked to build. If you are
+  unsure which bucket a finding falls into, treat it as the second bucket.
+
+### 3f. New or changed logic needs its own test
+
+Passing the existing suite (3b) only proves you didn't break what was already covered.
+It does not prove the thing you just built works, or will keep working when something
+else changes later. Do not defer this to a future `test_gaps` follow-up when it is
+reasonably within your reach right now:
+
+- Any new or materially changed non-trivial logic (a new code path, a bugfix, a changed
+  branch/condition) ships with a matching unit or integration test in the **same**
+  task, colocated the way this repo already does it (`*.test.ts` beside the source
+  file; see `api-server-route-testing.md` in `.agents/memory/` for the
+  vitest+supertest pattern used for routes).
+- A bugfix's test must fail against the old code and pass against the fix — a
+  regression test, not just a happy-path check.
+- Reserve a `test_gaps` follow-up for coverage that is genuinely out of reach in this
+  environment — e.g. full end-to-end browser tests, which this sandbox cannot run
+  (see `playwright-nixos-noop.md`) and which are validated via GitHub Actions instead —
+  not as a substitute for a unit test you could write now.
+- This is not a 100%-coverage mandate. Do not write tests for trivial code (simple
+  getters, type-only wiring, generated code) just to move a coverage number — that
+  produces shallow tests without reducing real regression risk. Spend the effort on
+  business logic, edge cases, and anything with a failure mode a user would notice.
+
 ---
 
 ## 4. Required Commands — run these at the right times

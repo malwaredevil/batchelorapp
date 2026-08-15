@@ -743,7 +743,7 @@ async function main() {
 
   // ── Travels ───────────────────────────────────────────────────────────────
   await dest.query(
-    "TRUNCATE messenger_reactions, messenger_link_previews, messenger_attachments, messenger_messages, messenger_conversation_participants, messenger_conversations, travels_trip_calendar_events, travels_packing_items, travels_packing_lists, travels_packing_templates, travels_calendar_trip_suggestions, travels_custom_document_types, travels_trip_card_collapse_state, travels_card_layout_preferences, travels_gmail_scan_decisions, travels_gmail_connections, elaine_scheduled_actions, elaine_history_messages, elaine_history_conversations, elaine_global_config, elaine_nudges, elaine_memory_events, elaine_memory, elaine_settings, elaine_email_webhook_deliveries, elaine_email_conversations, elaine_conversations, elaine_cross_channel_context, travels_reminder_calendar_events, travels_connected_calendars, travels_google_calendar_connections, travels_calendar_settings, travels_reminder_alert_log, travels_reminders, travels_wishlist, travels_diary_entries, travels_trip_photos, travels_trip_documents CASCADE",
+    "TRUNCATE messenger_reactions, messenger_link_previews, messenger_attachments, messenger_messages, messenger_conversation_participants, messenger_conversations, travels_trip_calendar_events, travels_packing_items, travels_packing_lists, travels_packing_templates, travels_calendar_trip_suggestions, travels_custom_document_types, travels_trip_card_collapse_state, travels_card_layout_preferences, travels_gmail_scan_decisions, travels_gmail_connections, elaine_scheduled_actions, elaine_history_messages, elaine_history_conversations, elaine_global_config, elaine_nudges, elaine_lessons, elaine_code_tasks, elaine_code_suggestions, elaine_memory_events, elaine_memory, elaine_settings, elaine_email_webhook_deliveries, elaine_email_conversations, elaine_conversations, elaine_cross_channel_context, travels_reminder_calendar_events, travels_connected_calendars, travels_google_calendar_connections, travels_calendar_settings, travels_reminder_alert_log, travels_reminders, travels_wishlist, travels_diary_entries, travels_trip_photos, travels_trip_documents CASCADE",
   );
   await dest.query(
     "TRUNCATE travels_monitoring_preferences, travels_reservations, travel_change_events CASCADE",
@@ -1102,6 +1102,64 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "elaine_nudges", "id");
+
+  await copyTable(source, dest, {
+    table: "elaine_lessons",
+    columns: [
+      "id",
+      "outcome",
+      "domain",
+      "situation",
+      "takeaway",
+      "tags",
+      "active",
+      "source",
+      "occurrence_count",
+      "created_by_user_id",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+    jsonbColumns: ["tags"],
+  });
+  await resetSequence(dest, "elaine_lessons", "id");
+
+  await copyTable(source, dest, {
+    table: "elaine_code_suggestions",
+    columns: [
+      "id",
+      "pattern_key",
+      "lesson_id",
+      "occurrence_count",
+      "observed_pattern",
+      "files_reviewed",
+      "hypothesis",
+      "status",
+      "created_at",
+      "decided_at",
+      "decided_by_user_id",
+      "linked_task_ref",
+    ],
+    orderBy: "id",
+    jsonbColumns: ["files_reviewed"],
+  });
+  await resetSequence(dest, "elaine_code_suggestions", "id");
+
+  await copyTable(source, dest, {
+    table: "elaine_code_tasks",
+    columns: [
+      "id",
+      "title",
+      "description",
+      "status",
+      "created_from_suggestion_id",
+      "created_by_user_id",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "elaine_code_tasks", "id");
 
   await copyTable(source, dest, {
     table: "elaine_global_config",

@@ -73,6 +73,7 @@ function ModelPicker({
 
 function NumberField({
   label,
+  hint,
   value,
   onChange,
   min,
@@ -80,6 +81,7 @@ function NumberField({
   step,
 }: {
   label: string;
+  hint?: string;
   value: number;
   onChange: (v: number) => void;
   min?: number;
@@ -97,6 +99,7 @@ function NumberField({
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
       />
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>
   );
 }
@@ -400,6 +403,19 @@ export function GlobalConfigCard() {
             value={thresholds.openAIStateMaxAgeDays}
             onChange={(v) =>
               setThresholds({ ...thresholds, openAIStateMaxAgeDays: v })
+            }
+          />
+          <NumberField
+            label="Code-diagnosis recurrence threshold"
+            hint="How many times the same self-heal lesson must recur before Elaine reads the related source file(s) and leaves a code-grounded suggestion for owner review."
+            min={2}
+            max={20}
+            value={thresholds.codeDiagnosisRecurrenceThreshold}
+            onChange={(v) =>
+              setThresholds({
+                ...thresholds,
+                codeDiagnosisRecurrenceThreshold: v,
+              })
             }
           />
         </div>

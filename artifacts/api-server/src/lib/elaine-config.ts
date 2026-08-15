@@ -117,6 +117,13 @@ export interface ThresholdsConfig {
   // Treat them as stale one day earlier so Elaine can rebuild from durable
   // local history without putting an expected expiration on the hot path.
   openAIStateMaxAgeDays: number;
+  // How many times the exact same self-heal lesson must recur
+  // (elaine_lessons.occurrenceCount) before Elaine is given a bounded,
+  // read-only look at the source file(s) tied to that pattern to form a
+  // code-grounded suggestion for human review (#895). Deliberately >1 so
+  // this never fires on a single occurrence — see
+  // lib/elaine-code-diagnosis.ts.
+  codeDiagnosisRecurrenceThreshold: number;
 }
 
 export interface ElaineGlobalConfig {
@@ -184,6 +191,7 @@ export const DEFAULT_THRESHOLDS: ThresholdsConfig = {
   openAIResponsesMaxOutputTokens: 12_000,
   openAICompactionThresholdTokens: 80_000,
   openAIStateMaxAgeDays: 29,
+  codeDiagnosisRecurrenceThreshold: 3,
 };
 
 // Exported (not just module-local) so the admin "reset to defaults" route and

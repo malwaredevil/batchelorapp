@@ -35,6 +35,7 @@ export const MODEL_VISIBLE_HARD_TOOL_NAMES = new Set<string>([
   "list_elaine_tasks",
   "get_elaine_task",
   "remember_household_fact",
+  "remember_lesson",
   "search_trip_documents",
   "show_destination_card",
   "get_exchange_rate",
@@ -44,6 +45,11 @@ export const MODEL_VISIBLE_HARD_TOOL_NAMES = new Set<string>([
   "check_integrations_health",
   "generate_document",
   "list_reminders",
+  "list_scheduled_contacts",
+  "analyze_pottery_photo",
+  "analyze_fabric_photo",
+  "analyze_ornament_photo",
+  "lookup_book_value",
 ]);
 
 export const MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS: Readonly<
@@ -80,6 +86,7 @@ export const MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS: Readonly<
   list_elaine_tasks: "checking background tasks",
   get_elaine_task: "checking that background task",
   remember_household_fact: "saving that memory",
+  remember_lesson: "noting that lesson",
   search_trip_documents: "searching trip documents",
   show_destination_card: "preparing that destination",
   get_exchange_rate: "checking exchange rates",
@@ -89,6 +96,11 @@ export const MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS: Readonly<
   check_integrations_health: "checking connected services",
   generate_document: "creating that document",
   list_reminders: "checking your reminders",
+  list_scheduled_contacts: "checking your scheduled contacts",
+  analyze_pottery_photo: "analyzing that pottery photo",
+  analyze_fabric_photo: "analyzing that fabric photo",
+  analyze_ornament_photo: "analyzing that ornament photo",
+  lookup_book_value: "looking up that book value",
 };
 
 export const SPECIALIZED_CURRENT_TOOL_NAMES = new Set<string>([

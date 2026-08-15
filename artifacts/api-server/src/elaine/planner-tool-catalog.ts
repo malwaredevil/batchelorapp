@@ -32,6 +32,7 @@ import {
   communicationActionTools,
 } from "./communication-actions";
 import { reminderActionTools, reminderReadTools } from "./reminder-actions";
+import { ELAINE_LESSON_DOMAINS } from "../lib/elaine-lessons";
 
 // ---------------------------------------------------------------------------
 // Shared enums used by tool JSON schemas and route-handler Zod schemas alike.
@@ -59,11 +60,16 @@ export const ACTION_CONFIRMATION_MODES = [
 
 export const NAVIGATE_TOOL_NAME = "suggest_navigation";
 export const REMEMBER_TOOL_NAME = "remember_household_fact";
+export const RECORD_LESSON_TOOL_NAME = "remember_lesson";
 export const SET_MODE_TOOL_NAME = "set_action_confirmation_mode";
 export const WEB_SEARCH_TOOL_NAME = "web_search";
 export const EBAY_SEARCH_TOOL_NAME = "ebay_search";
 export const SEARCH_HALLMARK_TOOL_NAME = "search_hallmark";
 export const LOOKUP_BARCODE_TOOL_NAME = "lookup_product_barcode";
+export const ANALYZE_POTTERY_PHOTO_TOOL_NAME = "analyze_pottery_photo";
+export const ANALYZE_FABRIC_PHOTO_TOOL_NAME = "analyze_fabric_photo";
+export const ANALYZE_ORNAMENT_PHOTO_TOOL_NAME = "analyze_ornament_photo";
+export const LOOKUP_BOOK_VALUE_TOOL_NAME = "lookup_book_value";
 export const SEARCH_FLIGHTS_TOOL_NAME = "search_flights";
 export const FETCH_PAGE_TOOL_NAME = "fetch_page";
 export const CONSULT_EXPERTS_TOOL_NAME = "consult_experts";
@@ -838,6 +844,47 @@ export const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
     type: "function",
     function: {
+      name: RECORD_LESSON_TOOL_NAME,
+      description:
+        "Record a lesson about YOUR OWN past performance — never a household fact (use remember_household_fact for those). Use outcome='mistake' when the user explicitly corrects something you got wrong, so you avoid repeating it; use outcome='success' when an approach clearly worked well and is worth repeating. Applied immediately, without a confirmation step. Web chat only.",
+      parameters: {
+        type: "object",
+        properties: {
+          outcome: {
+            type: "string",
+            enum: ["mistake", "success"],
+            description:
+              "mistake = something you got wrong that was corrected; success = an approach that worked well and is worth repeating",
+          },
+          situation: {
+            type: "string",
+            description:
+              "What was attempted / the situation, written plainly enough to recognize a similar future request (e.g. \"user asked to reschedule a reminder by saying 'push it back an hour'\")",
+          },
+          takeaway: {
+            type: "string",
+            description:
+              "The short, reusable lesson to apply next time a similar situation comes up (e.g. \"'push it back an hour' means add 1 hour to the existing time, not reset it to 1 hour from now\")",
+          },
+          domain: {
+            type: "string",
+            enum: [...ELAINE_LESSON_DOMAINS],
+            description:
+              "Bucket for retrieval — pick the closest app/topic area, or 'general' if none fit",
+          },
+          tags: {
+            type: "array",
+            items: { type: "string" },
+            description: "Optional extra keywords to help future retrieval",
+          },
+        },
+        required: ["outcome", "situation", "takeaway"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: SET_MODE_TOOL_NAME,
       description:
         'Change how this user wants you to confirm multi-action turns going forward. Applied immediately, without a separate confirmation card — only call this when the user explicitly asks you to change it (e.g. "just do things automatically from now on", "ask me one at a time", "show me everything together before you do it"). Never call this to explain the modes — just tell them in your visible reply and only call the tool once they\'ve actually decided.',
@@ -1404,6 +1451,72 @@ export const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           },
         },
         required: ["barcode"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: ANALYZE_POTTERY_PHOTO_TOOL_NAME,
+      description:
+        "Run the app's real pottery vision analysis on the photo(s) the user just attached to THIS message — the exact same AI cataloguing pipeline used when uploading a piece (style, shape, maker/backstamp, glaze/decoration type, dimensions from a cutting mat if visible, decorative pattern, dominant colours, motifs, and a catalogue-style description). Use this whenever the user attaches a pottery/ceramic photo and asks what it is, its style, maker, glaze, or for any identification — do NOT answer from general knowledge instead, always run the real analysis. This is a one-off, non-destructive lookup: it never creates or edits anything in the pottery collection, even if the piece is never saved. Only works on photo(s) attached in the CURRENT message — if the user hasn't attached a photo this turn, tell them to attach one rather than calling this or guessing.",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: ANALYZE_FABRIC_PHOTO_TOOL_NAME,
+      description:
+        "Run the app's real quilting-fabric vision analysis on the photo(s) the user just attached to THIS message — the exact same AI cataloguing pipeline used when uploading a fabric to the stash (print type, fabric line, designer, manufacturer, colorway, fiber content, dominant colours, motifs, style descriptors, and a catalogue-style description). Use this whenever the user attaches a fabric photo and asks to identify its print/designer/line or describe it — do NOT answer from general knowledge instead, always run the real analysis. This is a one-off, non-destructive lookup: it never creates or edits anything in the quilting stash, even if the fabric is never saved. Only works on photo(s) attached in the CURRENT message — if the user hasn't attached a photo this turn, tell them to attach one rather than calling this or guessing.",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: ANALYZE_ORNAMENT_PHOTO_TOOL_NAME,
+      description:
+        "Run the app's real ornament vision analysis on the photo(s) the user just attached to THIS message — the exact same AI cataloguing pipeline used when uploading an ornament (name, series/collection, release year, dimensions, dominant colours, motifs, a catalogue-style description, and any UPC/barcode digits visible on the box or tag). Use this whenever the user attaches a Hallmark/Christmas ornament photo and asks to identify it — do NOT answer from general knowledge instead, always run the real analysis. This is a one-off, non-destructive lookup: it never creates or edits anything in the ornaments collection, even if the ornament is never saved. If a UPC is found in the result, you can follow up with lookup_product_barcode for Hallmark catalog details, or lookup_book_value for its collector value. Only works on photo(s) attached in the CURRENT message — if the user hasn't attached a photo this turn, tell them to attach one rather than calling this or guessing.",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: LOOKUP_BOOK_VALUE_TOOL_NAME,
+      description:
+        "Look up a Hallmark ornament's real secondary-market 'book value' by checking hallmarkornaments.com and hookedonhallmark.com and taking the higher of the two — the exact same two-source lookup the app itself runs when a user checks a saved item's book value. ALWAYS use this tool (never search_hallmark or general knowledge) when the user asks 'what's the book value', 'what's this worth for insurance/appraisal', or similar book-value questions about an ornament — search_hallmark only returns Hallmark's own catalog/retail listing info, which is a different number and will not match. Use ebay_search separately for current resale/market asking prices, which is a different question from book value.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: {
+            type: "string",
+            description: "The ornament's name (required)",
+          },
+          seriesOrCollection: {
+            type: "string",
+            description:
+              "The Hallmark series/collection name, if known — improves match accuracy (optional)",
+          },
+          year: {
+            type: "number",
+            description: "The ornament's release year, if known (optional)",
+          },
+        },
+        required: ["name"],
       },
     },
   },

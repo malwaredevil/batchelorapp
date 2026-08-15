@@ -510,4 +510,73 @@ describe("HallmarkEventStatTile — deep-link href round-trip (cross-SPA)", () =
     const url = new URL(capturedHref!, "http://localhost");
     expect(url.searchParams.get("event")).toBe(gcalId);
   });
+
+  it("click after carousel advances 8 s carries the third event's month and gcalId", () => {
+    // WHY: The carousel rotates index every 4 s.  After 8 s the tile should be
+    // showing event[2].  A click must deep-link to THAT event, not event[0].
+    // This would regress silently if href were computed from a stale closure or
+    // a fixed index=0 reference.
+    const evtA = makeEvent("gcal-first", "2026-09-10", "2026-09-11");
+    const evtB = makeEvent("gcal-second", "2026-10-01", "2026-10-02");
+    const evtC = makeEvent("gcal-third", "2026-11-05", "2026-11-06");
+
+    mockUseUpcomingHallmarkEvents.mockReturnValue({
+      events: [evtA, evtB, evtC],
+      hallmarkCal: { id: 1, name: "Hallmark" },
+    });
+    vi.setSystemTime(new Date("2026-08-01T00:00:00"));
+
+    const { container } = render(<HallmarkEventStatTile />);
+
+    // Advance two full 4-second intervals: index 0 → 1 → 2 (evtC).
+    act(() => {
+      vi.advanceTimersByTime(8000);
+    });
+
+    const tile = container.querySelector(
+      "[data-testid='hallmark-event-tile']",
+    ) as HTMLElement;
+
+    fireEvent.click(tile);
+
+    expect(capturedHref).not.toBeNull();
+    const url = new URL(capturedHref!, "http://localhost");
+    // Must point to evtC's month ("2026-11"), not evtA's ("2026-09").
+    expect(url.searchParams.get("month")).toBe("2026-11");
+    // Must carry evtC's gcalId, not evtA's.
+    expect(url.searchParams.get("event")).toBe("gcal-third");
+  });
+
+  it("Space-bar keyDown after carousel advances 8 s carries the third event's month and gcalId", () => {
+    // WHY: Keyboard-nav parity — Space activates the tile just like a click.
+    // After 8 s the carousel shows event[2]; Space must deep-link to event[2].
+    const evtA = makeEvent("kb-first", "2026-09-10", "2026-09-11");
+    const evtB = makeEvent("kb-second", "2026-10-01", "2026-10-02");
+    const evtC = makeEvent("kb-third", "2026-11-05", "2026-11-06");
+
+    mockUseUpcomingHallmarkEvents.mockReturnValue({
+      events: [evtA, evtB, evtC],
+      hallmarkCal: { id: 1, name: "Hallmark" },
+    });
+    vi.setSystemTime(new Date("2026-08-01T00:00:00"));
+
+    const { container } = render(<HallmarkEventStatTile />);
+
+    // Advance two intervals: index 0 → 1 → 2 (evtC).
+    act(() => {
+      vi.advanceTimersByTime(8000);
+    });
+
+    const tile = container.querySelector(
+      "[data-testid='hallmark-event-tile']",
+    ) as HTMLElement;
+
+    fireEvent.keyDown(tile, { key: " " });
+
+    expect(capturedHref).not.toBeNull();
+    const url = new URL(capturedHref!, "http://localhost");
+    // Must point to evtC's month and gcalId, not evtA's.
+    expect(url.searchParams.get("month")).toBe("2026-11");
+    expect(url.searchParams.get("event")).toBe("kb-third");
+  });
 });

@@ -71,6 +71,7 @@ import { ReminderEditDialog } from "@/travels/components/ReminderEditDialog";
 import { AttachmentPickerDialog } from "@/travels/components/AttachmentPickerDialog";
 import {
   ActivityPhotoThumb,
+  ActivityPhotoStrip,
   AttachActivityPhotoButton,
 } from "@/travels/components/trip-detail/activity-photo-attach";
 import { ImageLightbox } from "@/quilting/components/image-lightbox";
@@ -345,11 +346,21 @@ type ItineraryActivity = {
   status?: "tentative" | "confirmed";
   sourceDocumentId?: number;
   sourceField?: string;
-  /** A trip photo (from the same gallery, not a copy) attached to this
-   *  activity. Only settable on manually-added activities. */
+  /** @deprecated Use photoIds instead. Kept for backward-compat reading of
+   *  older itinerary blobs that only stored a single photo reference. */
   photoId?: number;
+  /** Trip-gallery photos attached to this activity (same photo objects as the
+   *  main gallery, never copies). Only settable on manually-added activities. */
+  photoIds?: number[];
 };
 
+/** Normalises legacy scalar `photoId` and new `photoIds` array into a single
+ *  list, so the rest of the UI only deals with one shape. */
+function getActivityPhotoIds(a: ItineraryActivity): number[] {
+  if (a.photoIds && a.photoIds.length > 0) return a.photoIds;
+  if (a.photoId != null) return [a.photoId];
+  return [];
+}
 type ItineraryDay = {
   date: string;
   title: string;
@@ -1895,7 +1906,7 @@ function DayCard({
   onDeleteActivity?: (activityIndex: number) => void;
   onDeleteDay?: () => void;
   onConfirmActivity?: (activityIndex: number) => void;
-  onSetActivityPhoto?: (activityIndex: number, photoId: number | null) => void;
+  onSetActivityPhoto?: (activityIndex: number, photoIds: number[]) => void;
 }) {
   const [open, setOpen] = useState(index === 0);
   const [addingActivity, setAddingActivity] = useState(false);
@@ -1905,14 +1916,14 @@ function DayCard({
     description: string;
     proximity: string;
     tip: string;
-    photoId?: number;
+    photoIds: number[];
   }>({
     time: "",
     name: "",
     description: "",
     proximity: "",
     tip: "",
-    photoId: undefined,
+    photoIds: [],
   });
 
   const submitActivity = () => {
@@ -1930,7 +1941,7 @@ function DayCard({
       description: "",
       proximity: "",
       tip: "",
-      photoId: undefined,
+      photoIds: [],
     });
     setAddingActivity(false);
   };
@@ -2027,25 +2038,36 @@ function DayCard({
                       {a.proximity && (
                         <span className="text-sm">{a.proximity}</span>
                       )}
-                      {!a.sourceDocumentId &&
-                        onSetActivityPhoto &&
-                        (a.photoId ? (
-                          <ActivityPhotoThumb
-                            tripId={tripId}
-                            photoId={a.photoId}
-                            onRemove={() =>
-                              onSetActivityPhoto(originalIndex, null)
-                            }
-                          />
-                        ) : (
-                          <AttachActivityPhotoButton
-                            tripId={tripId}
-                            compact
-                            onAttach={(photoId) =>
-                              onSetActivityPhoto(originalIndex, photoId)
-                            }
-                          />
-                        ))}
+                      {onSetActivityPhoto &&
+                        (() => {
+                          const ids = getActivityPhotoIds(a);
+                          return ids.length > 0 ? (
+                            <ActivityPhotoStrip
+                              tripId={tripId}
+                              photoIds={ids}
+                              onRemove={(removedId) =>
+                                onSetActivityPhoto(
+                                  originalIndex,
+                                  ids.filter((id) => id !== removedId),
+                                )
+                              }
+                              onAttach={(newIds) =>
+                                onSetActivityPhoto(originalIndex, [
+                                  ...ids,
+                                  ...newIds,
+                                ])
+                              }
+                            />
+                          ) : (
+                            <AttachActivityPhotoButton
+                              tripId={tripId}
+                              compact
+                              onAttach={(newIds) =>
+                                onSetActivityPhoto(originalIndex, newIds)
+                              }
+                            />
+                          );
+                        })()}
                       {a.status === "tentative" && onConfirmActivity && (
                         <button
                           onClick={() => onConfirmActivity(originalIndex)}
@@ -2126,24 +2148,30 @@ function DayCard({
                     />
                   </div>
                   <div className="flex items-center gap-2">
-                    {actForm.photoId ? (
-                      <div className="flex items-center gap-2">
-                        <ActivityPhotoThumb
-                          tripId={tripId}
-                          photoId={actForm.photoId}
-                          onRemove={() =>
-                            setActForm((f) => ({ ...f, photoId: undefined }))
-                          }
-                        />
-                        <span className="text-xs text-muted-foreground">
-                          Photo attached
-                        </span>
-                      </div>
+                    {actForm.photoIds.length > 0 ? (
+                      <ActivityPhotoStrip
+                        tripId={tripId}
+                        photoIds={actForm.photoIds}
+                        onRemove={(removedId) =>
+                          setActForm((f) => ({
+                            ...f,
+                            photoIds: f.photoIds.filter(
+                              (id) => id !== removedId,
+                            ),
+                          }))
+                        }
+                        onAttach={(newIds) =>
+                          setActForm((f) => ({
+                            ...f,
+                            photoIds: [...f.photoIds, ...newIds],
+                          }))
+                        }
+                      />
                     ) : (
                       <AttachActivityPhotoButton
                         tripId={tripId}
-                        onAttach={(photoId) =>
-                          setActForm((f) => ({ ...f, photoId }))
+                        onAttach={(newIds) =>
+                          setActForm((f) => ({ ...f, photoIds: newIds }))
                         }
                       />
                     )}
@@ -2168,7 +2196,7 @@ function DayCard({
                           description: "",
                           proximity: "",
                           tip: "",
-                          photoId: undefined,
+                          photoIds: [],
                         });
                       }}
                     >
@@ -3408,7 +3436,7 @@ export default function TripDetail({ id }: { id: number }) {
   const handleSetActivityPhoto = (
     dayIndex: number,
     activityIndex: number,
-    photoId: number | null,
+    photoIds: number[],
   ) => {
     const base = localItinerary ?? (trip?.itinerary as Itinerary | null);
     if (!base) return;
@@ -3418,11 +3446,10 @@ export default function TripDetail({ id }: { id: number }) {
             ...d,
             activities: d.activities.map((a, ai) => {
               if (ai !== activityIndex) return a;
-              if (photoId === null) {
-                const { photoId: _dropped, ...rest } = a;
-                return rest;
-              }
-              return { ...a, photoId };
+              // Always write the canonical photoIds array; drop legacy photoId.
+              const { photoId: _legacy, photoIds: _old, ...rest } = a;
+              if (photoIds.length === 0) return rest;
+              return { ...rest, photoIds };
             }),
           }
         : d,
@@ -3435,7 +3462,9 @@ export default function TripDetail({ id }: { id: number }) {
         onSuccess: (result) => {
           qc.setQueryData(getGetTripQueryKey(id), result);
           invalidate();
-          toast.success(photoId === null ? "Photo removed" : "Photo attached");
+          toast.success(
+            photoIds.length === 0 ? "Photo removed" : "Photo attached",
+          );
         },
         onError: () => toast.error("Failed to update activity"),
       },
@@ -4283,11 +4312,11 @@ export default function TripDetail({ id }: { id: number }) {
                                           onConfirmActivity={(ai) =>
                                             handleConfirmActivity(i, ai)
                                           }
-                                          onSetActivityPhoto={(ai, photoId) =>
+                                          onSetActivityPhoto={(ai, photoIds) =>
                                             handleSetActivityPhoto(
                                               i,
                                               ai,
-                                              photoId,
+                                              photoIds,
                                             )
                                           }
                                         />

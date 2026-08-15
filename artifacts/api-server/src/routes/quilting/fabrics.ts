@@ -1551,4 +1551,76 @@ router.post("/fabrics/:id/images/:imageId/set-default", async (req, res) => {
   );
 });
 
+/**
+ * Create a new fabric from raw image bytes, running the same analysis
+ * pipeline as the POST /fabrics route. Called by Elaine's add_photo_to_quilting
+ * action when the user explicitly asks to file an already-uploaded attachment
+ * straight into the stash.
+ */
+export async function createFabricFromBuffer(
+  userId: number,
+  buffer: Buffer,
+): Promise<{ id: number; name: string | null }> {
+  const sniffed = sniffImageType(buffer);
+  if (!sniffed || !isImageMimeType(sniffed)) {
+    throw Object.assign(
+      new Error("Unsupported image type — must be JPEG, PNG, or WEBP"),
+      { status: 400 },
+    );
+  }
+  const contentType = sniffed;
+  const cleanBuffer = await stripMetadata(buffer, contentType);
+  const dataUrl = toDataUrl(cleanBuffer, contentType);
+
+  const { result: analysis, runId: analysisRunId } =
+    await runAnalysisWithEvidenceTrace(
+      {
+        module: "quilting",
+        feature: "catalogue-fabric-image",
+        targetType: "quilting_fabric",
+        userId,
+        model: (await getModels()).fastVision,
+      },
+      () => analyzeImage([dataUrl]),
+    );
+  const embeddingText = buildEmbeddingText(analysis);
+  const [embedding, imagePath, visualEmb] = await Promise.all([
+    embedText(embeddingText),
+    uploadImage(cleanBuffer, contentType),
+    generateVisualEmbedding(cleanBuffer).catch(() => null),
+  ]);
+
+  const [row] = (await db
+    .insert(fabrics)
+    .values({
+      userId,
+      name: analysis.name,
+      lineName: analysis.lineName,
+      designer: analysis.designer,
+      manufacturer: analysis.manufacturer,
+      colorway: analysis.colorway,
+      printType: analysis.printType,
+      fiberContent: analysis.fiberContent,
+      quantity: 1,
+      quantityUnit: "yard",
+      aiDescription: analysis.aiDescription,
+      dominantColors: analysis.dominantColors,
+      motifs: analysis.motifs,
+      styleDescriptors: analysis.styleDescriptors,
+      lockedFields: [],
+      imagePath,
+      embedding: sql`${`[${embedding.join(",")}]`}::vector`,
+      visualEmbedding: visualEmb
+        ? sql`${`[${visualEmb.join(",")}]`}::vector`
+        : null,
+    })
+    .returning(fabricColumns as any)) as unknown as Array<
+    Omit<FabricRow, "embedding" | "visualEmbedding">
+  >;
+
+  await assignGenerationRunTarget(analysisRunId, row.id);
+
+  return { id: row.id, name: row.name };
+}
+
 export default router;

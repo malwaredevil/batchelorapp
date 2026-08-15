@@ -11,6 +11,12 @@ export default [
       "docs/generated/**",
       ".local/**",
       ".cache/**",
+      // Throwaway fixture that check-domain-composition.test.ts briefly writes
+      // into src/routes/ during integration tests. Listed here so the TS
+      // language service (projectService: true) never races on it between the
+      // fixture's creation and deletion — the same race the tsconfig exclude
+      // handles for tsc itself.
+      "artifacts/api-server/src/routes/_temp_composition_guard_test_b_fixture.ts",
       // These executable/test files are intentionally outside their package
       // TypeScript projects, so type-aware rules cannot safely inspect them.
       "lib/api-spec/build-spec.ts",
@@ -20,6 +26,9 @@ export default [
       "lib/api-client-react/src/custom-fetch.test.ts",
       "lib/api-client-react/src/elaine.test.ts",
       "lib/api-client-react/src/ornaments-hallmark.test.ts",
+      // Excluded from its package tsconfig (intentional CI sentinel); ESLint
+      // cannot type-check it without a project reference.
+      "artifacts/api-server/src/_ci_sentinel_scheduler_names_.ts",
     ],
   },
   {

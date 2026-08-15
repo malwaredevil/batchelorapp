@@ -74,6 +74,7 @@ const config: ElaineGlobalConfig = {
     openAIResponsesMaxOutputTokens: 6_000,
     openAICompactionThresholdTokens: 80_000,
     openAIStateMaxAgeDays: 29,
+    codeDiagnosisRecurrenceThreshold: 3,
   },
   updatedAt: null,
 };

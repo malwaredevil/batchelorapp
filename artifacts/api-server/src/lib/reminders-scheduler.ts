@@ -25,6 +25,7 @@ import { getCalendarEvent } from "./google-calendar";
 import {
   fireCallContact,
   fireMessageContact,
+  fireCallMe,
 } from "../elaine/communication-actions";
 import { richTextToPlainText, richTextToSpeech } from "./rich-text-plaintext";
 import { seedOutboundCallContext } from "./agentphone-conversation";
@@ -288,7 +289,13 @@ async function recoverStuckSendingDeliveries(): Promise<number> {
       WHERE status = 'sending'
         AND created_at < NOW() - INTERVAL '${STUCK_SENDING_TIMEOUT_MS} milliseconds'`,
   );
-  return result.rowCount ?? 0;
+  const count = result.rowCount ?? 0;
+  if (count > 0) {
+    logger.warn(
+      `reminders-scheduler: recoverStuckSendingDeliveries permanently failed ${count} delivery/deliveries that were stuck in 'sending' — these will NOT be retried (check reminder_deliveries where status='failed' and error like 'recovered:%')`,
+    );
+  }
+  return count;
 }
 
 /**
@@ -347,13 +354,22 @@ async function deliverGenericMessengerReminder(
 /**
  * Dispatches an `elaine_action` reminder's stored action through the same
  * executors communication-actions.ts uses for immediate (non-scheduled)
- * call_contact/message_contact requests, so scheduled and immediate
+ * call_contact/message_contact/call_me requests, so scheduled and immediate
  * delivery never diverge in behavior. New elaineActionType values added to
  * communication-actions.ts in the future need a matching case here.
+ *
+ * `createdByUserId` is only needed by self-directed action types (currently
+ * just call_me, which re-resolves the requesting user's own verified phone
+ * number/opt-out status at fire time — the same guardrails the immediate
+ * call_me executor enforces).
+ *
+ * Exported for unit testing only — call sites within this file use it
+ * directly; external callers should use the scheduler entry points.
  */
-async function dispatchElaineActionReminder(
+export async function dispatchElaineActionReminder(
   actionType: string | null,
   payload: unknown,
+  createdByUserId: number,
 ): Promise<{ status: number; body: unknown }> {
   const p = (payload ?? {}) as Record<string, unknown>;
   if (actionType === "call_contact") {
@@ -373,6 +389,12 @@ async function dispatchElaineActionReminder(
       String(p.contactName ?? ""),
       String(p.message ?? ""),
       channel,
+    );
+  }
+  if (actionType === "call_me") {
+    return fireCallMe(
+      createdByUserId,
+      typeof p.greeting === "string" ? p.greeting : undefined,
     );
   }
   return {
@@ -405,7 +427,19 @@ export async function claimAndSendDueDeliveries(): Promise<{
   sent: number;
   failed: number;
 }> {
-  await recoverStuckSendingDeliveries();
+  // Recovery is best-effort: a transient DB error inside
+  // recoverStuckSendingDeliveries must NOT halt the whole batch.  Stuck-sending
+  // rows are an edge-case left over from a killed process; failing to clean them
+  // up is far less harmful than dropping an entire batch of pending deliveries.
+  // Log a warning so the problem is visible, then continue.
+  try {
+    await recoverStuckSendingDeliveries();
+  } catch (err) {
+    logger.warn(
+      { err },
+      "recoverStuckSendingDeliveries failed; continuing with claim batch",
+    );
+  }
 
   const claimClient = await pool.connect();
   let claimed: ClaimedDelivery[] = [];
@@ -690,17 +724,26 @@ export async function claimAndSendDueDeliveries(): Promise<{
         // scheduled and immediate call_contact/message_contact behave
         // identically.
         const [
-          { elaine_action_type: actionType, elaine_action_payload: payload },
+          {
+            elaine_action_type: actionType,
+            elaine_action_payload: payload,
+            created_by_user_id: createdByUserId,
+          },
         ] = (
           await pool.query<{
             elaine_action_type: string | null;
             elaine_action_payload: unknown;
+            created_by_user_id: number;
           }>(
-            `SELECT elaine_action_type, elaine_action_payload FROM reminders WHERE id = $1`,
+            `SELECT elaine_action_type, elaine_action_payload, created_by_user_id FROM reminders WHERE id = $1`,
             [delivery.reminder_id],
           )
         ).rows;
-        const result = await dispatchElaineActionReminder(actionType, payload);
+        const result = await dispatchElaineActionReminder(
+          actionType,
+          payload,
+          createdByUserId,
+        );
         if (result.status >= 400) {
           const errBody = result.body as { error?: string } | null;
           throw new Error(
@@ -1106,6 +1149,57 @@ export async function syncCalendarLinkedReminders(): Promise<{
 const IN_PROCESS_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
 
 /**
+ * One tick of the in-process scheduler. Extracted so tests can call it
+ * directly without starting a real setInterval.
+ *
+ * When the scheduler guard says to skip the claim batch, stuck-sending
+ * recovery still runs (best-effort) so a crashed process never leaves
+ * deliveries stuck in `sending` until the next eligible tick. When the
+ * guard passes, `claimAndSendDueDeliveries` (called via `runReminderDeliveries`)
+ * handles recovery internally, so it runs exactly once per tick regardless
+ * of the guard outcome.
+ */
+export async function runSchedulerTick(): Promise<void> {
+  if (
+    !(await shouldRunScheduledTask(
+      "reminders-scheduler",
+      IN_PROCESS_INTERVAL_MS,
+    ))
+  ) {
+    logger.info(
+      "reminders-scheduler: skipped (ran within the last 15 minutes)",
+    );
+    // Guard skipped the full batch. Still recover any deliveries left in
+    // `sending` by a crashed process — best-effort so a transient DB error
+    // here never becomes an unhandled rejection.
+    try {
+      await recoverStuckSendingDeliveries();
+    } catch (err) {
+      logger.error(
+        { err },
+        "reminders-scheduler: recoverStuckSendingDeliveries failed (non-fatal)",
+      );
+    }
+    return;
+  }
+  const t0 = Date.now();
+  logger.info("reminders-scheduler: run starting");
+  try {
+    await runReminderDeliveries();
+    logger.info(
+      { durationMs: Date.now() - t0 },
+      "reminders-scheduler: run complete",
+    );
+    await recordScheduledTaskSuccess("reminders-scheduler");
+  } catch (err) {
+    logger.error(
+      { err, durationMs: Date.now() - t0 },
+      "reminders-scheduler: run failed",
+    );
+    recordScheduledTaskFailure("reminders-scheduler");
+  }
+}
+/**
  * Best-effort, in-process fallback: runs on startup and every 15 minutes
  * while this server instance happens to be warm. This alone is NOT
  * sufficient to guarantee delivery — on `autoscale` deployments the
@@ -1117,39 +1211,12 @@ const IN_PROCESS_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
  * reminder_deliveries dedup index makes both paths safely idempotent.
  */
 export function startRemindersScheduler(): () => void {
-  const run = async (): Promise<void> => {
-    if (
-      !(await shouldRunScheduledTask(
-        "reminders-scheduler",
-        IN_PROCESS_INTERVAL_MS,
-      ))
-    ) {
-      logger.info(
-        "reminders-scheduler: skipped (ran within the last 15 minutes)",
-      );
-      return;
-    }
-    const t0 = Date.now();
-    logger.info("reminders-scheduler: run starting");
-    try {
-      await runReminderDeliveries();
-      logger.info(
-        { durationMs: Date.now() - t0 },
-        "reminders-scheduler: run complete",
-      );
-      await recordScheduledTaskSuccess("reminders-scheduler");
-    } catch (err) {
-      logger.error(
-        { err, durationMs: Date.now() - t0 },
-        "reminders-scheduler: run failed",
-      );
-      recordScheduledTaskFailure("reminders-scheduler");
-    }
-  };
+  void runSchedulerTick();
 
-  void run();
-
-  const interval = setInterval(() => void run(), IN_PROCESS_INTERVAL_MS);
+  const interval = setInterval(
+    () => void runSchedulerTick(),
+    IN_PROCESS_INTERVAL_MS,
+  );
   interval.unref();
 
   logger.info(

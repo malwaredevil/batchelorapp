@@ -18,6 +18,7 @@ import { adminLimiter } from "../../middleware/rateLimit";
 import { env } from "../../lib/env";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
+import { probeFindingApi } from "../../lib/ebay/finding";
 
 const router: IRouter = Router();
 router.use(adminLimiter, requireAuth, requireOwner);
@@ -469,17 +470,21 @@ async function checkReplicate(): Promise<ServiceCheckResult> {
   });
 }
 
-async function checkEbay(): Promise<ServiceCheckResult> {
+/**
+ * eBay OAuth check — verifies EBAY_APP_ID + EBAY_CERT_ID can obtain an
+ * application access token from the eBay identity service.
+ */
+async function checkEbayOAuth(): Promise<ServiceCheckResult> {
   const { ebayAppId, ebayCertId } = env;
   if (!ebayAppId || !ebayCertId) {
-    return { service: "eBay", status: "missing_key" };
+    return { service: "eBay OAuth", status: "missing_key" };
   }
   // Pass the base64-encoded credentials as the "key" so runCheck handles
   // the missing-key guard, retry, timeout, and latency tracking uniformly.
   const credentials = Buffer.from(`${ebayAppId}:${ebayCertId}`).toString(
     "base64",
   );
-  return runCheck("eBay", credentials, async (creds) => {
+  return runCheck("eBay OAuth", credentials, async (creds) => {
     const resp = await fetch("https://api.ebay.com/identity/v1/oauth2/token", {
       method: "POST",
       headers: {
@@ -501,6 +506,70 @@ async function checkEbay(): Promise<ServiceCheckResult> {
     }
     return { ok: true };
   });
+}
+
+/**
+ * eBay Finding API check — probes the legacy `svcs.ebay.com` endpoint with a
+ * minimal `findCompletedItems` call to detect WAF blocks (418/403) or quota
+ * exhaustion that the OAuth check above cannot see.
+ *
+ * The OAuth check only verifies that the credential exchange works; it says
+ * nothing about whether the Finding API itself is reachable. A 418 from the
+ * Finding API with an empty body is a known symptom of eBay's WAF blocking
+ * headless requests — this check surfaces that failure explicitly.
+ */
+async function checkEbayFindingApi(): Promise<ServiceCheckResult> {
+  const { ebayAppId } = env;
+  if (!ebayAppId) {
+    return { service: "eBay Finding API", status: "missing_key" };
+  }
+  const start = Date.now();
+  let lastDetail: string | undefined;
+
+  for (let attempt = 1; attempt <= CHECK_MAX_ATTEMPTS; attempt++) {
+    try {
+      const result = await Promise.race([
+        probeFindingApi(ebayAppId),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error(`timeout after ${CHECK_TIMEOUT_MS}ms`)),
+            CHECK_TIMEOUT_MS,
+          ),
+        ),
+      ]);
+
+      const latencyMs = Date.now() - start;
+      if (result.ok) {
+        return { service: "eBay Finding API", status: "ok", latencyMs };
+      }
+      // 429 / 5xx are transient; 418/403 are WAF blocks (permanent until fixed).
+      const isTransient =
+        result.status !== undefined && isRetryableStatus(result.status);
+      if (isTransient && attempt < CHECK_MAX_ATTEMPTS) {
+        lastDetail = result.detail;
+        await new Promise<void>((r) => setTimeout(r, CHECK_RETRY_DELAY_MS));
+        continue;
+      }
+      return {
+        service: "eBay Finding API",
+        status: "error",
+        latencyMs,
+        detail: result.detail,
+      };
+    } catch (err) {
+      lastDetail = err instanceof Error ? err.message : String(err);
+      if (attempt < CHECK_MAX_ATTEMPTS) {
+        await new Promise<void>((r) => setTimeout(r, CHECK_RETRY_DELAY_MS));
+      }
+    }
+  }
+
+  return {
+    service: "eBay Finding API",
+    status: "error",
+    latencyMs: Date.now() - start,
+    detail: lastDetail ?? "unknown error",
+  };
 }
 
 /** Sentry: config-only — validate DSN format. */
@@ -541,7 +610,8 @@ export async function runAllChecks(): Promise<CachedResult> {
     checkGoogleMaps(),
     Promise.resolve(checkGoogleWallet()),
     checkReplicate(),
-    checkEbay(),
+    checkEbayOAuth(),
+    checkEbayFindingApi(),
     Promise.resolve(checkSentry()),
     Promise.resolve(checkVapid()),
   ]);

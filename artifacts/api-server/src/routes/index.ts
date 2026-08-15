@@ -27,6 +27,7 @@ import knowledgeRouter from "./knowledge";
 import storageReconcileRouter from "./admin/storage-reconcile";
 import adminUsersRouter from "./admin/users";
 import integrationsHealthRouter from "./admin/integrations-health";
+import elaineCodeSuggestionsRouter from "./admin/elaine-code-suggestions";
 import richTextRouter from "./rich-text";
 import remindersRouter from "./reminders";
 
@@ -64,6 +65,7 @@ router.use(knowledgeRouter);
 router.use("/admin/storage", storageReconcileRouter);
 router.use("/admin/users", adminUsersRouter);
 router.use("/admin/integrations/health", integrationsHealthRouter);
+router.use("/admin/elaine-code-suggestions", elaineCodeSuggestionsRouter);
 router.use("/rich-text", richTextRouter);
 router.use("/reminders", remindersRouter);
 // Must be mounted before elaineRouter: elaineRouter applies a blanket

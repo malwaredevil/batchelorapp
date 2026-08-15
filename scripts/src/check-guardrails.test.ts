@@ -7,6 +7,7 @@ import {
   checkDestructiveSqlFromDiff,
   checkExclusionSetShrink,
   countExclusionEntries,
+  checkElaineChatTestMissingLessonsMock,
 } from "./check-guardrails.js";
 
 // --- drizzle-kit push ---
@@ -156,5 +157,85 @@ assert.deepEqual(checkExclusionSetShrink(grownSource, baseSource), []);
 assert.deepEqual(checkExclusionSetShrink(baseSource, baseSource), []);
 // Missing base (new file / new repo) never counts as a shrink.
 assert.deepEqual(checkExclusionSetShrink(shrunkSource, null), []);
+
+// --- Elaine chat integration tests must mock elaine-lessons ---
+const ELAINE_TEST_PATH = "artifacts/api-server/src/elaine/my-feature.test.ts";
+
+// Content that hits the chat route AND has the lessons mock → no violation.
+const withMockAndRoute = `
+vi.mock("../lib/elaine-lessons", () => ({
+  ELAINE_LESSON_DOMAINS: ["general"],
+  getRelevantElaineLessons: vi.fn().mockResolvedValue({ lessons: [], evidenceBlock: "" }),
+  recordElaineLesson: vi.fn().mockResolvedValue(undefined),
+}));
+// later...
+await request(app).post("/elaine/chat").send({ message: "hi" });
+`;
+assert.deepEqual(
+  checkElaineChatTestMissingLessonsMock(
+    [ELAINE_TEST_PATH],
+    () => withMockAndRoute,
+  ),
+  [],
+  "chat route + lessons mock → no violation",
+);
+
+// Content that hits the chat route but OMITS the lessons mock → violation.
+const missingMock = `
+// elaine-lessons mock deliberately absent from this fixture
+await request(app).post("/elaine/chat").send({ message: "hi" });
+`;
+assert.deepEqual(
+  checkElaineChatTestMissingLessonsMock([ELAINE_TEST_PATH], () => missingMock),
+  [ELAINE_TEST_PATH],
+  "chat route without lessons mock → violation",
+);
+
+// File that does NOT hit the chat route → no violation even without the mock.
+const noRoute = `
+vi.fn(); // no chat route reference
+await request(app).post("/elaine/action").send({});
+`;
+assert.deepEqual(
+  checkElaineChatTestMissingLessonsMock([ELAINE_TEST_PATH], () => noRoute),
+  [],
+  "non-chat route file → no violation regardless of mock",
+);
+
+// Full-path variant: "/api/elaine/chat" also counts as the chat route.
+const fullPathRoute = `
+await request(app).post("/api/elaine/chat").send({ message: "hi" });
+`;
+assert.deepEqual(
+  checkElaineChatTestMissingLessonsMock(
+    [ELAINE_TEST_PATH],
+    () => fullPathRoute,
+  ),
+  [ELAINE_TEST_PATH],
+  "/api/elaine/chat (full-path) without mock → violation",
+);
+
+// Files outside the elaine directory are not scanned.
+const outsideElaine = "artifacts/api-server/src/routes/travels/my.test.ts";
+assert.deepEqual(
+  checkElaineChatTestMissingLessonsMock([outsideElaine], () => missingMock),
+  [],
+  "file outside elaine/ → not scanned",
+);
+
+// Deleted files (readFile returns null) are skipped.
+assert.deepEqual(
+  checkElaineChatTestMissingLessonsMock([ELAINE_TEST_PATH], () => null),
+  [],
+  "deleted file → skipped",
+);
+
+// Non-.test.ts files are not scanned.
+const nonTestPath = "artifacts/api-server/src/elaine/index.ts";
+assert.deepEqual(
+  checkElaineChatTestMissingLessonsMock([nonTestPath], () => missingMock),
+  [],
+  "non-test file → not scanned",
+);
 
 console.log("✓ check-guardrails tests passed");

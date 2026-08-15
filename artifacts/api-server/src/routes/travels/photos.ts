@@ -12,6 +12,7 @@ import {
 } from "../../lib/travels/storage";
 import { generateVisualEmbedding } from "../../lib/visual-embed";
 import { tripExists } from "../../lib/travels/db-helpers";
+import { clearActivityPhotoReferences } from "../../lib/travels/activity-photo-refs";
 import {
   createImageFileFilter,
   sniffAndValidateMime,
@@ -35,46 +36,6 @@ function parsePhotoType(raw: unknown): "photo" | "magnet" {
   const value =
     typeof raw === "string" ? raw : Array.isArray(raw) ? raw[0] : undefined;
   return value === "magnet" ? "magnet" : "photo";
-}
-
-type LooseItineraryActivity = Record<string, unknown> & { photoId?: number };
-type LooseItineraryDay = { activities?: LooseItineraryActivity[] } & Record<
-  string,
-  unknown
->;
-type LooseItinerary = { days?: LooseItineraryDay[] } & Record<string, unknown>;
-
-/**
- * Strips any itinerary activity's `photoId` reference to a deleted trip
- * photo, so a removed gallery photo never leaves a dangling/broken
- * thumbnail on an itinerary activity. Returns the updated itinerary object
- * to persist, or null if nothing referenced this photo (no write needed).
- */
-function clearActivityPhotoReferences(
-  itinerary: unknown,
-  photoId: number,
-): LooseItinerary | null {
-  if (
-    !itinerary ||
-    typeof itinerary !== "object" ||
-    !Array.isArray((itinerary as LooseItinerary).days)
-  ) {
-    return null;
-  }
-  const typed = itinerary as LooseItinerary;
-  let changed = false;
-  const days = (typed.days ?? []).map((day) => {
-    if (!Array.isArray(day.activities)) return day;
-    const activities = day.activities.map((activity) => {
-      if (activity.photoId !== photoId) return activity;
-      changed = true;
-      const { photoId: _removed, ...rest } = activity;
-      return rest;
-    });
-    return { ...day, activities };
-  });
-  if (!changed) return null;
-  return { ...typed, days };
 }
 
 // GET /trips/:id/photos

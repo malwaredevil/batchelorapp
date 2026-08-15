@@ -17,9 +17,12 @@ import {
 import {
   bulkReanalyzeOrnamentItems,
   promoteOrnamentImageToPrimary,
+  createOrnamentItemFromBuffer,
 } from "../routes/ornaments/ornaments";
 import { deleteImage } from "../lib/ornaments/storage";
 import { logActivity } from "../lib/soft-delete";
+import { env } from "../lib/env";
+import { consumeAiRateLimit } from "../middleware/rateLimit";
 
 // Elaine's write-actions for the Ornaments app. Creating a brand-new item
 // isn't offered here since every ornament requires an uploaded photo
@@ -113,6 +116,10 @@ export const BulkReanalyzeOrnamentsActionPayload = z.object({
   itemIds: z.array(z.number().int().positive()).max(20).optional(),
 });
 
+export const AddPhotoToOrnamentsPayload = z.object({
+  attachmentUrl: z.string().url().max(2000),
+});
+
 export const ornamentActionSchemas = [
   z.object({
     type: z.literal("update_ornament_item"),
@@ -154,6 +161,10 @@ export const ornamentActionSchemas = [
     type: z.literal("bulk_reanalyze_ornaments"),
     payload: BulkReanalyzeOrnamentsActionPayload,
   }),
+  z.object({
+    type: z.literal("add_photo_to_ornaments"),
+    payload: AddPhotoToOrnamentsPayload,
+  }),
 ] as const;
 
 export type OrnamentActionType =
@@ -166,7 +177,8 @@ export type OrnamentActionType =
   | "delete_ornament_photo"
   | "promote_ornament_photo"
   | "merge_ornament_categories"
-  | "bulk_reanalyze_ornaments";
+  | "bulk_reanalyze_ornaments"
+  | "add_photo_to_ornaments";
 
 async function getOrnamentItemLabelInfo(
   itemId: number,
@@ -478,6 +490,61 @@ export const ornamentActionExecutors: Record<
       body: { type: "bulk_reanalyze_ornaments", result },
     };
   }) as ActionExecutor,
+
+  add_photo_to_ornaments: (async (
+    payload: z.infer<typeof AddPhotoToOrnamentsPayload>,
+    userId: number,
+  ) => {
+    // Enforce the AI rate limit before starting expensive vision/embedding
+    // pipelines — same cap as the POST /items upload route.
+    const { limited } = await consumeAiRateLimit(userId);
+    if (limited) {
+      return {
+        status: 429,
+        body: { error: "Too many AI requests, please try again later." },
+      };
+    }
+    // Validate URL is from this application's Supabase storage to prevent SSRF
+    if (!payload.attachmentUrl.startsWith(env.supabaseUrl + "/storage/")) {
+      return {
+        status: 400,
+        body: {
+          error: "Attachment URL is not from this application's storage",
+        },
+      };
+    }
+    let buffer: Buffer;
+    try {
+      const response = await fetch(payload.attachmentUrl);
+      if (!response.ok) {
+        return {
+          status: 502,
+          body: { error: "Failed to fetch attachment from storage" },
+        };
+      }
+      buffer = Buffer.from(await response.arrayBuffer());
+    } catch {
+      return {
+        status: 502,
+        body: { error: "Failed to fetch attachment from storage" },
+      };
+    }
+    try {
+      const result = await createOrnamentItemFromBuffer(userId, buffer);
+      return {
+        status: 201,
+        body: { type: "add_photo_to_ornaments", result },
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      const rawStatus = (err as { status?: unknown }).status;
+      const errStatus =
+        typeof rawStatus === "number" && rawStatus >= 400 && rawStatus < 600
+          ? rawStatus
+          : 500;
+      return { status: errStatus, body: { error: message } };
+    }
+  }) as ActionExecutor,
 };
 
 export async function buildOrnamentActionLabel(action: {
@@ -568,6 +635,9 @@ export async function buildOrnamentActionLabel(action: {
       return payload.itemIds && payload.itemIds.length > 0
         ? `Run AI re-analysis on ${payload.itemIds.length} ornament(s)`
         : `Run AI re-analysis on every ornament that needs it`;
+    }
+    case "add_photo_to_ornaments": {
+      return "Add this photo to your ornaments collection (runs full AI cataloguing)";
     }
   }
 }
@@ -729,6 +799,25 @@ export const ornamentActionTools: OpenAI.Chat.Completions.ChatCompletionTool[] =
           properties: {
             itemIds: { type: "array", items: { type: "integer" } },
           },
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "add_photo_to_ornaments",
+        description:
+          "Propose adding the photo the user already attached to this message straight into their ornaments collection — runs the exact same full AI cataloguing pipeline (name, series/collection, year, UPC lookup, eBay market value, colours, description) as uploading via the Ornaments page. ONLY call this when the user explicitly asks to add or save the attached photo to their ornaments collection. Pass the exact signed URL of the attached image as attachmentUrl. Never call this automatically, speculatively, or without a clear user request.",
+        parameters: {
+          type: "object",
+          properties: {
+            attachmentUrl: {
+              type: "string",
+              description:
+                "The exact signed URL of the image the user attached to this message",
+            },
+          },
+          required: ["attachmentUrl"],
         },
       },
     },

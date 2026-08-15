@@ -641,21 +641,28 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
         barcodeValue: barcodeField,
         quantity: quantityField,
         notes: notesField,
-        // Priority: Hallmark collector price > eBay sold median > null
+        // Priority: Hallmark collector price > eBay *sold* median > null.
+        // Only use the eBay median as a book-value seed when it comes from real
+        // completed/sold listings (sourceType "sold"). Active-listing fallback
+        // prices are asking prices, not realized values — don't store them as
+        // book value or they'll mislead collectors.
         bookValue:
           barcodeLookup?.hallmarkCollectorPriceUsd != null
             ? String(barcodeLookup.hallmarkCollectorPriceUsd)
-            : ebayCreationLookup?.priceMedianUsd != null
+            : ebayCreationLookup?.priceMedianUsd != null &&
+                ebayCreationLookup.sourceType === "sold"
               ? String(ebayCreationLookup.priceMedianUsd)
               : null,
         bookValueSource: barcodeLookup?.hallmarkCollectorPriceUsd
           ? "hallmarkornaments.com"
-          : ebayCreationLookup?.priceMedianUsd
+          : ebayCreationLookup?.priceMedianUsd != null &&
+              ebayCreationLookup.sourceType === "sold"
             ? "ebay"
             : null,
         bookValueUpdatedAt:
           barcodeLookup?.hallmarkCollectorPriceUsd != null ||
-          ebayCreationLookup?.priceMedianUsd != null
+          (ebayCreationLookup?.priceMedianUsd != null &&
+            ebayCreationLookup.sourceType === "sold")
             ? new Date()
             : null,
         dimensions: userDimensions ?? analysis.dimensions,
@@ -1823,5 +1830,161 @@ router.post("/items/:id/set-primary-image", aiLimiter, async (req, res) => {
     res.status(status).json({ error: message });
   }
 });
+
+/**
+ * Create a new ornament item from raw image bytes, running the same analysis
+ * pipeline as the POST /items route. Called by Elaine's add_photo_to_ornaments
+ * action when the user explicitly asks to file an already-uploaded attachment
+ * straight into the collection.
+ */
+export async function createOrnamentItemFromBuffer(
+  userId: number,
+  buffer: Buffer,
+): Promise<{ id: number; name: string | null }> {
+  const sniffed = sniffImageType(buffer);
+  if (!sniffed || !isImageMimeType(sniffed)) {
+    throw Object.assign(
+      new Error("Unsupported image type — must be JPEG, PNG, or WEBP"),
+      { status: 400 },
+    );
+  }
+  const contentType = sniffed;
+  const cleanBuffer = await stripMetadata(buffer, contentType);
+  const dataUrl = toDataUrl(cleanBuffer, contentType);
+
+  const { result: analysis, runId: analysisRunId } =
+    await runAnalysisWithEvidenceTrace(
+      {
+        module: "ornaments",
+        feature: "catalogue-image",
+        targetType: "ornament_item",
+        userId,
+        model: (await getModels()).fastVision,
+      },
+      () => analyzeOrnamentImage([dataUrl]),
+    );
+  const embedding = await embedText(buildEmbeddingText(analysis));
+
+  const barcodeField = analysis.upc ? analysis.upc.slice(0, MAX_TEXT) : null;
+
+  let barcodeLookup: Awaited<ReturnType<typeof lookupBarcode>> | null = null;
+  if (barcodeField) {
+    try {
+      barcodeLookup = await lookupBarcode(barcodeField);
+    } catch (err) {
+      logger.warn(
+        { err, barcode: barcodeField },
+        "Auto barcode lookup during Elaine ornament create failed (non-fatal)",
+      );
+    }
+  }
+
+  const effectiveName =
+    analysis.name ?? (barcodeLookup?.found ? barcodeLookup.name : null);
+  const effectiveYear =
+    analysis.year ?? (barcodeLookup?.found ? barcodeLookup.year : null);
+  const effectiveBrand = barcodeLookup?.found ? barcodeLookup.brand : null;
+
+  const [imagePath, ebayCreationLookup] = await Promise.all([
+    uploadImage(cleanBuffer, contentType),
+    env.ebayAppId && effectiveName
+      ? lookupEbayMarketValue(
+          buildEbayQuery(effectiveName, {
+            maker: effectiveBrand ?? undefined,
+            year: effectiveYear ?? undefined,
+          }),
+          { withAspects: false, upc: barcodeField ?? undefined },
+        ).catch((err: unknown) => {
+          logger.warn(
+            { err },
+            "eBay lookup during Elaine ornament creation failed (non-fatal)",
+          );
+          return null;
+        })
+      : Promise.resolve(null),
+  ]);
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  try {
+    const [row] = await db
+      .insert(ornamentsItems)
+      .values({
+        userId,
+        name: effectiveName,
+        brand: effectiveBrand ?? "Hallmark",
+        seriesOrCollection:
+          analysis.seriesOrCollection ??
+          (barcodeLookup?.found
+            ? (barcodeLookup.hallmarkSeriesName ??
+              barcodeLookup.seriesOrCollection)
+            : null),
+        year: effectiveYear,
+        barcodeValue: barcodeField,
+        quantity: 1,
+        // Same guard as the normal ornament upload route: only seed bookValue
+        // from eBay when the data comes from real sold/completed listings
+        // (sourceType "sold"). Active-listing asking prices must not be stored
+        // as book value because they mislead collectors about realised values.
+        bookValue:
+          barcodeLookup?.hallmarkCollectorPriceUsd != null
+            ? String(barcodeLookup.hallmarkCollectorPriceUsd)
+            : ebayCreationLookup?.priceMedianUsd != null &&
+                ebayCreationLookup.sourceType === "sold"
+              ? String(ebayCreationLookup.priceMedianUsd)
+              : null,
+        bookValueSource: barcodeLookup?.hallmarkCollectorPriceUsd
+          ? "hallmarkornaments.com"
+          : ebayCreationLookup?.priceMedianUsd != null &&
+              ebayCreationLookup.sourceType === "sold"
+            ? "ebay"
+            : null,
+        bookValueUpdatedAt:
+          barcodeLookup?.hallmarkCollectorPriceUsd != null ||
+          (ebayCreationLookup?.priceMedianUsd != null &&
+            ebayCreationLookup.sourceType === "sold")
+            ? new Date()
+            : null,
+        dimensions: analysis.dimensions,
+        aiDescription: analysis.aiDescription,
+        dominantColors: analysis.dominantColors,
+        motifs: analysis.motifs,
+        acquiredAt: today,
+        imagePath,
+        embedding,
+      })
+      .returning();
+
+    await assignGenerationRunTarget(analysisRunId, row.id);
+
+    const allCats = await db
+      .select({ id: categories.id, name: categories.name })
+      .from(categories);
+    const autoCategoryIds = matchCategoryIds(allCats, [
+      analysis.name,
+      analysis.seriesOrCollection,
+      analysis.dimensions,
+      analysis.motifs,
+    ]);
+    const allCategoryIds = mergeExistingCategoryIds(
+      allCats,
+      autoCategoryIds,
+      [],
+    );
+    if (allCategoryIds.length > 0) {
+      await db.insert(itemCategories).values(
+        allCategoryIds.map((catId) => ({
+          itemId: row.id,
+          categoryId: catId,
+        })),
+      );
+    }
+
+    return { id: row.id, name: row.name };
+  } catch (err) {
+    await deleteImage(imagePath).catch(() => {});
+    throw err;
+  }
+}
 
 export default router;

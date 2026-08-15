@@ -25,6 +25,10 @@ import {
 import { createClient } from "@supabase/supabase-js";
 import { logger } from "./logger";
 import { env } from "./env";
+import {
+  clearActivityPhotoReferences,
+  clearActivityDocumentReferences,
+} from "./travels/activity-photo-refs";
 
 const PURGE_DAYS = 30;
 
@@ -292,6 +296,50 @@ export async function purgeDeletedItems(): Promise<PurgeSummary> {
     // Skip photos whose parent trip is also soft-deleted — those are already handled above.
     const orphanPhotos = rows.filter((r) => r.tripId != null);
     if (orphanPhotos.length > 0) {
+      // Clear iconPhotoId and itinerary activity references on affected trips
+      // before hard-deleting the rows, so activities don't hold dangling photoIds.
+      const affectedTripIds = [
+        ...new Set(orphanPhotos.map((r) => r.tripId as number)),
+      ];
+      const trips = await db
+        .select({
+          id: travelsTrips.id,
+          iconPhotoId: travelsTrips.iconPhotoId,
+          itinerary: travelsTrips.itinerary,
+        })
+        .from(travelsTrips)
+        .where(inArray(travelsTrips.id, affectedTripIds));
+
+      for (const trip of trips) {
+        const photosForTrip = orphanPhotos.filter((p) => p.tripId === trip.id);
+        let iconPhotoId = trip.iconPhotoId;
+        let itinerary: unknown = trip.itinerary;
+        let iconChanged = false;
+        let itineraryChanged = false;
+
+        for (const photo of photosForTrip) {
+          if (iconPhotoId === photo.id) {
+            iconPhotoId = null;
+            iconChanged = true;
+          }
+          const cleared = clearActivityPhotoReferences(itinerary, photo.id);
+          if (cleared !== null) {
+            itinerary = cleared;
+            itineraryChanged = true;
+          }
+        }
+
+        if (iconChanged || itineraryChanged) {
+          await db
+            .update(travelsTrips)
+            .set({
+              ...(iconChanged ? { iconPhotoId: null } : {}),
+              ...(itineraryChanged ? { itinerary } : {}),
+            })
+            .where(eq(travelsTrips.id, trip.id));
+        }
+      }
+
       await removeStoragePaths(
         "travels",
         orphanPhotos.map((r) => r.storagePath),
@@ -310,11 +358,18 @@ export async function purgeDeletedItems(): Promise<PurgeSummary> {
   }
 
   // --- Trip Documents (standalone) ---
+  //
+  // Before hard-deleting, clear any `sourceDocumentId` references that still
+  // exist in affected trips' itinerary activities.  The trip-scoped soft-delete
+  // route performs early clearing, but the simpler DELETE /documents/:docId
+  // route may not have run it.  Clearing here is the universal safety net —
+  // identical in structure to the trip-photo reference clearing above.
   try {
     const rows = await db
       .select({
         id: travelsTripDocuments.id,
         storagePath: travelsTripDocuments.storagePath,
+        tripId: travelsTripDocuments.tripId,
       })
       .from(travelsTripDocuments)
       .where(
@@ -324,6 +379,42 @@ export async function purgeDeletedItems(): Promise<PurgeSummary> {
         ),
       );
     if (rows.length > 0) {
+      const affectedTripIds = [
+        ...new Set(
+          rows.map((r) => r.tripId).filter((id): id is number => id != null),
+        ),
+      ];
+      if (affectedTripIds.length > 0) {
+        const trips = await db
+          .select({
+            id: travelsTrips.id,
+            itinerary: travelsTrips.itinerary,
+          })
+          .from(travelsTrips)
+          .where(inArray(travelsTrips.id, affectedTripIds));
+
+        for (const trip of trips) {
+          const docsForTrip = rows.filter((d) => d.tripId === trip.id);
+          let itinerary: unknown = trip.itinerary;
+          let changed = false;
+
+          for (const doc of docsForTrip) {
+            const cleared = clearActivityDocumentReferences(itinerary, doc.id);
+            if (cleared !== null) {
+              itinerary = cleared;
+              changed = true;
+            }
+          }
+
+          if (changed) {
+            await db
+              .update(travelsTrips)
+              .set({ itinerary })
+              .where(eq(travelsTrips.id, trip.id));
+          }
+        }
+      }
+
       await removeStoragePaths(
         "travels",
         rows.map((r) => r.storagePath),

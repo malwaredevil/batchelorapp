@@ -10,6 +10,7 @@ export * from "./planner";
 export * from "./replan-policy";
 export * from "./responses-state";
 export * from "./scheduler";
+export * from "./self-heal-policy";
 export * from "./source-policy";
 export * from "./tool-families";
 export * from "./trace-store";

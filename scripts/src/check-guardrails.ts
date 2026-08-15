@@ -211,6 +211,59 @@ export const EXCLUSION_SHRINK_HELP = [
 ].join("\n");
 
 // ---------------------------------------------------------------------------
+// Check 7: every Elaine integration test that exercises POST /elaine/chat
+// via supertest must mock elaine-lessons.
+//
+// The real getRelevantElaineLessons issues an extra db.select() that shifts
+// the selectQueue slots out of alignment, silently aborting the SSE response
+// with ECONNRESET before any headers are sent.  The failure is invisible
+// until a hard-tool scenario is added to the test — by then the test author
+// may have already merged.  Enforcing the mock at the diff level prevents
+// the gap from being introduced in the first place.
+// ---------------------------------------------------------------------------
+
+// Detects files that hit the chat route by looking for the literal POST path
+// string that supertest uses.  Both `/elaine/chat` (router-relative) and
+// `/api/elaine/chat` (full path) are accepted because different test files
+// mount the router at different prefixes.
+const ELAINE_CHAT_ROUTE_RE = /["'`]\/(?:api\/)?elaine\/chat["'`]/;
+const ELAINE_LESSONS_MOCK_RE = /vi\.mock\(["'`]\.\.\/lib\/elaine-lessons["'`]/;
+
+export function checkElaineChatTestMissingLessonsMock(
+  files: string[],
+  readFile: (file: string) => string | null,
+): string[] {
+  const violations: string[] = [];
+  for (const file of files) {
+    if (!file.endsWith(".test.ts")) continue;
+    if (!file.startsWith("artifacts/api-server/src/elaine/")) continue;
+    const content = readFile(file);
+    if (content === null) continue; // deleted in this diff — nothing to enforce
+    if (!ELAINE_CHAT_ROUTE_RE.test(content)) continue; // doesn't hit the chat route
+    if (!ELAINE_LESSONS_MOCK_RE.test(content)) {
+      violations.push(file);
+    }
+  }
+  return violations;
+}
+
+export const ELAINE_CHAT_LESSONS_MOCK_HELP = [
+  "Every Elaine integration test that drives POST /elaine/chat via supertest",
+  "must include:",
+  "",
+  '  vi.mock("../lib/elaine-lessons", () => ({',
+  "    ELAINE_LESSON_DOMAINS: [...],",
+  "    getRelevantElaineLessons: vi.fn().mockResolvedValue({ lessons: [], evidenceBlock: '' }),",
+  "    recordElaineLesson: vi.fn().mockResolvedValue(undefined),",
+  "  }));",
+  "",
+  "Without this mock the real getRelevantElaineLessons issues an extra",
+  "db.select() that shifts the selectQueue slots out of alignment, silently",
+  "aborting the SSE response with ECONNRESET before headers are sent.",
+  "The failure is invisible until a hard-tool scenario is exercised.",
+].join("\n");
+
+// ---------------------------------------------------------------------------
 // Git-backed wiring (not unit tested directly — exercised end-to-end in CI
 // and via manual `--base` runs).
 // ---------------------------------------------------------------------------
@@ -343,6 +396,11 @@ export function runGuardrailChecks(base: string): CheckResult[] {
         baseExclusionSource,
       ),
       helpText: EXCLUSION_SHRINK_HELP,
+    },
+    {
+      name: "Guard: Elaine chat integration tests must mock elaine-lessons",
+      violations: checkElaineChatTestMissingLessonsMock(changedFiles, readFile),
+      helpText: ELAINE_CHAT_LESSONS_MOCK_HELP,
     },
   ];
 }

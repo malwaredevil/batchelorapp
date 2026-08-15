@@ -581,6 +581,9 @@ export function useGetElaineConversation<
 // updates via `callbacks` and the final result via the resolved promise
 // (which also resolves `onDone`).
 export interface AssistantChatStreamCallbacks {
+  /** Called as soon as the server registers the turn — surfaces the stable
+   *  turn id used for the widget→full-app maximize handoff/resume flow. */
+  onTurnId?: (info: { turnId: string; conversationId: number | null }) => void;
   onDelta?: (text: string) => void;
   /** Clears provisional text when Elaine continues with tools or a replan. */
   onResponseReset?: () => void;
@@ -680,7 +683,17 @@ export async function streamElaineMessage(
     throw new Error(text || `Request failed with status ${response.status}`);
   }
 
-  const reader = response.body.getReader();
+  return readElaineSseStream(response.body, callbacks);
+}
+
+/** Shared SSE reader for both the primary /chat stream and the resume/attach
+ *  stream — parses events off the body and dispatches to `callbacks`,
+ *  resolving with the terminal `done` payload. */
+async function readElaineSseStream(
+  body: ReadableStream<Uint8Array>,
+  callbacks: AssistantChatStreamCallbacks,
+): Promise<AssistantChatResponse> {
+  const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   let done: AssistantChatResponse | null = null;
@@ -709,6 +722,11 @@ export async function streamElaineMessage(
       }
 
       switch (eventType) {
+        case "turn":
+          callbacks.onTurnId?.(
+            data as { turnId: string; conversationId: number | null },
+          );
+          break;
         case "delta":
           callbacks.onDelta?.((data as { text: string }).text);
           break;
@@ -749,6 +767,46 @@ export async function streamElaineMessage(
     throw new Error("Elaine's response ended unexpectedly.");
   }
   return done;
+}
+
+/**
+ * Tells the server the current turn's connection is about to be dropped
+ * intentionally (widget maximize navigation) so it must keep generating
+ * instead of aborting on disconnect. `keepalive` lets the request survive
+ * the imminent page unload. Resolves false when the turn is unknown/expired.
+ */
+export async function signalElaineTurnHandoff(turnId: string): Promise<boolean> {
+  try {
+    const response = await fetch(
+      `/api/elaine/chat/turns/${encodeURIComponent(turnId)}/handoff`,
+      { method: "POST", keepalive: true },
+    );
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Attaches to an in-progress (or just-finished) turn after a maximize
+ * handoff: immediately replays everything generated so far through
+ * `callbacks`, then keeps streaming live events until the turn completes.
+ * Throws when the turn is unknown/expired (HTTP 404) — callers should fall
+ * back to plain persisted history.
+ */
+export async function resumeElaineTurnStream(
+  turnId: string,
+  callbacks: AssistantChatStreamCallbacks = {},
+  signal?: AbortSignal,
+): Promise<AssistantChatResponse> {
+  const response = await fetch(
+    `/api/elaine/chat/turns/${encodeURIComponent(turnId)}/stream`,
+    { headers: { Accept: "text/event-stream" }, signal },
+  );
+  if (!response.ok || !response.body) {
+    throw new Error(`Turn resume failed with status ${response.status}`);
+  }
+  return readElaineSseStream(response.body, callbacks);
 }
 
 const newElaineConversationFn = (): Promise<{

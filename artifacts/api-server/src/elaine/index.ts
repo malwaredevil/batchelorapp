@@ -52,6 +52,15 @@ import {
   elaineCrossChannelContext,
 } from "@workspace/db";
 import { requireAuth } from "../middleware/auth";
+import {
+  registerElaineTurn,
+  publishElaineTurnEvent,
+  completeElaineTurn,
+  getElaineTurn,
+  markElaineTurnHandoff,
+  attachElaineTurnListener,
+  detachElaineTurnListener,
+} from "./turn-registry";
 import { phoneVerifyLimiter, aiLimiter } from "../middleware/rateLimit";
 import { logger } from "../lib/logger";
 import {
@@ -4518,18 +4527,36 @@ router.post("/chat", async (req, res) => {
   // `res`'s "close" event, guarded by `writableEnded` to distinguish a
   // genuine client-side abort from the socket closing normally after we
   // finished.
+  // Register this turn so a second client (the full Elaine app, after the
+  // widget's maximize handoff) can attach mid-turn via
+  // GET /chat/turns/:turnId/stream and replay + follow every event. When the
+  // widget signals a handoff (POST /chat/turns/:turnId/handoff) before
+  // navigating away, the disconnect below deliberately does NOT abort the
+  // model call — the turn keeps generating, buffering into the registry, and
+  // persists a normal (non-stopped) message.
+  const liveTurn = registerElaineTurn({ userId, conversationId: histConvId });
+
   const abortController = new AbortController();
   let clientDisconnected = false;
   res.on("close", () => {
     if (res.writableEnded) return;
     clientDisconnected = true;
-    abortController.abort();
+    if (!liveTurn.handoff) abortController.abort();
   });
 
   function sendEvent(event: string, data: unknown) {
-    if (clientDisconnected) return;
+    // Always buffer/fan-out via the turn registry, even after the original
+    // client disconnected — a handed-off turn keeps generating for whoever
+    // attaches next, and even an aborted turn still publishes its terminal
+    // event so a racing attach ends cleanly.
+    publishElaineTurnEvent(liveTurn, event, data);
+    if (clientDisconnected || res.writableEnded) return;
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   }
+
+  // Surface the turn id immediately so the widget can hand it off on
+  // maximize even during the earliest "Planning…" phase.
+  sendEvent("turn", { turnId: liveTurn.turnId, conversationId: histConvId });
 
   const requestClass = classifyElaineRequest({
     message,
@@ -5179,7 +5206,8 @@ router.post("/chat", async (req, res) => {
           );
         }
         sendEvent("error", { message: "elAIne couldn't respond just now." });
-        res.end();
+        completeElaineTurn(liveTurn);
+        if (!clientDisconnected) res.end();
         return;
       }
     }
@@ -7130,7 +7158,10 @@ router.post("/chat", async (req, res) => {
             ? Date.now() - turnStartMs
             : null,
           channel: "web",
-          stopped: clientDisconnected,
+          // A handed-off disconnect is not a Stop: the maximize flow
+          // deliberately drops the widget's connection while the turn keeps
+          // generating, so the persisted message must be a normal one.
+          stopped: clientDisconnected && !liveTurn.handoff,
         },
       ])
       .returning({
@@ -7210,33 +7241,32 @@ router.post("/chat", async (req, res) => {
     }
   }
 
-  // The client already disconnected (Stop button, or a real network drop) —
-  // nothing is listening on the other end, so skip emitting the terminal
-  // event and ending an already-closed response.
-  if (!clientDisconnected) {
-    sendEvent("done", {
-      role: "assistant",
-      content,
-      navigate,
-      actions: resolvedActions,
-      executedActions,
-      actionConfirmationMode:
-        updatedActionConfirmationMode ?? actionConfirmationMode,
-      // Legacy field — no longer backed by the rolling JSONB blob; clients must
-      // use `userMessageId`/`assistantMessageId` to reconcile history state.
-      messages: [] as ChatMessage[],
-      // Real, persisted ids for this turn's two rows in elaineHistoryMessages
-      // (null only in the rare case histConvId couldn't be resolved). Clients
-      // must use these — not an array position — to reconcile the optimistic
-      // message and to keep "load older" pagination cursors correct.
-      userMessageId,
-      assistantMessageId,
-      conversationId: histConvId,
-      runtimeTrace: finalTrace,
-      reasoningSummary: finalReasoningSummary ?? null,
-    });
-    res.end();
-  }
+  // Always publish the terminal event: sendEvent buffers it in the turn
+  // registry (so a handed-off/attached client receives it) and only writes
+  // to the original response when it's still connected.
+  sendEvent("done", {
+    role: "assistant",
+    content,
+    navigate,
+    actions: resolvedActions,
+    executedActions,
+    actionConfirmationMode:
+      updatedActionConfirmationMode ?? actionConfirmationMode,
+    // Legacy field — no longer backed by the rolling JSONB blob; clients must
+    // use `userMessageId`/`assistantMessageId` to reconcile history state.
+    messages: [] as ChatMessage[],
+    // Real, persisted ids for this turn's two rows in elaineHistoryMessages
+    // (null only in the rare case histConvId couldn't be resolved). Clients
+    // must use these — not an array position — to reconcile the optimistic
+    // message and to keep "load older" pagination cursors correct.
+    userMessageId,
+    assistantMessageId,
+    conversationId: histConvId,
+    runtimeTrace: finalTrace,
+    reasoningSummary: finalReasoningSummary ?? null,
+  });
+  completeElaineTurn(liveTurn);
+  if (!clientDisconnected) res.end();
 
   // Fire-and-forget personal summary update. Durable facts are never inferred
   // from a turn; only the explicit remember/correct flows may write them.
@@ -7258,6 +7288,72 @@ router.post("/chat", async (req, res) => {
   ).catch((err) =>
     req.log.error({ err }, "appendCrossChannelEntry background task failed"),
   );
+});
+
+// ── Widget → full-app maximize handoff ─────────────────────────────────────
+// Marks an in-flight turn as intentionally handed off: the widget calls this
+// right before its maximize navigation drops the SSE connection, so the
+// /chat handler's close listener skips the usual abort-on-disconnect and the
+// turn keeps generating (and persists normally). Idempotent; 404 when the
+// turn is unknown/expired/not owned by this user.
+router.post("/chat/turns/:turnId/handoff", (req, res) => {
+  const userId = req.session.userId!;
+  const turnId = String(req.params["turnId"]);
+  const ok = markElaineTurnHandoff(turnId, userId);
+  if (!ok) {
+    res.status(404).json({ error: "Turn not found" });
+    return;
+  }
+  res.json({ ok: true });
+});
+
+// Attach/resume stream for an in-progress (or just-finished) turn. Replays
+// every event generated so far — including the terminal `done`/`error` if the
+// turn already completed within the retention window — then keeps streaming
+// live events until the turn finishes. 404 when the turn is unknown/expired,
+// which the client treats as "fall back to persisted history".
+router.get("/chat/turns/:turnId/stream", (req, res) => {
+  const userId = req.session.userId!;
+  const turnId = String(req.params["turnId"]);
+  const turn = getElaineTurn(turnId, userId);
+  if (!turn) {
+    res.status(404).json({ error: "Turn not found" });
+    return;
+  }
+
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const writeEvent = (event: string, data: unknown) => {
+    if (res.writableEnded) return;
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  // Replay everything buffered so far so the attaching client can render the
+  // current planning/streaming state immediately, without a blank flash.
+  for (const entry of turn.events) {
+    writeEvent(entry.event, entry.data);
+  }
+  if (turn.done) {
+    res.end();
+    return;
+  }
+
+  // Follow live until the turn's terminal event arrives.
+  const listener = (entry: { event: string; data: unknown }) => {
+    writeEvent(entry.event, entry.data);
+    if (entry.event === "done" || entry.event === "error") {
+      detachElaineTurnListener(turn, listener);
+      if (!res.writableEnded) res.end();
+    }
+  };
+  attachElaineTurnListener(turn, listener);
+  res.on("close", () => {
+    detachElaineTurnListener(turn, listener);
+  });
 });
 
 // Action types that send a real SMS (real per-message cost + abuse surface),

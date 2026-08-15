@@ -357,7 +357,46 @@ export function ElaineWidget({
                     className="h-8 w-8"
                     title="Open full-screen chat"
                     onClick={() => {
-                      window.location.href = fullScreenPath;
+                      void (async () => {
+                        // Seamless maximize: hand any in-flight turn to the
+                        // server (so it keeps generating through the
+                        // disconnect) and pass the conversation/turn along so
+                        // the full app opens exactly where the widget was.
+                        // Resolves only after any in-flight turn has been
+                        // handed off (server acknowledged; waits briefly for
+                        // the turn id if the user maximized the instant
+                        // after pressing Send) — safe to navigate after.
+                        const handoff = await chat.beginHandoff();
+                        if (handoff.turnId) {
+                          try {
+                            sessionStorage.setItem(
+                              "elaineHandoff",
+                              JSON.stringify({
+                                conversationId: handoff.conversationId,
+                                turnId: handoff.turnId,
+                                userMessage: handoff.userMessage,
+                              }),
+                            );
+                          } catch {
+                            // sessionStorage unavailable — URL params still
+                            // carry the conversation/turn ids.
+                          }
+                        }
+                        const url = new URL(
+                          fullScreenPath,
+                          window.location.origin,
+                        );
+                        if (handoff.conversationId !== null) {
+                          url.searchParams.set(
+                            "conversation",
+                            String(handoff.conversationId),
+                          );
+                        }
+                        if (handoff.turnId) {
+                          url.searchParams.set("turn", handoff.turnId);
+                        }
+                        window.location.href = url.toString();
+                      })();
                     }}
                   >
                     <Maximize2 className="h-4 w-4" />

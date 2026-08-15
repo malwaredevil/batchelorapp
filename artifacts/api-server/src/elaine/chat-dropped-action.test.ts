@@ -42,6 +42,10 @@ import {
   rateLimitMockFactory,
 } from "./test-helpers/standard-mock-scaffold";
 import { buildRuntimeMock } from "./test-helpers/runtime-mock";
+import {
+  __listElaineTurnsForTests,
+  __resetElaineTurnRegistryForTests,
+} from "./turn-registry";
 
 // ── Hoisted mock controls ────────────────────────────────────────────────────
 // These must be hoisted before any vi.mock() factory references them.
@@ -1322,4 +1326,176 @@ describe("POST /api/elaine/chat — self-heal corrective text and lesson write",
       expect.objectContaining({ source: "self_heal" }),
     );
   }, 15_000);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Maximize handoff — turn id surfacing, handoff signal, resume stream
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("POST /api/elaine/chat — maximize handoff for a brand-new conversation", () => {
+  beforeEach(() => {
+    __resetElaineTurnRegistryForTests();
+  });
+
+  /** Extracts the first `turn` event payload from a raw SSE body. */
+  function parseTurnEvent(
+    body: string,
+  ): { turnId: string; conversationId: number | null } | null {
+    const match = body.match(/event: turn\ndata: (.+)\n/);
+    if (!match?.[1]) return null;
+    return JSON.parse(match[1]) as {
+      turnId: string;
+      conversationId: number | null;
+    };
+  }
+
+  it("emits a `turn` event carrying the NEWLY-CREATED conversation id, and the resume stream replays the full turn", async () => {
+    // Fresh chat with no existing widget-default conversation: the handler
+    // creates conversation id 100 mid-request. The `turn` SSE event must
+    // carry that id (not null) — it is what the widget puts in the maximize
+    // URL when the user maximizes during their very first message.
+    primeDbForFreshChat();
+    setUpStreamingContent("Hello from a brand-new conversation!");
+
+    const app = buildApp();
+    const res = await request(app)
+      .post("/api/elaine/chat")
+      .send({ message: "Hi Elaine!", appId: "hub" })
+      .buffer(true);
+
+    expect(res.status).toBe(200);
+    const turn = parseTurnEvent(res.text);
+    expect(turn).not.toBeNull();
+    expect(turn!.turnId).toMatch(/[0-9a-f-]{36}/);
+    expect(turn!.conversationId).toBe(100);
+
+    // The handoff signal must be accepted for the owning user…
+    const handoffRes = await request(app).post(
+      `/api/elaine/chat/turns/${turn!.turnId}/handoff`,
+    );
+    expect(handoffRes.status).toBe(200);
+
+    // …and the resume stream must replay everything, including the terminal
+    // done event with the same conversation id, so the full app can hydrate.
+    const resumeRes = await request(app)
+      .get(`/api/elaine/chat/turns/${turn!.turnId}/stream`)
+      .buffer(true);
+    expect(resumeRes.status).toBe(200);
+    const { allDeltaText, eventTypes } = parseSseResponse(resumeRes.text);
+    expect(allDeltaText).toContain("Hello from a brand-new conversation!");
+    expect(eventTypes).toContain("turn");
+    expect(eventTypes).toContain("done");
+    const doneMatch = resumeRes.text.match(/event: done\ndata: (.+)\n/);
+    expect(doneMatch?.[1]).toBeDefined();
+    const done = JSON.parse(doneMatch![1]!) as { conversationId: number };
+    expect(done.conversationId).toBe(100);
+  }, 15_000);
+
+  it("live handoff: original client disconnects mid-generation after handoff → generation is NOT aborted, and a pre-attached resume stream receives the later deltas and terminal done", async () => {
+    // This exercises the real timing, not a buffered replay:
+    //   1. The model stream is gated — it emits a first delta then blocks.
+    //   2. The turn id is discovered server-side (registry), mimicking a
+    //      maximize that happens before the browser receives the `turn` SSE
+    //      event (the widget's beginHandoff waits for the id, then signals).
+    //   3. Handoff is signaled, a resume client attaches while generation is
+    //      still pending, and the ORIGINAL connection is aborted — the
+    //      navigation's disconnect.
+    //   4. Only then is the gate released. If the disconnect had aborted the
+    //      model call, the second delta and the `done` event could never
+    //      reach the resume client.
+    primeDbForFreshChat();
+
+    let releaseGate!: () => void;
+    const gate = new Promise<void>((resolve) => (releaseGate = resolve));
+    mockCallModelWithSubagent.mockImplementation(
+      async (
+        _model: string,
+        _instructions: string,
+        callback: (
+          client: unknown,
+          model: string,
+          serverTools: unknown[],
+        ) => Promise<void>,
+      ) => {
+        const mockClient = {
+          chat: {
+            completions: {
+              create: vi.fn().mockReturnValue(
+                (async function* () {
+                  yield { choices: [{ delta: { content: "First half… " } }] };
+                  await gate;
+                  yield { choices: [{ delta: { content: "second half." } }] };
+                })(),
+              ),
+            },
+          },
+        };
+        await callback(mockClient, "mock-model", []);
+      },
+    );
+
+    const app = buildApp();
+    // Dispatch the original streaming request (do not await — it's live).
+    const original = request(app)
+      .post("/api/elaine/chat")
+      .send({ message: "Hi Elaine!", appId: "hub" })
+      .buffer(true);
+    const originalSettled = original.then(
+      (r) => r,
+      (e) => e, // the abort below makes this reject — that's expected
+    );
+
+    // Discover the turn server-side while generation is blocked on the gate.
+    let turnId: string | null = null;
+    for (let i = 0; i < 300 && turnId === null; i++) {
+      const [turn] = __listElaineTurnsForTests();
+      if (turn) turnId = turn.turnId;
+      else await new Promise((r) => setTimeout(r, 10));
+    }
+    expect(turnId).not.toBeNull();
+
+    // Signal the handoff while the turn is mid-generation…
+    const handoffRes = await request(app).post(
+      `/api/elaine/chat/turns/${turnId!}/handoff`,
+    );
+    expect(handoffRes.status).toBe(200);
+
+    // …attach a resume client while the turn is still pending…
+    const resumePromise = request(app)
+      .get(`/api/elaine/chat/turns/${turnId!}/stream`)
+      .buffer(true)
+      .then((r) => r);
+
+    // …and drop the ORIGINAL connection (the maximize navigation).
+    original.abort();
+    await new Promise((r) => setTimeout(r, 100));
+
+    // Generation must still be alive: release the gate and the resume client
+    // must receive the post-disconnect delta and the terminal done event.
+    releaseGate();
+    const resumeRes = await resumePromise;
+    await originalSettled;
+
+    expect(resumeRes.status).toBe(200);
+    const { allDeltaText, eventTypes } = parseSseResponse(resumeRes.text);
+    expect(allDeltaText).toContain("First half");
+    expect(allDeltaText).toContain("second half.");
+    expect(eventTypes).toContain("done");
+
+    const [turn] = __listElaineTurnsForTests();
+    expect(turn?.handoff).toBe(true);
+    expect(turn?.done).toBe(true);
+  }, 15_000);
+
+  it("rejects handoff and resume for an unknown turn id with 404", async () => {
+    const app = buildApp();
+    const handoffRes = await request(app).post(
+      "/api/elaine/chat/turns/00000000-0000-0000-0000-000000000000/handoff",
+    );
+    expect(handoffRes.status).toBe(404);
+    const resumeRes = await request(app).get(
+      "/api/elaine/chat/turns/00000000-0000-0000-0000-000000000000/stream",
+    );
+    expect(resumeRes.status).toBe(404);
+  });
 });

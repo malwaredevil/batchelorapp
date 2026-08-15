@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { useElaineChat } from "@workspace/elaine-ui";
+import { useElaineChat, type ElaineHandoffState } from "@workspace/elaine-ui";
 import {
   useCheckMagnet,
   type MagnetCheckResult,
@@ -13,8 +13,15 @@ import {
  * sense in the full "SUPER AI Agent" chat surface, not the lightweight
  * floating widget used across every app.
  */
-export function useFullChat({ active }: { active: boolean }) {
-  const chat = useElaineChat({ appId: "elaine", active });
+export function useFullChat({
+  active,
+  handoff = null,
+}: {
+  active: boolean;
+  /** Widget→full-app maximize handoff state (see useElaineChat). */
+  handoff?: ElaineHandoffState | null;
+}) {
+  const chat = useElaineChat({ appId: "elaine", active, handoff });
 
   const [magnetPreview, setMagnetPreview] = useState<string | null>(null);
   const [magnetResult, setMagnetResult] = useState<MagnetCheckResult | null>(

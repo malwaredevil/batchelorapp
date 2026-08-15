@@ -16,13 +16,7 @@
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import {
-  existsSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-  unlinkSync,
-} from "node:fs";
+import { readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
   hasSentryInit,

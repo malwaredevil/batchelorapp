@@ -259,7 +259,7 @@ export default function OrnamentDetail() {
       } else {
         toast.loading("Searching eBay listings…", { id: "ebay" });
       }
-      const result = await lookupEbayPrice.mutateAsync({
+      await lookupEbayPrice.mutateAsync({
         id,
         data: force ? { force: true } : undefined,
       });

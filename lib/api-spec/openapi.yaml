@@ -5130,6 +5130,37 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /ornaments/items/{id}/retail-value-lookup:
+    post:
+      operationId: lookupOrnamentRetailValue
+      tags:
+        - ornaments
+      summary: Look up and save the original retail value (and product page link) via a grounded web search
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated with fresh retail value
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrnamentsOrnamentItem"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: No retail value could be found for this ornament
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /ornaments/series:
     get:
       operationId: listOrnamentSeries
@@ -10494,6 +10525,26 @@ components:
             - string
             - "null"
           format: date-time
+        retailValueUsd:
+          type:
+            - number
+            - "null"
+          description: Original retail/MSRP value (distinct from bookValue, the collector/secondary-market value)
+        retailValueProductUrl:
+          type:
+            - string
+            - "null"
+          description: Link to the ornament's official product page, when one was found
+        retailValueSource:
+          type:
+            - string
+            - "null"
+          description: Domain the retail value was attributed to (e.g. hallmark.com), or "web search"
+        retailValueUpdatedAt:
+          type:
+            - string
+            - "null"
+          format: date-time
         ebayPriceMinUsd:
           type:
             - number
@@ -10608,6 +10659,18 @@ components:
             - number
             - "null"
         bookValueSource:
+          type:
+            - string
+            - "null"
+        retailValueUsd:
+          type:
+            - number
+            - "null"
+        retailValueProductUrl:
+          type:
+            - string
+            - "null"
+        retailValueSource:
           type:
             - string
             - "null"

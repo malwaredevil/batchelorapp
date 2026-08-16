@@ -45,6 +45,10 @@ export interface SerializedItem {
   bookValue: number | null;
   bookValueSource: string | null;
   bookValueUpdatedAt: Date | null;
+  retailValueUsd: number | null;
+  retailValueProductUrl: string | null;
+  retailValueSource: string | null;
+  retailValueUpdatedAt: Date | null;
   ebayPriceMinUsd: number | null;
   ebayPriceMaxUsd: number | null;
   ebayLastSoldPriceUsd: number | null;
@@ -120,6 +124,11 @@ const { serializeItem, serializeItems } = createCollectionSerializer<
       bookValue: row.bookValue != null ? parseFloat(row.bookValue) : null,
       bookValueSource: row.bookValueSource,
       bookValueUpdatedAt: row.bookValueUpdatedAt,
+      retailValueUsd:
+        row.retailValueUsd != null ? parseFloat(row.retailValueUsd) : null,
+      retailValueProductUrl: row.retailValueProductUrl,
+      retailValueSource: row.retailValueSource,
+      retailValueUpdatedAt: row.retailValueUpdatedAt,
       ebayPriceMinUsd:
         row.ebayPriceMinUsd != null ? parseFloat(row.ebayPriceMinUsd) : null,
       ebayPriceMaxUsd:

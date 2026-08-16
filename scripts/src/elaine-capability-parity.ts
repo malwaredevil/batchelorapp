@@ -141,6 +141,7 @@ const DIRECT_TOOL_MAP: Record<string, string[]> = {
   lookupOrnamentBarcode: ["lookup_product_barcode"],
   lookupBarcode: ["lookup_product_barcode"],
   lookupOrnamentEbayPrice: ["ebay_search"],
+  lookupOrnamentRetailValue: ["lookup_retail_value"],
   createOrnamentCategory: ["create_ornament_category"],
   deleteOrnamentCategory: ["delete_ornament_category"],
   mergeOrnamentCategory: ["merge_ornament_categories"],

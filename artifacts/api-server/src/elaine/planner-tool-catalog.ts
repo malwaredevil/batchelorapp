@@ -70,6 +70,7 @@ export const ANALYZE_POTTERY_PHOTO_TOOL_NAME = "analyze_pottery_photo";
 export const ANALYZE_FABRIC_PHOTO_TOOL_NAME = "analyze_fabric_photo";
 export const ANALYZE_ORNAMENT_PHOTO_TOOL_NAME = "analyze_ornament_photo";
 export const LOOKUP_BOOK_VALUE_TOOL_NAME = "lookup_book_value";
+export const LOOKUP_RETAIL_VALUE_TOOL_NAME = "lookup_retail_value";
 export const SEARCH_FLIGHTS_TOOL_NAME = "search_flights";
 export const FETCH_PAGE_TOOL_NAME = "fetch_page";
 export const CONSULT_EXPERTS_TOOL_NAME = "consult_experts";
@@ -1531,6 +1532,33 @@ export const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       name: LOOKUP_BOOK_VALUE_TOOL_NAME,
       description:
         "Look up a Hallmark ornament's real secondary-market 'book value' by checking hallmarkornaments.com and hookedonhallmark.com and taking the higher of the two — the exact same two-source lookup the app itself runs when a user checks a saved item's book value. ALWAYS use this tool (never search_hallmark or general knowledge) when the user asks 'what's the book value', 'what's this worth for insurance/appraisal', or similar book-value questions about an ornament — search_hallmark only returns Hallmark's own catalog/retail listing info, which is a different number and will not match. Use ebay_search separately for current resale/market asking prices, which is a different question from book value.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: {
+            type: "string",
+            description: "The ornament's name (required)",
+          },
+          seriesOrCollection: {
+            type: "string",
+            description:
+              "The Hallmark series/collection name, if known — improves match accuracy (optional)",
+          },
+          year: {
+            type: "number",
+            description: "The ornament's release year, if known (optional)",
+          },
+        },
+        required: ["name"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: LOOKUP_RETAIL_VALUE_TOOL_NAME,
+      description:
+        "Look up a Hallmark ornament's original retail value (what it sold for new, e.g. MSRP) and a link to its official product page, via a grounded web search — the exact same lookup the app itself runs when a user checks a saved item's retail value. This is a DIFFERENT number from lookup_book_value (secondary-market/collector value) and from ebay_search (current resale/asking prices) — use this specifically when the user asks what the ornament originally sold for, its retail price, MSRP, or wants a link to buy/see it on the official product page.",
       parameters: {
         type: "object",
         properties: {

@@ -16209,6 +16209,76 @@ export const useLookupOrnamentBookValue = <TError = ErrorType<Error>,
       return useMutation(getLookupOrnamentBookValueMutationOptions(options));
     }
 
+export const getLookupOrnamentRetailValueUrl = (id: number,) => {
+
+
+
+
+  return `/api/ornaments/items/${id}/retail-value-lookup`
+}
+
+/**
+ * @summary Look up and save the original retail value (and product page link) via a grounded web search
+ */
+export const lookupOrnamentRetailValue = async (id: number, options?: RequestInit): Promise<OrnamentsOrnamentItem> => {
+
+  return customFetch<OrnamentsOrnamentItem>(getLookupOrnamentRetailValueUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getLookupOrnamentRetailValueMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof lookupOrnamentRetailValue>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof lookupOrnamentRetailValue>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['lookupOrnamentRetailValue'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof lookupOrnamentRetailValue>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  lookupOrnamentRetailValue(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type LookupOrnamentRetailValueMutationResult = NonNullable<Awaited<ReturnType<typeof lookupOrnamentRetailValue>>>
+
+    export type LookupOrnamentRetailValueMutationError = ErrorType<Error>
+
+    /**
+ * @summary Look up and save the original retail value (and product page link) via a grounded web search
+ */
+export const useLookupOrnamentRetailValue = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof lookupOrnamentRetailValue>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof lookupOrnamentRetailValue>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getLookupOrnamentRetailValueMutationOptions(options));
+    }
+
 export const getListOrnamentSeriesUrl = () => {
 
 

@@ -2591,6 +2591,14 @@ export const STATEMENTS: string[] = [
   // legible printed box-back text was found (vs. verbatim/manual/catalog).
   `ALTER TABLE ornaments_items ADD COLUMN IF NOT EXISTS description_generated    BOOLEAN NOT NULL DEFAULT FALSE`,
 
+  // Original retail/MSRP value (distinct from book_value, the
+  // collector/secondary-market value) — from a grounded web search, plus a
+  // link to the official product page when one is found.
+  `ALTER TABLE ornaments_items ADD COLUMN IF NOT EXISTS retail_value_usd         NUMERIC(10,2)`,
+  `ALTER TABLE ornaments_items ADD COLUMN IF NOT EXISTS retail_value_product_url TEXT`,
+  `ALTER TABLE ornaments_items ADD COLUMN IF NOT EXISTS retail_value_source      TEXT`,
+  `ALTER TABLE ornaments_items ADD COLUMN IF NOT EXISTS retail_value_updated_at  TIMESTAMPTZ`,
+
   // ---------------------------------------------------------------------------
   // #215 — Etsy price-suggestion cache on quilting_shopping_items
   // ---------------------------------------------------------------------------

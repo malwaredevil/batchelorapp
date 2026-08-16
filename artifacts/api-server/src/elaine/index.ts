@@ -78,6 +78,7 @@ import {
 } from "../lib/pottery/openai";
 import { analyzeOrnamentImage } from "../lib/ornaments/openai";
 import { lookupBookValue } from "../lib/ornaments/book-value";
+import { lookupRetailValue } from "../lib/ornaments/retail-value";
 import {
   getElaineGlobalConfig,
   type ElaineGlobalConfig,
@@ -325,6 +326,7 @@ import {
   GET_WEATHER_TOOL_NAME,
   LOOKUP_BARCODE_TOOL_NAME,
   LOOKUP_BOOK_VALUE_TOOL_NAME,
+  LOOKUP_RETAIL_VALUE_TOOL_NAME,
   NAVIGATE_TOOL_NAME,
   QUERY_HOUSEHOLD_TOOL_NAME,
   RECORD_LESSON_TOOL_NAME,
@@ -4226,10 +4228,12 @@ CONTEXT-AWARE LOOKUPS — read the on-screen state and act, don't ask: When the 
 **Ornament detail page** (context starts with "Ornament detail — itemId: …"): The context includes the ornament's name, brand, series/collection, year, barcode/UPC, condition, and any existing book value.
 - "What's this worth?", "what would this sell for on eBay?", "check eBay for this", "how much is it?", "what's the value?", "what's the book value?" → call **both** ebay_search AND lookup_book_value in the same turn, in parallel. lookup_book_value is the app's real two-source book-value check (hallmarkornaments.com + hookedonhallmark.com, taking the higher of the two) — the exact same logic used when a book value is looked up for a saved item, so NEVER use search_hallmark for a value question; search_hallmark returns a different number (Hallmark's own catalog/retail price). Build the eBay query as "Hallmark Keepsake [name] [year]" (e.g. "Hallmark Keepsake Darth Vader 2023") — do NOT append the word "ornament". Pass lookup_book_value the ornament's name from context, plus series/year if known. When you report back: lead with the book value from lookup_book_value, then give the eBay sold-price range. If eBay returns no results, the book value is still a useful answer — don't say you couldn't find the value just because eBay had nothing. Do not ask which ornament.
 - "Look it up on Hallmark", "is this still on Hallmark.com?", "find the Hallmark listing", "what series is this in?", "tell me about this ornament" → call search_hallmark with the ornament's name or series from context — this is Hallmark's own catalog/retail/series info, a different question from book value. Do not ask which ornament.
+- "What did this originally sell for?", "what's the retail value?", "what was the MSRP?", "what did it cost new?", "link me to the product page" → call lookup_retail_value with the ornament's name from context, plus series/year if known. This is a DIFFERENT number from book value (secondary-market) and eBay (current resale) — it's what the ornament sold for new, plus a link to its product page when one is found. Report the value and, if present, the product link.
 
 **Ornament add page — prefilled from scan** (context starts with "Add ornament page — prefilled from barcode scan"): The user just scanned a barcode and the form is pre-filled with the ornament's name, brand, series/collection, year, and barcode/UPC — all visible in the page context.
 - If the user asks "what's this worth?", "look it up on eBay", "how much is it?", "check the price", "what's the value?", "what's the book value?" → call **both** ebay_search AND lookup_book_value in the same turn using the name + year from context (never search_hallmark for a value question — see the book-value rule above). Format the eBay query as "Hallmark Keepsake [name] [year]" (no "ornament" suffix). Lead the answer with the book value from lookup_book_value, then eBay sold prices. If eBay has no results, the book value is still a useful answer.
 - If the user asks "look it up on Hallmark", "is this on hallmark.com?", "find the Hallmark page" → call search_hallmark using the name or SKU from context.
+- If the user asks what it originally sold for, the retail value, or the MSRP → call lookup_retail_value using the name + year from context (see the retail-value rule above; this is a different number from book value and eBay).
 - You may proactively offer: "I can look this up on eBay and Hallmark.com if you'd like — just ask!" after the user lands here from a scan, but only offer once and don't run the lookup unprompted.
 
 **Barcode scanning**: There is a barcode scan button (camera icon) next to the Elaine chat input — when the user wants to scan a barcode, tell them to tap that button in the chat bar. The scanned barcode code is sent directly as a message. When you see a barcode or UPC number in a message (e.g. "I scanned a barcode: 1234567890"), immediately call lookup_product_barcode with that code — do not navigate anywhere, report the results in chat. For general product barcode lookups without adding to a collection, navigate to /ornaments/scan ("Lookup Ornament" — lookup only, nothing saved). To add a new ornament via photo or barcode, navigate to /ornaments/camera-add (the "Add Ornament" page). IMPORTANT — Hallmark barcode fallback: if lookup_product_barcode returns "not found" for a barcode starting with "661127" (Hallmark's registered GS1 company prefix), the UPC database simply didn't have a record — the ornament almost certainly exists. In that same turn, immediately also call ebay_search (use the full barcode number as the query, category="ornaments") AND web_search (query = "{barcode} hallmark ornament") to identify the item and find its current market value. Never tell the user the ornament doesn't exist just because the UPC database returned "not found" for a 661127-prefix barcode.
@@ -6239,6 +6243,32 @@ router.post("/chat", async (req, res) => {
               } catch (err) {
                 logger.error({ err }, "elaine lookup_book_value failed");
                 resultText = "Book value lookup failed. Please try again.";
+              }
+            }
+          } else if (call.name === LOOKUP_RETAIL_VALUE_TOOL_NAME) {
+            const parsed = z
+              .object({
+                name: z.string().min(1),
+                seriesOrCollection: z.string().optional(),
+                year: z.number().int().optional(),
+              })
+              .safeParse(JSON.parse(call.args));
+            if (!parsed.success) {
+              resultText =
+                "Invalid retail value lookup — an ornament name is required.";
+            } else {
+              try {
+                const result = await lookupRetailValue({
+                  name: parsed.data.name,
+                  seriesOrCollection: parsed.data.seriesOrCollection ?? null,
+                  year: parsed.data.year ?? null,
+                });
+                resultText = result
+                  ? `Retail value: $${result.valueUsd.toFixed(2)} (real web-search lookup, source: ${result.source})${result.productUrl ? `. Product page: ${result.productUrl}` : ""}`
+                  : `No retail value could be found via web search for "${parsed.data.name}".`;
+              } catch (err) {
+                logger.error({ err }, "elaine lookup_retail_value failed");
+                resultText = "Retail value lookup failed. Please try again.";
               }
             }
           } else if (call.name === SEARCH_FLIGHTS_TOOL_NAME) {

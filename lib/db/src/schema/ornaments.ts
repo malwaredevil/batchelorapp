@@ -60,6 +60,16 @@ export const ornamentsItems = pgTable(
     bookValueUpdatedAt: timestamp("book_value_updated_at", {
       withTimezone: true,
     }),
+    // Original retail/MSRP value (distinct from bookValue, which is the
+    // collector/secondary-market value) — looked up via a grounded web
+    // search for "what is the retail value of hallmark ornament <name>
+    // <year>", plus a link to the official product page when one is found.
+    retailValueUsd: numeric("retail_value_usd", { precision: 10, scale: 2 }),
+    retailValueProductUrl: text("retail_value_product_url"),
+    retailValueSource: text("retail_value_source"),
+    retailValueUpdatedAt: timestamp("retail_value_updated_at", {
+      withTimezone: true,
+    }),
     ebayPriceMinUsd: numeric("ebay_price_min_usd", { precision: 10, scale: 2 }),
     ebayPriceMaxUsd: numeric("ebay_price_max_usd", { precision: 10, scale: 2 }),
     ebayPriceMedianUsd: numeric("ebay_price_median_usd", {

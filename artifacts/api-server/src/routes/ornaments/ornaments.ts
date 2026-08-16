@@ -48,6 +48,8 @@ import {
   LookupBarcodeResponse,
   LookupOrnamentBookValueParams,
   LookupOrnamentBookValueResponse,
+  LookupOrnamentRetailValueParams,
+  LookupOrnamentRetailValueResponse,
   ReportBarcodeCorrectionBody,
   ReportBarcodeCorrectionResponse,
 } from "@workspace/api-zod";
@@ -79,6 +81,7 @@ import {
 } from "../../lib/ornaments/openai";
 import { lookupBarcode } from "../../lib/ornaments/barcode";
 import { lookupBookValue } from "../../lib/ornaments/book-value";
+import { lookupRetailValue } from "../../lib/ornaments/retail-value";
 import {
   lookupEbayMarketValue,
   lookupOrnamentEbayData,
@@ -602,27 +605,42 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
 
   // If we have a name, try to get eBay sold-price data in parallel with the
   // image upload. Use this to pre-populate bookValue when no Hallmark price
-  // is available.
-  const [imagePath, ebayCreationLookup] = await Promise.all([
-    uploadImage(cleanBuffer, contentType),
-    env.ebayAppId && effectiveName
-      ? lookupEbayMarketValue(
-          // Text-based query as primary; UPC (when available) as a parallel
-          // keyword search — whichever returns more sold listings wins.
-          buildEbayQuery(effectiveName, {
-            maker: effectiveBrand ?? undefined,
-            year: effectiveYear ?? undefined,
-          }),
-          { withAspects: false, upc: barcodeField ?? undefined },
-        ).catch((err: unknown) => {
-          logger.warn(
-            { err },
-            "eBay lookup during ornament creation failed (non-fatal)",
-          );
-          return null;
-        })
-      : Promise.resolve(null),
-  ]);
+  // is available. Also look up the original retail value + product page link
+  // in parallel — non-fatal, same as the eBay lookup.
+  const [imagePath, ebayCreationLookup, retailValueCreationLookup] =
+    await Promise.all([
+      uploadImage(cleanBuffer, contentType),
+      env.ebayAppId && effectiveName
+        ? lookupEbayMarketValue(
+            // Text-based query as primary; UPC (when available) as a parallel
+            // keyword search — whichever returns more sold listings wins.
+            buildEbayQuery(effectiveName, {
+              maker: effectiveBrand ?? undefined,
+              year: effectiveYear ?? undefined,
+            }),
+            { withAspects: false, upc: barcodeField ?? undefined },
+          ).catch((err: unknown) => {
+            logger.warn(
+              { err },
+              "eBay lookup during ornament creation failed (non-fatal)",
+            );
+            return null;
+          })
+        : Promise.resolve(null),
+      effectiveName
+        ? lookupRetailValue({
+            name: effectiveName,
+            seriesOrCollection: analysis.seriesOrCollection ?? null,
+            year: effectiveYear ?? null,
+          }).catch((err: unknown) => {
+            logger.warn(
+              { err },
+              "Retail value lookup during ornament creation failed (non-fatal)",
+            );
+            return null;
+          })
+        : Promise.resolve(null),
+    ]);
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -667,6 +685,14 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
             ebayCreationLookup.sourceType === "sold")
             ? new Date()
             : null,
+        retailValueUsd:
+          retailValueCreationLookup != null
+            ? String(retailValueCreationLookup.valueUsd)
+            : null,
+        retailValueProductUrl: retailValueCreationLookup?.productUrl ?? null,
+        retailValueSource: retailValueCreationLookup?.source ?? null,
+        retailValueUpdatedAt:
+          retailValueCreationLookup != null ? new Date() : null,
         dimensions: userDimensions ?? analysis.dimensions,
         condition: conditionField,
         origin: originField,
@@ -767,6 +793,26 @@ router.patch("/items/:id", async (req, res) => {
       body.bookValue === null ? null : String(body.bookValue);
   if (body.bookValueSource !== undefined)
     fieldUpdates.bookValueSource = clampField(body.bookValueSource, MAX_TEXT);
+  if (body.retailValueUsd !== undefined)
+    fieldUpdates.retailValueUsd =
+      body.retailValueUsd === null ? null : String(body.retailValueUsd);
+  if (body.retailValueProductUrl !== undefined)
+    fieldUpdates.retailValueProductUrl = clampField(
+      body.retailValueProductUrl,
+      MAX_TEXT,
+    );
+  if (body.retailValueSource !== undefined)
+    fieldUpdates.retailValueSource = clampField(
+      body.retailValueSource,
+      MAX_TEXT,
+    );
+  if (
+    body.retailValueUsd !== undefined &&
+    fieldUpdates.retailValueUsd !== null &&
+    body.retailValueUsd !== null
+  ) {
+    fieldUpdates.retailValueUpdatedAt = new Date();
+  }
   if (
     body.bookValue !== undefined &&
     fieldUpdates.bookValue !== null &&
@@ -1340,6 +1386,54 @@ router.post("/items/:id/book-value-lookup", aiLimiter, async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Retail value lookup — grounded web search for the original retail/MSRP
+// value + a link to the official product page, saves the result, and
+// returns the updated item.
+// ---------------------------------------------------------------------------
+
+router.post("/items/:id/retail-value-lookup", aiLimiter, async (req, res) => {
+  const { id } = LookupOrnamentRetailValueParams.parse(req.params);
+
+  const [item] = await db
+    .select(itemColumns)
+    .from(ornamentsItems)
+    .where(eq(ornamentsItems.id, id))
+    .limit(1);
+  if (!item) {
+    res.status(404).json({ error: "Ornament not found." });
+    return;
+  }
+
+  const result = await lookupRetailValue({
+    name: item.name,
+    seriesOrCollection: item.seriesOrCollection,
+    year: item.year,
+  });
+
+  if (!result) {
+    res.status(422).json({
+      error: "Could not find a retail value for this ornament via web search.",
+    });
+    return;
+  }
+
+  const [updated] = await db
+    .update(ornamentsItems)
+    .set({
+      retailValueUsd: String(result.valueUsd),
+      retailValueProductUrl: result.productUrl,
+      retailValueSource: result.source,
+      retailValueUpdatedAt: new Date(),
+    })
+    .where(eq(ornamentsItems.id, id))
+    .returning(itemColumns);
+
+  res.json(
+    LookupOrnamentRetailValueResponse.parse(await serializeItem(updated)),
+  );
+});
+
+// ---------------------------------------------------------------------------
 // Shared AI analysis pipeline — used by both reanalyze and set-primary-image
 // ---------------------------------------------------------------------------
 
@@ -1724,8 +1818,9 @@ router.post("/items/:id/refresh-all", aiLimiter, async (req, res) => {
     return;
   }
 
-  // Run all 4 in parallel — each independently stores its result.
-  // Non-fatal: a failure in book-value/eBay/appraisal doesn't abort the whole refresh.
+  // Run all 5 in parallel — each independently stores its result.
+  // Non-fatal: a failure in book-value/retail-value/eBay/appraisal doesn't
+  // abort the whole refresh.
   await Promise.allSettled([
     // 1. AI vision reanalysis (description, colors, motifs, name, barcode)
     runItemAnalysis(id),
@@ -1772,7 +1867,30 @@ router.post("/items/:id/refresh-all", aiLimiter, async (req, res) => {
           .where(eq(ornamentsItems.id, id));
       }
     })(),
-    // 3. eBay market data
+    // 3. Retail value — grounded web search for the original retail/MSRP
+    // value + a link to the official product page
+    lookupRetailValue({
+      name: item.name,
+      seriesOrCollection: item.seriesOrCollection,
+      year: item.year,
+    })
+      .then(async (result) => {
+        if (result) {
+          await db
+            .update(ornamentsItems)
+            .set({
+              retailValueUsd: String(result.valueUsd),
+              retailValueProductUrl: result.productUrl,
+              retailValueSource: result.source,
+              retailValueUpdatedAt: new Date(),
+            })
+            .where(eq(ornamentsItems.id, id));
+        }
+      })
+      .catch((err) => {
+        req.log.warn({ err }, "refresh-all: retail-value lookup failed");
+      }),
+    // 4. eBay market data
     env.ebayAppId
       ? (async () => {
           const query = buildEbayQuery(item.name, {
@@ -1972,24 +2090,38 @@ export async function createOrnamentItemFromBuffer(
     analysis.year ?? (barcodeLookup?.found ? barcodeLookup.year : null);
   const effectiveBrand = barcodeLookup?.found ? barcodeLookup.brand : null;
 
-  const [imagePath, ebayCreationLookup] = await Promise.all([
-    uploadImage(cleanBuffer, contentType),
-    env.ebayAppId && effectiveName
-      ? lookupEbayMarketValue(
-          buildEbayQuery(effectiveName, {
-            maker: effectiveBrand ?? undefined,
-            year: effectiveYear ?? undefined,
-          }),
-          { withAspects: false, upc: barcodeField ?? undefined },
-        ).catch((err: unknown) => {
-          logger.warn(
-            { err },
-            "eBay lookup during Elaine ornament creation failed (non-fatal)",
-          );
-          return null;
-        })
-      : Promise.resolve(null),
-  ]);
+  const [imagePath, ebayCreationLookup, retailValueCreationLookup] =
+    await Promise.all([
+      uploadImage(cleanBuffer, contentType),
+      env.ebayAppId && effectiveName
+        ? lookupEbayMarketValue(
+            buildEbayQuery(effectiveName, {
+              maker: effectiveBrand ?? undefined,
+              year: effectiveYear ?? undefined,
+            }),
+            { withAspects: false, upc: barcodeField ?? undefined },
+          ).catch((err: unknown) => {
+            logger.warn(
+              { err },
+              "eBay lookup during Elaine ornament creation failed (non-fatal)",
+            );
+            return null;
+          })
+        : Promise.resolve(null),
+      effectiveName
+        ? lookupRetailValue({
+            name: effectiveName,
+            seriesOrCollection: analysis.seriesOrCollection ?? null,
+            year: effectiveYear ?? null,
+          }).catch((err: unknown) => {
+            logger.warn(
+              { err },
+              "Retail value lookup during Elaine ornament creation failed (non-fatal)",
+            );
+            return null;
+          })
+        : Promise.resolve(null),
+    ]);
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -2032,6 +2164,14 @@ export async function createOrnamentItemFromBuffer(
             ebayCreationLookup.sourceType === "sold")
             ? new Date()
             : null,
+        retailValueUsd:
+          retailValueCreationLookup != null
+            ? String(retailValueCreationLookup.valueUsd)
+            : null,
+        retailValueProductUrl: retailValueCreationLookup?.productUrl ?? null,
+        retailValueSource: retailValueCreationLookup?.source ?? null,
+        retailValueUpdatedAt:
+          retailValueCreationLookup != null ? new Date() : null,
         dimensions: analysis.dimensions,
         aiDescription: analysis.aiDescription,
         description:

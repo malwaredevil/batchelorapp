@@ -29,6 +29,7 @@ import {
   UpdatePatternImageParams,
   UpdatePatternImageBody,
   DeletePatternImageParams,
+  SetPatternImageDefaultBody,
 } from "@workspace/api-zod";
 import { requireAuth } from "../../middleware/auth";
 import { aiLimiter, bulkAiLimiter } from "../../middleware/rateLimit";
@@ -52,6 +53,7 @@ import {
   extractBlockFromImage,
 } from "../../lib/openai";
 import { serializePattern, serializePatterns } from "../../lib/serialize";
+import { pathCacheBuster } from "../../lib/path-cache-buster";
 
 const MAX_NAME = 200;
 const MAX_FIELD = 200;
@@ -510,7 +512,7 @@ router.post(
   upload.single("image"),
   async (req, res) => {
     const { id } = AddPatternImageParams.parse(req.params);
-    const body = AddPatternImageBody.parse(req.body);
+    const body = AddPatternImageBody.omit({ image: true }).parse(req.body);
 
     // Verify the pattern exists
     const [pattern] = await db
@@ -673,6 +675,108 @@ router.delete("/patterns/:id/images/:imageId", async (req, res) => {
     return;
   }
   res.status(200).json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// Set supplemental image as the pattern's default photo
+// ---------------------------------------------------------------------------
+// Atomically swaps the supplemental image's storage path with the pattern's
+// current image_path, so the /image route immediately serves the new default
+// without any URL change on the client. If the pattern has no primary photo
+// yet, the supplemental image is promoted and its gallery row soft-deleted.
+
+router.post("/patterns/:id/images/:imageId/set-default", async (req, res) => {
+  const { id } = DeletePatternParams.parse(req.params);
+  const { imageId } = DeletePatternImageParams.parse(req.params);
+  const { expectedVersion } = SetPatternImageDefaultBody.parse(req.body ?? {});
+
+  let swapped = false;
+  let versionConflict = false;
+  await db.transaction(async (tx) => {
+    const [pattern] = await tx
+      .select({ id: quiltPatterns.id, imagePath: quiltPatterns.imagePath })
+      .from(quiltPatterns)
+      .where(eq(quiltPatterns.id, id))
+      .for("update")
+      .limit(1);
+    if (!pattern) return;
+
+    const [img] = await tx
+      .select({
+        id: quiltingImages.id,
+        storagePath: quiltingImages.storagePath,
+      })
+      .from(quiltingImages)
+      .where(
+        sql`${quiltingImages.id} = ${imageId} AND entity_type = 'pattern' AND entity_id = ${id} AND deleted_at IS NULL`,
+      )
+      .for("update")
+      .limit(1);
+    if (!img) return;
+
+    // Compare-and-swap: the swap is symmetric (a repeat would swap back), so
+    // when the client supplies the version it rendered, refuse to apply the
+    // swap against a storage path it hasn't seen. This makes retries and
+    // duplicate deliveries of an already-applied promotion a no-op 409.
+    if (
+      expectedVersion != null &&
+      pathCacheBuster(img.storagePath) !== expectedVersion
+    ) {
+      versionConflict = true;
+      return;
+    }
+
+    const oldImagePath = pattern.imagePath;
+    const newImagePath = img.storagePath;
+
+    if (newImagePath === oldImagePath) {
+      swapped = true;
+      return;
+    }
+
+    await tx
+      .update(quiltPatterns)
+      .set({ imagePath: newImagePath })
+      .where(eq(quiltPatterns.id, id));
+    if (oldImagePath) {
+      // Swap: the old primary becomes this supplemental image.
+      await tx
+        .update(quiltingImages)
+        .set({ storagePath: oldImagePath })
+        .where(eq(quiltingImages.id, imageId));
+    } else {
+      // No previous primary — promote the supplemental and retire its row.
+      await tx
+        .update(quiltingImages)
+        .set({ deletedAt: new Date() })
+        .where(eq(quiltingImages.id, imageId));
+    }
+
+    swapped = true;
+  });
+
+  if (versionConflict) {
+    res.status(409).json({
+      error: "This photo changed since it was loaded — refresh and try again.",
+    });
+    return;
+  }
+  if (!swapped) {
+    res.status(404).json({ error: "Pattern or image not found." });
+    return;
+  }
+
+  const [updated] = await db
+    .select()
+    .from(quiltPatterns)
+    .where(eq(quiltPatterns.id, id))
+    .limit(1);
+
+  res.json(
+    GetPatternResponse.parse(
+      await serializePattern(updated as QuiltPatternRow),
+    ),
+  );
 });
 
 // ---------------------------------------------------------------------------

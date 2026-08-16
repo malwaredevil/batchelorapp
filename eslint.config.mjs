@@ -22,6 +22,7 @@ export default [
       // TypeScript projects, so type-aware rules cannot safely inspect them.
       "lib/api-spec/build-spec.ts",
       "artifacts/modules/src/quilting/lib/cell-parser.test.ts",
+      "artifacts/modules/src/quilting/hooks/useCompareSelectMutualExclusion.test.ts",
       "artifacts/modules/src/ornaments/pages/camera-add-queue.test.ts",
       "artifacts/modules/src/ornaments/components/use-barcode-camera.test.ts",
       "lib/api-client-react/src/custom-fetch.test.ts",

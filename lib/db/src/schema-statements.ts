@@ -1398,6 +1398,8 @@ export const STATEMENTS: string[] = [
     condition              TEXT,
     origin                 TEXT,
     acquired_at            DATE,
+    description            TEXT,
+    description_generated  BOOLEAN NOT NULL DEFAULT FALSE,
     ai_description         TEXT,
     dominant_colors        TEXT[] NOT NULL DEFAULT '{}',
     motifs                 TEXT[] NOT NULL DEFAULT '{}',
@@ -2583,6 +2585,11 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE ornaments_items ADD COLUMN IF NOT EXISTS ebay_last_sold_date       TIMESTAMPTZ`,
   `ALTER TABLE ornaments_items ADD COLUMN IF NOT EXISTS ai_appraisal             TEXT`,
   `ALTER TABLE ornaments_items ADD COLUMN IF NOT EXISTS ai_appraisal_updated_at  TIMESTAMPTZ`,
+  // Verbatim box-back description (distinct from ai_description).
+  `ALTER TABLE ornaments_items ADD COLUMN IF NOT EXISTS description              TEXT`,
+  // True when `description` above is an AI-generated stand-in because no
+  // legible printed box-back text was found (vs. verbatim/manual/catalog).
+  `ALTER TABLE ornaments_items ADD COLUMN IF NOT EXISTS description_generated    BOOLEAN NOT NULL DEFAULT FALSE`,
 
   // ---------------------------------------------------------------------------
   // #215 — Etsy price-suggestion cache on quilting_shopping_items

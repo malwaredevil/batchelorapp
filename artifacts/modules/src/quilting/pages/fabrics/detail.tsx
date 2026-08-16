@@ -11,10 +11,6 @@ import {
   Check,
   X as XIcon,
   Download,
-  ZoomIn,
-  Crown,
-  Plus,
-  Crop,
   Sparkles,
 } from "lucide-react";
 import { LockButton } from "@/quilting/components/LockButton";
@@ -34,6 +30,7 @@ import {
   useGetFabricPairings,
   useAddFabricImage,
   useDeleteFabricImage,
+  useUpdateFabricImage,
   useSetFabricImageDefault,
   getListFabricsQueryKey,
   getGetFabricQueryKey,
@@ -43,7 +40,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { TagSelector } from "@/quilting/components/tag-selector";
 import { ImageLightbox } from "@/quilting/components/image-lightbox";
-import { ImageEditor } from "@/quilting/components/image-editor";
+import { ItemImageGallery } from "@workspace/image-capture";
 import { downloadCollectionImage } from "@/quilting/lib/svg-export";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
 import {
@@ -56,6 +53,9 @@ import {
   CollectionDetailHero,
   CollectionDetailPanelStack,
   CollectionDetailSection,
+  CollectionDetailField,
+  CollectionDetailSkeleton,
+  CollectionErrorState,
   ReminderBellButton,
 } from "@workspace/collection-ui";
 
@@ -174,12 +174,6 @@ export default function FabricDetail() {
   const [catEditing, setCatEditing] = useState(false);
   const [localNewCats, setLocalNewCats] = useState<QuiltingCategory[]>([]);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-  const [cropFile, setCropFile] = useState<File | null>(null);
-  const [cropTarget, setCropTarget] = useState<
-    { type: "primary" } | { type: "supplemental"; imageId: number } | null
-  >(null);
-  const [isFetchingCropImage, setIsFetchingCropImage] = useState(false);
-  const [isSavingCrop, setIsSavingCrop] = useState(false);
   const [renamingName, setRenamingName] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [creaseModalOpen, setCreaseModalOpen] = useState(false);
@@ -221,7 +215,7 @@ export default function FabricDetail() {
     motifs: "",
   });
 
-  const { data: fabric, isLoading, isError } = useGetFabric(fabricId);
+  const { data: fabric, isLoading, isError, refetch } = useGetFabric(fabricId);
   const { data: allCategories } = useListQuiltingCategories();
 
   usePageAssistantContext(
@@ -293,6 +287,18 @@ export default function FabricDetail() {
         toast.success("Photo deleted");
       },
       onError: () => toast.error("Failed to delete photo."),
+    },
+  });
+
+  const relabelImageMutation = useUpdateFabricImage({
+    mutation: {
+      onSuccess: () => {
+        void queryClient.invalidateQueries({
+          queryKey: getGetFabricQueryKey(fabricId),
+        });
+        toast.success("Label saved");
+      },
+      onError: () => toast.error("Failed to save label."),
     },
   });
 
@@ -433,115 +439,16 @@ export default function FabricDetail() {
     );
   }
 
-  const [pendingAddFile, setPendingAddFile] = useState<File | null>(null);
-
-  function handleAddPhoto(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    e.target.value = "";
-    setPendingAddFile(file);
-  }
-
-  function handleAddPhotoEditorSave(edited: File) {
-    setPendingAddFile(null);
-    addFabricImage.mutate({ id: fabricId, data: { image: edited } });
-  }
-
-  function handleDeletePhoto(imageId: number) {
-    if (!confirm("Delete this photo? This cannot be undone.")) return;
-    deleteFabricImageMutation.mutate({ id: fabricId, imageId });
-  }
-
-  function handleSetDefault(imageId: number) {
-    setDefaultMutation.mutate({ id: fabricId, imageId });
-  }
-
-  async function handleEditImage(
-    target: { type: "primary" } | { type: "supplemental"; imageId: number },
-    url: string,
-  ) {
-    setIsFetchingCropImage(true);
-    setCropTarget(target);
-    try {
-      const resp = await fetch(url, { credentials: "include" });
-      if (!resp.ok) throw new Error("fetch failed");
-      const blob = await resp.blob();
-      const file = new File([blob], "fabric-photo.jpg", {
-        type: blob.type || "image/jpeg",
-      });
-      setCropFile(file);
-    } catch {
-      toast.error("Failed to load image for editing.");
-      setCropTarget(null);
-    } finally {
-      setIsFetchingCropImage(false);
-    }
-  }
-
-  async function handleCropSave(edited: File) {
-    if (!cropTarget) return;
-    setIsSavingCrop(true);
-    try {
-      const form = new FormData();
-      form.append("image", edited, "fabric-photo.jpg");
-      const endpoint =
-        cropTarget.type === "primary"
-          ? `/api/quilting/fabrics/${fabricId}/image`
-          : `/api/quilting/fabrics/${fabricId}/images/${cropTarget.imageId}`;
-      const resp = await fetch(endpoint, {
-        method: "PUT",
-        body: form,
-        credentials: "include",
-      });
-      if (!resp.ok) throw new Error("upload failed");
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: getGetFabricQueryKey(fabricId),
-        }),
-        queryClient.invalidateQueries({ queryKey: getListFabricsQueryKey() }),
-      ]);
-      toast.success("Photo updated");
-      setCropFile(null);
-      setCropTarget(null);
-    } catch {
-      toast.error("Failed to save edited photo.");
-    } finally {
-      setIsSavingCrop(false);
-    }
-  }
-
   if (isLoading) {
-    return (
-      <div>
-        <div className="mb-6 flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => navigate("/quilting/fabrics")}
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <Skeleton className="h-6 w-40" />
-        </div>
-        <CollectionDetailHero>
-          <Skeleton className="aspect-square w-full rounded-xl" />
-          <div className="space-y-3">
-            <Skeleton className="h-6 w-3/4" />
-            <Skeleton className="h-4 w-1/2" />
-          </div>
-        </CollectionDetailHero>
-      </div>
-    );
+    return <CollectionDetailSkeleton />;
   }
 
   if (isError || !fabric) {
     return (
-      <div className="flex h-60 flex-col items-center justify-center gap-4">
-        <p className="text-muted-foreground">Fabric not found.</p>
-        <Button variant="outline" onClick={() => navigate("/quilting/fabrics")}>
-          Back to collection
-        </Button>
-      </div>
+      <CollectionErrorState
+        message="Fabric not found."
+        onRetry={() => refetch()}
+      />
     );
   }
 
@@ -553,32 +460,6 @@ export default function FabricDetail() {
 
   return (
     <>
-      {pendingAddFile && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-black">
-          <ImageEditor
-            file={pendingAddFile}
-            onSave={handleAddPhotoEditorSave}
-            onCancel={() => setPendingAddFile(null)}
-          />
-        </div>
-      )}
-      {cropFile && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-black">
-          <ImageEditor
-            file={cropFile}
-            onSave={handleCropSave}
-            onCancel={() => {
-              setCropFile(null);
-              setCropTarget(null);
-            }}
-          />
-          {isSavingCrop && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-              <RefreshCw className="h-10 w-10 animate-spin text-white" />
-            </div>
-          )}
-        </div>
-      )}
       <div className="mx-auto max-w-3xl">
         <Button
           variant="ghost"
@@ -591,21 +472,8 @@ export default function FabricDetail() {
         </Button>
 
         <CollectionDetailHero>
-          {/* Col 1: main photo + gallery strip */}
-          <div className="flex flex-col gap-3">
-            <div
-              className="relative aspect-square overflow-hidden rounded-2xl border border-card-border bg-muted cursor-zoom-in group"
-              onClick={() => setLightboxIndex(0)}
-            >
-              <img
-                src={f.imageUrl}
-                alt={f.name}
-                className="h-full w-full object-cover"
-              />
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/20 group-hover:opacity-100">
-                <ZoomIn className="h-10 w-10 text-white drop-shadow-lg" />
-              </div>
-            </div>
+          {/* Col 1: shared item image gallery */}
+          <div className="space-y-4">
             {(() => {
               const sortedSupplementals = f.images
                 .slice()
@@ -616,149 +484,83 @@ export default function FabricDetail() {
               ];
               const allLightboxLabels = [
                 "Default",
-                ...sortedSupplementals.map((_, i) => `Photo ${i + 2}`),
+                ...sortedSupplementals.map(
+                  (img, i) => img.label ?? `Photo ${i + 2}`,
+                ),
               ];
               return (
-                <ImageLightbox
-                  src={
-                    lightboxIndex !== null
-                      ? (allLightboxImages[lightboxIndex] ?? "")
-                      : ""
-                  }
-                  open={lightboxIndex !== null}
-                  onClose={() => setLightboxIndex(null)}
-                  images={allLightboxImages}
-                  currentIndex={lightboxIndex ?? 0}
-                  onNavigate={setLightboxIndex}
-                  labels={allLightboxLabels}
-                />
+                <>
+                  <ImageLightbox
+                    src={
+                      lightboxIndex !== null
+                        ? (allLightboxImages[lightboxIndex] ?? "")
+                        : ""
+                    }
+                    open={lightboxIndex !== null}
+                    onClose={() => setLightboxIndex(null)}
+                    images={allLightboxImages}
+                    currentIndex={lightboxIndex ?? 0}
+                    onNavigate={setLightboxIndex}
+                    labels={allLightboxLabels}
+                  />
+                  <ItemImageGallery
+                    images={[
+                      {
+                        id: -1,
+                        url: f.imageUrl,
+                        label: null,
+                        isPrimary: true,
+                      },
+                      ...sortedSupplementals.map((img) => ({
+                        id: img.id,
+                        url: img.url,
+                        label: img.label ?? null,
+                        isPrimary: false,
+                      })),
+                    ]}
+                    onAddImage={async (file) => {
+                      await addFabricImage.mutateAsync({
+                        id: fabricId,
+                        data: { image: file },
+                      });
+                    }}
+                    onDeleteImage={(imageId, isPrimary) => {
+                      if (isPrimary) {
+                        toast.error(
+                          "Set another photo as default first, then you can delete this one.",
+                        );
+                        return;
+                      }
+                      deleteFabricImageMutation.mutate({
+                        id: fabricId,
+                        imageId,
+                      });
+                    }}
+                    onSetPrimary={(imageId) =>
+                      setDefaultMutation.mutate({ id: fabricId, imageId })
+                    }
+                    onRelabel={async (imageId, label) => {
+                      await relabelImageMutation.mutateAsync({
+                        id: fabricId,
+                        imageId,
+                        data: { label },
+                      });
+                    }}
+                    onZoom={(url) => {
+                      const idx = allLightboxImages.indexOf(url);
+                      if (idx >= 0) setLightboxIndex(idx);
+                    }}
+                    isUploading={addFabricImage.isPending}
+                    isMutating={
+                      setDefaultMutation.isPending ||
+                      deleteFabricImageMutation.isPending ||
+                      relabelImageMutation.isPending
+                    }
+                    maxImages={11}
+                  />
+                </>
               );
             })()}
-
-            {/* Photo gallery strip */}
-            <div className="flex flex-wrap gap-2">
-              {/* Default photo thumb */}
-              <div className="flex flex-col items-center gap-1">
-                <div className="relative h-20 w-20 overflow-hidden rounded-lg ring-2 ring-primary">
-                  <img
-                    src={f.imageUrl}
-                    alt="Default"
-                    className="h-full w-full object-cover"
-                  />
-                </div>
-                <div className="flex gap-0.5">
-                  <button
-                    title="Edit photo"
-                    onClick={() =>
-                      handleEditImage({ type: "primary" }, f.imageUrl)
-                    }
-                    disabled={isFetchingCropImage}
-                    className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted disabled:opacity-50"
-                  >
-                    {isFetchingCropImage && cropTarget?.type === "primary" ? (
-                      <RefreshCw className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-                    ) : (
-                      <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              {/* Supplemental photos */}
-              {f.images
-                .slice()
-                .sort((a, b) => a.position - b.position)
-                .map((img, idx) => (
-                  <div
-                    key={img.id}
-                    className="flex flex-col items-center gap-1"
-                  >
-                    <div
-                      className="relative h-20 w-20 overflow-hidden rounded-lg border border-card-border bg-muted cursor-zoom-in group"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setLightboxIndex(idx + 1);
-                      }}
-                    >
-                      <img
-                        src={img.url}
-                        alt={img.label ?? "Photo"}
-                        className="h-full w-full object-cover"
-                      />
-                      <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/20 group-hover:opacity-100">
-                        <ZoomIn className="h-5 w-5 text-white drop-shadow" />
-                      </div>
-                    </div>
-                    <div className="flex gap-0.5">
-                      <button
-                        title="Edit photo"
-                        onClick={() =>
-                          handleEditImage(
-                            { type: "supplemental", imageId: img.id },
-                            img.url,
-                          )
-                        }
-                        disabled={isFetchingCropImage}
-                        className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted disabled:opacity-50"
-                      >
-                        {isFetchingCropImage &&
-                        cropTarget?.type === "supplemental" &&
-                        cropTarget.imageId === img.id ? (
-                          <RefreshCw className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-                        ) : (
-                          <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-                        )}
-                      </button>
-                      <button
-                        title="Set as default photo"
-                        onClick={() => handleSetDefault(img.id)}
-                        disabled={
-                          setDefaultMutation.isPending ||
-                          deleteFabricImageMutation.isPending
-                        }
-                        className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted disabled:opacity-50"
-                      >
-                        <Crown className="h-3.5 w-3.5 text-muted-foreground" />
-                      </button>
-                      <button
-                        title="Delete photo"
-                        onClick={() => handleDeletePhoto(img.id)}
-                        disabled={
-                          deleteFabricImageMutation.isPending ||
-                          setDefaultMutation.isPending
-                        }
-                        className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted disabled:opacity-50"
-                      >
-                        <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-
-              {/* Add photo */}
-              {f.images.length < 10 && (
-                <div className="flex flex-col items-center gap-1">
-                  <label className="flex h-20 w-20 cursor-pointer items-center justify-center rounded-lg border-2 border-dashed border-card-border bg-muted/30 transition-colors hover:bg-muted/60">
-                    <input
-                      type="file"
-                      className="sr-only"
-                      accept="image/*"
-                      capture="environment"
-                      onChange={handleAddPhoto}
-                      disabled={addFabricImage.isPending}
-                    />
-                    {addFabricImage.isPending ? (
-                      <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" />
-                    ) : (
-                      <Plus className="h-5 w-5 text-muted-foreground" />
-                    )}
-                  </label>
-                  <span className="text-[10px] text-muted-foreground">
-                    Add photo
-                  </span>
-                </div>
-              )}
-            </div>
           </div>
 
           <div className="flex flex-col gap-4">
@@ -1015,12 +817,12 @@ export default function FabricDetail() {
         <CollectionDetailPanelStack>
           {/* Inventory */}
           <CollectionDetailSection title="Inventory">
-            {isEditing ? (
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="mb-1 block text-xs text-muted-foreground">
-                    Quantity
-                  </label>
+            <CollectionDetailField
+              label="Quantity"
+              value={`${f.quantity} ${f.quantityUnit}`}
+              editing={isEditing}
+              editSlot={
+                <div className="grid grid-cols-2 gap-3">
                   <Input
                     value={field("quantity")}
                     onChange={(e) => set("quantity", e.target.value)}
@@ -1029,11 +831,6 @@ export default function FabricDetail() {
                     step="0.25"
                     className="h-8 text-sm"
                   />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs text-muted-foreground">
-                    Unit
-                  </label>
                   <Input
                     value={field("quantityUnit")}
                     onChange={(e) => set("quantityUnit", e.target.value)}
@@ -1041,10 +838,14 @@ export default function FabricDetail() {
                     placeholder="yards"
                   />
                 </div>
-                <div>
-                  <label className="mb-1 block text-xs text-muted-foreground">
-                    Width (inches)
-                  </label>
+              }
+            />
+            {(isEditing || f.widthInches != null) && (
+              <CollectionDetailField
+                label="Width (inches)"
+                value={f.widthInches != null ? `${f.widthInches}"` : "—"}
+                editing={isEditing}
+                editSlot={
                   <Input
                     value={field("widthInches")}
                     onChange={(e) => set("widthInches", e.target.value)}
@@ -1052,174 +853,117 @@ export default function FabricDetail() {
                     min="0"
                     className="h-8 text-sm"
                   />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs text-muted-foreground">
-                    SKU
-                  </label>
+                }
+              />
+            )}
+            {(isEditing || f.sku) && (
+              <CollectionDetailField
+                label="SKU"
+                value={f.sku ?? "—"}
+                valueClassName="font-mono"
+                editing={isEditing}
+                editSlot={
                   <Input
                     value={field("sku")}
                     onChange={(e) => set("sku", e.target.value)}
                     className="h-8 text-sm"
                   />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs text-muted-foreground">
-                    Acquired
-                  </label>
+                }
+              />
+            )}
+            {(isEditing || f.acquiredAt) && (
+              <CollectionDetailField
+                label="Acquired"
+                value={f.acquiredAt ?? "—"}
+                editing={isEditing}
+                editSlot={
                   <Input
                     value={field("acquiredAt")}
                     onChange={(e) => set("acquiredAt", e.target.value)}
                     className="h-8 text-sm"
                     placeholder="2024-01"
                   />
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <span className="text-muted-foreground">Quantity</span>
-                  <p className="font-semibold">
-                    {f.quantity} {f.quantityUnit}
-                  </p>
-                </div>
-                {f.widthInches != null && (
-                  <div>
-                    <span className="text-muted-foreground">Width</span>
-                    <p className="font-semibold">{f.widthInches}"</p>
-                  </div>
-                )}
-                {f.sku && (
-                  <div>
-                    <span className="text-muted-foreground">SKU</span>
-                    <p className="font-mono font-semibold">{f.sku}</p>
-                  </div>
-                )}
-                {f.acquiredAt && (
-                  <div>
-                    <span className="text-muted-foreground">Acquired</span>
-                    <p className="font-semibold">{f.acquiredAt}</p>
-                  </div>
-                )}
-              </div>
+                }
+              />
             )}
           </CollectionDetailSection>
 
           {/* Fabric details */}
           <CollectionDetailSection title="Fabric details">
-            {isEditing ? (
-              <div className="space-y-2">
-                {(
-                  [
-                    "name",
-                    "lineName",
-                    "designer",
-                    "manufacturer",
-                    "colorway",
-                    "printType",
-                    "fiberContent",
-                  ] as const
-                ).map((k) => {
-                  const labels: Record<string, string> = {
-                    name: "Name",
-                    lineName: "Line name",
-                    designer: "Designer",
-                    manufacturer: "Manufacturer",
-                    colorway: "Colorway",
-                    printType: "Print type",
-                    fiberContent: "Fibre content",
-                  };
-                  const isAI = AI_FIELDS.includes(k as keyof Fabric);
-                  return (
-                    <div key={k}>
-                      <label className="mb-1 flex items-center text-xs text-muted-foreground">
-                        {labels[k]}
-                        {isAI && (
-                          <LockButton
-                            field={k}
-                            lockedFields={lockedFields}
-                            onToggle={toggleLock}
-                          />
-                        )}
-                      </label>
-                      <Input
-                        value={field(k)}
-                        onChange={(e) => set(k, e.target.value)}
-                        className="h-8 text-sm"
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="space-y-2 text-sm">
-                {(
-                  [
-                    ["lineName", "Line", f.lineName],
-                    ["designer", "Designer", f.designer],
-                    ["manufacturer", "Manufacturer", f.manufacturer],
-                    ["colorway", "Colorway", f.colorway],
-                    ["printType", "Print type", f.printType],
-                    ["fiberContent", "Fibre", f.fiberContent],
-                  ] as [string, string, string | null | undefined][]
-                )
-                  .filter(([, , v]) => v)
-                  .map(([k, label, v]) => (
-                    <div key={k} className="flex items-center justify-between">
-                      <span className="flex items-center gap-0.5 text-muted-foreground">
-                        {label}
-                        <LockButton
-                          field={k}
-                          lockedFields={lockedFields}
-                          onToggle={toggleLock}
-                        />
-                      </span>
-                      <span className="font-medium capitalize">{v}</span>
-                    </div>
-                  ))}
-              </div>
-            )}
+            {(
+              [
+                ["name", "Name", f.name, true],
+                ["lineName", "Line name", f.lineName, false],
+                ["designer", "Designer", f.designer, false],
+                ["manufacturer", "Manufacturer", f.manufacturer, false],
+                ["colorway", "Colorway", f.colorway, false],
+                ["printType", "Print type", f.printType, false],
+                ["fiberContent", "Fibre content", f.fiberContent, false],
+              ] as [
+                keyof typeof draft & string,
+                string,
+                string | null | undefined,
+                boolean,
+              ][]
+            )
+              .filter(([, , v, editOnly]) => isEditing || (!editOnly && v))
+              .map(([k, label, v]) => (
+                <CollectionDetailField
+                  key={k}
+                  label={label}
+                  value={v || "—"}
+                  valueClassName="capitalize"
+                  editing={isEditing}
+                  editSlot={
+                    <Input
+                      value={field(k)}
+                      onChange={(e) => set(k, e.target.value)}
+                      className="h-8 text-sm"
+                    />
+                  }
+                  locked={lockedFields.includes(k)}
+                  onToggleLock={
+                    AI_FIELDS.includes(k as keyof Fabric)
+                      ? () => toggleLock(k)
+                      : undefined
+                  }
+                />
+              ))}
           </CollectionDetailSection>
 
           {/* Colors / Motifs */}
           {isEditing && (
             <CollectionDetailSection title="Characteristics">
-              {
-                <div className="space-y-2">
-                  <div>
-                    <label className="mb-1 flex items-center text-xs text-muted-foreground">
-                      Dominant colours
-                      <LockButton
-                        field="dominantColors"
-                        lockedFields={lockedFields}
-                        onToggle={toggleLock}
-                      />
-                    </label>
-                    <Input
-                      value={field("dominantColors")}
-                      onChange={(e) => set("dominantColors", e.target.value)}
-                      placeholder="red, blue, gold"
-                      className="h-8 text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 flex items-center text-xs text-muted-foreground">
-                      Motifs
-                      <LockButton
-                        field="motifs"
-                        lockedFields={lockedFields}
-                        onToggle={toggleLock}
-                      />
-                    </label>
-                    <Input
-                      value={field("motifs")}
-                      onChange={(e) => set("motifs", e.target.value)}
-                      placeholder="floral, leaves"
-                      className="h-8 text-sm"
-                    />
-                  </div>
-                </div>
-              }
+              <CollectionDetailField
+                label="Dominant colours"
+                value={f.dominantColors.join(", ") || "—"}
+                editing
+                editSlot={
+                  <Input
+                    value={field("dominantColors")}
+                    onChange={(e) => set("dominantColors", e.target.value)}
+                    placeholder="red, blue, gold"
+                    className="h-8 text-sm"
+                  />
+                }
+                locked={lockedFields.includes("dominantColors")}
+                onToggleLock={() => toggleLock("dominantColors")}
+              />
+              <CollectionDetailField
+                label="Motifs"
+                value={f.motifs.join(", ") || "—"}
+                editing
+                editSlot={
+                  <Input
+                    value={field("motifs")}
+                    onChange={(e) => set("motifs", e.target.value)}
+                    placeholder="floral, leaves"
+                    className="h-8 text-sm"
+                  />
+                }
+                locked={lockedFields.includes("motifs")}
+                onToggleLock={() => toggleLock("motifs")}
+              />
             </CollectionDetailSection>
           )}
 

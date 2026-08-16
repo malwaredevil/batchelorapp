@@ -2165,6 +2165,26 @@
     "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
+    "operationId": "setPatternImageDefault",
+    "method": "POST",
+    "path": "/quilting/patterns/{id}/images/{imageId}/set-default",
+    "domain": "patterns",
+    "summary": "Set a supplemental image as the pattern's default photo",
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
+  },
+  {
+    "operationId": "setQuiltImageDefault",
+    "method": "POST",
+    "path": "/quilting/quilts/{id}/images/{imageId}/set-default",
+    "domain": "quilts",
+    "summary": "Set a supplemental image as the quilt's default photo",
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
+  },
+  {
     "operationId": "setOrnamentPrimaryImage",
     "method": "POST",
     "path": "/ornaments/items/{id}/set-primary-image",

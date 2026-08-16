@@ -44,7 +44,7 @@ value = "strict-origin-when-cross-origin"
 [[services.production.responseHeaders]]
 path = "/*"
 name = "Permissions-Policy"
-value = "geolocation=(), camera=(), microphone=()"
+value = "geolocation=(), camera=(self), microphone=()"
 
 [services.env]
 PORT = "25313"

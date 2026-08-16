@@ -1034,6 +1034,7 @@ export const STATEMENTS: string[] = [
     timeouts            JSONB NOT NULL DEFAULT '{}'::jsonb,
     features            JSONB NOT NULL DEFAULT '{}'::jsonb,
     thresholds          JSONB NOT NULL DEFAULT '{}'::jsonb,
+    runtime_budget      JSONB NOT NULL DEFAULT '{}'::jsonb,
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_by_user_id  INTEGER,
     CONSTRAINT elaine_global_config_singleton CHECK (id = 1)
@@ -1043,6 +1044,7 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS timeouts JSONB NOT NULL DEFAULT '{}'::jsonb`,
   `ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS features JSONB NOT NULL DEFAULT '{}'::jsonb`,
   `ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS thresholds JSONB NOT NULL DEFAULT '{}'::jsonb`,
+  `ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS runtime_budget JSONB NOT NULL DEFAULT '{}'::jsonb`,
   `INSERT INTO elaine_global_config (id) VALUES (1)
      ON CONFLICT (id) DO NOTHING`,
 

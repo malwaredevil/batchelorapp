@@ -208,11 +208,27 @@ vi.mock("../lib/elaine-config", () => ({
       enableBuiltinWebSearch: false,
     },
     timeouts: { openAIResponsesMs: 60_000 },
+    runtimeBudget: {
+      maxModelRounds: 8,
+      maxToolCalls: 24,
+      maxReplans: 10,
+      maxElapsedMs: 240_000,
+    },
     thresholds: { openAIStateMaxAgeDays: 7 },
     chatWindowSize: "comfortable",
     actionConfirmationMode: "one_by_one",
   }),
   invalidateElaineGlobalConfigCache: vi.fn(),
+  // ElaineTurnRuntime (loaded via the "./runtime" importOriginal mock below)
+  // falls back to this constant when no `budget` override is passed — must
+  // stay in the mock or the module import throws "No DEFAULT_RUNTIME_BUDGET
+  // export is defined".
+  DEFAULT_RUNTIME_BUDGET: {
+    maxModelRounds: 8,
+    maxToolCalls: 24,
+    maxReplans: 10,
+    maxElapsedMs: 240_000,
+  },
 }));
 
 vi.mock("../lib/openai-responses", () => ({

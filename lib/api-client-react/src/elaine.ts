@@ -1444,6 +1444,13 @@ export interface ElaineThresholdsConfig {
   codeDiagnosisRecurrenceThreshold: number;
 }
 
+export interface ElaineRuntimeBudgetConfig {
+  maxModelRounds: number;
+  maxToolCalls: number;
+  maxReplans: number;
+  maxElapsedMs: number;
+}
+
 export interface ElaineGlobalConfig {
   chatModel: string;
   subagentModel: string;
@@ -1453,6 +1460,7 @@ export interface ElaineGlobalConfig {
   timeouts: ElaineTimeoutsConfig;
   features: ElaineFeaturesConfig;
   thresholds: ElaineThresholdsConfig;
+  runtimeBudget: ElaineRuntimeBudgetConfig;
   updatedAt: string | null;
 }
 
@@ -1498,6 +1506,7 @@ export type UpdateElaineAdminConfigBody = Partial<
   timeouts?: Partial<ElaineTimeoutsConfig>;
   features?: Partial<ElaineFeaturesConfig>;
   thresholds?: Partial<ElaineThresholdsConfig>;
+  runtimeBudget?: Partial<ElaineRuntimeBudgetConfig>;
 };
 
 const putElaineAdminConfigFn = (

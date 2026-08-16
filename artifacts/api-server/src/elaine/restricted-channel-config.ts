@@ -165,6 +165,10 @@ export const RESTRICTED_EXCLUDED_ACTION_TYPES_SOURCE: readonly string[] = [
   // Admin-only action — requires the owner to be looking at the Control Panel
   // with config keys visible on screen; not meaningful over SMS/voice/email.
   "update_app_config",
+  // update_owner_setting: owner-only global AI config change — requires the
+  // owner to be in the web UI where they can see the confirmation card and
+  // the current/new value before confirming; not safe over async channels.
+  "update_owner_setting",
   // broadcast_message: fans out to ALL the user's channels simultaneously.
   // Excluded from inbound restricted channels to prevent delivery loops
   // (an SMS-triggered broadcast would echo back to the SMS channel it came

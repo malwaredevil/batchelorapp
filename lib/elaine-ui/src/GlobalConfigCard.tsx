@@ -12,6 +12,7 @@ import {
   type ElaineTimeoutsConfig,
   type ElaineFeaturesConfig,
   type ElaineThresholdsConfig,
+  type ElaineRuntimeBudgetConfig,
 } from "@workspace/api-client-react";
 import { Button } from "@workspace/ui";
 import {
@@ -180,6 +181,8 @@ export function GlobalConfigCard() {
   const [thresholds, setThresholds] = useState<ElaineThresholdsConfig | null>(
     null,
   );
+  const [runtimeBudget, setRuntimeBudget] =
+    useState<ElaineRuntimeBudgetConfig | null>(null);
 
   useEffect(() => {
     if (config) {
@@ -191,6 +194,7 @@ export function GlobalConfigCard() {
       setTimeouts(config.timeouts);
       setFeatures(config.features);
       setThresholds(config.thresholds);
+      setRuntimeBudget(config.runtimeBudget);
     }
   }, [config]);
 
@@ -200,10 +204,12 @@ export function GlobalConfigCard() {
   if (isForbidden) return null;
   if (isLoading) return null;
   if (isError) return null;
-  if (!models || !timeouts || !features || !thresholds) return null;
+  if (!models || !timeouts || !features || !thresholds || !runtimeBudget)
+    return null;
 
   function handleSave() {
-    if (!models || !timeouts || !features || !thresholds) return;
+    if (!models || !timeouts || !features || !thresholds || !runtimeBudget)
+      return;
     updateConfig.mutate(
       {
         chatModel,
@@ -214,6 +220,7 @@ export function GlobalConfigCard() {
         timeouts,
         features,
         thresholds,
+        runtimeBudget,
       },
       {
         onSuccess: (result) => {
@@ -240,6 +247,7 @@ export function GlobalConfigCard() {
         setTimeouts(result.timeouts);
         setFeatures(result.features);
         setThresholds(result.thresholds);
+        setRuntimeBudget(result.runtimeBudget);
         setConfirmingReset(false);
         toast.success("Global configuration reset to defaults");
       },
@@ -669,6 +677,55 @@ export function GlobalConfigCard() {
             max={120000}
             value={timeouts.fusionMs}
             onChange={(v) => setTimeouts({ ...timeouts, fusionMs: v })}
+          />
+        </div>
+      </Section>
+
+      <Section
+        title="Runtime budget"
+        description="Ceilings on Elaine's per-turn agentic loop — how many model round-trips, tool calls, and mid-turn plan adjustments a single reply may use before the turn is cut off as 'blocked'. Raise these if simple multi-step questions are being cut off too early; lower them to bound cost/latency on a runaway turn."
+      >
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <NumberField
+            label="Max model rounds"
+            hint="Model call round-trips allowed in one turn (tool-call rounds + the final answer)."
+            min={1}
+            max={20}
+            value={runtimeBudget.maxModelRounds}
+            onChange={(v) =>
+              setRuntimeBudget({ ...runtimeBudget, maxModelRounds: v })
+            }
+          />
+          <NumberField
+            label="Max tool calls"
+            hint="Total tool calls allowed across the whole turn."
+            min={1}
+            max={50}
+            value={runtimeBudget.maxToolCalls}
+            onChange={(v) =>
+              setRuntimeBudget({ ...runtimeBudget, maxToolCalls: v })
+            }
+          />
+          <NumberField
+            label="Max replans"
+            hint="Times the runtime may adjust the plan mid-turn (e.g. ask for another lookup after incomplete evidence, or run an unplanned tool call). Each ad-hoc tool call the model makes beyond the original plan also consumes one, so this is usually the tightest ceiling in practice."
+            min={0}
+            max={20}
+            value={runtimeBudget.maxReplans}
+            onChange={(v) =>
+              setRuntimeBudget({ ...runtimeBudget, maxReplans: v })
+            }
+          />
+          <NumberField
+            label="Max elapsed time (ms)"
+            hint="Wall-clock cap for the whole turn, independent of round/tool-call/replan counts."
+            min={30000}
+            max={300000}
+            step={1000}
+            value={runtimeBudget.maxElapsedMs}
+            onChange={(v) =>
+              setRuntimeBudget({ ...runtimeBudget, maxElapsedMs: v })
+            }
           />
         </div>
       </Section>

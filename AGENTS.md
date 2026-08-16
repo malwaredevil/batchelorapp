@@ -423,14 +423,44 @@ pre-publishing task.
 
 #### Specifically prohibited patterns (the automated guard detects these)
 
-| Prohibited                                                               | Correct alternative                                                                     |
-| ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
-| `Sentry.init(` in any SPA file                                           | `initBrowserMonitoring()` from `@workspace/web-core/sentry`                             |
-| `new OpenAI(` in `routes/**`                                             | `getOpenRouterClient()` / `callModel()` from `lib/ai-client.ts`                         |
-| `usePageAssistantContext` in a new `.tsx` without `@workspace/elaine-ui` | `formatElaineContextList()` + `formatElaineContextEntity()` from `@workspace/elaine-ui` |
-| Inline `.join()` / `.slice().map()` to build Elaine context              | `formatElaineContextList()` from `@workspace/elaine-ui`                                 |
-| Local `Sentry.replayIntegration` config                                  | Stays in `lib/web-core/src/sentry.ts` only                                              |
-| Route handler reimplementing household data query                        | `queryHouseholdData()` / `searchHouseholdData()` from elaine shared fns                 |
+| Prohibited                                                                | Correct alternative                                                                     |
+| ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `Sentry.init(` in any SPA file                                            | `initBrowserMonitoring()` from `@workspace/web-core/sentry`                             |
+| `new OpenAI(` in `routes/**`                                              | `getOpenRouterClient()` / `callModel()` from `lib/ai-client.ts`                         |
+| `usePageAssistantContext` in a new `.tsx` without `@workspace/elaine-ui`  | `formatElaineContextList()` + `formatElaineContextEntity()` from `@workspace/elaine-ui` |
+| Inline `.join()` / `.slice().map()` to build Elaine context               | `formatElaineContextList()` from `@workspace/elaine-ui`                                 |
+| Local `Sentry.replayIntegration` config                                   | Stays in `lib/web-core/src/sentry.ts` only                                              |
+| Route handler reimplementing household data query                         | `queryHouseholdData()` / `searchHouseholdData()` from elaine shared fns                 |
+| Literal limit/timeout/budget/threshold/cap baked into business-logic code | Owner-configurable field on `elaineGlobalConfig` — see "No hardcoded config" below      |
+
+#### No hardcoded config values
+
+Limits, timeouts, budgets, caps, thresholds, and similar tunable numbers in
+`artifacts/**` or `lib/**` business logic must be owner-adjustable, not
+literals. This rule exists because of a real incident: Elaine's per-turn
+runtime budget (`maxModelRounds`/`maxToolCalls`/`maxReplans`/`maxElapsedMs`)
+was a literal object at the chat call site, invisible to the owner and
+impossible to raise without a code change.
+
+- **Enforced by** `scripts/src/check-hardcoded-config.ts` — a diff-scoped
+  guard (only inspects files touched in the current diff), run via
+  `pnpm --filter @workspace/scripts run check-hardcoded-config -- --base origin/main`,
+  the GitHub Guardrails workflow, and `pre-publish.sh`. It flags (a) 2+
+  sibling object-literal keys with tunable-looking names assigned bare
+  numeric literals, and (b) standalone `MAX_*`/`*_TIMEOUT_MS`/`*_BUDGET`-style
+  constants outside a recognized config/defaults/schema file.
+- **Fix:** add the field to `AdminConfigBody`
+  (`artifacts/api-server/src/elaine/admin-config.ts`), a default in
+  `ELAINE_CONFIG_DEFAULTS` (`artifacts/api-server/src/lib/elaine-config.ts`),
+  and read it via `getElaineGlobalConfig()` at the call site. Because Elaine's
+  own logic already loads `elaineConfig` broadly, wiring a new value in here
+  is what keeps her aware of it automatically — do not build a parallel
+  config surface.
+- **Audit the existing backlog** (report-only, does not fail CI) with
+  `pnpm --filter @workspace/scripts run check-hardcoded-config-audit`.
+- **Genuine exceptions** (a fixed algorithm parameter that should never be
+  owner-facing) go in `HARDCODED_CONFIG_ALLOWLIST` in the script, with a
+  comment explaining why — never rename/reformat around the check.
 
 #### Enforcement gates (all three must pass; none can be skipped)
 

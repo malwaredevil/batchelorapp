@@ -118,6 +118,16 @@ vi.mock("../lib/elaine-config", () => ({
     maxResponseTokens: 1_000,
   })),
   invalidateElaineGlobalConfigCache: vi.fn(),
+  // ElaineTurnRuntime (loaded via the real, unmocked "./runtime" module in
+  // this file) falls back to this constant when no `budget` override is
+  // passed — must stay in the mock or the module import throws "No
+  // DEFAULT_RUNTIME_BUDGET export is defined".
+  DEFAULT_RUNTIME_BUDGET: {
+    maxModelRounds: 8,
+    maxToolCalls: 24,
+    maxReplans: 10,
+    maxElapsedMs: 240_000,
+  },
 }));
 
 vi.mock("../lib/openrouter-models", () => ({

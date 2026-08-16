@@ -821,6 +821,7 @@ CREATE TABLE IF NOT EXISTS elaine_global_config (
   timeouts              JSONB NOT NULL DEFAULT '{}'::jsonb,
   features              JSONB NOT NULL DEFAULT '{}'::jsonb,
   thresholds            JSONB NOT NULL DEFAULT '{}'::jsonb,
+  runtime_budget        JSONB NOT NULL DEFAULT '{}'::jsonb,
   updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_by_user_id    INTEGER
 );
@@ -1107,6 +1108,7 @@ ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS extra_models JSONB NOT
 ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS timeouts JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS features JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS thresholds JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS runtime_budget JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_sku TEXT;
 ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_series_name TEXT;
@@ -2967,11 +2969,18 @@ async function main() {
       "timeouts",
       "features",
       "thresholds",
+      "runtime_budget",
       "updated_at",
       "updated_by_user_id",
     ],
     orderBy: "id",
-    jsonbColumns: ["extra_models", "timeouts", "features", "thresholds"],
+    jsonbColumns: [
+      "extra_models",
+      "timeouts",
+      "features",
+      "thresholds",
+      "runtime_budget",
+    ],
   });
 
   summary["elaine_history_conversations"] = await copyTable(source, dest, {

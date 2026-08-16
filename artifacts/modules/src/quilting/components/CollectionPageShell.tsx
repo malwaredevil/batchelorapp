@@ -109,6 +109,10 @@ interface CollectionPageShellProps<T extends CollectionPageItem> {
 
   // Optional stats bar
   stats?: StatsData;
+
+  // Optional extra buttons rendered in the header, before the Select button
+  // (e.g. a page-local Compare mode toggle).
+  extraHeaderActions?: ReactNode;
 }
 
 export function CollectionPageShell<T extends CollectionPageItem>({
@@ -160,6 +164,7 @@ export function CollectionPageShell<T extends CollectionPageItem>({
   isSavingCategories,
   paletteMatchEntity,
   stats,
+  extraHeaderActions,
 }: CollectionPageShellProps<T>) {
   const noun = errorNoun ?? pluralNoun;
 
@@ -228,6 +233,7 @@ export function CollectionPageShell<T extends CollectionPageItem>({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {extraHeaderActions}
           {items && items.length > 0 && (
             <Button
               variant={isBulkMode ? "secondary" : "outline"}

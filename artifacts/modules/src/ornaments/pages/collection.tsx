@@ -5,6 +5,7 @@ import {
   useListOrnaments,
   useListOrnamentCategories,
   useReanalyzeOrnament,
+  useBulkReanalyzeOrnaments,
   useDeleteOrnament,
   useUpdateOrnament,
   getListOrnamentsQueryKey,
@@ -57,10 +58,38 @@ import {
   CollectionSearchBar,
   CollectionStatBar,
   useValidatedCollectionPageSize,
+  useMultiSelectMode,
+  CompareModal,
+  CompareFloatingBar,
+  trackAsyncAction,
+  isAsyncActionBusy,
+  useAsyncActionStatus,
   type SortOption,
+  type CompareItem,
 } from "@workspace/collection-ui";
+import { GitCompare, RefreshCw as RefreshCwIcon } from "lucide-react";
 import { GalleryPaginator } from "@/components/GalleryPaginator";
 import { cn } from "@/lib/utils";
+import { ornamentReanalyzeKey } from "@/ornaments/lib/reanalyze-status";
+
+// Thin wrappers so each card/row's live "Refresh AI" status is read via its
+// own hook call (one per rendered instance), rather than calling a hook
+// inside the .map() below — which would violate the rules of hooks whenever
+// the visible item count changes (pagination, filtering, search).
+
+function OrnamentCard(
+  props: Omit<React.ComponentProps<typeof CollectionCard>, "aiStatus">,
+) {
+  const aiStatus = useAsyncActionStatus(ornamentReanalyzeKey(props.id));
+  return <CollectionCard {...props} aiStatus={aiStatus} />;
+}
+
+function OrnamentListRow(
+  props: Omit<React.ComponentProps<typeof CollectionListRow>, "aiStatus">,
+) {
+  const aiStatus = useAsyncActionStatus(ornamentReanalyzeKey(props.id));
+  return <CollectionListRow {...props} aiStatus={aiStatus} />;
+}
 
 const ORNAMENTS_PAGE_SIZE_KEY = "ornaments-collection-page-size";
 const PAGE_SIZE_OPTIONS = [20, 50, 100, 200];
@@ -112,6 +141,60 @@ export default function Collection() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const queryClient = useQueryClient();
   const reanalyze = useReanalyzeOrnament();
+
+  // Guards against firing a second AI vision call for the same item while
+  // one is already running (e.g. double-clicking "Refresh AI", or clicking
+  // it again after navigating to the detail page and back — its "Refresh
+  // all" button shares this same key). Status is tracked in a module-scoped
+  // store so it also survives navigating away from this page entirely.
+  function triggerReanalyze(itemId: number) {
+    const key = ornamentReanalyzeKey(itemId);
+    if (isAsyncActionBusy(key)) return;
+    trackAsyncAction(
+      key,
+      reanalyze.mutateAsync({ id: itemId }).then(() =>
+        queryClient.invalidateQueries({
+          queryKey: getListOrnamentsQueryKey(),
+        }),
+      ),
+    );
+  }
+
+  // Compare mode — tap up to 5 cards, then view them side by side.
+  const compareMode = useMultiSelectMode(5);
+  const [showCompareModal, setShowCompareModal] = useState(false);
+
+  // Select (bulk) mode — tap up to 20 cards, then run a bulk action.
+  const bulkMode = useMultiSelectMode(20);
+  const [bulkStatus, setBulkStatus] = useState<string | null>(null);
+  const bulkReanalyze = useBulkReanalyzeOrnaments();
+
+  const isSelecting = compareMode.active || bulkMode.active;
+
+  function exitSelectionModes() {
+    compareMode.exit();
+    bulkMode.exit();
+    setBulkStatus(null);
+  }
+
+  async function runBulkReanalyze() {
+    if (bulkMode.selectedIds.length === 0) return;
+    setBulkStatus("Analysing…");
+    try {
+      const result = await bulkReanalyze.mutateAsync({
+        data: { ids: bulkMode.selectedIds },
+      });
+      await queryClient.invalidateQueries({
+        queryKey: getListOrnamentsQueryKey(),
+      });
+      setBulkStatus(
+        `Done — ${result.succeeded.length} refreshed${result.failed.length ? `, ${result.failed.length} failed` : ""}.`,
+      );
+      bulkMode.clear();
+    } catch {
+      setBulkStatus("Something went wrong. Please try again.");
+    }
+  }
 
   const deleteOrnament = useDeleteOrnament({
     mutation: {
@@ -323,14 +406,44 @@ export default function Collection() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button
-            asChild
-            className="shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 shadow-md"
-          >
-            <Link href="/ornaments/camera-add">
-              <Plus className="mr-2 h-4 w-4" /> Add Ornament
-            </Link>
-          </Button>
+          {!isSelecting ? (
+            <>
+              {items.length >= 2 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={compareMode.enter}
+                  data-testid="button-compare-mode"
+                >
+                  <GitCompare className="h-4 w-4" />
+                  <span className="hidden sm:inline">Compare</span>
+                </Button>
+              )}
+              {items.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={bulkMode.enter}
+                  data-testid="button-bulk-reanalyze-mode"
+                >
+                  <RefreshCwIcon className="h-4 w-4" />
+                  <span className="hidden sm:inline">Select</span>
+                </Button>
+              )}
+              <Button
+                asChild
+                className="shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 shadow-md"
+              >
+                <Link href="/ornaments/camera-add">
+                  <Plus className="mr-2 h-4 w-4" /> Add Ornament
+                </Link>
+              </Button>
+            </>
+          ) : (
+            <Button variant="outline" size="sm" onClick={exitSelectionModes}>
+              Cancel
+            </Button>
+          )}
         </div>
       </div>
 
@@ -372,7 +485,7 @@ export default function Collection() {
       {viewMode === "grid" && (
         <CollectionGrid>
           {pagedItems.map((item) => (
-            <CollectionCard
+            <OrnamentCard
               key={item.id}
               id={item.id}
               name={item.name}
@@ -411,13 +524,7 @@ export default function Collection() {
                 setQuickEditItem(item as unknown as OrnamentsOrnamentItem)
               }
               onSetCategories={() => setCategoryEditItem(item)}
-              onReanalyze={() =>
-                void reanalyze.mutateAsync({ id: item.id }).then(() =>
-                  queryClient.invalidateQueries({
-                    queryKey: getListOrnamentsQueryKey(),
-                  }),
-                )
-              }
+              onReanalyze={() => triggerReanalyze(item.id)}
               onDelete={() => setDeleteConfirmId(item.id)}
               extraMenuItems={
                 <DropdownMenuItem asChild>
@@ -426,6 +533,15 @@ export default function Collection() {
                     Edit
                   </Link>
                 </DropdownMenuItem>
+              }
+              selecting={isSelecting}
+              selected={
+                compareMode.active
+                  ? compareMode.selectedIds.includes(item.id)
+                  : bulkMode.selectedIds.includes(item.id)
+              }
+              onToggleSelect={
+                compareMode.active ? compareMode.toggle : bulkMode.toggle
               }
               LinkComponent={Link}
             />
@@ -445,7 +561,7 @@ export default function Collection() {
       {viewMode === "list" && (
         <CollectionList>
           {pagedItems.map((item) => (
-            <CollectionListRow
+            <OrnamentListRow
               key={item.id}
               id={item.id}
               name={item.name}
@@ -511,13 +627,7 @@ export default function Collection() {
                 setQuickEditItem(item as unknown as OrnamentsOrnamentItem)
               }
               onSetCategories={() => setCategoryEditItem(item)}
-              onReanalyze={() =>
-                void reanalyze.mutateAsync({ id: item.id }).then(() =>
-                  queryClient.invalidateQueries({
-                    queryKey: getListOrnamentsQueryKey(),
-                  }),
-                )
-              }
+              onReanalyze={() => triggerReanalyze(item.id)}
               onDelete={() => setDeleteConfirmId(item.id)}
               extraMenuItems={
                 <DropdownMenuItem asChild>
@@ -526,6 +636,15 @@ export default function Collection() {
                     Edit
                   </Link>
                 </DropdownMenuItem>
+              }
+              selecting={isSelecting}
+              selected={
+                compareMode.active
+                  ? compareMode.selectedIds.includes(item.id)
+                  : bulkMode.selectedIds.includes(item.id)
+              }
+              onToggleSelect={
+                compareMode.active ? compareMode.toggle : bulkMode.toggle
               }
               LinkComponent={Link}
             />
@@ -539,6 +658,90 @@ export default function Collection() {
           onPageChange={setCurrentPage}
           className="mt-4"
         />
+      )}
+
+      {/* Compare floating bar */}
+      {compareMode.active && (
+        <CompareFloatingBar
+          count={compareMode.selectedIds.length}
+          label="ornaments selected"
+          onCompare={() => setShowCompareModal(true)}
+        />
+      )}
+
+      {/* Compare modal */}
+      {showCompareModal && (
+        <CompareModal
+          title="Compare ornaments"
+          items={compareMode.selectedIds
+            .map((id) => items.find((i) => i.id === id))
+            .filter((i): i is (typeof items)[number] => Boolean(i))
+            .map(
+              (item): CompareItem => ({
+                id: item.id,
+                name: item.name,
+                imageUrl: item.imageUrl,
+                href: `/ornaments/ornament/${item.id}`,
+                fields: [
+                  { label: "Brand", value: item.brand },
+                  { label: "Year", value: item.year },
+                  { label: "Series", value: item.seriesOrCollection },
+                  {
+                    label: "Book value",
+                    value:
+                      item.bookValue != null
+                        ? `$${item.bookValue.toFixed(0)}`
+                        : undefined,
+                  },
+                ],
+                colors: item.dominantColors ?? [],
+                colorToHex,
+              }),
+            )}
+          onClose={() => {
+            setShowCompareModal(false);
+            compareMode.exit();
+          }}
+          LinkComponent={Link}
+        />
+      )}
+
+      {/* Bulk reanalyze floating bar */}
+      {bulkMode.active &&
+        bulkMode.selectedIds.length > 0 &&
+        !bulkReanalyze.isPending &&
+        !bulkStatus && (
+          <div className="fixed inset-x-0 bottom-20 z-30 flex justify-center px-4 md:bottom-6">
+            <div className="flex items-center gap-3 rounded-full border border-amber-300/60 bg-background/95 px-5 py-3 shadow-xl backdrop-blur">
+              <span className="text-sm font-medium text-muted-foreground">
+                {bulkMode.selectedIds.length} selected
+              </span>
+              <Button
+                size="sm"
+                onClick={runBulkReanalyze}
+                data-testid="button-bulk-reanalyze-run"
+              >
+                <RefreshCwIcon className="h-4 w-4" />
+                Refresh AI ({bulkMode.selectedIds.length})
+              </Button>
+            </div>
+          </div>
+        )}
+
+      {/* Bulk pending / status bar */}
+      {bulkMode.active && (bulkReanalyze.isPending || bulkStatus) && (
+        <div className="fixed inset-x-0 bottom-20 z-30 flex justify-center px-4 md:bottom-6">
+          <div className="flex items-center gap-2 rounded-full border border-amber-300/60 bg-background/95 px-5 py-3 shadow-xl backdrop-blur">
+            {bulkReanalyze.isPending ? (
+              <>
+                <RefreshCwIcon className="h-4 w-4 animate-spin text-amber-600" />
+                <span className="text-sm font-medium">Analysing…</span>
+              </>
+            ) : (
+              <span className="text-sm font-medium">{bulkStatus}</span>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Quick edit sheet */}

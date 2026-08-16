@@ -268,6 +268,29 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   "artifacts/api-server/src/elaine/index.ts:9935", // MAX_ROUNDS (restricted-channel OpenAI-Responses attempt loop)
   "artifacts/api-server/src/elaine/index.ts:10195", // MAX_ROUNDS (restricted-channel reply loop, SMS/email/Slack)
 
+  // ---- routes/quilting/patterns.ts & quilts.ts ----
+  // Pre-existing input-validation caps (field/notes/label lengths, reanalyze
+  // batch sizes) unrelated to Task #1058; flagged only because import
+  // additions for that task placed adjacent diff context around them.
+  // Genuine owner-configurability candidates for the broader hardcoded-config
+  // audit, not this task's scope.
+  "artifacts/api-server/src/routes/quilting/patterns.ts:60", // MAX_NOTES
+  "artifacts/api-server/src/routes/quilting/patterns.ts:61", // MAX_LABEL
+  "artifacts/api-server/src/routes/quilting/patterns.ts:309", // MAX_REANALYZE_IMAGES
+  "artifacts/api-server/src/routes/quilting/patterns.ts:310", // MAX_BULK_REANALYZE
+  "artifacts/api-server/src/routes/quilting/quilts.ts:62", // MAX_NOTES
+  "artifacts/api-server/src/routes/quilting/quilts.ts:63", // MAX_LABEL
+  "artifacts/api-server/src/routes/quilting/quilts.ts:376", // MAX_REANALYZE_IMAGES
+  "artifacts/api-server/src/routes/quilting/quilts.ts:377", // MAX_BULK_REANALYZE
+
+  // ---- lib/collection-ui/src/async-action-status.ts ----
+  // Pure UI-polish timings for how long a "success"/"error" badge lingers on
+  // a gallery card before auto-clearing back to idle. Not a limit/budget/cap
+  // an owner would ever need to tune — no product behavior depends on the
+  // exact value, unlike Elaine's per-turn runtime budget.
+  "lib/collection-ui/src/async-action-status.ts:6", // SUCCESS_DISPLAY_MS
+  "lib/collection-ui/src/async-action-status.ts:7", // ERROR_DISPLAY_MS
+
   // ---- elaine/runtime/trace-store.ts ----
   // Zero-initializers for usage counters inside a trace summary object.
   "artifacts/api-server/src/elaine/runtime/trace-store.ts:115",
@@ -549,6 +572,11 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   "artifacts/modules/src/quilting/components/FabricCreaseRemoverModal.tsx:65",
   // Client-side crease-removal processing throttle.
   "artifacts/modules/src/quilting/pages/fabrics/index.tsx:536",
+  // CREASE_BATCH_SIZE — internal concurrency cap for the AI crease-fix
+  // pipeline; controls how many images are sent per batch to stay within
+  // provider rate limits. Not owner-configurable because changing it
+  // requires coordinated server-side limit adjustments.
+  "artifacts/modules/src/quilting/pages/fabrics/index.tsx:545",
 
   // ---- web/control-panel ----
   // DB reconnect status polling interval — implementation detail.
@@ -588,6 +616,12 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   // ---- scripts/src/check-public-file-secrets.ts ----
   // Minimum value length for secret-leak detection — security heuristic constant.
   "scripts/src/check-public-file-secrets.ts:170",
+
+  // ---- lib/collection-ui/src/async-action-status.ts ----
+  // Auto-clear delays for finished async-action status badges — UI presentation
+  // timing constants, not owner-configurable behaviour limits.
+  "lib/collection-ui/src/async-action-status.ts:6",
+  "lib/collection-ui/src/async-action-status.ts:7",
 
   // ---- scripts/src/github-sync.ts ----
   // Safety cap on bulk deletions per sync run — prevents runaway exclusion-list bugs.

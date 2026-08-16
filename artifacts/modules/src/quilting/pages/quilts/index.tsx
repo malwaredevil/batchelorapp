@@ -43,6 +43,13 @@ import {
   formatElaineContextList,
   formatElaineContextEntity,
 } from "@workspace/elaine-ui";
+import {
+  useMultiSelectMode,
+  CompareModal,
+  CompareFloatingBar,
+  type CompareItem,
+} from "@workspace/collection-ui";
+import { GitCompare } from "lucide-react";
 import { useCollectionPage } from "@/quilting/hooks/useCollectionPage";
 import { CollectionPageShell } from "@/quilting/components/CollectionPageShell";
 import { QuickEditQuiltSheet } from "@/quilting/components/quick-edit-quilt-sheet";
@@ -323,6 +330,8 @@ export default function Quilts() {
   const [quickEditItem, setQuickEditItem] = useState<QuiltSummary | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const queryClient = useQueryClient();
+  const compareMode = useMultiSelectMode(5);
+  const [showCompareModal, setShowCompareModal] = useState(false);
 
   const {
     data: quiltsData,
@@ -418,6 +427,22 @@ export default function Quilts() {
     toast.info("Refreshing AI analysis…");
   }
 
+  function toggleCompareMode() {
+    if (compareMode.active) {
+      compareMode.exit();
+    } else {
+      if (pageState.isBulkMode) pageState.toggleBulkMode();
+      compareMode.enter();
+    }
+  }
+
+  // Wraps pageState.toggleBulkMode so that entering Select mode always exits
+  // Compare mode first — prevents both modes being simultaneously active.
+  function handleToggleBulkMode() {
+    if (compareMode.active) compareMode.exit();
+    pageState.toggleBulkMode();
+  }
+
   const recipients = quilts
     ? Array.from(
         new Set(
@@ -455,6 +480,7 @@ export default function Quilts() {
         isLoading={isLoading}
         isError={isError}
         {...pageState}
+        toggleBulkMode={handleToggleBulkMode}
         title="Finished Quilts"
         singularNoun="quilt"
         pluralNoun="quilts"
@@ -465,15 +491,35 @@ export default function Quilts() {
         localStorageKey="quilting-quilts-page-size"
         onBulkReanalyze={(ids) => bulkReanalyze.mutate({ data: { ids } })}
         isBulkReanalyzePending={bulkReanalyze.isPending}
+        extraHeaderActions={
+          quilts.length >= 2 ? (
+            <Button
+              variant={compareMode.active ? "secondary" : "outline"}
+              size="sm"
+              onClick={toggleCompareMode}
+            >
+              <GitCompare className="mr-0 sm:mr-2 h-4 w-4" />
+              <span className="hidden sm:inline">
+                {compareMode.active ? "Done" : "Compare"}
+              </span>
+            </Button>
+          ) : undefined
+        }
         renderCard={(quilt) => (
           <QuiltCard
             key={quilt.id}
             quilt={quilt}
             onDelete={handleDelete}
             onReanalyze={handleReanalyze}
-            isBulkMode={pageState.isBulkMode}
-            isSelected={pageState.selectedIds.has(quilt.id)}
-            onToggleSelect={pageState.toggleSelect}
+            isBulkMode={pageState.isBulkMode || compareMode.active}
+            isSelected={
+              pageState.isBulkMode
+                ? pageState.selectedIds.has(quilt.id)
+                : compareMode.selectedIds.includes(quilt.id)
+            }
+            onToggleSelect={
+              pageState.isBulkMode ? pageState.toggleSelect : compareMode.toggle
+            }
             onFilterByRecipient={(r) =>
               setRecipientFilter((prev) => (prev === r ? null : r))
             }
@@ -507,6 +553,47 @@ export default function Quilts() {
         paletteMatchEntity="quilt"
         stats={stats}
       />
+      {compareMode.active && (
+        <CompareFloatingBar
+          count={compareMode.selectedIds.length}
+          label="quilts selected"
+          onCompare={() => setShowCompareModal(true)}
+        />
+      )}
+      {showCompareModal && (
+        <CompareModal
+          title="Compare quilts"
+          items={compareMode.selectedIds
+            .map((id) => quilts.find((q) => q.id === id))
+            .filter((q): q is QuiltSummary => Boolean(q))
+            .map(
+              (quilt): CompareItem => ({
+                id: quilt.id,
+                name: quilt.name,
+                imageUrl: quilt.imageUrl,
+                href: `/quilting/quilts/${quilt.id}`,
+                fields: [
+                  { label: "Recipient", value: quilt.recipient },
+                  {
+                    label: "Size",
+                    value:
+                      quilt.sizeWidth && quilt.sizeHeight
+                        ? `${quilt.sizeWidth}" × ${quilt.sizeHeight}"`
+                        : undefined,
+                  },
+                  { label: "Completed", value: quilt.dateCompleted },
+                ],
+                colors: quilt.dominantColors ?? [],
+                colorToHex,
+              }),
+            )}
+          onClose={() => {
+            setShowCompareModal(false);
+            compareMode.exit();
+          }}
+          LinkComponent={Link}
+        />
+      )}
       {quickEditItem && (
         <QuickEditQuiltSheet
           quilt={quickEditItem as unknown as QuiltingFinishedQuilt}

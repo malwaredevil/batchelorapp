@@ -44,6 +44,13 @@ import {
   formatElaineContextList,
   formatElaineContextEntity,
 } from "@workspace/elaine-ui";
+import {
+  useMultiSelectMode,
+  CompareModal,
+  CompareFloatingBar,
+  type CompareItem,
+} from "@workspace/collection-ui";
+import { GitCompare } from "lucide-react";
 import { useCollectionPage } from "@/quilting/hooks/useCollectionPage";
 import { CollectionPageShell } from "@/quilting/components/CollectionPageShell";
 import { QuickEditPatternSheet } from "@/quilting/components/quick-edit-pattern-sheet";
@@ -328,6 +335,8 @@ export default function Patterns() {
   const [categoryEditItem, setCategoryEditItem] =
     useState<PatternSummary | null>(null);
   const queryClient = useQueryClient();
+  const compareMode = useMultiSelectMode(5);
+  const [showCompareModal, setShowCompareModal] = useState(false);
 
   const {
     data: patternsData,
@@ -432,6 +441,22 @@ export default function Patterns() {
     toast.info("Refreshing AI analysis…");
   }
 
+  function toggleCompareMode() {
+    if (compareMode.active) {
+      compareMode.exit();
+    } else {
+      if (pageState.isBulkMode) pageState.toggleBulkMode();
+      compareMode.enter();
+    }
+  }
+
+  // Wraps pageState.toggleBulkMode so that entering Select mode always exits
+  // Compare mode first — prevents both modes being simultaneously active.
+  function handleToggleBulkMode() {
+    if (compareMode.active) compareMode.exit();
+    pageState.toggleBulkMode();
+  }
+
   const difficulties = patterns
     ? Array.from(
         new Set(
@@ -496,6 +521,7 @@ export default function Patterns() {
         isLoading={isLoading}
         isError={isError}
         {...pageState}
+        toggleBulkMode={handleToggleBulkMode}
         title="Patterns"
         singularNoun="pattern"
         pluralNoun="patterns"
@@ -506,15 +532,35 @@ export default function Patterns() {
         localStorageKey="quilting-patterns-page-size"
         onBulkReanalyze={(ids) => bulkReanalyze.mutate({ data: { ids } })}
         isBulkReanalyzePending={bulkReanalyze.isPending}
+        extraHeaderActions={
+          patterns.length >= 2 ? (
+            <Button
+              variant={compareMode.active ? "secondary" : "outline"}
+              size="sm"
+              onClick={toggleCompareMode}
+            >
+              <GitCompare className="mr-0 sm:mr-2 h-4 w-4" />
+              <span className="hidden sm:inline">
+                {compareMode.active ? "Done" : "Compare"}
+              </span>
+            </Button>
+          ) : undefined
+        }
         renderCard={(pattern) => (
           <PatternCard
             key={pattern.id}
             pattern={pattern}
             onDelete={handleDelete}
             onReanalyze={handleReanalyze}
-            isBulkMode={pageState.isBulkMode}
-            isSelected={pageState.selectedIds.has(pattern.id)}
-            onToggleSelect={pageState.toggleSelect}
+            isBulkMode={pageState.isBulkMode || compareMode.active}
+            isSelected={
+              pageState.isBulkMode
+                ? pageState.selectedIds.has(pattern.id)
+                : compareMode.selectedIds.includes(pattern.id)
+            }
+            onToggleSelect={
+              pageState.isBulkMode ? pageState.toggleSelect : compareMode.toggle
+            }
             onFilterByDifficulty={(d) =>
               setDifficultyFilter((prev) => (prev === d ? null : d))
             }
@@ -551,6 +597,41 @@ export default function Patterns() {
         paletteMatchEntity="pattern"
         stats={stats}
       />
+      {compareMode.active && (
+        <CompareFloatingBar
+          count={compareMode.selectedIds.length}
+          label="patterns selected"
+          onCompare={() => setShowCompareModal(true)}
+        />
+      )}
+      {showCompareModal && (
+        <CompareModal
+          title="Compare patterns"
+          items={compareMode.selectedIds
+            .map((id) => patterns.find((p) => p.id === id))
+            .filter((p): p is PatternSummary => Boolean(p))
+            .map(
+              (pattern): CompareItem => ({
+                id: pattern.id,
+                name: pattern.name,
+                imageUrl: pattern.imageUrl,
+                href: `/quilting/patterns/${pattern.id}`,
+                fields: [
+                  { label: "Designer", value: pattern.designer },
+                  { label: "Difficulty", value: pattern.difficulty },
+                  { label: "Block size", value: pattern.blockSize },
+                ],
+                colors: pattern.dominantColors ?? [],
+                colorToHex,
+              }),
+            )}
+          onClose={() => {
+            setShowCompareModal(false);
+            compareMode.exit();
+          }}
+          LinkComponent={Link}
+        />
+      )}
       {quickEditItem && (
         <QuickEditPatternSheet
           pattern={quickEditItem as unknown as QuiltingQuiltPattern}

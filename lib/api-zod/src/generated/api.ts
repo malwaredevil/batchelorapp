@@ -4863,6 +4863,10 @@ export const ListOrnamentsResponse = zod.object({
   "bookValue": zod.number().nullish(),
   "bookValueSource": zod.string().nullish().describe('Which site the value came from: hallmarkornaments.com or hookedonhallmark.com'),
   "bookValueUpdatedAt": zod.coerce.date().nullish(),
+  "retailValueUsd": zod.number().nullish().describe('Original retail\/MSRP value (distinct from bookValue, the collector\/secondary-market value)'),
+  "retailValueProductUrl": zod.string().nullish().describe('Link to the ornament\'s official product page, when one was found'),
+  "retailValueSource": zod.string().nullish().describe('Domain the retail value was attributed to (e.g. hallmark.com), or \"web search\"'),
+  "retailValueUpdatedAt": zod.coerce.date().nullish(),
   "ebayPriceMinUsd": zod.number().nullish().describe('Current active eBay listing minimum price USD (for-sale)'),
   "ebayPriceMaxUsd": zod.number().nullish().describe('Current active eBay listing maximum price USD (for-sale)'),
   "ebayLastSoldPriceUsd": zod.number().nullish().describe('Most recent sold price on eBay (past 2 years)'),
@@ -4968,6 +4972,10 @@ export const GetOrnamentResponse = zod.object({
   "bookValue": zod.number().nullish(),
   "bookValueSource": zod.string().nullish().describe('Which site the value came from: hallmarkornaments.com or hookedonhallmark.com'),
   "bookValueUpdatedAt": zod.coerce.date().nullish(),
+  "retailValueUsd": zod.number().nullish().describe('Original retail\/MSRP value (distinct from bookValue, the collector\/secondary-market value)'),
+  "retailValueProductUrl": zod.string().nullish().describe('Link to the ornament\'s official product page, when one was found'),
+  "retailValueSource": zod.string().nullish().describe('Domain the retail value was attributed to (e.g. hallmark.com), or \"web search\"'),
+  "retailValueUpdatedAt": zod.coerce.date().nullish(),
   "ebayPriceMinUsd": zod.number().nullish().describe('Current active eBay listing minimum price USD (for-sale)'),
   "ebayPriceMaxUsd": zod.number().nullish().describe('Current active eBay listing maximum price USD (for-sale)'),
   "ebayLastSoldPriceUsd": zod.number().nullish().describe('Most recent sold price on eBay (past 2 years)'),
@@ -5022,7 +5030,10 @@ export const UpdateOrnamentBody = zod.object({
   "lockedFields": zod.array(zod.string()).optional(),
   "categoryIds": zod.array(zod.number()).optional(),
   "bookValue": zod.number().nullish(),
-  "bookValueSource": zod.string().nullish()
+  "bookValueSource": zod.string().nullish(),
+  "retailValueUsd": zod.number().nullish(),
+  "retailValueProductUrl": zod.string().nullish(),
+  "retailValueSource": zod.string().nullish()
 })
 
 
@@ -5050,6 +5061,10 @@ export const UpdateOrnamentResponse = zod.object({
   "bookValue": zod.number().nullish(),
   "bookValueSource": zod.string().nullish().describe('Which site the value came from: hallmarkornaments.com or hookedonhallmark.com'),
   "bookValueUpdatedAt": zod.coerce.date().nullish(),
+  "retailValueUsd": zod.number().nullish().describe('Original retail\/MSRP value (distinct from bookValue, the collector\/secondary-market value)'),
+  "retailValueProductUrl": zod.string().nullish().describe('Link to the ornament\'s official product page, when one was found'),
+  "retailValueSource": zod.string().nullish().describe('Domain the retail value was attributed to (e.g. hallmark.com), or \"web search\"'),
+  "retailValueUpdatedAt": zod.coerce.date().nullish(),
   "ebayPriceMinUsd": zod.number().nullish().describe('Current active eBay listing minimum price USD (for-sale)'),
   "ebayPriceMaxUsd": zod.number().nullish().describe('Current active eBay listing maximum price USD (for-sale)'),
   "ebayLastSoldPriceUsd": zod.number().nullish().describe('Most recent sold price on eBay (past 2 years)'),
@@ -5115,6 +5130,10 @@ export const ReanalyzeOrnamentResponse = zod.object({
   "bookValue": zod.number().nullish(),
   "bookValueSource": zod.string().nullish().describe('Which site the value came from: hallmarkornaments.com or hookedonhallmark.com'),
   "bookValueUpdatedAt": zod.coerce.date().nullish(),
+  "retailValueUsd": zod.number().nullish().describe('Original retail\/MSRP value (distinct from bookValue, the collector\/secondary-market value)'),
+  "retailValueProductUrl": zod.string().nullish().describe('Link to the ornament\'s official product page, when one was found'),
+  "retailValueSource": zod.string().nullish().describe('Domain the retail value was attributed to (e.g. hallmark.com), or \"web search\"'),
+  "retailValueUpdatedAt": zod.coerce.date().nullish(),
   "ebayPriceMinUsd": zod.number().nullish().describe('Current active eBay listing minimum price USD (for-sale)'),
   "ebayPriceMaxUsd": zod.number().nullish().describe('Current active eBay listing maximum price USD (for-sale)'),
   "ebayLastSoldPriceUsd": zod.number().nullish().describe('Most recent sold price on eBay (past 2 years)'),
@@ -5176,6 +5195,10 @@ export const SetOrnamentPrimaryImageResponse = zod.object({
   "bookValue": zod.number().nullish(),
   "bookValueSource": zod.string().nullish().describe('Which site the value came from: hallmarkornaments.com or hookedonhallmark.com'),
   "bookValueUpdatedAt": zod.coerce.date().nullish(),
+  "retailValueUsd": zod.number().nullish().describe('Original retail\/MSRP value (distinct from bookValue, the collector\/secondary-market value)'),
+  "retailValueProductUrl": zod.string().nullish().describe('Link to the ornament\'s official product page, when one was found'),
+  "retailValueSource": zod.string().nullish().describe('Domain the retail value was attributed to (e.g. hallmark.com), or \"web search\"'),
+  "retailValueUpdatedAt": zod.coerce.date().nullish(),
   "ebayPriceMinUsd": zod.number().nullish().describe('Current active eBay listing minimum price USD (for-sale)'),
   "ebayPriceMaxUsd": zod.number().nullish().describe('Current active eBay listing maximum price USD (for-sale)'),
   "ebayLastSoldPriceUsd": zod.number().nullish().describe('Most recent sold price on eBay (past 2 years)'),
@@ -5373,6 +5396,10 @@ export const RefreshAllOrnamentDataResponse = zod.object({
   "bookValue": zod.number().nullish(),
   "bookValueSource": zod.string().nullish().describe('Which site the value came from: hallmarkornaments.com or hookedonhallmark.com'),
   "bookValueUpdatedAt": zod.coerce.date().nullish(),
+  "retailValueUsd": zod.number().nullish().describe('Original retail\/MSRP value (distinct from bookValue, the collector\/secondary-market value)'),
+  "retailValueProductUrl": zod.string().nullish().describe('Link to the ornament\'s official product page, when one was found'),
+  "retailValueSource": zod.string().nullish().describe('Domain the retail value was attributed to (e.g. hallmark.com), or \"web search\"'),
+  "retailValueUpdatedAt": zod.coerce.date().nullish(),
   "ebayPriceMinUsd": zod.number().nullish().describe('Current active eBay listing minimum price USD (for-sale)'),
   "ebayPriceMaxUsd": zod.number().nullish().describe('Current active eBay listing maximum price USD (for-sale)'),
   "ebayLastSoldPriceUsd": zod.number().nullish().describe('Most recent sold price on eBay (past 2 years)'),
@@ -5430,6 +5457,10 @@ export const RunOrnamentAiAppraisalResponse = zod.object({
   "bookValue": zod.number().nullish(),
   "bookValueSource": zod.string().nullish().describe('Which site the value came from: hallmarkornaments.com or hookedonhallmark.com'),
   "bookValueUpdatedAt": zod.coerce.date().nullish(),
+  "retailValueUsd": zod.number().nullish().describe('Original retail\/MSRP value (distinct from bookValue, the collector\/secondary-market value)'),
+  "retailValueProductUrl": zod.string().nullish().describe('Link to the ornament\'s official product page, when one was found'),
+  "retailValueSource": zod.string().nullish().describe('Domain the retail value was attributed to (e.g. hallmark.com), or \"web search\"'),
+  "retailValueUpdatedAt": zod.coerce.date().nullish(),
   "ebayPriceMinUsd": zod.number().nullish().describe('Current active eBay listing minimum price USD (for-sale)'),
   "ebayPriceMaxUsd": zod.number().nullish().describe('Current active eBay listing maximum price USD (for-sale)'),
   "ebayLastSoldPriceUsd": zod.number().nullish().describe('Most recent sold price on eBay (past 2 years)'),
@@ -5523,6 +5554,71 @@ export const LookupOrnamentBookValueResponse = zod.object({
   "bookValue": zod.number().nullish(),
   "bookValueSource": zod.string().nullish().describe('Which site the value came from: hallmarkornaments.com or hookedonhallmark.com'),
   "bookValueUpdatedAt": zod.coerce.date().nullish(),
+  "retailValueUsd": zod.number().nullish().describe('Original retail\/MSRP value (distinct from bookValue, the collector\/secondary-market value)'),
+  "retailValueProductUrl": zod.string().nullish().describe('Link to the ornament\'s official product page, when one was found'),
+  "retailValueSource": zod.string().nullish().describe('Domain the retail value was attributed to (e.g. hallmark.com), or \"web search\"'),
+  "retailValueUpdatedAt": zod.coerce.date().nullish(),
+  "ebayPriceMinUsd": zod.number().nullish().describe('Current active eBay listing minimum price USD (for-sale)'),
+  "ebayPriceMaxUsd": zod.number().nullish().describe('Current active eBay listing maximum price USD (for-sale)'),
+  "ebayLastSoldPriceUsd": zod.number().nullish().describe('Most recent sold price on eBay (past 2 years)'),
+  "ebayLastSoldDate": zod.coerce.date().nullish(),
+  "ebayPriceCachedAt": zod.coerce.date().nullish().describe('When the eBay data was last refreshed'),
+  "aiAppraisal": zod.string().nullish().describe('AI-generated collector appraisal text including estimated value range'),
+  "aiAppraisalUpdatedAt": zod.coerce.date().nullish(),
+  "categories": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "bgColor": zod.string().nullish(),
+  "textColor": zod.string().nullish(),
+  "count": zod.number().optional().describe('Number of ornaments assigned this category (only present on the category-list endpoint)')
+})),
+  "images": zod.array(zod.object({
+  "id": zod.number(),
+  "url": zod.string(),
+  "label": zod.string().nullish(),
+  "position": zod.number()
+})),
+  "imageUrl": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Look up and save the original retail value (and product page link) via a grounded web search
+ */
+export const LookupOrnamentRetailValueParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+
+
+export const LookupOrnamentRetailValueResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "brand": zod.string(),
+  "seriesOrCollection": zod.string().nullish(),
+  "year": zod.number().nullish().describe('Release\/edition year printed on the ornament'),
+  "barcodeValue": zod.string().nullish(),
+  "quantity": zod.number().min(1),
+  "lockedFields": zod.array(zod.string()),
+  "notes": zod.string().nullish(),
+  "dimensions": zod.string().nullish(),
+  "condition": zod.string().nullish(),
+  "origin": zod.string().nullish(),
+  "aiDescription": zod.string().nullish(),
+  "description": zod.string().nullish().describe('Verbatim text transcribed from the printed description on the back of the ornament\'s box (distinct from aiDescription, which is AI-authored). When no legible box-back text was found, the AI writes a stand-in instead — see descriptionGenerated.'),
+  "descriptionGenerated": zod.boolean().optional().describe('True when description above is an AI-generated stand-in because no legible box-back text was found (false for manual, verbatim, or catalog text).'),
+  "acquiredAt": zod.string().nullish(),
+  "dominantColors": zod.array(zod.string()).optional(),
+  "motifs": zod.array(zod.string()).optional(),
+  "bookValue": zod.number().nullish(),
+  "bookValueSource": zod.string().nullish().describe('Which site the value came from: hallmarkornaments.com or hookedonhallmark.com'),
+  "bookValueUpdatedAt": zod.coerce.date().nullish(),
+  "retailValueUsd": zod.number().nullish().describe('Original retail\/MSRP value (distinct from bookValue, the collector\/secondary-market value)'),
+  "retailValueProductUrl": zod.string().nullish().describe('Link to the ornament\'s official product page, when one was found'),
+  "retailValueSource": zod.string().nullish().describe('Domain the retail value was attributed to (e.g. hallmark.com), or \"web search\"'),
+  "retailValueUpdatedAt": zod.coerce.date().nullish(),
   "ebayPriceMinUsd": zod.number().nullish().describe('Current active eBay listing minimum price USD (for-sale)'),
   "ebayPriceMaxUsd": zod.number().nullish().describe('Current active eBay listing maximum price USD (for-sale)'),
   "ebayLastSoldPriceUsd": zod.number().nullish().describe('Most recent sold price on eBay (past 2 years)'),

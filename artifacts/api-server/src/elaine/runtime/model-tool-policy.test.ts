@@ -54,6 +54,7 @@ const IMPLEMENTED_MAIN_CHAT_HARD_TOOLS = [
   "analyze_fabric_photo",
   "analyze_ornament_photo",
   "lookup_book_value",
+  "lookup_retail_value",
 ].sort();
 
 describe("model-visible hard-tool policy", () => {

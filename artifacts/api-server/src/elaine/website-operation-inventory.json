@@ -1805,6 +1805,16 @@
     "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
+    "operationId": "lookupOrnamentRetailValue",
+    "method": "POST",
+    "path": "/ornaments/items/{id}/retail-value-lookup",
+    "domain": "ornaments",
+    "summary": "Look up and save the original retail value (and product page link) via a grounded web search",
+    "disposition": "direct",
+    "mappedTools": ["lookup_retail_value"],
+    "reason": "Covered by the dedicated lookup_retail_value soft tool (mirrors lookup_book_value)."
+  },
+  {
     "operationId": "lookupOrnamentEbayPrice",
     "method": "POST",
     "path": "/ornaments/items/{id}/ebay-price-lookup",

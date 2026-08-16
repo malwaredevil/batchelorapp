@@ -21,6 +21,7 @@ import {
   useDeleteOrnament,
   useRefreshAllOrnamentData,
   useLookupOrnamentEbayPrice,
+  useLookupOrnamentRetailValue,
   useListOrnamentCategories,
   getGetOrnamentQueryKey,
   getListOrnamentsQueryKey,
@@ -139,6 +140,9 @@ export default function OrnamentDetail() {
           ornament.bookValue != null
             ? `Book value on file: $${Number(ornament.bookValue).toFixed(2)}${ornament.bookValueSource ? ` (source: ${ornament.bookValueSource})` : ""}`
             : "No book value on file yet.",
+          ornament.retailValueUsd != null
+            ? `Retail value on file: $${Number(ornament.retailValueUsd).toFixed(2)}${ornament.retailValueSource ? ` (source: ${ornament.retailValueSource})` : ""}${ornament.retailValueProductUrl ? ` — product page: ${ornament.retailValueProductUrl}` : ""}`
+            : "No retail value on file yet.",
           ornament.aiAppraisal
             ? `AI appraisal: "${ornament.aiAppraisal.slice(0, 200)}"`
             : null,
@@ -181,6 +185,8 @@ export default function OrnamentDetail() {
   const refreshAll = useRefreshAllOrnamentData();
   const lookupEbayPrice = useLookupOrnamentEbayPrice();
   const [forceEbayRefreshing, setForceEbayRefreshing] = useState(false);
+  const lookupRetailValue = useLookupOrnamentRetailValue();
+  const [retailValueLookupBusy, setRetailValueLookupBusy] = useState(false);
   const addImage = useUploadOrnamentImage(id);
   const setPrimaryImage = useSetOrnamentPrimaryImage();
   const deleteImage = useDeleteOrnamentImage();
@@ -311,6 +317,19 @@ export default function OrnamentDetail() {
       toast.error("eBay lookup failed — try again");
     } finally {
       if (force) setForceEbayRefreshing(false);
+    }
+  };
+
+  const handleRetailValueLookup = async () => {
+    try {
+      setRetailValueLookupBusy(true);
+      await lookupRetailValue.mutateAsync({ id });
+      queryClient.invalidateQueries({ queryKey: getGetOrnamentQueryKey(id) });
+      toast.success("Retail value updated");
+    } catch {
+      toast.error("Could not find a retail value for this ornament");
+    } finally {
+      setRetailValueLookupBusy(false);
     }
   };
 
@@ -987,6 +1006,60 @@ export default function OrnamentDetail() {
                   </span>
                 }
               />
+            )}
+
+            {!isEditing && ornament.retailValueUsd != null && (
+              <CollectionDetailField
+                label="Retail Value"
+                value={
+                  <span>
+                    {formatCurrency(ornament.retailValueUsd)}
+                    {ornament.retailValueSource && (
+                      <span className="text-xs text-muted-foreground font-normal ml-1.5">
+                        · {ornament.retailValueSource}
+                        {ornament.retailValueUpdatedAt
+                          ? ` · updated ${formatDate(ornament.retailValueUpdatedAt)}`
+                          : ""}
+                      </span>
+                    )}
+                    {ornament.retailValueProductUrl && (
+                      <>
+                        {" "}
+                        ·{" "}
+                        <a
+                          href={ornament.retailValueProductUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-primary underline underline-offset-2"
+                        >
+                          View product page
+                        </a>
+                      </>
+                    )}
+                  </span>
+                }
+              />
+            )}
+
+            {!isEditing && ornament.retailValueUsd == null && (
+              <div className="flex items-start gap-3 py-1.5 border-b border-border/60 last:border-0">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">
+                    Retail Value
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRetailValueLookup}
+                    disabled={retailValueLookupBusy}
+                  >
+                    {retailValueLookupBusy ? (
+                      <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                    ) : null}
+                    Look up retail value
+                  </Button>
+                </div>
+              </div>
             )}
 
             {!isEditing && (

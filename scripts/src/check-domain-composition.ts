@@ -985,6 +985,7 @@ export const PLANNER_TOOL_CATALOG_REQUIRED_EXPORTS: ReadonlyArray<{
   { key: "GET_WEATHER_TOOL_NAME", value: "get_weather_forecast" },
   { key: "LOOKUP_BARCODE_TOOL_NAME", value: "lookup_product_barcode" },
   { key: "LOOKUP_BOOK_VALUE_TOOL_NAME", value: "lookup_book_value" },
+  { key: "LOOKUP_RETAIL_VALUE_TOOL_NAME", value: "lookup_retail_value" },
   { key: "NAVIGATE_TOOL_NAME", value: "suggest_navigation" },
   { key: "QUERY_HOUSEHOLD_TOOL_NAME", value: "query_household_data" },
   { key: "RECORD_LESSON_TOOL_NAME", value: "remember_lesson" },
@@ -2679,7 +2680,7 @@ export const KNOWN_EXECUTOR_PREFIXES: ReadonlySet<string> = new Set([
   "widget", // show_trip_card, show_destination_card, show_data_card
   "collectionRead", // show_pottery_item, analyze_pottery_photo
   "quiltingRead", // show_fabric_swatch, calculate_yardage, analyze_fabric_photo
-  "ornamentRead", // show_ornament_item, search_hallmark, lookup_product_barcode, analyze_ornament_photo, lookup_book_value
+  "ornamentRead", // show_ornament_item, search_hallmark, lookup_product_barcode, analyze_ornament_photo, lookup_book_value, lookup_retail_value
   "officeRead", // list_notes, get_note (executeUniversalReadTool)
   "gmailRead", // summarize_inbox, find_emails_about_topic, get_email_detail (executeOfficeTool)
   "notificationRead", // list_notifications, get_notification_counts, get_notification_preferences (executeUniversalReadTool)

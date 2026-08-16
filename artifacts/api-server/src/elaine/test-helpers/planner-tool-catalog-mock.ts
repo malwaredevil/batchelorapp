@@ -59,6 +59,7 @@ export interface PlannerToolCatalogMockShape {
   GET_WEATHER_TOOL_NAME: string;
   LOOKUP_BARCODE_TOOL_NAME: string;
   LOOKUP_BOOK_VALUE_TOOL_NAME: string;
+  LOOKUP_RETAIL_VALUE_TOOL_NAME: string;
   NAVIGATE_TOOL_NAME: string;
   QUERY_HOUSEHOLD_TOOL_NAME: string;
   RECORD_LESSON_TOOL_NAME: string;
@@ -117,6 +118,7 @@ export const PLANNER_TOOL_CATALOG_MOCK_DEFAULTS: PlannerToolCatalogMockShape = {
   GET_WEATHER_TOOL_NAME: "get_weather_forecast",
   LOOKUP_BARCODE_TOOL_NAME: "lookup_product_barcode",
   LOOKUP_BOOK_VALUE_TOOL_NAME: "lookup_book_value",
+  LOOKUP_RETAIL_VALUE_TOOL_NAME: "lookup_retail_value",
   NAVIGATE_TOOL_NAME: "suggest_navigation",
   QUERY_HOUSEHOLD_TOOL_NAME: "query_household_data",
   RECORD_LESSON_TOOL_NAME: "remember_lesson",

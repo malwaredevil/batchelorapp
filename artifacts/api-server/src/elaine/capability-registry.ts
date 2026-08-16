@@ -116,6 +116,11 @@ export const NARROW_READ_CHANNEL_JUSTIFICATIONS: Readonly<
     "scoped to web chat for the same launch; unlike the others it only takes " +
     "text parameters, so it can be widened to ALL_READ_CHANNELS separately " +
     "once restricted-channel book-value requests are verified end-to-end.",
+  lookup_retail_value:
+    "Shipped alongside lookup_book_value with the same text-only-parameter " +
+    "shape; scoped to web chat for the initial launch and can be widened to " +
+    "ALL_READ_CHANNELS once restricted-channel retail-value requests are " +
+    "verified end-to-end.",
 };
 
 const WEB_AND_TRUSTED_CHANNELS = ["web", "sms", "voice"] as const;
@@ -563,20 +568,23 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
       channels: ALL_READ_CHANNELS,
     },
   ),
-  // analyze_ornament_photo / lookup_book_value: ad-hoc vision analysis and
-  // the real two-source book-value lookup, both scoped to web chat only —
+  // analyze_ornament_photo / lookup_book_value / lookup_retail_value: ad-hoc
+  // vision analysis and the real value lookups, all scoped to web chat only —
   // see NARROW_READ_CHANNEL_JUSTIFICATIONS.
-  ...policies(["analyze_ornament_photo", "lookup_book_value"], {
-    domain: "ornaments",
-    kind: "read",
-    risk: "none",
-    auth: "session",
-    confirmation: "never",
-    executorPrefix: "ornamentRead",
-    audit: "runtime_observation",
-    retry: "read_only",
-    channels: ["web"],
-  }),
+  ...policies(
+    ["analyze_ornament_photo", "lookup_book_value", "lookup_retail_value"],
+    {
+      domain: "ornaments",
+      kind: "read",
+      risk: "none",
+      auth: "session",
+      confirmation: "never",
+      executorPrefix: "ornamentRead",
+      audit: "runtime_observation",
+      retry: "read_only",
+      channels: ["web"],
+    },
+  ),
   ...policies(["list_notes", "get_note"], {
     domain: "office",
     kind: "read",

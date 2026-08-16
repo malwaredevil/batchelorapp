@@ -257,7 +257,7 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
 
   // ---- elaine/index.ts ----
   // Auth security: max verification-code attempts before lockout.
-  "artifacts/api-server/src/elaine/index.ts:902",
+  "artifacts/api-server/src/elaine/index.ts:904",
   // maxModelRounds/maxToolCalls/maxReplans/maxElapsedMs are now owner-config
   // (Task #1046 — see RuntimeBudgetConfig in lib/elaine-config.ts), not
   // hardcoded here anymore.
@@ -265,8 +265,19 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   // this file was touched for that task. Genuine owner-configurability
   // candidates, but out of scope here — tracked under the broader
   // hardcoded-config audit rather than folded into an unrelated task's diff.
-  "artifacts/api-server/src/elaine/index.ts:9935", // MAX_ROUNDS (restricted-channel OpenAI-Responses attempt loop)
-  "artifacts/api-server/src/elaine/index.ts:10195", // MAX_ROUNDS (restricted-channel reply loop, SMS/email/Slack)
+  "artifacts/api-server/src/elaine/index.ts:9965", // MAX_ROUNDS (restricted-channel OpenAI-Responses attempt loop)
+  "artifacts/api-server/src/elaine/index.ts:10225", // MAX_ROUNDS (restricted-channel reply loop, SMS/email/Slack)
+
+  // ---- routes/ornaments/ornaments.ts ----
+  // Pre-existing input-validation caps (notes length, supplemental-image
+  // counts, bulk-reanalyze batch size) unrelated to the retail-value-lookup
+  // feature; flagged only because that feature touched this file. Genuine
+  // owner-configurability candidates for the broader hardcoded-config audit,
+  // not this task's scope.
+  "artifacts/api-server/src/routes/ornaments/ornaments.ts:119", // MAX_NOTES
+  "artifacts/api-server/src/routes/ornaments/ornaments.ts:123", // MAX_SUPPLEMENTAL_IMAGES
+  "artifacts/api-server/src/routes/ornaments/ornaments.ts:124", // MAX_AI_SUPPLEMENTAL
+  "artifacts/api-server/src/routes/ornaments/ornaments.ts:125", // MAX_BULK_REANALYZE
 
   // ---- routes/quilting/patterns.ts & quilts.ts ----
   // Pre-existing input-validation caps (field/notes/label lengths, reanalyze

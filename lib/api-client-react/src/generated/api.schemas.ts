@@ -2285,6 +2285,23 @@ export interface OrnamentsOrnamentItem {
   /** @nullable */
   bookValueUpdatedAt?: string | null;
   /**
+     * Original retail/MSRP value (distinct from bookValue, the collector/secondary-market value)
+     * @nullable
+     */
+  retailValueUsd?: number | null;
+  /**
+     * Link to the ornament's official product page, when one was found
+     * @nullable
+     */
+  retailValueProductUrl?: string | null;
+  /**
+     * Domain the retail value was attributed to (e.g. hallmark.com), or "web search"
+     * @nullable
+     */
+  retailValueSource?: string | null;
+  /** @nullable */
+  retailValueUpdatedAt?: string | null;
+  /**
      * Current active eBay listing minimum price USD (for-sale)
      * @nullable
      */
@@ -2377,6 +2394,12 @@ export interface OrnamentsOrnamentUpdate {
   bookValue?: number | null;
   /** @nullable */
   bookValueSource?: string | null;
+  /** @nullable */
+  retailValueUsd?: number | null;
+  /** @nullable */
+  retailValueProductUrl?: string | null;
+  /** @nullable */
+  retailValueSource?: string | null;
 }
 
 export type OrnamentsStragglerItemReasonsItem = typeof OrnamentsStragglerItemReasonsItem[keyof typeof OrnamentsStragglerItemReasonsItem];

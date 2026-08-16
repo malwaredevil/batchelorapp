@@ -1,4 +1,5 @@
 import { callModel, getModels } from "./ai-client";
+import { getElaineGlobalConfig } from "./elaine-config";
 
 /**
  * Multi-model advice panel for elAIne. When a question calls for expertise,
@@ -15,14 +16,13 @@ export interface ExpertConsultResult {
   answer: string;
 }
 
-const CONSULT_TIMEOUT_MS = 15_000;
-
 const EXPERT_SYSTEM_PROMPT =
   "You are a knowledgeable, opinionated advisor for a travel-planning assistant app. Give direct, practical, well-reasoned advice or a recommendation in a few sentences to a short paragraph. State an actual opinion or recommendation rather than a wishy-washy non-answer, and briefly say why.";
 
 async function askExpert(
   model: string,
   question: string,
+  timeoutMs: number,
   context?: string,
 ): Promise<string> {
   const userContent = context
@@ -38,7 +38,7 @@ async function askExpert(
         ],
         max_tokens: 500,
       },
-      { timeout: CONSULT_TIMEOUT_MS },
+      { timeout: timeoutMs },
     ),
   );
   return raw.choices[0]?.message?.content?.trim() ?? "";
@@ -52,11 +52,15 @@ export async function consultExperts(
   if (!trimmedQuestion) return { answer: "" };
   const trimmedContext = context?.trim().slice(0, 1000) || undefined;
 
-  const models = await getModels();
+  const [models, config] = await Promise.all([
+    getModels(),
+    getElaineGlobalConfig(),
+  ]);
+  const timeoutMs = config.timeouts.expertConsultMs;
   const expertPanel = [models.advisor, models.expertPanelAlt];
   const settled = await Promise.allSettled(
     expertPanel.map((model) =>
-      askExpert(model, trimmedQuestion, trimmedContext),
+      askExpert(model, trimmedQuestion, timeoutMs, trimmedContext),
     ),
   );
   const opinions = settled
@@ -93,7 +97,7 @@ export async function consultExperts(
           ],
           max_tokens: 500,
         },
-        { timeout: CONSULT_TIMEOUT_MS },
+        { timeout: timeoutMs },
       ),
     );
     const answer = merged.choices[0]?.message?.content?.trim();

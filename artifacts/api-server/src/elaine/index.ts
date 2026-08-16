@@ -84,6 +84,7 @@ import {
 } from "../lib/elaine-config";
 import {
   AdminConfigBody,
+  type AdminConfigPatch,
   applyAdminConfigPatch,
   resetElaineGlobalConfigToDefaults,
 } from "./admin-config";
@@ -99,7 +100,11 @@ import {
   resolveOpenAIResponsesModel,
   streamOpenAIResponseRound,
 } from "../lib/openai-responses";
-import { APP_CONFIG_DEFAULTS, updateConfigValue } from "../lib/app-config";
+import {
+  APP_CONFIG_DEFAULTS,
+  getAllConfig,
+  updateConfigValue,
+} from "../lib/app-config";
 import { listOpenRouterModels } from "../lib/openrouter-models";
 import { deleteTripPhoto } from "../lib/travels/storage";
 import { logActivity } from "../lib/soft-delete";
@@ -310,6 +315,8 @@ import {
   FETCH_PAGE_TOOL_NAME,
   FIND_NEARBY_PLACES_TOOL_NAME,
   GENERATE_DOCUMENT_TOOL_NAME,
+  GET_OWNER_SETTINGS_TOOL_NAME,
+  UPDATE_OWNER_SETTING_TOOL_NAME,
   LIST_SENTRY_ISSUES_TOOL_NAME,
   GET_AIR_QUALITY_TOOL_NAME,
   GET_EXCHANGE_RATE_TOOL_NAME,
@@ -372,6 +379,10 @@ import {
   detectLocationClear,
   detectStatedLocation,
 } from "./location-helpers.js";
+import {
+  buildOwnerSettingsElaineSection,
+  buildOwnerSettingsAppConfigSection,
+} from "./owner-settings-report";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -969,6 +980,15 @@ const UpdateAppConfigActionPayload = z.object({
   value: z.string().min(0).max(1000),
 });
 
+// Elaine global AI config update — owner-only, applies a single-field patch
+// to the elaine_global_config row via applyAdminConfigPatch. The executor
+// re-checks isOwner so non-owner users who somehow trigger it still get a 403.
+const UpdateOwnerSettingActionPayload = z.object({
+  field: z.string().min(1).max(200),
+  value: z.string().min(0).max(500),
+  currentValue: z.string().optional(),
+});
+
 const ActionBody = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("create_trip"),
@@ -1110,6 +1130,10 @@ const ActionBody = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("update_app_config"),
     payload: UpdateAppConfigActionPayload,
+  }),
+  z.object({
+    type: z.literal("update_owner_setting"),
+    payload: UpdateOwnerSettingActionPayload,
   }),
   ...potteryActionSchemas,
   ...quiltingActionSchemas,
@@ -1377,6 +1401,12 @@ async function buildActionLabel(action: PendingAction): Promise<string> {
     }
     case "update_app_config":
       return `Update Control Panel: set ${action.payload.module}.${action.payload.key} to "${action.payload.value}"`;
+    case "update_owner_setting": {
+      const from = action.payload.currentValue
+        ? ` (currently ${action.payload.currentValue})`
+        : "";
+      return `Update Elaine AI setting: set ${action.payload.field} to "${action.payload.value}"${from}`;
+    }
     default:
       if (POTTERY_ACTION_TYPES.has(action.type as PotteryActionType)) {
         return buildPotteryActionLabel(
@@ -2654,6 +2684,159 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
       };
     }
     return { status: 200, body: { type: "update_app_config", result: row } };
+  }) as ActionExecutor,
+
+  update_owner_setting: (async (
+    payload: z.infer<typeof UpdateOwnerSettingActionPayload>,
+    userId: number,
+  ) => {
+    const [me] = await db
+      .select({ isOwner: appUsers.isOwner })
+      .from(appUsers)
+      .where(eq(appUsers.id, userId));
+    if (!me?.isOwner) {
+      return {
+        status: 403,
+        body: {
+          error:
+            "Admin access required — only the app owner can change Elaine AI settings.",
+        },
+      };
+    }
+
+    // Explicit allowlist of every supported scalar field path → value type.
+    // Derived from AdminConfigBody in admin-config.ts. Any path not listed here
+    // is rejected with a 400 so a misspelling can never silently no-op (Zod's
+    // .partial() schema strips unknown keys rather than erroring on them).
+    // Array-valued fields (models.fusionModels) and doubly-nested objects
+    // (features.openAIStoreScopeOverrides / openAIStoreRoleOverrides) are
+    // intentionally excluded — they require a richer input contract.
+    type FieldType = "string" | "int" | "float" | "bool";
+    const FIELD_ALLOWLIST: ReadonlyMap<string, FieldType> = new Map([
+      // ── top-level ─────────────────────────────────────────────────────────
+      ["chatModel", "string"],
+      ["subagentModel", "string"],
+      ["requestTimeoutMs", "int"],
+      ["maxResponseTokens", "int"],
+      // ── models.* (all string) ─────────────────────────────────────────────
+      ["models.fastVision", "string"],
+      ["models.smartVision", "string"],
+      ["models.advisor", "string"],
+      ["models.research", "string"],
+      ["models.expertPanelAlt", "string"],
+      ["models.embedding", "string"],
+      ["models.openAIReasoning", "string"],
+      ["models.openAIBalanced", "string"],
+      ["models.openAIFast", "string"],
+      ["models.restrictedTextModel", "string"],
+      ["models.rerank", "string"],
+      ["models.visualEmbed", "string"],
+      ["models.fusionJudge", "string"],
+      // ── timeouts.* (all int, ms) ──────────────────────────────────────────
+      ["timeouts.expertConsultMs", "int"],
+      ["timeouts.rerankerMs", "int"],
+      ["timeouts.geocodingMs", "int"],
+      ["timeouts.fusionMs", "int"],
+      ["timeouts.openAIResponsesMs", "int"],
+      // ── features.* (all bool, simple scalar only) ─────────────────────────
+      ["features.enableAdvisor", "bool"],
+      ["features.enableSubagent", "bool"],
+      ["features.enableFusionPotteryExpert", "bool"],
+      ["features.enableFusionTravelDocFallback", "bool"],
+      ["features.enableOpenAIResponses", "bool"],
+      ["features.enableOpenAIAppWorkflows", "bool"],
+      ["features.enableOpenAIResponsesFallback", "bool"],
+      ["features.enableBuiltinWebSearch", "bool"],
+      ["features.showReasoningSummary", "bool"],
+      ["features.openAIStoreEnabledDefault", "bool"],
+      // ── thresholds.* ──────────────────────────────────────────────────────
+      ["thresholds.potterySimilarityYes", "float"],
+      ["thresholds.potterySimilarityMaybe", "float"],
+      ["thresholds.potterySimilarityNo", "float"],
+      ["thresholds.visualEmbedCropTop", "float"],
+      ["thresholds.visualEmbedCropHeight", "float"],
+      ["thresholds.aiJpegQuality", "int"],
+      ["thresholds.potteryZoneAnalysisMaxTokens", "int"],
+      ["thresholds.potteryBackstampMaxTokens", "int"],
+      ["thresholds.travelDocExtractionMaxTokens", "int"],
+      ["thresholds.openAIResponsesMaxOutputTokens", "int"],
+      ["thresholds.openAICompactionThresholdTokens", "int"],
+      ["thresholds.openAIStateMaxAgeDays", "int"],
+      ["thresholds.broadcastHourlyLimit", "int"],
+      ["thresholds.codeDiagnosisRecurrenceThreshold", "int"],
+    ]);
+
+    const fieldType = FIELD_ALLOWLIST.get(payload.field);
+    if (fieldType === undefined) {
+      const validPaths = [...FIELD_ALLOWLIST.keys()].sort().join(", ");
+      return {
+        status: 400,
+        body: {
+          error:
+            `"${payload.field}" is not a supported Elaine AI setting path. ` +
+            `Valid paths: ${validPaths}`,
+        },
+      };
+    }
+
+    // Coerce the string value to the correct JS type for this field.
+    let coerced: string | number | boolean;
+    if (fieldType === "bool") {
+      if (payload.value !== "true" && payload.value !== "false") {
+        return {
+          status: 400,
+          body: {
+            error: `"${payload.field}" is a boolean setting; value must be "true" or "false", got "${payload.value}".`,
+          },
+        };
+      }
+      coerced = payload.value === "true";
+    } else if (fieldType === "int" || fieldType === "float") {
+      const num = Number(payload.value);
+      if (!Number.isFinite(num)) {
+        return {
+          status: 400,
+          body: {
+            error: `"${payload.field}" requires a numeric value, got "${payload.value}".`,
+          },
+        };
+      }
+      coerced = fieldType === "int" ? Math.round(num) : num;
+    } else {
+      coerced = payload.value;
+    }
+
+    // Build the nested patch object from the dot-notation path.
+    const dotIdx = payload.field.indexOf(".");
+    let patch: AdminConfigPatch;
+    if (dotIdx === -1) {
+      patch = { [payload.field]: coerced } as AdminConfigPatch;
+    } else {
+      const group = payload.field.slice(0, dotIdx);
+      const subfield = payload.field.slice(dotIdx + 1);
+      patch = { [group]: { [subfield]: coerced } } as AdminConfigPatch;
+    }
+
+    // Run through AdminConfigBody for range validation (min/max checks).
+    const parseResult = AdminConfigBody.safeParse(patch);
+    if (!parseResult.success) {
+      const issues = parseResult.error.issues.map((i) => i.message).join("; ");
+      return {
+        status: 400,
+        body: { error: `Invalid value for "${payload.field}": ${issues}` },
+      };
+    }
+
+    const updated = await applyAdminConfigPatch(parseResult.data, userId);
+    return {
+      status: 200,
+      body: {
+        type: "update_owner_setting",
+        field: payload.field,
+        value: payload.value,
+        result: updated,
+      },
+    };
   }) as ActionExecutor,
 };
 
@@ -4070,6 +4253,10 @@ INTEGRATIONS HEALTH: When the owner asks whether a connected service is working 
 
 SENTRY ERRORS: When the owner asks about production errors — "are there any errors right now?", "what's broken in production?", "show me Sentry issues", "any crashes today?", "what errors are happening?" — call list_sentry_issues (owner-only). It returns up to 50 issues sorted by most recent. Default to environment: "production" and query: "is:unresolved" unless the owner specifically says otherwise. If the result says configured: false, tell the owner plainly that Sentry isn't connected yet (the SENTRY_AUTH_TOKEN, SENTRY_ORG_SLUG, or SENTRY_PROJECT_SLUG secret is missing) and that they can set it up in the Owner Panel. When issues are returned: lead with a one-line summary ("3 unresolved production errors" or "No unresolved issues — all clear"), then for each issue list its title, severity level, how many times it occurred (count), and when it was last seen. Keep the list concise — for more than 5 issues, show the top 5 by recency and note how many more exist. Never call this tool for non-owners.
 
+OWNER SETTINGS: When the owner asks about their current configurable settings — "what's my current tool-call budget?", "which model are you using?", "what's the request timeout set to?", "how often do you check Gmail?", "what settings can I change?" — call get_owner_settings (owner-only) to fetch the live values instead of guessing or answering from memory. It returns Elaine's global AI configuration (models, timeouts, token budgets, feature toggles, thresholds) and every Control Panel app-config entry with its module, key, label, and current value. Answer in plain English with just the values the owner asked about (use each entry's label/description to explain what it does); only give the full list when they ask what's configurable overall. Never call this tool for non-owners; if a non-owner asks, tell them only the app owner can view these settings.
+
+To CHANGE a setting: use update_app_config for Control Panel entries (module+key values visible on the Control Panel page), or use update_owner_setting for Elaine's global AI configuration (chat/subagent models, request timeout, response token budget, model roles, feature toggles, timeouts, thresholds). Before calling update_owner_setting, always call get_owner_settings first to read the current value and describe the exact change in your visible reply (e.g. "I'll raise your response token budget from 500 to 1000 — want me to apply that?"). Pass the current value as currentValue so the confirmation card shows "changing X from Y to Z". update_owner_setting is owner-only and excluded from SMS/voice/email channels — point owners to the Owner Panel if they ask from a restricted channel. When you execute update_owner_setting, the action result includes the full updated config — always state the new value explicitly in your reply. Never call update_owner_setting for non-owners.
+
 PROACTIVE CONFIG WARNINGS: When the on-screen page context already includes an "App config snapshot" section and a setting there looks likely to cause problems for what the current page does — for example, a very short request timeout on a page that runs AI analysis, or a very low token limit on a page that generates long text — volunteer a one-sentence observation early in your reply (e.g. "By the way, your AI timeout is set to 5 s, which may be why ornament analysis keeps timing out — the app owner can raise it in the Control Panel."). Only do this when the config value is genuinely out of range for the task at hand and is visible in the current page context; do not speculate about settings you haven't seen, and don't repeat the warning in the same conversation if you've already mentioned it.
 
 WEB SEARCH & PAGE READING: You have a real-time web_search tool AND a fetch_page tool — use them actively. Never tell the user to search Google or visit a website themselves; if you catch yourself writing "you could Google this" or "you might want to visit X", stop and call web_search instead. Use web_search proactively (no permission needed) for ANY question that benefits from current or specific information — prices, opening hours, product details, how-to guides, reviews, news, events, visa rules, recipes, recommendations, anything — not just travel topics. Call it multiple times if needed for different angles on the same question. If search results point to a specific page that would have more detail than the summary (e.g. an official site, a how-to article, a product listing), use fetch_page to read that URL and extract the relevant details before you answer. Once you have all the information: write your answer based on what you found, cite sources naturally (e.g. "according to [Site Name]"), and at the very end of your reply always include one Google search link formatted as: 🔍 [Search Google for "your query"](https://www.google.com/search?q=url+encoded+query) — this gives the user a quick way to explore further on their own. Never paste raw search output verbatim, never fabricate a fact instead of searching, and do not use web_search or fetch_page for things already in the on-screen state or for stable general knowledge that definitely hasn't changed.
@@ -4726,14 +4913,10 @@ router.post("/chat", async (req, res) => {
     requestClass,
     plan,
     sourceRoute,
-    budget: {
-      maxModelRounds: 4,
-      maxToolCalls: 16,
-      maxReplans: 2,
-      maxElapsedMs: useOpenAIResponses
-        ? Math.max(120_000, elaineConfig.timeouts.openAIResponsesMs * 4)
-        : Math.max(30_000, elaineConfig.requestTimeoutMs * 4),
-    },
+    // Owner-configurable via the Global Configuration panel (see
+    // RuntimeBudgetConfig in lib/elaine-config.ts) — no hardcoded literals
+    // here so the ceilings can be raised/lowered without a code change.
+    budget: { ...elaineConfig.runtimeBudget },
     eventSink: (event, trace) => sendEvent("runtime", { event, trace }),
   });
   if (pageContext?.trim()) {
@@ -4831,9 +5014,13 @@ router.post("/chat", async (req, res) => {
   // Read tools and the explicit immediate memory write feed their result back
   // before the model writes its final reply. That normally takes two model
   // calls: one that emits the tool call(s), then a second with results
-  // appended as `tool` messages. Capped at MAX_ROUNDS so a confused model
-  // cannot loop indefinitely on AI spend.
-  const MAX_ROUNDS = 4;
+  // appended as `tool` messages. Capped at MAX_ROUNDS (owner-configurable via
+  // elaineConfig.runtimeBudget.maxModelRounds) so a confused model cannot loop
+  // indefinitely on AI spend. This must stay in lockstep with the
+  // ElaineTurnRuntime's own maxModelRounds budget below — they are the same
+  // configured ceiling enforced at two layers (the model-call loop bound here,
+  // and the runtime's independent accounting), not two different numbers.
+  const MAX_ROUNDS = elaineConfig.runtimeBudget.maxModelRounds;
   const allAssistantTools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     ...ACTION_TOOLS,
     ...SOFT_TOOLS,
@@ -5263,14 +5450,29 @@ router.post("/chat", async (req, res) => {
       }
 
       if (!schedule?.allowed) {
+        // Every non-hard-tool call the scheduler vetoes gets a diagnostic
+        // log line — not just schedulable actions — so a "why did this get
+        // dropped" question (including a plain soft/widget tool blocked by
+        // the runtime budget) can always be answered from server logs
+        // alone. Hard-tool blocks are logged separately below, where the
+        // model-facing result text is also assembled.
+        if (schedule) {
+          req.log.warn(
+            {
+              traceId,
+              tool: name,
+              reason: schedule.reason,
+              budgetStatus: runtime.getBudgetStatus(),
+            },
+            ACTION_TOOL_NAMES.has(name)
+              ? "elaine: schedulable action vetoed by runtime scheduler"
+              : "elaine: tool-call blocked by runtime scheduler",
+          );
+        }
         // Only schedulable-action tools need a corrective note — a vetoed
         // navigate/set_mode/data_card call has no "confirm this" narrative
         // for the model to have already committed to.
         if (ACTION_TOOL_NAMES.has(name) && schedule) {
-          req.log.warn(
-            { traceId, tool: name, reason: schedule.reason },
-            "elaine: schedulable action vetoed by runtime scheduler",
-          );
           runtime.recordObservation({
             callId: schedule.id,
             toolName: name,
@@ -5545,6 +5747,20 @@ router.post("/chat", async (req, res) => {
         hasPendingConfirmation: resolvedActions.length > 0,
       });
       if (
+        !decision.shouldReplan &&
+        decision.verification.status === "blocked"
+      ) {
+        req.log.warn(
+          {
+            traceId,
+            reason: decision.verification.summary,
+            unsatisfiedCriteria: decision.verification.unsatisfiedCriteria,
+            budgetStatus: runtime.getBudgetStatus(),
+          },
+          "elaine: turn blocked by runtime (mid-loop verification)",
+        );
+      }
+      if (
         decision.shouldReplan &&
         decision.instruction &&
         round < MAX_ROUNDS - 1
@@ -5649,7 +5865,12 @@ router.post("/chat", async (req, res) => {
             call.runtimeReason ?? "Tool call blocked by plan dependencies";
           runtimeErrorCategory = "dependency_blocked";
           req.log.info(
-            { tool: call.name, traceId },
+            {
+              tool: call.name,
+              traceId,
+              reason: runtimeSummary,
+              budgetStatus: runtime.getBudgetStatus(),
+            },
             "elaine: tool-call blocked by runtime",
           );
           return {
@@ -6973,6 +7194,38 @@ router.post("/chat", async (req, res) => {
                 cachedAt,
               });
             }
+          } else if (call.name === GET_OWNER_SETTINGS_TOOL_NAME) {
+            const [me] = await db
+              .select({ isOwner: appUsers.isOwner })
+              .from(appUsers)
+              .where(eq(appUsers.id, userId));
+            if (!me?.isOwner) {
+              resultText =
+                "Access denied — only the app owner can view owner-configurable settings.";
+            } else {
+              const parsed = JSON.parse(call.args ?? "{}") as {
+                section?: unknown;
+                module?: unknown;
+              };
+              const section =
+                parsed.section === "elaine" || parsed.section === "app_config"
+                  ? parsed.section
+                  : "all";
+              const moduleFilter =
+                typeof parsed.module === "string" && parsed.module.trim()
+                  ? parsed.module.trim()
+                  : undefined;
+              const result: Record<string, unknown> = {};
+              if (section !== "app_config") {
+                const cfg = await getElaineGlobalConfig();
+                result.elaine = buildOwnerSettingsElaineSection(cfg);
+              }
+              if (section !== "elaine") {
+                const rows = await getAllConfig(moduleFilter);
+                result.appConfig = buildOwnerSettingsAppConfigSection(rows);
+              }
+              resultText = JSON.stringify(result);
+            }
           } else if (call.name === LIST_SENTRY_ISSUES_TOOL_NAME) {
             const [me] = await db
               .select({ isOwner: appUsers.isOwner })
@@ -7105,6 +7358,17 @@ router.post("/chat", async (req, res) => {
     finalContent: rawContent,
     hasPendingConfirmation: resolvedActions.length > 0,
   });
+  if (finalVerification.verification.status === "blocked") {
+    req.log.warn(
+      {
+        traceId,
+        reason: finalVerification.verification.summary,
+        unsatisfiedCriteria: finalVerification.verification.unsatisfiedCriteria,
+        budgetStatus: runtime.getBudgetStatus(),
+      },
+      "elaine: turn ended with blocked verification status",
+    );
+  }
   if (
     !rawContent.trim() &&
     finalVerification.verification.status === "blocked"

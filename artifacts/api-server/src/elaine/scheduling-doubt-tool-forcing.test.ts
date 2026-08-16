@@ -83,6 +83,12 @@ const {
     },
     thresholds: { openAIStateMaxAgeDays: 7 },
     timeouts: { openAIResponsesMs: 60_000 },
+    runtimeBudget: {
+      maxModelRounds: 8,
+      maxToolCalls: 24,
+      maxReplans: 10,
+      maxElapsedMs: 240_000,
+    },
     // Other config fields accessed in the handler
     replanBudget: 2,
   });
@@ -262,6 +268,15 @@ vi.mock("../lib/ai-client", () => ({
 // ── Elaine config ─────────────────────────────────────────────────────────
 vi.mock("../lib/elaine-config", () => ({
   getElaineGlobalConfig: mockGetElaineGlobalConfig,
+  // ElaineTurnRuntime (imported via ./runtime below) falls back to this
+  // constant when no `budget` override is passed — must stay in the mock or
+  // the module import throws "No DEFAULT_RUNTIME_BUDGET export is defined".
+  DEFAULT_RUNTIME_BUDGET: {
+    maxModelRounds: 8,
+    maxToolCalls: 24,
+    maxReplans: 10,
+    maxElapsedMs: 240_000,
+  },
 }));
 
 // ── App config ────────────────────────────────────────────────────────────
@@ -513,6 +528,12 @@ function applyDefaultMocks() {
     },
     thresholds: { openAIStateMaxAgeDays: 7 },
     timeouts: { openAIResponsesMs: 60_000 },
+    runtimeBudget: {
+      maxModelRounds: 8,
+      maxToolCalls: 24,
+      maxReplans: 10,
+      maxElapsedMs: 240_000,
+    },
   });
   mockIsOpenAIResponsesConfigured.mockReturnValue(false);
   mockPersistElaineTrace.mockResolvedValue(false);

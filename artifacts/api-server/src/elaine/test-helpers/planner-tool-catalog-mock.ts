@@ -43,6 +43,8 @@ export interface PlannerToolCatalogMockShape {
   ANALYZE_POTTERY_PHOTO_TOOL_NAME: string;
   CALCULATE_YARDAGE_TOOL_NAME: string;
   CHECK_INTEGRATIONS_HEALTH_TOOL_NAME: string;
+  GET_OWNER_SETTINGS_TOOL_NAME: string;
+  UPDATE_OWNER_SETTING_TOOL_NAME: string;
   LIST_SENTRY_ISSUES_TOOL_NAME: string;
   CONSULT_EXPERTS_TOOL_NAME: string;
   EBAY_SEARCH_TOOL_NAME: string;
@@ -99,6 +101,8 @@ export const PLANNER_TOOL_CATALOG_MOCK_DEFAULTS: PlannerToolCatalogMockShape = {
   ANALYZE_POTTERY_PHOTO_TOOL_NAME: "analyze_pottery_photo",
   CALCULATE_YARDAGE_TOOL_NAME: "calculate_yardage",
   CHECK_INTEGRATIONS_HEALTH_TOOL_NAME: "check_integrations_health",
+  GET_OWNER_SETTINGS_TOOL_NAME: "get_owner_settings",
+  UPDATE_OWNER_SETTING_TOOL_NAME: "update_owner_setting",
   LIST_SENTRY_ISSUES_TOOL_NAME: "list_sentry_issues",
   CONSULT_EXPERTS_TOOL_NAME: "consult_experts",
   EBAY_SEARCH_TOOL_NAME: "ebay_search",

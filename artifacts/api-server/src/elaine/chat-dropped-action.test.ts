@@ -191,6 +191,12 @@ vi.mock("../lib/elaine-config", () => ({
       enableBuiltinWebSearch: false,
     },
     timeouts: { openAIResponsesMs: 60_000 },
+    runtimeBudget: {
+      maxModelRounds: 8,
+      maxToolCalls: 24,
+      maxReplans: 10,
+      maxElapsedMs: 240_000,
+    },
     thresholds: { openAIStateMaxAgeDays: 7 },
     chatWindowSize: "comfortable",
     actionConfirmationMode: "one_by_one",
@@ -450,6 +456,17 @@ vi.mock("./runtime", () =>
       setTraceAvailable = mockSetTraceAvailable;
       markFailedReadStepsAdjusted = mockMarkFailedReadStepsAdjusted;
       recordObservation = mockRecordObservation;
+      getBudgetStatus = vi.fn().mockReturnValue({
+        exhausted: false,
+        hitLimits: [],
+        usage: { modelRounds: 0, toolCalls: 0, replans: 0, elapsedMs: 0 },
+        budget: {
+          maxModelRounds: 4,
+          maxToolCalls: 16,
+          maxReplans: 2,
+          maxElapsedMs: 120_000,
+        },
+      });
     },
   }),
 );

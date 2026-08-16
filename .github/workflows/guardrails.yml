@@ -42,3 +42,6 @@ jobs:
 
       - name: "Ban: raw fetch('/api/...') in frontend artifacts"
         run: pnpm --filter @workspace/scripts run check-raw-fetch
+
+      - name: "Ban: hardcoded configuration values (should be owner-adjustable)"
+        run: pnpm --filter @workspace/scripts run check-hardcoded-config -- --base origin/main

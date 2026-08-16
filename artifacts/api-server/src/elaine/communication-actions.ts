@@ -18,6 +18,7 @@ import {
 import { initiateOutboundCall, waitForCallOutcome } from "../lib/calls";
 import { openDmChannel, postSlackMessage, slackConfigured } from "../lib/slack";
 import { sendAssistantEmail, resendConfigured } from "../lib/email";
+import { getElaineGlobalConfig } from "../lib/elaine-config";
 import { logger } from "../lib/logger";
 import {
   resolveRelativeTime,
@@ -136,11 +137,11 @@ const BroadcastMessagePayload = z.object({
     .describe("The text to broadcast to all your connected channels."),
 });
 
-// Per-user broadcast rate limit: max 3 per hour.
+// Per-user broadcast rate limit.
 // Persisted in the DB so the cap survives server restarts and deployments.
 // Each successful broadcast inserts a row into elaine_broadcast_log; the
 // check counts rows WHERE user_id = ? AND created_at > now() - 1 hour.
-const BROADCAST_HOURLY_LIMIT = 3;
+// The limit is owner-configurable via getElaineGlobalConfig().thresholds.broadcastHourlyLimit.
 const BROADCAST_WINDOW_MS = 60 * 60 * 1000;
 
 async function checkBroadcastRateLimit(userId: number): Promise<{
@@ -150,12 +151,15 @@ async function checkBroadcastRateLimit(userId: number): Promise<{
   // Wrap count + insert in a transaction protected by a per-user PostgreSQL
   // advisory transaction lock. pg_advisory_xact_lock serializes concurrent
   // requests for the same userId so two simultaneous callers cannot both
-  // observe count < 3 and each sneak in a row (and a broadcast). The lock is
-  // released automatically when the transaction ends.
+  // observe count < limit and each sneak in a row (and a broadcast). The lock
+  // is released automatically when the transaction ends.
   //
   // The row is inserted BEFORE delivery begins (a "slot reservation" model):
   // this means a delivery failure does not reclaim the slot, which is
   // intentional — it prevents retries from bypassing the limit.
+  const config = await getElaineGlobalConfig();
+  const broadcastHourlyLimit = config.thresholds.broadcastHourlyLimit;
+
   return await db.transaction(async (tx) => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(${userId}::bigint)`);
 
@@ -174,7 +178,7 @@ async function checkBroadcastRateLimit(userId: number): Promise<{
       );
 
     const total = result?.total ?? 0;
-    if (total >= BROADCAST_HOURLY_LIMIT) {
+    if (total >= broadcastHourlyLimit) {
       const oldestMs = result?.oldest
         ? new Date(result.oldest).getTime()
         : Date.now();

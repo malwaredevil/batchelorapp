@@ -939,6 +939,11 @@ export const PLANNER_TOOL_CATALOG_REQUIRED_EXPORTS: ReadonlyArray<{
     key: "CHECK_INTEGRATIONS_HEALTH_TOOL_NAME",
     value: "check_integrations_health",
   },
+  { key: "GET_OWNER_SETTINGS_TOOL_NAME", value: "get_owner_settings" },
+  {
+    key: "UPDATE_OWNER_SETTING_TOOL_NAME",
+    value: "update_owner_setting",
+  },
   { key: "LIST_SENTRY_ISSUES_TOOL_NAME", value: "list_sentry_issues" },
   { key: "CONSULT_EXPERTS_TOOL_NAME", value: "consult_experts" },
   { key: "EBAY_SEARCH_TOOL_NAME", value: "ebay_search" },

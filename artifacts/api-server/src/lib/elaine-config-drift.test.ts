@@ -41,6 +41,7 @@ const CONFIG_INTERFACES = [
   "TimeoutsConfig",
   "FeaturesConfig",
   "ThresholdsConfig",
+  "RuntimeBudgetConfig",
   "ElaineGlobalConfig",
 ];
 

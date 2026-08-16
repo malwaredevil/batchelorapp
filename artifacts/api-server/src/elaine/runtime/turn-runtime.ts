@@ -5,6 +5,7 @@ import {
   type ElaineRuntimeBudget,
   type ElaineRuntimeEvent,
   type ElaineRuntimeTrace,
+  type ElaineRuntimeUsage,
   type ElaineTerminalStatus,
   type ElaineVerification,
   type ElaineRequestClass,
@@ -12,6 +13,7 @@ import {
   type ElaineSourceRoute,
 } from "./contracts";
 import { hasCurrentRetrievedEvidence } from "./source-policy";
+import { DEFAULT_RUNTIME_BUDGET } from "../../lib/elaine-config";
 
 export interface RuntimeToolCall {
   id: string;
@@ -42,12 +44,35 @@ export interface RuntimeVerificationDecision {
   verification: ElaineVerification;
 }
 
-const DEFAULT_BUDGET: ElaineRuntimeBudget = {
-  maxModelRounds: 4,
-  maxToolCalls: 16,
-  maxReplans: 2,
-  maxElapsedMs: 120_000,
-};
+// Fallback used only when the caller doesn't supply a budget (e.g. tests
+// that construct ElaineTurnRuntime directly). Production call sites read
+// the actual ceilings from elaine_global_config. Re-exported from
+// lib/elaine-config's DEFAULT_RUNTIME_BUDGET (the single source of truth
+// for these numbers) rather than duplicated here, so a runtime built
+// without an explicit budget can never silently drift from the shipped
+// defaults.
+const DEFAULT_BUDGET: ElaineRuntimeBudget = DEFAULT_RUNTIME_BUDGET;
+
+/** A single budget dimension that was at or past its configured ceiling. */
+export interface ElaineRuntimeBudgetHit {
+  limit: keyof ElaineRuntimeBudget;
+  used: number;
+  max: number;
+}
+
+/**
+ * Full point-in-time snapshot of usage vs. configured ceilings, for
+ * diagnostic (pino) logging — not for the user-facing SSE trace, which only
+ * ever gets the sanitized `summary` string. Lets a "why did this turn get
+ * blocked / why was this tool call blocked" question be answered from
+ * server logs alone, without needing the (best-effort) trace row.
+ */
+export interface ElaineRuntimeBudgetStatus {
+  exhausted: boolean;
+  hitLimits: ElaineRuntimeBudgetHit[];
+  usage: ElaineRuntimeUsage;
+  budget: ElaineRuntimeBudget;
+}
 
 function clonePlan(plan: ElainePlan): ElainePlan {
   return {
@@ -632,13 +657,55 @@ export class ElaineTurnRuntime {
   }
 
   private budgetWasExhausted(): boolean {
+    return this.getBudgetStatus().exhausted;
+  }
+
+  /**
+   * Point-in-time usage vs. each configured ceiling, for diagnostic logging
+   * at the call site (e.g. a blocked tool call or a "blocked" terminal
+   * verification). Public and side-effect-free (besides refreshing the
+   * elapsed-time counter) so callers can log it without affecting runtime
+   * state.
+   */
+  getBudgetStatus(): ElaineRuntimeBudgetStatus {
     this.refreshElapsed();
-    return (
-      this.trace.usage.modelRounds >= this.budget.maxModelRounds ||
-      this.trace.usage.toolCalls > this.budget.maxToolCalls ||
-      this.trace.usage.replans >= this.budget.maxReplans ||
-      this.trace.usage.elapsedMs > this.budget.maxElapsedMs
-    );
+    const usage = this.trace.usage;
+    const budget = this.budget;
+    const hitLimits: ElaineRuntimeBudgetHit[] = [];
+    if (usage.modelRounds >= budget.maxModelRounds) {
+      hitLimits.push({
+        limit: "maxModelRounds",
+        used: usage.modelRounds,
+        max: budget.maxModelRounds,
+      });
+    }
+    if (usage.toolCalls > budget.maxToolCalls) {
+      hitLimits.push({
+        limit: "maxToolCalls",
+        used: usage.toolCalls,
+        max: budget.maxToolCalls,
+      });
+    }
+    if (usage.replans >= budget.maxReplans) {
+      hitLimits.push({
+        limit: "maxReplans",
+        used: usage.replans,
+        max: budget.maxReplans,
+      });
+    }
+    if (usage.elapsedMs > budget.maxElapsedMs) {
+      hitLimits.push({
+        limit: "maxElapsedMs",
+        used: usage.elapsedMs,
+        max: budget.maxElapsedMs,
+      });
+    }
+    return {
+      exhausted: hitLimits.length > 0,
+      hitLimits,
+      usage: { ...usage },
+      budget: { ...budget },
+    };
   }
 
   private refreshElapsed(): void {

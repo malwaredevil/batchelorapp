@@ -124,8 +124,36 @@ export interface ThresholdsConfig {
   // this never fires on a single occurrence — see
   // lib/elaine-code-diagnosis.ts.
   codeDiagnosisRecurrenceThreshold: number;
+  // Max successful broadcasts per user per rolling hour window. Persisted in
+  // the DB so the cap survives server restarts. Raise if a household needs to
+  // send bulk announcements more frequently.
+  broadcastHourlyLimit: number;
 }
 
+/**
+ * Ceilings for Elaine's per-turn agentic loop (see
+ * artifacts/api-server/src/elaine/runtime/turn-runtime.ts). Previously a
+ * hardcoded literal object built at the chat call site — moved here so the
+ * owner can raise/lower them (e.g. after seeing "Runtime budget exhausted"
+ * in a trace) without a code change.
+ */
+export interface RuntimeBudgetConfig {
+  // Cap on how many times the model can be called in a single turn
+  // (tool-call round-trips + the final answer). Each replan (see
+  // maxReplans) also consumes a model round.
+  maxModelRounds: number;
+  // Cap on the total number of tool calls attempted in a single turn,
+  // across all rounds.
+  maxToolCalls: number;
+  // Cap on how many times the runtime may adapt the plan mid-turn (add an
+  // unplanned step, or ask the model to try again after incomplete
+  // evidence). Distinct from maxModelRounds: a replan always costs a model
+  // round, but not every model round is a replan.
+  maxReplans: number;
+  // Wall-clock cap for the whole turn, in milliseconds, independent of
+  // round/tool-call/replan counts.
+  maxElapsedMs: number;
+}
 export interface ElaineGlobalConfig {
   chatModel: string;
   subagentModel: string;
@@ -135,6 +163,7 @@ export interface ElaineGlobalConfig {
   timeouts: TimeoutsConfig;
   features: FeaturesConfig;
   thresholds: ThresholdsConfig;
+  runtimeBudget: RuntimeBudgetConfig;
   updatedAt: string | null;
 }
 
@@ -192,10 +221,15 @@ export const DEFAULT_THRESHOLDS: ThresholdsConfig = {
   openAICompactionThresholdTokens: 80_000,
   openAIStateMaxAgeDays: 29,
   codeDiagnosisRecurrenceThreshold: 3,
+  broadcastHourlyLimit: 3,
 };
 
-// Exported (not just module-local) so the admin "reset to defaults" route and
-// tests can reuse this single source of truth instead of hand-duplicating it.
+export const DEFAULT_RUNTIME_BUDGET: RuntimeBudgetConfig = {
+  maxModelRounds: 8,
+  maxToolCalls: 24,
+  maxReplans: 10,
+  maxElapsedMs: 240_000,
+};
 export const ELAINE_CONFIG_DEFAULTS: ElaineGlobalConfig = {
   chatModel: "google/gemini-2.5-flash",
   subagentModel: "z-ai/glm-5.2",
@@ -205,6 +239,7 @@ export const ELAINE_CONFIG_DEFAULTS: ElaineGlobalConfig = {
   timeouts: DEFAULT_TIMEOUTS,
   features: DEFAULT_FEATURES,
   thresholds: DEFAULT_THRESHOLDS,
+  runtimeBudget: DEFAULT_RUNTIME_BUDGET,
   updatedAt: null,
 };
 
@@ -241,9 +276,12 @@ function mergeThresholds(stored: unknown): ThresholdsConfig {
   };
 }
 
-// Short in-memory cache so every chat turn / AI call doesn't hit the DB, but
-// an admin edit takes effect within a few seconds without needing a server
-// restart.
+function mergeRuntimeBudget(stored: unknown): RuntimeBudgetConfig {
+  return {
+    ...DEFAULT_RUNTIME_BUDGET,
+    ...((stored ?? {}) as Partial<RuntimeBudgetConfig>),
+  };
+}
 const CACHE_TTL_MS = 30_000;
 let cached: { value: ElaineGlobalConfig; expiresAt: number } | null = null;
 
@@ -264,6 +302,7 @@ export async function getElaineGlobalConfig(): Promise<ElaineGlobalConfig> {
         timeouts: mergeTimeouts(row.timeouts),
         features: mergeFeatures(row.features),
         thresholds: mergeThresholds(row.thresholds),
+        runtimeBudget: mergeRuntimeBudget(row.runtimeBudget),
         updatedAt: row.updatedAt?.toISOString() ?? null,
       };
     }

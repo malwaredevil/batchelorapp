@@ -395,6 +395,13 @@ export const elaineGlobalConfig = pgTable("elaine_global_config", {
   thresholds: jsonb("thresholds")
     .notNull()
     .default(sql`'{}'::jsonb`),
+  // Per-turn agentic-loop ceilings for Elaine's runtime (maxModelRounds,
+  // maxToolCalls, maxReplans, maxElapsedMs). Previously hardcoded at the
+  // chat call site; moved here so the owner can raise/lower them without a
+  // code change. See RuntimeBudgetConfig in lib/elaine-config.ts.
+  runtimeBudget: jsonb("runtime_budget")
+    .notNull()
+    .default(sql`'{}'::jsonb`),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

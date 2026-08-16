@@ -306,6 +306,54 @@ function git(root: string, args: string[]): string {
   }
 }
 
+function refResolves(root: string, ref: string): boolean {
+  try {
+    execFileSync(
+      "git",
+      ["-C", root, "rev-parse", "--verify", "--quiet", `${ref}^{commit}`],
+      { encoding: "utf8" },
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// This repo's CI checkout (actions/checkout) always creates a remote named
+// "origin", but the live Replit workspace's git-to-GitHub connection is a
+// remote named "github" instead — "origin" does not exist there. Without
+// this fallback, every local run would silently diff against nothing (see
+// below) even though a real, resolvable upstream ref is available.
+const LOCAL_BASE_FALLBACK: Record<string, string> = {
+  "origin/main": "github/main",
+};
+
+/**
+ * `git diff base...HEAD` silently succeeds with empty output if `base` can't
+ * be resolved at all (unknown ref) — which would make every check below
+ * report a false-clean "no violations" instead of failing loudly. Resolve to
+ * a real ref (falling back to this environment's actual upstream remote when
+ * the CI-only default isn't present), or fail loudly if nothing resolves.
+ */
+function resolveBase(root: string, base: string): string {
+  if (refResolves(root, base)) return base;
+  const fallback = LOCAL_BASE_FALLBACK[base];
+  if (fallback && refResolves(root, fallback)) {
+    console.error(
+      `(note: "${base}" not found in this checkout — diffing against "${fallback}" instead)`,
+    );
+    return fallback;
+  }
+  throw new Error(
+    `Cannot resolve base ref "${base}"${fallback ? ` (or fallback "${fallback}")` : ""} — ` +
+      `no such branch/remote in this checkout, so the diff would silently be empty and ` +
+      `every guardrail check below would falsely report "no violations" instead of ` +
+      `actually checking anything. In CI this ref is "origin/main" (created by ` +
+      `actions/checkout). Locally, pass a --base that actually exists in this ` +
+      `checkout, or fetch the missing ref.`,
+  );
+}
+
 function readFileOrNull(root: string, file: string): string | null {
   try {
     return fs.readFileSync(`${root}/${file}`, "utf8");
@@ -316,14 +364,19 @@ function readFileOrNull(root: string, file: string): string | null {
 
 export function runGuardrailChecks(base: string): CheckResult[] {
   const root = repoRoot();
-  const changedFiles = git(root, ["diff", "--name-only", `${base}...HEAD`])
+  const resolvedBase = resolveBase(root, base);
+  const changedFiles = git(root, [
+    "diff",
+    "--name-only",
+    `${resolvedBase}...HEAD`,
+  ])
     .split("\n")
     .map((s) => s.trim())
     .filter(Boolean);
 
   const fullDiff = git(root, [
     "diff",
-    `${base}...HEAD`,
+    `${resolvedBase}...HEAD`,
     "--",
     ".",
     ":!.github/**",
@@ -336,7 +389,7 @@ export function runGuardrailChecks(base: string): CheckResult[] {
 
   const schemaDiff = git(root, [
     "diff",
-    `${base}...HEAD`,
+    `${resolvedBase}...HEAD`,
     "--",
     "lib/db/src/schema-statements.ts",
   ]);
@@ -351,11 +404,14 @@ export function runGuardrailChecks(base: string): CheckResult[] {
   try {
     baseExclusionSource = git(root, [
       "show",
-      `${base}:${RESTRICTED_EXCLUSION_SOURCE_PATH}`,
+      `${resolvedBase}:${RESTRICTED_EXCLUSION_SOURCE_PATH}`,
     ]);
   } catch {
     try {
-      baseExclusionSource = git(root, ["show", `${base}:${ELAINE_INDEX_PATH}`]);
+      baseExclusionSource = git(root, [
+        "show",
+        `${resolvedBase}:${ELAINE_INDEX_PATH}`,
+      ]);
     } catch {
       baseExclusionSource = null;
     }
@@ -414,7 +470,18 @@ function getArg(name: string, fallback: string): string {
 
 function main(): void {
   const base = getArg("base", "origin/main");
-  const results = runGuardrailChecks(base);
+  let results: CheckResult[];
+  try {
+    results = runGuardrailChecks(base);
+  } catch (error) {
+    console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.error("ERROR: Guardrail checks could not run");
+    console.error("");
+    console.error((error as Error).message);
+    console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    process.exitCode = 1;
+    return;
+  }
   let failed = false;
 
   for (const result of results) {

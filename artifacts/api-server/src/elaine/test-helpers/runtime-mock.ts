@@ -133,6 +133,17 @@ export const RUNTIME_MOCK_DEFAULTS: RuntimeMockShape = {
     setTraceAvailable = vi.fn();
     markFailedReadStepsAdjusted = vi.fn();
     recordObservation = vi.fn();
+    getBudgetStatus = vi.fn().mockReturnValue({
+      exhausted: false,
+      hitLimits: [],
+      usage: { modelRounds: 0, toolCalls: 0, replans: 0, elapsedMs: 0 },
+      budget: {
+        maxModelRounds: 4,
+        maxToolCalls: 16,
+        maxReplans: 2,
+        maxElapsedMs: 120_000,
+      },
+    });
   },
   evaluateElaineTrace: vi.fn().mockResolvedValue({}),
   evaluateForecastDateCoverage: vi.fn().mockResolvedValue({}),

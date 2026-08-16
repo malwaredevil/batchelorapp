@@ -33,6 +33,7 @@ import {
   UpdateQuiltImageParams,
   UpdateQuiltImageBody,
   DeleteQuiltImageParams,
+  SetQuiltImageDefaultBody,
 } from "@workspace/api-zod";
 import { requireAuth } from "../../middleware/auth";
 import { aiLimiter, bulkAiLimiter } from "../../middleware/rateLimit";
@@ -55,6 +56,7 @@ import {
 } from "../../lib/storage";
 import { analyzeQuiltImage } from "../../lib/openai";
 import { serializeQuilt, serializeQuilts } from "../../lib/serialize";
+import { pathCacheBuster } from "../../lib/path-cache-buster";
 
 const MAX_NAME = 200;
 const MAX_NOTES = 4000;
@@ -586,7 +588,7 @@ router.get("/quilts/:id/image", async (req, res) => {
 
 router.post("/quilts/:id/images", upload.single("image"), async (req, res) => {
   const { id } = AddQuiltImageParams.parse(req.params);
-  const body = AddQuiltImageBody.parse(req.body);
+  const body = AddQuiltImageBody.omit({ image: true }).parse(req.body);
 
   // Verify the quilt exists
   const [quilt] = await db
@@ -748,6 +750,96 @@ router.delete("/quilts/:id/images/:imageId", async (req, res) => {
     return;
   }
   res.status(200).json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// Set supplemental image as the quilt's default photo
+// ---------------------------------------------------------------------------
+// Atomically swaps the supplemental image's storage path with the quilt's
+// current image_path, so the /image route immediately serves the new default
+// without any URL change on the client.
+
+router.post("/quilts/:id/images/:imageId/set-default", async (req, res) => {
+  const { id } = DeleteQuiltParams.parse(req.params);
+  const { imageId } = DeleteQuiltImageParams.parse(req.params);
+  const { expectedVersion } = SetQuiltImageDefaultBody.parse(req.body ?? {});
+
+  let swapped = false;
+  let versionConflict = false;
+  await db.transaction(async (tx) => {
+    const [quilt] = await tx
+      .select({ id: finishedQuilts.id, imagePath: finishedQuilts.imagePath })
+      .from(finishedQuilts)
+      .where(eq(finishedQuilts.id, id))
+      .for("update")
+      .limit(1);
+    if (!quilt) return;
+
+    const [img] = await tx
+      .select({
+        id: quiltingImages.id,
+        storagePath: quiltingImages.storagePath,
+      })
+      .from(quiltingImages)
+      .where(
+        sql`${quiltingImages.id} = ${imageId} AND entity_type = 'quilt' AND entity_id = ${id} AND deleted_at IS NULL`,
+      )
+      .for("update")
+      .limit(1);
+    if (!img) return;
+
+    // Compare-and-swap: the swap is symmetric (a repeat would swap back), so
+    // when the client supplies the version it rendered, refuse to apply the
+    // swap against a storage path it hasn't seen. This makes retries and
+    // duplicate deliveries of an already-applied promotion a no-op 409.
+    if (
+      expectedVersion != null &&
+      pathCacheBuster(img.storagePath) !== expectedVersion
+    ) {
+      versionConflict = true;
+      return;
+    }
+
+    const oldImagePath = quilt.imagePath;
+    const newImagePath = img.storagePath;
+
+    if (newImagePath === oldImagePath) {
+      swapped = true;
+      return;
+    }
+
+    await tx
+      .update(finishedQuilts)
+      .set({ imagePath: newImagePath })
+      .where(eq(finishedQuilts.id, id));
+    await tx
+      .update(quiltingImages)
+      .set({ storagePath: oldImagePath })
+      .where(eq(quiltingImages.id, imageId));
+
+    swapped = true;
+  });
+
+  if (versionConflict) {
+    res.status(409).json({
+      error: "This photo changed since it was loaded — refresh and try again.",
+    });
+    return;
+  }
+  if (!swapped) {
+    res.status(404).json({ error: "Quilt or image not found." });
+    return;
+  }
+
+  const [updated] = await db
+    .select()
+    .from(finishedQuilts)
+    .where(eq(finishedQuilts.id, id))
+    .limit(1);
+
+  res.json(
+    GetQuiltResponse.parse(await serializeQuilt(updated as FinishedQuiltRow)),
+  );
 });
 
 export default router;

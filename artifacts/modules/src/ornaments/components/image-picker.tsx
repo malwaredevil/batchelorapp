@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import { ImagePicker as SharedImagePicker } from "@workspace/image-capture";
 import { cn } from "@/lib/utils";
+
+export { CameraModal } from "@workspace/image-capture";
 import {
   STANDARD_IMAGE_UPLOAD,
   validateClientUpload,

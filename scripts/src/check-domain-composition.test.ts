@@ -67,6 +67,8 @@ import {
   extractActionExecutorSpreads,
   findStaleActionClassPrefixes,
   scanOViolations,
+  hasInlineMultiSelectMode,
+  hasMissingCompareUIImports,
 } from "./check-domain-composition.js";
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -632,6 +634,22 @@ const KNOWN_TEMP_FIXTURES: string[] = [
   join(
     root,
     "artifacts/api-server/src/elaine/_temp_scan_o_action_executor_index_fixture.ts",
+  ),
+  // Scan P e2e: a violating gallery page fixture written into pages/ so the runner
+  // can find it; cleaned up in the test's finally block.
+  join(
+    root,
+    "artifacts/modules/src/ornaments/pages/_temp_scan_p_gallery_fixture.tsx",
+  ),
+  // Scan P e2e (per-specifier type bypass): same purpose as above.
+  join(
+    root,
+    "artifacts/modules/src/ornaments/pages/_temp_scan_p_type_specifier_fixture.tsx",
+  ),
+  // Scan P e2e (partial-adoption: hook used, bar missing): same purpose.
+  join(
+    root,
+    "artifacts/modules/src/ornaments/pages/_temp_scan_p_partial_adoption_fixture.tsx",
   ),
 ];
 
@@ -5540,6 +5558,551 @@ test("script exits non-zero when an executor variable in ACTION_EXECUTORS is ren
   } finally {
     try {
       unlinkSync(TEMP_SCAN_O_INDEX_FIXTURE);
+    } catch {
+      // best-effort cleanup
+    }
+  }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// Scan P — hasInlineMultiSelectMode
+// ────────────────────────────────────────────────────────────────────────────
+
+console.log(
+  "\ncheck-domain-composition.test: Scan P — hasInlineMultiSelectMode",
+);
+
+test("detects a file that hand-rolls compareMode bool + selectedIds array", () => {
+  const source = `
+import { useState } from "react";
+export default function Gallery() {
+  const [compareMode, setCompareMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  return <div />;
+}
+`;
+  assert.ok(
+    hasInlineMultiSelectMode(source),
+    "Should flag compareMode bool + selectedIds array without useMultiSelectMode",
+  );
+});
+
+test("detects a file that hand-rolls selectMode bool + selectedIds array", () => {
+  const source = `
+import { useState } from "react";
+export default function Gallery() {
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  return <div />;
+}
+`;
+  assert.ok(
+    hasInlineMultiSelectMode(source),
+    "Should flag selectMode bool + selectedIds array without useMultiSelectMode",
+  );
+});
+
+test("detects a file that hand-rolls bulkMode bool + selectedIds array", () => {
+  const source = `
+import { useState } from "react";
+export default function Gallery() {
+  const [bulkMode, setBulkMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  return <div />;
+}
+`;
+  assert.ok(
+    hasInlineMultiSelectMode(source),
+    "Should flag bulkMode bool + selectedIds array without useMultiSelectMode",
+  );
+});
+
+test("does NOT flag a file that imports useMultiSelectMode from collection-ui", () => {
+  const source = `
+import { useMultiSelectMode, CompareModal, CompareFloatingBar } from "@workspace/collection-ui";
+export default function Gallery() {
+  const compareMode = useMultiSelectMode(5);
+  return <div />;
+}
+`;
+  assert.ok(
+    !hasInlineMultiSelectMode(source),
+    "Should NOT flag a file that already uses useMultiSelectMode",
+  );
+});
+
+test("does NOT flag a file that has a real named import AND the hand-rolled state patterns (non-vacuous)", () => {
+  // The early-return path must fire even when both the mode-bool and
+  // selectedIds-array patterns are present — if the real import is found,
+  // the file is not a violation regardless of its state shape.
+  const source = `
+import { useState } from "react";
+import { useMultiSelectMode, CompareModal, CompareFloatingBar } from "@workspace/collection-ui";
+export default function Gallery() {
+  // The shared hook is used — these are the same state variable names a
+  // copy-pasted page would have, but here they coexist with a real import.
+  const compareMode = useMultiSelectMode(5);
+  const [bulkMode, setBulkMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  return <div />;
+}
+`;
+  assert.ok(
+    !hasInlineMultiSelectMode(source),
+    "Should NOT flag a file with a real useMultiSelectMode import, even if it also has boolean/array state",
+  );
+});
+
+test("does NOT flag a file with Set<number> selection (maintenance pattern)", () => {
+  const source = `
+import { useState } from "react";
+export default function Maintenance() {
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  return <div />;
+}
+`;
+  assert.ok(
+    !hasInlineMultiSelectMode(source),
+    "Should NOT flag the Set<number> maintenance pattern — that is a different use-case",
+  );
+});
+
+test("does NOT flag a file with mode bool but no selectedIds array state", () => {
+  const source = `
+import { useState } from "react";
+export default function Page() {
+  const [compareMode, setCompareMode] = useState(false);
+  return <div />;
+}
+`;
+  assert.ok(
+    !hasInlineMultiSelectMode(source),
+    "Should NOT flag a file that has a mode bool but no selectedIds array",
+  );
+});
+
+test("does NOT flag a file with selectedIds array but no mode bool", () => {
+  const source = `
+import { useState } from "react";
+export default function Page() {
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  return <div />;
+}
+`;
+  assert.ok(
+    !hasInlineMultiSelectMode(source),
+    "Should NOT flag a file that has selectedIds array but no mode bool",
+  );
+});
+
+test("detects a file with explicitly typed useState<boolean>(false) mode state", () => {
+  const source = `
+import { useState } from "react";
+export default function Gallery() {
+  const [compareMode, setCompareMode] = useState<boolean>(false);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  return <div />;
+}
+`;
+  assert.ok(
+    hasInlineMultiSelectMode(source),
+    "Should flag when mode is explicitly typed useState<boolean>(false)",
+  );
+});
+
+test("is NOT bypassed when useMultiSelectMode appears only in a comment", () => {
+  // A comment containing the string must not satisfy the import check.
+  const source = `
+import { useState } from "react";
+// TODO: replace with useMultiSelectMode from @workspace/collection-ui
+export default function Gallery() {
+  const [compareMode, setCompareMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  return <div />;
+}
+`;
+  assert.ok(
+    hasInlineMultiSelectMode(source),
+    "A comment mentioning useMultiSelectMode must not satisfy the import check",
+  );
+});
+
+test("is NOT bypassed when useMultiSelectMode appears only in a string literal", () => {
+  const source = `
+import { useState } from "react";
+const msg = "replace with useMultiSelectMode";
+export default function Gallery() {
+  const [compareMode, setCompareMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  return <div />;
+}
+`;
+  assert.ok(
+    hasInlineMultiSelectMode(source),
+    "A string containing useMultiSelectMode must not satisfy the import check",
+  );
+});
+
+test("is NOT bypassed by a type-only import of useMultiSelectMode", () => {
+  const source = `
+import type { useMultiSelectMode } from "@workspace/collection-ui";
+export default function Gallery() {
+  const [compareMode, setCompareMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  return <div />;
+}
+`;
+  assert.ok(
+    hasInlineMultiSelectMode(source),
+    "A type-only import must not satisfy the check (it carries no runtime behaviour)",
+  );
+});
+
+test("is NOT bypassed by a per-specifier type keyword on useMultiSelectMode", () => {
+  // import { type useMultiSelectMode } from "@workspace/collection-ui" is
+  // type-only at the specifier level and carries no runtime value.
+  const source = `
+import { type useMultiSelectMode, CompareModal } from "@workspace/collection-ui";
+export default function Gallery() {
+  const [compareMode, setCompareMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  return <div />;
+}
+`;
+  assert.ok(
+    hasInlineMultiSelectMode(source),
+    "A per-specifier `type useMultiSelectMode` must not satisfy the import check",
+  );
+});
+
+test("does NOT flag when the per-specifier type is on a different name but useMultiSelectMode is a real specifier", () => {
+  // Mixed import: type alias is on CompareType, useMultiSelectMode is runtime.
+  const source = `
+import { type CompareType, useMultiSelectMode } from "@workspace/collection-ui";
+export default function Gallery() {
+  const [compareMode, setCompareMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  return <div />;
+}
+`;
+  assert.ok(
+    !hasInlineMultiSelectMode(source),
+    "A mixed import where useMultiSelectMode itself is not type-only must pass",
+  );
+});
+
+test("does NOT flag when both state patterns are in comments (false-violation guard)", () => {
+  // A file migrating to the shared hook may leave old code commented out.
+  // Commented patterns must not trigger the detector.
+  const source = `
+import { useMultiSelectMode, CompareModal } from "@workspace/collection-ui";
+// const [compareMode, setCompareMode] = useState(false);
+// const [selectedIds, setSelectedIds] = useState<number[]>([]);
+export default function Gallery() {
+  const { compareMode, selectedIds } = useMultiSelectMode(10);
+  return <div />;
+}
+`;
+  assert.ok(
+    !hasInlineMultiSelectMode(source),
+    "Should NOT flag a file whose only state-shaped patterns are inside comments",
+  );
+});
+
+test("is NOT bypassed by a string literal containing a full import-shaped statement", () => {
+  // A string value that looks like an import is NOT a real import.
+  // stripAllStringLiteralContent must erase it before the import regex runs.
+  const source = `
+import { useState } from "react";
+const hint = 'import { useMultiSelectMode } from "@workspace/collection-ui"';
+export default function Gallery() {
+  const [compareMode, setCompareMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  return <div />;
+}
+`;
+  assert.ok(
+    hasInlineMultiSelectMode(source),
+    "A string literal containing an import statement must not satisfy the import check",
+  );
+});
+
+test("is NOT bypassed by a commented-out full import declaration", () => {
+  // A commented-out import statement must not satisfy the check.
+  const source = `
+import { useState } from "react";
+// import { useMultiSelectMode, CompareModal } from "@workspace/collection-ui";
+export default function Gallery() {
+  const [compareMode, setCompareMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  return <div />;
+}
+`;
+  assert.ok(
+    hasInlineMultiSelectMode(source),
+    "A commented-out import declaration must not satisfy the import check",
+  );
+});
+
+// ── Scan P — hasMissingCompareUIImports ───────────────────────────────────────
+
+console.log(
+  "\ncheck-domain-composition.test: Scan P — hasMissingCompareUIImports",
+);
+
+test("flags when useMultiSelectMode is called but CompareFloatingBar is not imported", () => {
+  const source = `
+import { useMultiSelectMode, CompareModal } from "@workspace/collection-ui";
+import { useState } from "react";
+export default function Gallery() {
+  const compareMode = useMultiSelectMode(5);
+  return <div />;
+}
+`;
+  assert.ok(
+    hasMissingCompareUIImports(source),
+    "Should flag: hook called, CompareModal present, CompareFloatingBar missing",
+  );
+});
+
+test("flags when useMultiSelectMode is called but CompareModal is not imported", () => {
+  const source = `
+import { useMultiSelectMode, CompareFloatingBar } from "@workspace/collection-ui";
+import { useState } from "react";
+export default function Gallery() {
+  const compareMode = useMultiSelectMode(5);
+  return <div />;
+}
+`;
+  assert.ok(
+    hasMissingCompareUIImports(source),
+    "Should flag: hook called, CompareFloatingBar present, CompareModal missing",
+  );
+});
+
+test("flags when useMultiSelectMode is called and neither CompareModal nor CompareFloatingBar is imported", () => {
+  const source = `
+import { useMultiSelectMode } from "@workspace/collection-ui";
+import { useState } from "react";
+export default function Gallery() {
+  const compareMode = useMultiSelectMode(5);
+  return <div />;
+}
+`;
+  assert.ok(
+    hasMissingCompareUIImports(source),
+    "Should flag: hook called, both modal and bar missing",
+  );
+});
+
+test("does NOT flag when useMultiSelectMode is called and both CompareModal and CompareFloatingBar are imported", () => {
+  const source = `
+import {
+  useMultiSelectMode,
+  CompareModal,
+  CompareFloatingBar,
+} from "@workspace/collection-ui";
+export default function Gallery() {
+  const compareMode = useMultiSelectMode(5);
+  return <div />;
+}
+`;
+  assert.ok(
+    !hasMissingCompareUIImports(source),
+    "Should NOT flag: all three shared primitives imported and hook called",
+  );
+});
+
+test("does NOT flag when useMultiSelectMode is imported but never called", () => {
+  // An unused import doesn't constitute active compare/select usage;
+  // hasInlineMultiSelectMode handles the state-pattern side.
+  const source = `
+import { useMultiSelectMode, CompareModal } from "@workspace/collection-ui";
+export default function Gallery() {
+  return <div />;
+}
+`;
+  assert.ok(
+    !hasMissingCompareUIImports(source),
+    "Should NOT flag when the hook is imported but not called (no invocation)",
+  );
+});
+
+test("does NOT flag when useMultiSelectMode is not present at all", () => {
+  const source = `
+import { CollectionGrid, CollectionSearchBar } from "@workspace/collection-ui";
+export default function Gallery() {
+  return <div />;
+}
+`;
+  assert.ok(
+    !hasMissingCompareUIImports(source),
+    "Should NOT flag when there is no multi-select hook usage",
+  );
+});
+
+test("does NOT flag a commented-out useMultiSelectMode call", () => {
+  // Comments must not be mistaken for active hook calls.
+  const source = `
+import { useMultiSelectMode, CompareModal } from "@workspace/collection-ui";
+export default function Gallery() {
+  // const mode = useMultiSelectMode(5);
+  return <div />;
+}
+`;
+  assert.ok(
+    !hasMissingCompareUIImports(source),
+    "A commented-out hook call must not trigger the partial-adoption check",
+  );
+});
+
+// ── Scan P end-to-end integration test ───────────────────────────────────────
+//
+// Writes a violating gallery page fixture into the ornaments/pages/ directory
+// (which is scanned by Scan P), runs the full script, and asserts it exits
+// non-zero with a FIX: clause mentioning "useMultiSelectMode".
+
+console.log("\ncheck-domain-composition.test: Scan P — end-to-end integration");
+
+const TEMP_SCAN_P_GALLERY_FIXTURE = join(
+  root,
+  "artifacts/modules/src/ornaments/pages/_temp_scan_p_gallery_fixture.tsx",
+);
+
+test("script exits non-zero when a gallery page hand-rolls compare/select state (Scan P)", () => {
+  const violatingSource = `
+import { useState } from "react";
+// This file intentionally hand-rolls compare state for test purposes.
+export default function ViolatingGallery() {
+  const [compareMode, setCompareMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  return <div />;
+}
+`;
+
+  cleanupKnownTempFixtures(new Set([TEMP_SCAN_P_GALLERY_FIXTURE]));
+  writeFileSync(TEMP_SCAN_P_GALLERY_FIXTURE, violatingSource, "utf8");
+  try {
+    const result = spawnSync("node", ["--import", "tsx", scriptPath], {
+      cwd: scriptsCwd,
+      encoding: "utf8",
+    });
+    assert.notEqual(
+      result.status,
+      0,
+      `Expected non-zero exit when a gallery page hand-rolls compare/select state, ` +
+        `but script exited ${result.status}.\nstdout: ${result.stdout}\nstderr: ${result.stderr}`,
+    );
+    const output = result.stdout + result.stderr;
+    assert.ok(
+      output.includes("useMultiSelectMode"),
+      `Violation message must mention "useMultiSelectMode".\nstdout: ${result.stdout}\nstderr: ${result.stderr}`,
+    );
+    assert.ok(
+      output.includes("FIX:"),
+      `Violation message must include a FIX: clause.\nstdout: ${result.stdout}\nstderr: ${result.stderr}`,
+    );
+  } finally {
+    try {
+      unlinkSync(TEMP_SCAN_P_GALLERY_FIXTURE);
+    } catch {
+      // best-effort cleanup
+    }
+  }
+});
+
+const TEMP_SCAN_P_TYPE_SPECIFIER_FIXTURE = join(
+  root,
+  "artifacts/modules/src/ornaments/pages/_temp_scan_p_type_specifier_fixture.tsx",
+);
+
+test("script exits non-zero when a gallery page uses a per-specifier type import to bypass Scan P", () => {
+  // `import { type useMultiSelectMode }` is type-only; the page still needs to
+  // be flagged because it provides no runtime multi-select behaviour.
+  const source = `
+import { type useMultiSelectMode, CompareModal } from "@workspace/collection-ui";
+import { useState } from "react";
+export default function BypassAttempt() {
+  const [compareMode, setCompareMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  return <div />;
+}
+`;
+
+  cleanupKnownTempFixtures(new Set([TEMP_SCAN_P_TYPE_SPECIFIER_FIXTURE]));
+  writeFileSync(TEMP_SCAN_P_TYPE_SPECIFIER_FIXTURE, source, "utf8");
+  try {
+    const result = spawnSync("node", ["--import", "tsx", scriptPath], {
+      cwd: scriptsCwd,
+      encoding: "utf8",
+    });
+    assert.notEqual(
+      result.status,
+      0,
+      `Expected non-zero exit for per-specifier type bypass, ` +
+        `but script exited ${result.status}.\nstdout: ${result.stdout}\nstderr: ${result.stderr}`,
+    );
+    const output = result.stdout + result.stderr;
+    assert.ok(
+      output.includes("useMultiSelectMode"),
+      `Violation message must mention "useMultiSelectMode".\nstdout: ${result.stdout}\nstderr: ${result.stderr}`,
+    );
+  } finally {
+    try {
+      unlinkSync(TEMP_SCAN_P_TYPE_SPECIFIER_FIXTURE);
+    } catch {
+      // best-effort cleanup
+    }
+  }
+});
+
+const TEMP_SCAN_P_PARTIAL_ADOPTION_FIXTURE = join(
+  root,
+  "artifacts/modules/src/ornaments/pages/_temp_scan_p_partial_adoption_fixture.tsx",
+);
+
+test("script exits non-zero when a gallery page calls useMultiSelectMode but omits CompareFloatingBar (partial adoption)", () => {
+  // This is the "hook adopted, compare bar hand-rolled" scenario the code
+  // review identified: hasInlineMultiSelectMode sees the real hook import and
+  // passes, but hasMissingCompareUIImports must flag the missing companion.
+  const source = `
+import {
+  useMultiSelectMode,
+  CompareModal,
+} from "@workspace/collection-ui";
+import { useState } from "react";
+export default function PartialAdoptionGallery() {
+  const compareMode = useMultiSelectMode(5);
+  return <div />;
+}
+`;
+
+  cleanupKnownTempFixtures(new Set([TEMP_SCAN_P_PARTIAL_ADOPTION_FIXTURE]));
+  writeFileSync(TEMP_SCAN_P_PARTIAL_ADOPTION_FIXTURE, source, "utf8");
+  try {
+    const result = spawnSync("node", ["--import", "tsx", scriptPath], {
+      cwd: scriptsCwd,
+      encoding: "utf8",
+    });
+    assert.notEqual(
+      result.status,
+      0,
+      `Expected non-zero exit when a gallery page uses the hook but omits CompareFloatingBar, ` +
+        `but script exited ${result.status}.\nstdout: ${result.stdout}\nstderr: ${result.stderr}`,
+    );
+    const output = result.stdout + result.stderr;
+    assert.ok(
+      output.includes("CompareFloatingBar"),
+      `Violation message must mention "CompareFloatingBar".\nstdout: ${result.stdout}\nstderr: ${result.stderr}`,
+    );
+    assert.ok(
+      output.includes("FIX:"),
+      `Violation message must include a FIX: clause.\nstdout: ${result.stdout}\nstderr: ${result.stderr}`,
+    );
+  } finally {
+    try {
+      unlinkSync(TEMP_SCAN_P_PARTIAL_ADOPTION_FIXTURE);
     } catch {
       // best-effort cleanup
     }

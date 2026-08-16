@@ -760,43 +760,26 @@ export async function lookupBarcode(
   // authoritative for the collectibles market.
   const isHallmarkBarcode = barcode.startsWith("661127");
 
-  // ── 2. AI lookup — ask the LLM first (fastest for Hallmark SKUs & titles) ─
-  // AI has broad training-data coverage of Hallmark collectibles and can often
-  // identify an ornament from its UPC digits alone, without any external API
-  // call. Running it before eBay/UPCite avoids a round-trip to slower services
-  // for the common case.
+  // ── 2. eBay GTIN search — exact barcode match against real listings ─────
+  // This is an authoritative, verifiable match (the barcode is searched
+  // directly), so it must run before the AI guess below.
   let upcResult: UpcFetchResult | null = null;
   try {
-    const r = await fetchFromAI(barcode);
+    const r = await fetchFromEbay(barcode);
     if (r.found) {
-      logger.info({ barcode }, "AI barcode lookup: identified product");
+      logger.info({ barcode }, "eBay GTIN lookup: identified product");
       upcResult = r;
     } else {
-      logger.info({ barcode }, "AI barcode lookup: not found — trying eBay");
+      logger.info(
+        { barcode },
+        "eBay GTIN lookup: not found — trying UPCitemdb/OPF",
+      );
     }
-  } catch (aiErr) {
-    logger.warn({ err: aiErr, barcode }, "AI barcode lookup failed");
+  } catch (ebayErr) {
+    logger.warn({ err: ebayErr, barcode }, "eBay GTIN lookup failed");
   }
 
-  // ── 3. eBay GTIN search fallback ──────────────────────────────────────────
-  if (!upcResult) {
-    try {
-      const r = await fetchFromEbay(barcode);
-      if (r.found) {
-        logger.info({ barcode }, "eBay GTIN lookup: identified product");
-        upcResult = r;
-      } else {
-        logger.info(
-          { barcode },
-          "eBay GTIN lookup: not found — trying UPCitemdb/OPF",
-        );
-      }
-    } catch (ebayErr) {
-      logger.warn({ err: ebayErr, barcode }, "eBay GTIN lookup failed");
-    }
-  }
-
-  // ── 4. UPCitemdb → Open Food Facts fallback chain (non-Hallmark only) ────
+  // ── 3. UPCitemdb → Open Food Facts fallback chain (non-Hallmark only) ────
   // Hallmark UPCs (661127 prefix) frequently return incorrect data from these
   // generic product databases; skip them for Hallmark barcodes.
   if (!upcResult) {
@@ -839,6 +822,29 @@ export async function lookupBarcode(
         { barcode },
         "Hallmark UPC prefix: skipping UPCitemdb/OPF (unreliable for Hallmark barcodes)",
       );
+    }
+  }
+
+  // ── 4. AI lookup — last resort only ───────────────────────────────────────
+  // The AI is guessing from training-data recall, not verifying the barcode
+  // against anything — it has repeatedly misidentified the correct ornament
+  // for a given UPC when real sources exist. Only use it when every
+  // verifiable source above found nothing, and never let it override a real
+  // match.
+  if (!upcResult) {
+    try {
+      const r = await fetchFromAI(barcode);
+      if (r.found) {
+        logger.info(
+          { barcode },
+          "AI barcode lookup: identified product (no verified source found one)",
+        );
+        upcResult = r;
+      } else {
+        logger.info({ barcode }, "AI barcode lookup: not found");
+      }
+    } catch (aiErr) {
+      logger.warn({ err: aiErr, barcode }, "AI barcode lookup failed");
     }
   }
 

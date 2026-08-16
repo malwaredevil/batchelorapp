@@ -6,6 +6,8 @@ import {
   Tag,
   RefreshCw,
   Trash2,
+  Check,
+  X,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -14,28 +16,53 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@workspace/ui/dropdown-menu";
-
+import { cn } from "@workspace/web-core/utils";
+import type { AsyncActionStatus } from "./async-action-status";
 export interface CollectionListRowProps {
   id: number;
+
   name: string;
+
   imageUrl?: string | null;
+
   href: string;
   /** Main subtitle line (e.g. brand, maker, year) */
+
   subtitle?: ReactNode;
   /** Secondary line (e.g. series, style) */
+
   detail?: ReactNode;
   /** Category badges */
+
   categoryBadges?: ReactNode;
   /** Color dots */
+
   colorDots?: ReactNode;
   /** Right-side value (e.g. book value, price) */
+
   valueDisplay?: ReactNode;
   /** Extra menu items */
+
   extraMenuItems?: ReactNode;
+
   onQuickEdit?: () => void;
+
   onSetCategories?: () => void;
+
   onReanalyze?: () => void;
+
   onDelete?: () => void;
+  /** See CollectionCardProps.aiStatus — same badge/duplicate-trigger-guard behavior for list rows. */
+
+  aiStatus?: AsyncActionStatus;
+  /** See CollectionCardProps.selecting — same selection-overlay behavior for list rows. */
+
+  selecting?: boolean;
+
+  selected?: boolean;
+
+  onToggleSelect?: (id: number) => void;
+
   LinkComponent: React.ComponentType<{
     href: string;
     className?: string;
@@ -45,6 +72,7 @@ export interface CollectionListRowProps {
 }
 
 export function CollectionListRow({
+  id,
   name,
   imageUrl,
   href,
@@ -58,13 +86,49 @@ export function CollectionListRow({
   onSetCategories,
   onReanalyze,
   onDelete,
+  aiStatus,
+  selecting = false,
+  selected = false,
+  onToggleSelect,
   LinkComponent,
 }: CollectionListRowProps) {
   return (
-    <div className="group flex gap-4 p-3 bg-card border border-card-border rounded-xl hover:border-primary/50 transition-colors shadow-sm items-center">
-      {/* Entire left+center area is a navigating link */}
+    <div
+      className={cn(
+        "group flex gap-4 p-3 bg-card border rounded-xl hover:border-primary/50 transition-colors shadow-sm items-center",
+        selecting && selected
+          ? "border-primary ring-2 ring-primary"
+          : "border-card-border",
+      )}
+    >
+      {/* Selection checkbox (selecting mode) */}
+      {selecting && (
+        <button
+          type="button"
+          onClick={() => onToggleSelect?.(id)}
+          className={cn(
+            "grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 transition",
+            selected
+              ? "border-primary bg-primary text-primary-foreground"
+              : "border-border bg-muted text-transparent hover:border-primary",
+          )}
+          aria-label={selected ? "Deselect" : "Select"}
+        >
+          {selected && <Check className="h-3.5 w-3.5" />}
+        </button>
+      )}
+
+      {/* Entire left+center area is a navigating link (or selection toggle) */}
       <LinkComponent
-        href={href}
+        href={selecting ? "#" : href}
+        onClick={
+          selecting
+            ? (e) => {
+                e.preventDefault();
+                onToggleSelect?.(id);
+              }
+            : undefined
+        }
         className="flex flex-1 gap-4 items-center min-w-0 py-1"
       >
         {/* Thumbnail */}
@@ -78,6 +142,33 @@ export function CollectionListRow({
           ) : (
             <div className="w-full h-full flex items-center justify-center text-muted-foreground/30 text-2xl select-none">
               ?
+            </div>
+          )}
+
+          {/* AI refresh status badge — always visible, mirrors CollectionCard */}
+          {aiStatus && (
+            <div
+              className={cn(
+                "absolute -bottom-1 -right-1 z-10 flex h-5 w-5 items-center justify-center rounded-full shadow-sm ring-2 ring-card",
+                aiStatus === "processing" &&
+                  "bg-primary text-primary-foreground",
+                aiStatus === "success" && "bg-green-600 text-white",
+                aiStatus === "error" &&
+                  "bg-destructive text-destructive-foreground",
+              )}
+              title={
+                aiStatus === "processing"
+                  ? "Refreshing AI analysis…"
+                  : aiStatus === "success"
+                    ? "AI analysis refreshed"
+                    : "AI refresh failed"
+              }
+            >
+              {aiStatus === "processing" && (
+                <RefreshCw className="h-3 w-3 animate-spin" />
+              )}
+              {aiStatus === "success" && <Check className="h-3 w-3" />}
+              {aiStatus === "error" && <X className="h-3 w-3" />}
             </div>
           )}
         </div>

@@ -1862,11 +1862,16 @@ async function copyTable(
     const rowPlaceholders = batch.map((row, ri) => {
       const tuple = opts.columns.map((c, ci) => {
         const v = row[c] ?? null;
-        values.push(
-          v !== null && jsonbCols.has(c) && typeof v === "object"
-            ? JSON.stringify(v)
-            : v,
-        );
+        // JSONB columns must always be re-encoded as JSON text, not just
+        // when the driver handed back an object/array. The pg driver
+        // auto-parses JSONB scalars (a bare string, number, or boolean
+        // value stored in a JSONB column) into the matching JS primitive,
+        // so a JSONB column holding e.g. the string `6" Widget` comes back
+        // as a plain JS string. Passing that raw string as a query param
+        // is invalid JSON (unquoted, unescaped) and 22P02s the insert.
+        // JSON.stringify() on every non-null value (object, array, or
+        // primitive) always produces valid JSON text.
+        values.push(v !== null && jsonbCols.has(c) ? JSON.stringify(v) : v);
         return `$${ri * opts.columns.length + ci + 1}`;
       });
       return `(${tuple.join(", ")})`;
@@ -3334,6 +3339,7 @@ async function main() {
       "updated_at",
     ],
     orderBy: "id",
+    jsonbColumns: ["payload"],
   });
   await resetSequence(dest, "app_jobs", "id");
 
@@ -3351,6 +3357,7 @@ async function main() {
       "metadata",
     ],
     orderBy: "id",
+    jsonbColumns: ["metadata"],
   });
   await resetSequence(dest, "app_job_attempts", "id");
 
@@ -3387,6 +3394,7 @@ async function main() {
       "created_at",
     ],
     orderBy: "id",
+    jsonbColumns: ["metadata"],
   });
   await resetSequence(dest, "external_operation_events", "id");
 
@@ -3457,6 +3465,7 @@ async function main() {
       "created_at",
     ],
     orderBy: "id",
+    jsonbColumns: ["input_artifact_hashes"],
   });
   await resetSequence(dest, "ai_generation_runs", "id");
 
@@ -3479,6 +3488,7 @@ async function main() {
       "created_at",
     ],
     orderBy: "id",
+    jsonbColumns: ["candidate_value", "source_references"],
   });
   await resetSequence(dest, "ai_field_candidates", "id");
 
@@ -3496,6 +3506,7 @@ async function main() {
       "decided_at",
     ],
     orderBy: "id",
+    jsonbColumns: ["prior_value", "final_value"],
   });
   await resetSequence(dest, "ai_field_decisions", "id");
 
@@ -3534,6 +3545,7 @@ async function main() {
       "updated_at",
     ],
     orderBy: "id",
+    jsonbColumns: ["adapter_config"],
   });
   await resetSequence(dest, "ingestion_sources", "id");
 
@@ -3558,6 +3570,7 @@ async function main() {
       "created_at",
     ],
     orderBy: "id",
+    jsonbColumns: ["metadata"],
   });
   await resetSequence(dest, "ingestion_runs", "id");
 
@@ -3579,6 +3592,7 @@ async function main() {
       "created_at",
     ],
     orderBy: "id",
+    jsonbColumns: ["normalized_data"],
   });
   await resetSequence(dest, "ingestion_candidates", "id");
 
@@ -3642,6 +3656,7 @@ async function main() {
       "created_at",
     ],
     orderBy: "id",
+    jsonbColumns: ["bbox"],
   });
   await resetSequence(dest, "travels_document_field_evidence", "id");
 
@@ -3664,6 +3679,7 @@ async function main() {
       "updated_at",
     ],
     orderBy: "id",
+    jsonbColumns: ["accepted_value", "competing_candidate_ids"],
   });
   await resetSequence(dest, "travels_field_conflicts", "id");
 
@@ -3724,6 +3740,7 @@ async function main() {
       "updated_at",
     ],
     orderBy: "id",
+    jsonbColumns: ["source_json"],
   });
   await resetSequence(dest, "market_observations", "id");
 
@@ -3747,6 +3764,7 @@ async function main() {
       "computed_at",
     ],
     orderBy: "id",
+    jsonbColumns: ["observation_ids"],
   });
   await resetSequence(dest, "market_valuations", "id");
 
@@ -3770,6 +3788,7 @@ async function main() {
       "updated_at",
     ],
     orderBy: "id",
+    jsonbColumns: ["platforms"],
   });
   await resetSequence(dest, "market_watches", "id");
 

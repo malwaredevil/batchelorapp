@@ -2,6 +2,14 @@ import { type ReactNode } from "react";
 import { Lock, Unlock } from "lucide-react";
 import { cn } from "@workspace/web-core/utils";
 
+// NOTE: Pottery is the visual gold standard these components were extracted
+// from, but its detail page (artifacts/modules/src/pottery/pages/detail.tsx)
+// deliberately keeps its own local field/section markup and is NOT wired to
+// these components. No automated check compares the two, so any deliberate
+// visual change here (spacing, typography, lock styling, section chrome)
+// should be eyeballed against the Pottery detail page to keep the collections
+// looking consistent. See docs/collection-item-page-convergence.md.
+
 export interface CollectionDetailFieldProps {
   label: string;
   value: ReactNode;

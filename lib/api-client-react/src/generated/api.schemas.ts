@@ -461,6 +461,14 @@ export interface PotteryCollectionStats {
   topColors: PotteryColorCount[];
 }
 
+export interface QuiltingSetImageDefaultBody {
+  /**
+     * The v cache-buster from the supplemental image URL being promoted. When provided, the server verifies the image's storage path still hashes to this value before swapping (compare-and-swap); a mismatch returns 409 so a retry cannot reverse an applied swap.
+     * @maxLength 64
+     */
+  expectedVersion?: string;
+}
+
 export type QuiltingSuggestPriceBodyItemType = typeof QuiltingSuggestPriceBodyItemType[keyof typeof QuiltingSuggestPriceBodyItemType];
 
 
@@ -2256,6 +2264,15 @@ export interface OrnamentsOrnamentItem {
   origin?: string | null;
   /** @nullable */
   aiDescription?: string | null;
+  /**
+     * Verbatim text transcribed from the printed description on the back of the ornament's box (distinct from aiDescription, which is AI-authored). When no legible box-back text was found, the AI writes a stand-in instead — see descriptionGenerated.
+     * @nullable
+     */
+  description?: string | null;
+  /**
+     * True when description above is an AI-generated stand-in because no legible box-back text was found (false for manual, verbatim, or catalog text).
+     */
+  descriptionGenerated?: boolean;
   /** @nullable */
   acquiredAt?: string | null;
   dominantColors?: string[];
@@ -2346,6 +2363,8 @@ export interface OrnamentsOrnamentUpdate {
   acquiredAt?: string | null;
   /** @nullable */
   aiDescription?: string | null;
+  /** @nullable */
+  description?: string | null;
   /** @nullable */
   dimensions?: string | null;
   /** @nullable */

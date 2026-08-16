@@ -460,6 +460,7 @@ export default function BarcodeLookupPage() {
                       seriesOrCollection: scanResult.seriesOrCollection,
                       year: scanResult.year,
                       barcodeValue: scannedCode,
+                      description: scanResult.description,
                     }),
                   );
                   setLocation("/ornaments/add");

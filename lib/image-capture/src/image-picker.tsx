@@ -22,9 +22,20 @@ import { Slider } from "@workspace/ui/slider";
 interface CameraModalProps {
   onCapture: (file: File) => void;
   onClose: () => void;
+  /**
+   * When provided, shows a small "N captured" pill in the top bar. Intended
+   * for flows that keep the modal open across multiple snaps (e.g. bulk
+   * photo capture) so the user gets confirmation that a shot registered
+   * even though the viewfinder itself doesn't change after a snap.
+   */
+  capturedCount?: number;
 }
 
-export function CameraModal({ onCapture, onClose }: CameraModalProps) {
+export function CameraModal({
+  onCapture,
+  onClose,
+  capturedCount,
+}: CameraModalProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
@@ -37,6 +48,8 @@ export function CameraModal({ onCapture, onClose }: CameraModalProps) {
   const [flashOn, setFlashOn] = useState(false);
   const [hasFlash, setHasFlash] = useState(false);
   const [switching, setSwitching] = useState(false);
+  /** Brief white pulse over the viewfinder to confirm a snap registered. */
+  const [captureFlash, setCaptureFlash] = useState(false);
 
   /** Live values for pinch handlers (avoids stale closures). */
   const liveRef = useRef({ zoom, maxZoom });
@@ -180,7 +193,14 @@ export function CameraModal({ onCapture, onClose }: CameraModalProps) {
     canvas.toBlob(
       (blob) => {
         if (!blob) return;
-        streamRef.current?.getTracks().forEach((t) => t.stop());
+        // Don't stop the stream here — some callers (e.g. bulk photo capture)
+        // keep this modal open after a snap so the user can keep shooting.
+        // The stream is torn down by handleClose() or the effect cleanup
+        // when this component actually closes/unmounts.
+        // Brief flash confirms the snap registered even when the modal
+        // stays open and the viewfinder itself doesn't visibly change.
+        setCaptureFlash(true);
+        setTimeout(() => setCaptureFlash(false), 150);
         onCapture(
           new File([blob], `photo-${Date.now()}.jpg`, { type: "image/jpeg" }),
         );
@@ -242,7 +262,14 @@ export function CameraModal({ onCapture, onClose }: CameraModalProps) {
         >
           <X className="h-5 w-5" />
         </button>
-        <span className="text-sm font-medium text-white/80">Take a photo</span>
+        <span className="flex flex-col items-center text-sm font-medium text-white/80">
+          Take a photo
+          {typeof capturedCount === "number" && capturedCount > 0 && (
+            <span className="mt-0.5 text-xs font-normal text-white/60">
+              {capturedCount} captured
+            </span>
+          )}
+        </span>
         <button
           type="button"
           onClick={toggleFlash}
@@ -306,6 +333,13 @@ export function CameraModal({ onCapture, onClose }: CameraModalProps) {
             />
           </>
         )}
+        {/* Capture flash — quick white pulse confirming a snap registered */}
+        <div
+          className={cn(
+            "pointer-events-none absolute inset-0 bg-white transition-opacity duration-150",
+            captureFlash ? "opacity-70" : "opacity-0",
+          )}
+        />
       </div>
 
       {/* Zoom slider */}

@@ -165,6 +165,7 @@ export function buildOrnamentSearchDocument(attrs: {
   motifs?: unknown;
   dominantColors?: unknown;
   aiDescription?: string | null;
+  description?: string | null;
 }): string {
   const parts: string[] = [];
   if (attrs.name) parts.push(`Name: ${attrs.name}`);
@@ -180,5 +181,6 @@ export function buildOrnamentSearchDocument(attrs: {
   if (colors.length) parts.push(`Colours: ${colors.join(", ")}`);
   if (attrs.notes) parts.push(`Notes: ${attrs.notes}`);
   if (attrs.aiDescription) parts.push(attrs.aiDescription);
+  if (attrs.description) parts.push(attrs.description);
   return parts.join(". ") || "Unknown ornament";
 }

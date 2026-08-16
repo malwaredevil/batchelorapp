@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { Children, type ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
 import { Skeleton } from "@workspace/ui/skeleton";
 import { ReminderBellButton } from "./create-reminder-dialog";
@@ -37,7 +37,17 @@ export interface CollectionDetailLayoutProps {
 }
 
 export function CollectionDetailHero({ children }: { children: ReactNode }) {
-  return <div className="grid gap-6 md:grid-cols-2">{children}</div>;
+  // Each column gets its own min-w-0 wrapper so wide content nested inside
+  // (e.g. a photo gallery with many thumbnails) can wrap/scroll within its
+  // own column instead of forcing the grid track — and the whole page —
+  // wider than the viewport (issue: photos pushing buttons off-screen).
+  return (
+    <div className="grid gap-6 md:grid-cols-2">
+      {Children.map(children, (child) => (
+        <div className="min-w-0">{child}</div>
+      ))}
+    </div>
+  );
 }
 
 export function CollectionDetailPanelStack({

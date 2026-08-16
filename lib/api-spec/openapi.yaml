@@ -1620,6 +1620,41 @@ paths:
       responses:
         "204":
           description: Deleted
+  /quilting/patterns/{id}/images/{imageId}/set-default:
+    post:
+      operationId: setPatternImageDefault
+      tags:
+        - patterns
+      summary: Set a supplemental image as the pattern's default photo
+      description: "Swaps the supplemental image with the current primary photo so all imageUrl calls immediately serve the new default. The old primary photo becomes a supplemental image and retains its position in the gallery. If the pattern has no primary photo yet, the supplemental image is promoted to primary. Pass expectedVersion (the v cache-buster from the image URL being promoted) for compare-and-swap semantics: a retry or duplicate delivery after the swap has been applied gets a 409 instead of silently swapping back."
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+        - $ref: "#/components/parameters/ImageIdParam"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuiltingSetImageDefaultBody"
+      responses:
+        "200":
+          description: Updated pattern with new default photo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuiltingQuiltPattern"
+        "404":
+          description: Pattern or image not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: expectedVersion no longer matches (swap already applied or image changed)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /quilting/quilts:
     get:
       operationId: listQuilts
@@ -1851,6 +1886,41 @@ paths:
       responses:
         "204":
           description: Deleted
+  /quilting/quilts/{id}/images/{imageId}/set-default:
+    post:
+      operationId: setQuiltImageDefault
+      tags:
+        - quilts
+      summary: Set a supplemental image as the quilt's default photo
+      description: "Swaps the supplemental image with the current primary photo so all imageUrl calls immediately serve the new default. The old primary photo becomes a supplemental image and retains its position in the gallery. Pass expectedVersion (the v cache-buster from the image URL being promoted) for compare-and-swap semantics: a retry or duplicate delivery after the swap has been applied gets a 409 instead of silently swapping back."
+      parameters:
+        - $ref: "#/components/parameters/IdParam"
+        - $ref: "#/components/parameters/ImageIdParam"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuiltingSetImageDefaultBody"
+      responses:
+        "200":
+          description: Updated quilt with new default photo
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuiltingFinishedQuilt"
+        "404":
+          description: Quilt or image not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: expectedVersion no longer matches (swap already applied or image changed)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /quilting/compare:
     post:
       operationId: compareFabric
@@ -7106,6 +7176,13 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PotteryColorCount"
+    QuiltingSetImageDefaultBody:
+      type: object
+      properties:
+        expectedVersion:
+          type: string
+          maxLength: 64
+          description: The v cache-buster from the supplemental image URL being promoted. When provided, the server verifies the image's storage path still hashes to this value before swapping (compare-and-swap); a mismatch returns 409 so a retry cannot reverse an applied swap.
     QuiltingSuggestPriceBody:
       type: object
       properties:

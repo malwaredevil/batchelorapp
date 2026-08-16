@@ -117,6 +117,32 @@ const requirements: Array<{
     fix: "Use CollectionDetailHero and CollectionDetailPanelStack from @workspace/collection-ui. Domain pages supply fields, actions, and categories — not their own layout shell.",
   })),
 
+  // ── Item photo galleries: must use the shared ItemImageGallery ────────────
+  // (Pottery's detail page is the gold-standard original and is deliberately
+  // exempt — see .agents/memory/collection-ui-coverage.md.)
+  ...[
+    "artifacts/modules/src/ornaments/pages/detail.tsx",
+    "artifacts/modules/src/quilting/pages/fabrics/detail.tsx",
+    "artifacts/modules/src/quilting/pages/patterns/detail.tsx",
+    "artifacts/modules/src/quilting/pages/quilts/detail.tsx",
+  ].map((path) => ({
+    path,
+    includes: ["ItemImageGallery"],
+    fix: "Use ItemImageGallery from @workspace/image-capture for the item photo gallery (add/edit/label/set-primary/delete). Do not hand-roll a per-domain gallery strip.",
+  })),
+
+  // ── Detail field rows: must use the shared CollectionDetailField ──────────
+  ...[
+    "artifacts/modules/src/ornaments/pages/detail.tsx",
+    "artifacts/modules/src/quilting/pages/fabrics/detail.tsx",
+    "artifacts/modules/src/quilting/pages/patterns/detail.tsx",
+    "artifacts/modules/src/quilting/pages/quilts/detail.tsx",
+  ].map((path) => ({
+    path,
+    includes: ["CollectionDetailField", "CollectionDetailSection"],
+    fix: "Use CollectionDetailField / CollectionDetailSection from @workspace/collection-ui for record fields and panels instead of bespoke label/value markup.",
+  })),
+
   // ── Quick-edit sheets: must use shared frame and category picker ──────────
   ...[
     "artifacts/modules/src/pottery/components/quick-edit-sheet.tsx",
@@ -134,6 +160,7 @@ const requirements: Array<{
   ...[
     "artifacts/modules/src/pottery/components/tag-selector.tsx",
     "artifacts/modules/src/quilting/components/tag-selector.tsx",
+    "artifacts/modules/src/ornaments/components/tag-selector.tsx",
   ].map((path) => ({
     path,
     includes: ["CategoryTagSelector"],
@@ -2827,6 +2854,240 @@ for (const file of elaineTestFiles) {
         "       The canonical rateLimit stub lives in standard-mock-scaffold.ts so that\n" +
         "       all Elaine test files stay in sync when new limiters are added.\n" +
         "       See artifacts/api-server/src/elaine/test-helpers/standard-mock-scaffold.ts.",
+    );
+  }
+}
+
+// ── Scan P: gallery pages must use shared compare/multi-select primitives ──────
+//
+// CompareModal, CompareFloatingBar, and useMultiSelectMode were extracted from
+// Pottery's gallery page into lib/collection-ui so that Quilting Fabrics,
+// Patterns, Quilts, and Ornaments can reuse the same interaction model without
+// copy-pasting.
+//
+// A new gallery page that hand-rolls its own compare mode (boolean toggle) AND
+// selected-IDs array state is reimplementing what useMultiSelectMode already
+// provides — the exact duplication this project's "always consolidate into shared
+// libs" convention is meant to prevent.
+//
+// Scope: files under */pages/** within artifacts/modules/src/ and
+// artifacts/web/src/ — gallery collection pages always live under a pages/
+// subdirectory, so this avoids false-positives from component or utility files
+// that might happen to share unrelated state shapes.
+//
+// The Set<number> variant used in maintenance/bulk-delete pages is NOT flagged:
+// those use useState<Set<number>>(new Set()) which is a different pattern with a
+// different purpose (checkbox bulk-delete, not compare side-by-side).
+//
+// Pottery's collection page is the gold-standard ORIGINAL and is explicitly
+// exempt — the shared hook was extracted FROM it, so it deliberately keeps its
+// own hand-written implementation by design (noted in compare-modal.tsx).
+//
+
+/**
+ * Returns true when `pos` falls inside an open single-quoted or double-quoted
+ * string literal in `source`, scanning from the start and tracking quote state.
+ * Used by `hasNamedCollectionUIImport` to exclude import-shaped text that
+ * appears inside a string value rather than as a real top-level import.
+ *
+ * Template literals (backtick strings) are not tracked because real import
+ * declarations cannot appear inside them in valid TypeScript.
+ */
+function isInsideStringContext(source: string, pos: number): boolean {
+  let inSingle = false;
+  let inDouble = false;
+  for (let i = 0; i < pos; i++) {
+    const ch = source[i];
+    // Skip the character after a backslash escape inside a string.
+    if (ch === "\\" && (inSingle || inDouble)) {
+      i++;
+      continue;
+    }
+    if (ch === "'" && !inDouble) {
+      inSingle = !inSingle;
+    } else if (ch === '"' && !inSingle) {
+      inDouble = !inDouble;
+    }
+  }
+  return inSingle || inDouble;
+}
+
+/**
+ * Returns true when `source` contains a real named import of `exportName` from
+ * `@workspace/collection-ui` (not a raw substring — comments and string-
+ * embedded pseudo-imports are both excluded).
+ *
+ * Two-phase strategy:
+ *   1. Strip `//` and `/* * /` comments first so that a commented-out import
+ *      declaration is not mistaken for a real one.
+ *   2. Run the import regex against the comment-stripped source (preserving the
+ *      module-specifier string so the `from "@workspace/collection-ui"` literal
+ *      can still be matched by the regex).
+ *   3. For each regex match, verify the match position is NOT inside a string
+ *      literal (using `isInsideStringContext`), so a const whose value looks
+ *      like an import statement does not satisfy the check.
+ *
+ * Why NOT stripAllStringLiteralContent: that utility erases the content of ALL
+ * string literals, including the `"@workspace/collection-ui"` specifier in the
+ * real import itself — making the regex unable to recognise any genuine import.
+ */
+function hasNamedCollectionUIImport(
+  source: string,
+  exportName: string,
+): boolean {
+  // Strip only comments so commented-out imports are ignored but the module
+  // specifier in real imports remains intact for the regex.
+  const noComments = stripSourceComments(source);
+
+  // Matches: import { ..., exportName, ... } from "@workspace/collection-ui"
+  // Skips:   import type { ... }  (type-only imports)
+  const re =
+    /import(?!\s+type)\s*\{([^}]*)\}\s*from\s*['"]@workspace\/collection-ui['"]/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(noComments)) !== null) {
+    // Reject a match whose start position is inside a string literal —
+    // this handles const values like `'import { X } from "..."'`.
+    if (isInsideStringContext(noComments, m.index)) continue;
+
+    for (const raw of m[1].split(",")) {
+      const trimmed = raw.trim();
+      // Skip per-specifier type-only specifiers: `type X` or `type X as Y`.
+      // These carry no runtime value and must not satisfy the import check,
+      // even though the whole import { } block is not type-only.
+      if (/^type\s+/.test(trimmed)) continue;
+      const name = trimmed
+        .replace(/\s+as\s+\S+$/, "") // strip `as Alias` suffix
+        .trim();
+      if (name === exportName) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Scan P detector — exported for unit tests.
+ * Returns true if the source hand-rolls a compare/multi-select mode
+ * (boolean mode toggle + number-array selected-IDs state) without a real
+ * named import of useMultiSelectMode from @workspace/collection-ui.
+ *
+ * A comment or string containing "useMultiSelectMode" does NOT satisfy the
+ * check — only an actual named import in an import { } block does.
+ *
+ * The Set<number> variant used in maintenance/bulk-delete pages is NOT flagged
+ * (those use useState<Set<number>>(new Set()) — a different pattern).
+ */
+export function hasInlineMultiSelectMode(contents: string): boolean {
+  if (hasNamedCollectionUIImport(contents, "useMultiSelectMode")) return false;
+  // Note: returning false here does NOT mean the page is fully compliant —
+  // hasMissingCompareUIImports is a separate check that runs in addition.
+
+  // Strip comments before checking for state patterns so that commented-out
+  // legacy code cannot cause a false violation (e.g. a file migrating to the
+  // shared hook that leaves old state declarations in a comment block).
+  const stripped = stripSourceComments(contents);
+
+  // A boolean mode-active state whose name contains compare/select/bulk + Mode.
+  // Matches: const [compareMode, setCompareMode] = useState(false)
+  //          const [selectMode, setSelectMode] = useState<boolean>(false)
+  //          const [bulkMode, setBulkMode] = useState(false)
+  const hasModeBoolState =
+    /const \[[a-zA-Z]*(?:compare|select|bulk)[a-zA-Z]*[Mm]ode[a-zA-Z]*,\s*set[A-Za-z]+\]\s*=\s*useState(?:<boolean>)?\(false\)/.test(
+      stripped,
+    );
+
+  // A number-array (not Set<number>) selected-IDs state.
+  // Matches: const [selectedIds, setSelectedIds] = useState<number[]>([])
+  //          const [compareIds, setCompareIds] = useState<number[]>([])
+  const hasSelectedIdsArrayState =
+    /const \[[a-zA-Z]*[Ss]elected[A-Za-z]*[Ii]d[sa-zA-Z]*,\s*set[A-Za-z]+\]\s*=\s*useState<(?:number|string)\[\]>/.test(
+      stripped,
+    );
+
+  return hasModeBoolState && hasSelectedIdsArrayState;
+}
+
+/**
+ * Scan P partial-adoption detector — exported for unit tests.
+ *
+ * Returns true when the source *calls* useMultiSelectMode (an actual invocation
+ * `useMultiSelectMode(`, not just an import) but does NOT import both
+ * `CompareModal` AND `CompareFloatingBar` from \@workspace/collection-ui.
+ *
+ * This catches the "hook adopted but compare UI hand-rolled" drift pattern:
+ * a developer copies a gallery page, keeps `useMultiSelectMode`, but
+ * substitutes a local dialog for `CompareModal` or a local action bar for
+ * `CompareFloatingBar`.  Because `hasInlineMultiSelectMode` returns early on
+ * any real useMultiSelectMode import, this complementary check is required to
+ * enforce full adoption of all three shared primitives.
+ *
+ * A page that does NOT call useMultiSelectMode at all is not flagged — it
+ * either has no compare/select UI or is caught by hasInlineMultiSelectMode.
+ */
+export function hasMissingCompareUIImports(contents: string): boolean {
+  const stripped = stripSourceComments(contents);
+
+  // The hook must be *called* (not just imported) to trigger this check.
+  // This also prevents a bare unused-import from counting as adoption.
+  if (!/\buseMultiSelectMode\s*\(/.test(stripped)) return false;
+
+  // The hook is in active use — both companion primitives are required.
+  return (
+    !hasNamedCollectionUIImport(contents, "CompareModal") ||
+    !hasNamedCollectionUIImport(contents, "CompareFloatingBar")
+  );
+}
+
+/**
+ * Pottery's gallery page is the gold-standard original implementation that
+ * predates the shared hook.  useMultiSelectMode was extracted FROM it, so
+ * it is explicitly exempt from this scan by design.
+ */
+const MULTI_SELECT_MODE_LEGACY_EXEMPT = new Set([
+  "artifacts/modules/src/pottery/pages/collection.tsx",
+]);
+
+// Scope: gallery collection pages live under */pages/ subdirectories.
+// Narrowing to /pages/ prevents false-positives from component or utility files
+// that share unrelated boolean + number-array state shapes.
+const galleryPageSourceFiles = allSourceFiles.filter(
+  (f) =>
+    f.endsWith(".tsx") &&
+    (f.startsWith("artifacts/modules/src/") ||
+      f.startsWith("artifacts/web/src/")) &&
+    f.includes("/pages/"),
+);
+
+for (const file of galleryPageSourceFiles) {
+  if (MULTI_SELECT_MODE_LEGACY_EXEMPT.has(file)) continue;
+  const contents = read(file);
+
+  // Check 1: hand-rolled boolean mode + number-array state without the hook.
+  if (hasInlineMultiSelectMode(contents)) {
+    violations.push(
+      `${file}: hand-rolls compare/multi-select state (boolean mode toggle +\n` +
+        `  number-array selectedIds) instead of using the shared primitives\n` +
+        "  FIX: Import useMultiSelectMode, CompareModal, and CompareFloatingBar from\n" +
+        "       @workspace/collection-ui.  These were extracted from Pottery's gallery\n" +
+        "       page so that every collection gallery reuses the same interaction model\n" +
+        "       without copy-pasting the boolean-mode + array-state combination.\n" +
+        "       See artifacts/modules/src/ornaments/pages/collection.tsx for a reference\n" +
+        "       implementation that uses all three shared exports correctly.",
+    );
+  }
+
+  // Check 2: hook is called but CompareModal/CompareFloatingBar are missing —
+  // catches partial adoption where the hook was kept but the compare UI was
+  // hand-rolled (or the developer copied a template and replaced the modal with
+  // a local component).
+  if (hasMissingCompareUIImports(contents)) {
+    violations.push(
+      `${file}: calls useMultiSelectMode but does not import both CompareModal\n` +
+        "  and CompareFloatingBar from @workspace/collection-ui.\n" +
+        "  FIX: Gallery pages must use all three shared compare/select primitives\n" +
+        "       together — useMultiSelectMode, CompareModal, and CompareFloatingBar.\n" +
+        "       A hand-rolled compare dialog or action bar is the exact drift this\n" +
+        "       guard prevents.  See artifacts/modules/src/ornaments/pages/collection.tsx\n" +
+        "       for a reference implementation that imports all three correctly.",
     );
   }
 }

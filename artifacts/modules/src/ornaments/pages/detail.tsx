@@ -141,7 +141,7 @@ export default function OrnamentDetail() {
             ? `Book value on file: $${Number(ornament.bookValue).toFixed(2)}${ornament.bookValueSource ? ` (source: ${ornament.bookValueSource})` : ""}`
             : "No book value on file yet.",
           ornament.retailValueUsd != null
-            ? `Retail value on file: $${Number(ornament.retailValueUsd).toFixed(2)}${ornament.retailValueSource ? ` (source: ${ornament.retailValueSource})` : ""}${ornament.retailValueProductUrl ? ` — product page: ${ornament.retailValueProductUrl}` : ""}`
+            ? `Retail value on file: $${Number(ornament.retailValueUsd).toFixed(2)}${ornament.retailValueSource ? ` (source: ${ornament.retailValueSource})` : ""}`
             : "No retail value on file yet.",
           ornament.aiAppraisal
             ? `AI appraisal: "${ornament.aiAppraisal.slice(0, 200)}"`
@@ -1021,20 +1021,6 @@ export default function OrnamentDetail() {
                           ? ` · updated ${formatDate(ornament.retailValueUpdatedAt)}`
                           : ""}
                       </span>
-                    )}
-                    {ornament.retailValueProductUrl && (
-                      <>
-                        {" "}
-                        ·{" "}
-                        <a
-                          href={ornament.retailValueProductUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-primary underline underline-offset-2"
-                        >
-                          View product page
-                        </a>
-                      </>
                     )}
                   </span>
                 }

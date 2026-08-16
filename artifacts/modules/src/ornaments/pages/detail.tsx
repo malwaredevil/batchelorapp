@@ -21,11 +21,13 @@ import {
   useDeleteOrnament,
   useRefreshAllOrnamentData,
   useLookupOrnamentEbayPrice,
+  useListOrnamentCategories,
   getGetOrnamentQueryKey,
   getListOrnamentsQueryKey,
   useSetOrnamentPrimaryImage,
   useDeleteOrnamentImage,
   useUploadOrnamentImage,
+  useUpdateOrnamentImage,
   getUploadErrorMessage,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -40,7 +42,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { CategorySelector } from "@/ornaments/components/category-selector";
+import { TagSelector } from "@/ornaments/components/tag-selector";
 import { BarcodeScannerDialog } from "@/ornaments/components/barcode-scanner-dialog";
 import { generateInsurancePdf } from "@/ornaments/lib/pdf-export";
 import {
@@ -59,8 +61,12 @@ import {
   CollectionDetailSkeleton,
   CollectionDetailField,
   CollectionDetailSection,
+  trackAsyncAction,
+  isAsyncActionBusy,
+  useAsyncActionStatus,
 } from "@workspace/collection-ui";
 import { OrnamentEbayPriceSection } from "@/ornaments/components/OrnamentEbayPriceSection";
+import { ornamentReanalyzeKey } from "@/ornaments/lib/reanalyze-status";
 
 function formatCurrency(amount: number | string | null | undefined): string {
   if (amount == null) return "—";
@@ -90,6 +96,7 @@ export default function OrnamentDetail() {
   } = useGetOrnament(id, {
     query: { enabled: !!id, queryKey: getGetOrnamentQueryKey(id) },
   });
+  const { data: allCategories = [] } = useListOrnamentCategories();
 
   const [isEditing, setIsEditing] = useState(false);
   const search = useSearch();
@@ -103,6 +110,7 @@ export default function OrnamentDetail() {
     year: "",
     notes: "",
     aiDesc: "",
+    boxDescription: "",
     dimensions: "",
     condition: "",
     barcode: "",
@@ -136,6 +144,9 @@ export default function OrnamentDetail() {
             : null,
           ornament.aiDescription
             ? `AI description: "${ornament.aiDescription.slice(0, 200)}"`
+            : null,
+          ornament.description
+            ? `Box description (${ornament.descriptionGenerated ? "AI-generated stand-in, no real box text was found" : "verbatim text printed on the box"}): "${ornament.description.slice(0, 300)}"`
             : null,
           configSummary ? `\n${configSummary}` : null,
         ]
@@ -173,6 +184,7 @@ export default function OrnamentDetail() {
   const addImage = useUploadOrnamentImage(id);
   const setPrimaryImage = useSetOrnamentPrimaryImage();
   const deleteImage = useDeleteOrnamentImage();
+  const relabelImage = useUpdateOrnamentImage();
 
   function enterEdit() {
     if (!ornament) return;
@@ -183,6 +195,7 @@ export default function OrnamentDetail() {
       year: ornament.year ? String(ornament.year) : "",
       notes: ornament.notes || "",
       aiDesc: ornament.aiDescription || "",
+      boxDescription: ornament.description || "",
       dimensions: ornament.dimensions || "",
       condition: ornament.condition || "",
       barcode: ornament.barcodeValue || "",
@@ -193,6 +206,12 @@ export default function OrnamentDetail() {
 
   function cancelEdit() {
     setIsEditing(false);
+  }
+
+  function toggleCategory(catId: number) {
+    setSelectedCategoryIds((prev) =>
+      prev.includes(catId) ? prev.filter((x) => x !== catId) : [...prev, catId],
+    );
   }
 
   function save() {
@@ -209,6 +228,7 @@ export default function OrnamentDetail() {
         year: draft.year ? parseInt(draft.year, 10) : undefined,
         notes: draft.notes.trim() || undefined,
         aiDescription: draft.aiDesc.trim() || undefined,
+        description: draft.boxDescription.trim() || undefined,
         dimensions: draft.dimensions.trim() || undefined,
         condition: draft.condition.trim() || undefined,
         barcodeValue: draft.barcode.trim() || undefined,
@@ -235,13 +255,29 @@ export default function OrnamentDetail() {
     updateOrnament.mutate({ id, data: { lockedFields: next } });
   }
 
+  // Shared with the gallery card's plain "Refresh AI" action (see
+  // reanalyze-status.ts) — both trigger AI vision reanalysis for this same
+  // item, so they share one busy flag to avoid a duplicate AI call when the
+  // user triggers one from the gallery, opens the item, and can't tell the
+  // first is still running.
+  const reanalyzeKey = ornamentReanalyzeKey(id);
+  const reanalyzeStatus = useAsyncActionStatus(reanalyzeKey);
+  const refreshAllBusy =
+    refreshAll.isPending || reanalyzeStatus === "processing";
+
   const handleRefreshAll = async () => {
+    if (isAsyncActionBusy(reanalyzeKey)) {
+      toast.info("AI refresh is already running for this item — hang tight.");
+      return;
+    }
+    toast.loading(
+      "Refreshing AI analysis, book value, eBay prices, and appraisal…",
+      { id: "refresh-all" },
+    );
+    const promise = refreshAll.mutateAsync({ id });
+    trackAsyncAction(reanalyzeKey, promise);
     try {
-      toast.loading(
-        "Refreshing AI analysis, book value, eBay prices, and appraisal…",
-        { id: "refresh-all" },
-      );
-      const result = await refreshAll.mutateAsync({ id });
+      const result = await promise;
       toast.dismiss("refresh-all");
       toast.success("All data refreshed");
       queryClient.setQueryData(getGetOrnamentQueryKey(id), result);
@@ -410,7 +446,7 @@ export default function OrnamentDetail() {
                   .map((img) => ({
                     id: img.id,
                     url: img.url,
-                    label: null,
+                    label: img.label ?? null,
                     isPrimary: false,
                   })),
               ]}
@@ -459,6 +495,19 @@ export default function OrnamentDetail() {
                     toast.success("Primary image updated");
                   })
                   .catch(() => toast.error("Failed to set primary image"))
+              }
+              onRelabel={(imageId, label) =>
+                relabelImage
+                  .mutateAsync({ id, imageId, data: { label } })
+                  .then(() => {
+                    queryClient.invalidateQueries({
+                      queryKey: getGetOrnamentQueryKey(id),
+                    });
+                    toast.success("Label saved.");
+                  })
+                  .catch(() => {
+                    toast.error("Failed to save label");
+                  })
               }
               onZoom={(url) => {
                 const idx = lightboxImages.indexOf(url);
@@ -557,11 +606,15 @@ export default function OrnamentDetail() {
                 variant="outline"
                 size="icon"
                 onClick={handleRefreshAll}
-                disabled={refreshAll.isPending}
-                title="Refresh all — AI analysis, book value, eBay prices, and AI appraisal"
+                disabled={refreshAllBusy}
+                title={
+                  reanalyzeStatus === "processing" && !refreshAll.isPending
+                    ? "AI refresh already running (started from the gallery)"
+                    : "Refresh all — AI analysis, book value, eBay prices, and AI appraisal"
+                }
                 data-testid="button-reanalyze"
               >
-                {refreshAll.isPending ? (
+                {refreshAllBusy ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <RefreshCcw className="h-4 w-4" />
@@ -625,12 +678,31 @@ export default function OrnamentDetail() {
         heroContent={
           !isEditing ? (
             <div className="space-y-4">
+              {ornament.description && (
+                <div>
+                  <p className="mb-1.5 flex items-center gap-1.5 text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                    Box Description
+                    {ornament.descriptionGenerated && (
+                      <span
+                        className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium normal-case tracking-normal text-muted-foreground"
+                        title="No legible text was found on the box, so the AI wrote a similar stand-in description instead of a verbatim transcription."
+                      >
+                        AI-generated
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-sm leading-relaxed text-muted-foreground italic">
+                    “{ornament.description}”
+                  </p>
+                </div>
+              )}
+
               {(ornament.aiDescription || ornament.notes) && (
                 <div className="space-y-2">
                   {ornament.aiDescription && (
                     <div>
                       <p className="mb-1.5 text-xs font-medium uppercase tracking-widest text-muted-foreground">
-                        Description
+                        AI Summary
                       </p>
                       <p className="text-sm leading-relaxed text-muted-foreground">
                         {ornament.aiDescription}
@@ -836,6 +908,27 @@ export default function OrnamentDetail() {
             />
             {isEditing && (
               <CollectionDetailField
+                label="Box Description"
+                value={ornament.description || "—"}
+                editing={isEditing}
+                editSlot={
+                  <Textarea
+                    value={draft.boxDescription}
+                    onChange={(e) =>
+                      setDraft((d) => ({
+                        ...d,
+                        boxDescription: e.target.value,
+                      }))
+                    }
+                    placeholder="Verbatim text printed on the back of the box..."
+                    className="text-sm min-h-[80px]"
+                  />
+                }
+                empty={!ornament.description}
+              />
+            )}
+            {isEditing && (
+              <CollectionDetailField
                 label="Notes"
                 value={ornament.notes || "—"}
                 editing={isEditing}
@@ -856,12 +949,13 @@ export default function OrnamentDetail() {
             {/* Categories */}
             {isEditing ? (
               <div className="py-1.5 border-b border-border/60 last:border-0">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
-                  Categories
-                </p>
-                <CategorySelector
-                  value={selectedCategoryIds}
-                  onChange={setSelectedCategoryIds}
+                <TagSelector
+                  allCategories={allCategories}
+                  selectedIds={selectedCategoryIds}
+                  onToggle={toggleCategory}
+                  onCreated={(cat) =>
+                    setSelectedCategoryIds((prev) => [...prev, cat.id])
+                  }
                 />
               </div>
             ) : null}

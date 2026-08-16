@@ -2376,6 +2376,86 @@ export const ELAINE_APP_OPERATION_CATALOG = [
     requestBody: null,
   },
   {
+    operationId: "setPatternImageDefault",
+    method: "POST",
+    path: "/quilting/patterns/{id}/images/{imageId}/set-default",
+    domain: "patterns",
+    summary: "Set a supplemental image as the pattern's default photo",
+    access: "action",
+    parameters: [
+      {
+        name: "id",
+        in: "path",
+        required: true,
+        schema: {
+          type: "integer",
+        },
+      },
+      {
+        name: "imageId",
+        in: "path",
+        required: true,
+        schema: {
+          type: "integer",
+        },
+      },
+    ],
+    requestBody: {
+      required: false,
+      schema: {
+        type: "object",
+        properties: {
+          expectedVersion: {
+            type: "string",
+            maxLength: 64,
+            description:
+              "The v cache-buster from the supplemental image URL being promoted. When provided, the server verifies the image's storage path still hashes to this value before swapping (compare-and-swap); a mismatch returns 409 so a retry cannot reverse an applied swap.",
+          },
+        },
+      },
+    },
+  },
+  {
+    operationId: "setQuiltImageDefault",
+    method: "POST",
+    path: "/quilting/quilts/{id}/images/{imageId}/set-default",
+    domain: "quilts",
+    summary: "Set a supplemental image as the quilt's default photo",
+    access: "action",
+    parameters: [
+      {
+        name: "id",
+        in: "path",
+        required: true,
+        schema: {
+          type: "integer",
+        },
+      },
+      {
+        name: "imageId",
+        in: "path",
+        required: true,
+        schema: {
+          type: "integer",
+        },
+      },
+    ],
+    requestBody: {
+      required: false,
+      schema: {
+        type: "object",
+        properties: {
+          expectedVersion: {
+            type: "string",
+            maxLength: 64,
+            description:
+              "The v cache-buster from the supplemental image URL being promoted. When provided, the server verifies the image's storage path still hashes to this value before swapping (compare-and-swap); a mismatch returns 409 so a retry cannot reverse an applied swap.",
+          },
+        },
+      },
+    },
+  },
+  {
     operationId: "suggestShoppingItemPrice",
     method: "POST",
     path: "/quilting/shopping/{id}/suggest-price",

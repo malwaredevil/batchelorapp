@@ -13,7 +13,7 @@ paths:
         - name: q
           in: query
           required: false
-          description: Text search across name, series/collection, brand, and notes
+          description: Text search across name, series/collection, brand, notes, and description
           schema:
             type: string
         - name: categoryId
@@ -1072,6 +1072,21 @@ components:
           type:
             - string
             - "null"
+        description:
+          type:
+            - string
+            - "null"
+          description: >-
+            Verbatim text transcribed from the printed description on the
+            back of the ornament's box (distinct from aiDescription, which
+            is AI-authored). When no legible box-back text was found, the
+            AI writes a stand-in instead — see descriptionGenerated.
+        descriptionGenerated:
+          type: boolean
+          description: >-
+            True when description above is an AI-generated stand-in because
+            no legible box-back text was found (false for manual, verbatim,
+            or catalog text).
         acquiredAt:
           type:
             - string
@@ -1177,6 +1192,10 @@ components:
             - string
             - "null"
         aiDescription:
+          type:
+            - string
+            - "null"
+        description:
           type:
             - string
             - "null"

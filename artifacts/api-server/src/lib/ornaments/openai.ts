@@ -11,20 +11,31 @@ export interface OrnamentAnalysis {
   dominantColors: string[];
   motifs: string[];
   aiDescription: string | null;
+  boxDescription: string | null;
+  /**
+   * True when boxDescription above could not be transcribed from a legible
+   * printed box-back text and was instead written by the AI as a stand-in.
+   * False when boxDescription is a verbatim transcription (or null).
+   */
+  boxDescriptionGenerated: boolean;
   upc: string | null;
 }
 
 const ANALYSIS_PROMPT = `You are an expert Hallmark Keepsake ornament collector and cataloguer. You will be given one or more photos of the same Christmas ornament — box, tag, and/or the ornament itself.
 
 Respond with STRICT JSON only, using exactly these keys:
-- "name": a concise, descriptive name for the ornament (e.g. "Snoopy and Woodstock Skating" or "1998 Fabulous Decade Snowman"). Under 12 words.
+- "name": the ornament's official printed name whenever it is visible. Hallmark boxes almost always print the ornament's name on the FRONT of the box, usually directly below the picture of the ornament (it may also appear on a tag or the box back). If you can read a printed name anywhere in the photos, use that printed name EXACTLY as written (title casing is fine; drop trademark symbols like ™/®) — do not invent your own descriptive name, do not paraphrase it, and do not add extra words. Only if no printed name is legible in any photo, fall back to a concise descriptive name you write yourself (e.g. "Snoopy and Woodstock Skating"). Under 12 words either way.
 - "seriesOrCollection": the name of the Hallmark series or collection this ornament belongs to if visible on the box/tag or identifiable (e.g. "Fabulous Decade", "Star Trek", "Frosty Friends"), or null if not part of a numbered series.
 - "year": the release/copyright year printed on the ornament, tag, or box (a 4-digit number), or null if not visible/determinable.
 - "dimensions": approximate size if a ruler/reference is visible, otherwise null.
 - "dominantColors": an array of 2-5 colour names describing the ornament, chosen from common colour names (e.g. red, gold, green, silver, white, blue).
 - "motifs": an array of key recurring decorative elements or characters depicted (e.g. "Snoopy", "snowman", "holly").
 - "aiDescription": 2-4 sentences describing the ornament as if writing a collector's catalogue entry.
+- "boxDescription": if one of the photos clearly shows the printed descriptive text on the back or bottom of the box (the little paragraph telling the ornament's story), TRANSCRIBE THAT TEXT VERBATIM — exactly as printed, character for character, with no paraphrasing, summarizing, or added commentary — and set "boxDescriptionGenerated" to false. If no box is visible, or a box is visible but has no such printed text, or the text is present but not legible, DO NOT return null — instead WRITE YOUR OWN short (2-3 sentence) piece of box-style flavor text in the warm, story-telling tone Hallmark typically uses on the back of its ornament boxes, based on what the ornament depicts, and set "boxDescriptionGenerated" to true. Never claim invented text is verbatim.
+- "boxDescriptionGenerated": boolean, true only when boxDescription above is text you wrote yourself per the fallback rule, false when it's an exact transcription of real printed text you could read.
 - "upc": if a UPC/EAN barcode is visible anywhere in the photos (typically printed on the box, a sticker, or a tag), read the barcode digits underneath it and return them as a string of only digits (usually 12-13 digits). If no barcode is visible, or the digits are not clearly legible, return null. Never guess or fabricate digits.
+
+When you find a printed name on the box, treat it as the authoritative identification and let it guide the rest of your answer — use it (together with your knowledge of the Hallmark Keepsake catalogue) to pin down the series, year, and description rather than guessing from the picture alone.
 
 Do not include any commentary outside the JSON.`;
 
@@ -86,6 +97,8 @@ export async function analyzeOrnamentImage(
     dominantColors: asStringArray(parsed?.["dominantColors"]),
     motifs: asStringArray(parsed?.["motifs"]),
     aiDescription: asString(parsed?.["aiDescription"]),
+    boxDescription: asString(parsed?.["boxDescription"]),
+    boxDescriptionGenerated: parsed?.["boxDescriptionGenerated"] === true,
     upc,
   };
 }
@@ -161,6 +174,7 @@ export interface OrnamentMeta {
   year: number | null;
   condition: string | null;
   aiDescription: string | null;
+  description?: string | null;
   barcodeValue?: string | null;
 }
 
@@ -175,6 +189,7 @@ export async function appraiseOrnamentImage(
     meta.year ? `Year: ${meta.year}` : null,
     meta.condition ? `Condition: ${meta.condition}` : null,
     meta.aiDescription ? `Description: ${meta.aiDescription}` : null,
+    meta.description ? `Box description: ${meta.description}` : null,
     meta.barcodeValue ? `UPC/Barcode: ${meta.barcodeValue}` : null,
   ]
     .filter(Boolean)
@@ -218,6 +233,7 @@ export function buildEmbeddingText(analysis: OrnamentAnalysis): string {
     ...analysis.motifs,
     ...analysis.dominantColors,
     analysis.aiDescription,
+    analysis.boxDescription,
   ]
     .filter(Boolean)
     .join(" ");

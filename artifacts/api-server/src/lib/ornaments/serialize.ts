@@ -37,6 +37,8 @@ export interface SerializedItem {
   condition: string | null;
   origin: string | null;
   aiDescription: string | null;
+  description: string | null;
+  descriptionGenerated: boolean;
   acquiredAt: string | null;
   dominantColors: string[];
   motifs: string[];
@@ -110,6 +112,8 @@ const { serializeItem, serializeItems } = createCollectionSerializer<
       condition: row.condition,
       origin: row.origin,
       aiDescription: row.aiDescription,
+      description: row.description,
+      descriptionGenerated: row.descriptionGenerated ?? false,
       acquiredAt: row.acquiredAt,
       dominantColors: row.dominantColors ?? [],
       motifs: row.motifs ?? [],

@@ -351,6 +351,7 @@ router.get("/items", async (req, res) => {
         ilike(ornamentsItems.seriesOrCollection, term),
         ilike(ornamentsItems.brand, term),
         ilike(ornamentsItems.notes, term),
+        ilike(ornamentsItems.description, term),
       )!,
     );
   }
@@ -560,6 +561,7 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
 
   const nameField = clampField(req.body?.name, MAX_NAME);
   const notesField = clampField(req.body?.notes, MAX_NOTES);
+  const descriptionField = clampField(req.body?.description, MAX_NOTES);
   const userDimensions = clampField(req.body?.dimensions, MAX_TEXT);
   const brandField = clampField(req.body?.brand, MAX_TEXT);
   const conditionField = clampField(req.body?.condition, MAX_TEXT);
@@ -669,6 +671,19 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
         condition: conditionField,
         origin: originField,
         aiDescription: analysis.aiDescription,
+        // Verbatim box-back text: user-typed entry wins, then AI vision's
+        // transcription of the box (or an AI-generated stand-in when no box
+        // text was found), then a catalog/barcode lookup's blurb.
+        description:
+          descriptionField ??
+          analysis.boxDescription ??
+          (barcodeLookup?.found ? barcodeLookup.description : null),
+        // Only true when the stored description came from the AI-generated
+        // fallback (no real box text) — never for manual or looked-up text.
+        descriptionGenerated:
+          !descriptionField &&
+          analysis.boxDescription != null &&
+          analysis.boxDescriptionGenerated,
         dominantColors: analysis.dominantColors,
         motifs: analysis.motifs,
         acquiredAt: today,
@@ -736,6 +751,11 @@ router.patch("/items/:id", async (req, res) => {
   if (body.acquiredAt !== undefined) fieldUpdates.acquiredAt = body.acquiredAt;
   if (body.aiDescription !== undefined)
     fieldUpdates.aiDescription = clampField(body.aiDescription, MAX_NOTES);
+  if (body.description !== undefined) {
+    fieldUpdates.description = clampField(body.description, MAX_NOTES);
+    // A manual edit is always real text, never an AI-generated stand-in.
+    fieldUpdates.descriptionGenerated = false;
+  }
   if (body.dimensions !== undefined)
     fieldUpdates.dimensions = clampField(body.dimensions, MAX_TEXT);
   if (body.condition !== undefined)
@@ -1395,6 +1415,14 @@ export async function runItemAnalysis(id: number): Promise<unknown> {
       analysis.aiDescription,
       item.aiDescription,
     ),
+    description: keep("description", analysis.boxDescription, item.description),
+    // Tied to the "description" lock: only trust the new generated-flag when
+    // we're actually taking the new box description text above.
+    descriptionGenerated: locked.has("description")
+      ? item.descriptionGenerated
+      : analysis.boxDescription != null
+        ? analysis.boxDescriptionGenerated
+        : item.descriptionGenerated,
     barcodeValue: keep("barcodeValue", analysis.upc, item.barcodeValue),
     embedding,
   };
@@ -1652,6 +1680,7 @@ async function runItemAppraisal(id: number): Promise<void> {
     year: item.year,
     condition: item.condition,
     aiDescription: item.aiDescription,
+    description: item.description,
     barcodeValue: item.barcodeValue,
   });
 
@@ -2005,6 +2034,11 @@ export async function createOrnamentItemFromBuffer(
             : null,
         dimensions: analysis.dimensions,
         aiDescription: analysis.aiDescription,
+        description:
+          analysis.boxDescription ??
+          (barcodeLookup?.found ? barcodeLookup.description : null),
+        descriptionGenerated:
+          analysis.boxDescription != null && analysis.boxDescriptionGenerated,
         dominantColors: analysis.dominantColors,
         motifs: analysis.motifs,
         acquiredAt: today,

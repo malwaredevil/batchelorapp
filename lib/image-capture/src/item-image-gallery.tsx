@@ -8,14 +8,44 @@ import {
   Loader2,
   Plus,
   ZoomIn,
+  Check,
+  X,
 } from "lucide-react";
 import { cn } from "@workspace/web-core/utils";
+import { Input } from "@workspace/ui/input";
+import { Button } from "@workspace/ui/button";
 import { ImageEditor } from "./image-editor";
 import { CameraModal } from "./image-picker";
 
 // ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+/** Default label suggestions — shared across all collection add/detail pages. */
+export const DEFAULT_LABEL_SUGGESTIONS = [
+  "Front",
+  "Back",
+  "Left side",
+  "Right side",
+  "Top",
+  "Bottom",
+  "Detail",
+  "Maker's mark",
+];
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+/**
+ * Extract the `v` cache-buster from an image URL (e.g. "/api/.../images/10?v=abc123").
+ * Used as the compare-and-swap token for promote-to-primary requests so a
+ * retried/duplicated promotion cannot silently swap the images back.
+ */
+export function extractImageVersion(url: string): string | undefined {
+  const match = /[?&]v=([^&#]+)/.exec(url);
+  return match ? match[1] : undefined;
+}
 
 export interface GalleryImage {
   id: number;
@@ -42,12 +72,28 @@ export interface ItemImageGalleryProps {
   onDeleteImage?: (imageId: number, isPrimary: boolean) => void;
   /** Optional promote-to-primary handler — pass to show the star button. */
   onSetPrimary?: (imageId: number) => void;
+  /**
+   * Optional relabel handler — pass to let the user tag a supplemental photo
+   * (e.g. "Front", "Maker's mark"). Shows a labeling panel below the action
+   * bar, matching the Pottery module's photo labeler.
+   */
+  onRelabel?: (imageId: number, label: string | null) => Promise<void> | void;
+  /** Override the quick-pick suggestion chips shown in the label editor. */
+  labelSuggestions?: string[];
   /** Optional lightbox callback — pass to make the main image click-to-zoom. */
   onZoom?: (url: string, label?: string) => void;
   /** Max total images before the add button disappears. */
   maxImages?: number;
   /** External uploading state (e.g. from a mutation). */
   isUploading?: boolean;
+  /**
+   * External mutation-in-flight state (set-primary / relabel / delete).
+   * Disables all gallery actions while true (like isUploading) but does NOT
+   * show the add-tile upload spinner. Pass the OR of your image-mutation
+   * pending flags so rapid double-activations can't race (e.g. two
+   * set-primary swaps reversing each other).
+   */
+  isMutating?: boolean;
   className?: string;
   /**
    * Override the main image's aspect/size classes.
@@ -67,9 +113,12 @@ export function ItemImageGallery({
   onReplaceImage,
   onDeleteImage,
   onSetPrimary,
+  onRelabel,
+  labelSuggestions = DEFAULT_LABEL_SUGGESTIONS,
   onZoom,
   maxImages,
   isUploading = false,
+  isMutating = false,
   className,
   mainImageClassName,
 }: ItemImageGalleryProps) {
@@ -93,21 +142,48 @@ export function ItemImageGallery({
   const [isFetchingEdit, setIsFetchingEdit] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
+  // ── Label flow ────────────────────────────────────────────────────────────
+  const [showLabelInput, setShowLabelInput] = useState(false);
+  const [pendingLabel, setPendingLabel] = useState("");
+  const [isSavingLabel, setIsSavingLabel] = useState(false);
+  /** Set right after a new photo is added so we jump to it and prompt for a label. */
+  const openLabelAfterAddRef = useRef(false);
+
   // ── Derived ───────────────────────────────────────────────────────────────
   const safeIdx = Math.min(activeIdx, Math.max(0, images.length - 1));
   const active = images[safeIdx];
   const canAddMore = maxImages == null || images.length < maxImages;
-  const isBusy = isFetchingEdit || isSavingEdit || isSavingAdd || isUploading;
+  const isBusy =
+    isFetchingEdit || isSavingEdit || isSavingAdd || isUploading || isMutating;
 
   // ── Reset active index when the primary image changes (e.g. after set-primary) ──
-  const primaryId = images.find((i) => i.isPrimary)?.id;
-  const prevPrimaryIdRef = useRef(primaryId);
+  // Keyed on id AND url: some callers use a fixed synthetic id for the primary
+  // slot (the backend swaps storage paths in place), so only the URL changes
+  // after a promotion.
+  const primary = images.find((i) => i.isPrimary);
+  const primaryKey = primary ? `${primary.id}:${primary.url}` : undefined;
+  const prevPrimaryKeyRef = useRef(primaryKey);
   useEffect(() => {
-    if (prevPrimaryIdRef.current !== primaryId) {
-      prevPrimaryIdRef.current = primaryId;
+    if (prevPrimaryKeyRef.current !== primaryKey) {
+      prevPrimaryKeyRef.current = primaryKey;
       setActiveIdx(0);
     }
-  }, [primaryId]);
+  }, [primaryKey]);
+
+  // ── Jump to a freshly-added photo and open the label picker right away ──────
+  const prevImageCountRef = useRef(images.length);
+  useEffect(() => {
+    if (
+      openLabelAfterAddRef.current &&
+      images.length > prevImageCountRef.current
+    ) {
+      openLabelAfterAddRef.current = false;
+      setActiveIdx(images.length - 1);
+      setPendingLabel("");
+      setShowLabelInput(true);
+    }
+    prevImageCountRef.current = images.length;
+  }, [images.length]);
 
   // ── Camera / file pick for ADD ────────────────────────────────────────────
   function handleCapture(file: File) {
@@ -125,10 +201,32 @@ export function ItemImageGallery({
   async function handleAddSave(edited: File) {
     setPendingAddFile(null);
     setIsSavingAdd(true);
+    if (onRelabel) openLabelAfterAddRef.current = true;
     try {
       await onAddImage(edited);
+    } catch (err) {
+      openLabelAfterAddRef.current = false;
+      throw err;
     } finally {
       setIsSavingAdd(false);
+    }
+  }
+
+  // ── Label existing ────────────────────────────────────────────────────────
+  function openLabelEditor() {
+    if (!active) return;
+    setPendingLabel(active.label ?? "");
+    setShowLabelInput(true);
+  }
+
+  async function handleSaveLabel() {
+    if (!active || !onRelabel) return;
+    setIsSavingLabel(true);
+    try {
+      await onRelabel(active.id, pendingLabel.trim() || null);
+      setShowLabelInput(false);
+    } finally {
+      setIsSavingLabel(false);
     }
   }
 
@@ -163,6 +261,74 @@ export function ItemImageGallery({
       setIsSavingEdit(false);
       setEditTarget(null);
     }
+  }
+
+  const showActionBar = !!(
+    (active && !active.isPrimary && onSetPrimary) ||
+    onDeleteImage
+  );
+  const showLabelPanel = !!(active && !active.isPrimary && onRelabel);
+
+  /** Set-primary / delete buttons, or the delete-confirmation strip — shared
+   * between the standalone action bar and the merged labeling panel. */
+  function ActionButtons() {
+    if (!active) return null;
+    if (pendingDelete?.id === active.id) {
+      return (
+        <>
+          <span className="text-xs text-muted-foreground">
+            Delete this photo?
+          </span>
+          <button
+            type="button"
+            onClick={() => setPendingDelete(null)}
+            className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm transition hover:bg-muted"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onDeleteImage!(pendingDelete.id, pendingDelete.isPrimary);
+              setPendingDelete(null);
+            }}
+            className="flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 shadow-sm transition hover:bg-red-100 disabled:opacity-40 dark:border-red-900 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50"
+            disabled={isBusy}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Confirm delete
+          </button>
+        </>
+      );
+    }
+    return (
+      <>
+        {!active.isPrimary && onSetPrimary && (
+          <button
+            type="button"
+            onClick={() => onSetPrimary(active.id)}
+            className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm transition hover:bg-primary/10 hover:text-primary disabled:opacity-40"
+            disabled={isBusy}
+          >
+            <Star className="h-3.5 w-3.5" />
+            Set primary
+          </button>
+        )}
+        {onDeleteImage && (
+          <button
+            type="button"
+            onClick={() =>
+              setPendingDelete({ id: active.id, isPrimary: active.isPrimary })
+            }
+            className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 disabled:opacity-40"
+            disabled={isBusy}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Delete
+          </button>
+        )}
+      </>
+    );
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -266,67 +432,83 @@ export function ItemImageGallery({
           </div>
 
           {/* Action bar — Set Primary + Delete (Edit is now on the image icon) */}
-          {((!active.isPrimary && onSetPrimary) || onDeleteImage) && (
-            <div className="flex items-center justify-center gap-2">
-              {pendingDelete?.id === active.id ? (
-                /* Confirmation strip */
-                <>
-                  <span className="text-xs text-muted-foreground">
-                    Delete this photo?
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setPendingDelete(null)}
-                    className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm transition hover:bg-muted"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onDeleteImage!(pendingDelete.id, pendingDelete.isPrimary);
-                      setPendingDelete(null);
-                    }}
-                    className="flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600 shadow-sm transition hover:bg-red-100 dark:border-red-900 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    Confirm delete
-                  </button>
-                </>
-              ) : (
-                /* Normal action buttons */
-                <>
-                  {!active.isPrimary && onSetPrimary && (
-                    <button
-                      type="button"
-                      onClick={() => onSetPrimary(active.id)}
-                      className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm transition hover:bg-primary/10 hover:text-primary disabled:opacity-40"
-                      disabled={isBusy}
-                    >
-                      <Star className="h-3.5 w-3.5" />
-                      Set primary
-                    </button>
-                  )}
-                  {onDeleteImage && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setPendingDelete({
-                          id: active.id,
-                          isPrimary: active.isPrimary,
-                        })
-                      }
-                      className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm transition hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 disabled:opacity-40"
-                      disabled={isBusy}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      Delete
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
-          )}
+          {showActionBar &&
+            (showLabelPanel ? (
+              /* Merged into the labeling panel below for supplemental photos */
+              <div className="space-y-2 rounded-xl border border-card-border bg-card p-3">
+                {showLabelInput ? (
+                  <div className="space-y-2">
+                    <span className="text-xs text-muted-foreground">
+                      Label this photo
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {labelSuggestions.map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => setPendingLabel(s)}
+                          className={cn(
+                            "rounded-full border px-3 py-1 text-xs transition",
+                            pendingLabel === s
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-card-border hover:border-primary/30",
+                          )}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <Input
+                        value={pendingLabel}
+                        onChange={(e) => setPendingLabel(e.target.value)}
+                        placeholder="Custom label…"
+                        className="h-8 text-sm"
+                      />
+                      <Button
+                        size="sm"
+                        onClick={() => void handleSaveLabel()}
+                        disabled={isSavingLabel || isBusy}
+                      >
+                        {isSavingLabel ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Check className="h-4 w-4" />
+                        )}
+                        Save
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setShowLabelInput(false)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">
+                        {active.label ?? "No label"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={openLabelEditor}
+                        className="rounded px-2 py-0.5 text-xs text-primary transition hover:bg-primary/10"
+                      >
+                        Edit label
+                      </button>
+                    </div>
+                    <ActionButtons />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center justify-center gap-2">
+                <ActionButtons />
+              </div>
+            ))}
         </>
       ) : (
         /* ── Empty state — no images yet ─────────────────────────────────── */
@@ -363,7 +545,7 @@ export function ItemImageGallery({
 
       {/* ── Thumbnail strip + add tile ─────────────────────────────────────── */}
       {(images.length > 1 || (images.length >= 1 && canAddMore)) && (
-        <div className="flex gap-2 overflow-x-auto pb-1 snap-x">
+        <div className="flex flex-wrap gap-2 pb-1">
           {images.map((img, idx) => (
             <button
               key={img.id}

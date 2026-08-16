@@ -21,6 +21,7 @@ import {
   Sparkles,
   Check,
   XCircle,
+  GitCompare,
 } from "lucide-react";
 import { GalleryPaginator } from "@/components/GalleryPaginator";
 import { useBulkAdd } from "@/quilting/contexts/bulk-add-context";
@@ -76,6 +77,12 @@ import {
   formatElaineContextList,
   formatElaineContextEntity,
 } from "@workspace/elaine-ui";
+import {
+  useMultiSelectMode,
+  CompareModal,
+  CompareFloatingBar,
+  type CompareItem,
+} from "@workspace/collection-ui";
 
 const FABRICS_LIST_SS_KEY = "quilting-fabrics-list-state";
 let hasWarnedListStateSaveFailure = false;
@@ -429,6 +436,8 @@ export default function Fabrics() {
   );
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const compareMode = useMultiSelectMode(5);
+  const [showCompareModal, setShowCompareModal] = useState(false);
   const [stashBustMode, setStashBustMode] = useState(
     () => loadListState()?.stashBustMode ?? false,
   );
@@ -621,6 +630,16 @@ export default function Fabrics() {
     setIsBulkMode((v) => !v);
     setSelectedIds(new Set());
     setBulkItemStatus(new Map());
+    if (compareMode.active) compareMode.exit();
+  }
+
+  function toggleCompareMode() {
+    if (compareMode.active) {
+      compareMode.exit();
+    } else {
+      if (isBulkMode) toggleBulkMode();
+      compareMode.enter();
+    }
   }
 
   function selectAll() {
@@ -857,6 +876,18 @@ export default function Fabrics() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {fabrics && fabrics.length >= 2 && (
+            <Button
+              variant={compareMode.active ? "secondary" : "outline"}
+              size="sm"
+              onClick={toggleCompareMode}
+            >
+              <GitCompare className="mr-0 sm:mr-2 h-4 w-4" />
+              <span className="hidden sm:inline">
+                {compareMode.active ? "Done" : "Compare"}
+              </span>
+            </Button>
+          )}
           {fabrics && fabrics.length > 0 && (
             <Button
               variant={isBulkMode ? "secondary" : "outline"}
@@ -961,6 +992,46 @@ export default function Fabrics() {
             </>
           )}
         </div>
+      )}
+
+      {/* Compare mode floating bar + modal */}
+      {compareMode.active && (
+        <CompareFloatingBar
+          count={compareMode.selectedIds.length}
+          label="fabrics selected"
+          onCompare={() => setShowCompareModal(true)}
+        />
+      )}
+      {showCompareModal && (
+        <CompareModal
+          title="Compare fabrics"
+          items={compareMode.selectedIds
+            .map((id) => fabrics.find((f) => f.id === id))
+            .filter((f): f is (typeof fabrics)[number] => Boolean(f))
+            .map(
+              (fabric): CompareItem => ({
+                id: fabric.id,
+                name: fabric.name,
+                imageUrl: fabric.imageUrl,
+                href: `/quilting/fabrics/${fabric.id}`,
+                fields: [
+                  { label: "Designer", value: fabric.designer },
+                  { label: "Print type", value: fabric.printType },
+                  {
+                    label: "Quantity",
+                    value: `${fabric.quantity} ${fabric.quantityUnit}`,
+                  },
+                ],
+                colors: fabric.dominantColors ?? [],
+                colorToHex,
+              }),
+            )}
+          onClose={() => {
+            setShowCompareModal(false);
+            compareMode.exit();
+          }}
+          LinkComponent={Link}
+        />
       )}
 
       {fabrics && fabrics.length > 0 && (
@@ -1229,10 +1300,14 @@ export default function Fabrics() {
                 fabric={fabric as FabricSummary}
                 onDelete={handleDelete}
                 onReanalyze={handleReanalyze}
-                isBulkMode={isBulkMode}
-                isSelected={selectedIds.has(fabric.id)}
+                isBulkMode={isBulkMode || compareMode.active}
+                isSelected={
+                  isBulkMode
+                    ? selectedIds.has(fabric.id)
+                    : compareMode.selectedIds.includes(fabric.id)
+                }
                 bulkStatus={bulkItemStatus.get(fabric.id)}
-                onToggleSelect={toggleSelect}
+                onToggleSelect={isBulkMode ? toggleSelect : compareMode.toggle}
                 activeColor={colorFilter}
                 onFilterByPrintType={(pt) =>
                   setPrintTypeFilter((prev) => (prev === pt ? null : pt))

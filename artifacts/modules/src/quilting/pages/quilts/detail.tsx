@@ -9,15 +9,12 @@ import {
   RefreshCw,
   Check,
   X as XIcon,
-  Tag,
   Download,
-  ZoomIn,
 } from "lucide-react";
 import { LockButton } from "@/quilting/components/LockButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { getCategoryPalette, colorToHex } from "@workspace/web-core";
 import { ShareModal } from "@/quilting/components/share-modal";
@@ -27,6 +24,10 @@ import {
   useDeleteQuilt,
   useUpdateQuilt,
   useReanalyzeQuilt,
+  useAddQuiltImage,
+  useDeleteQuiltImage,
+  useUpdateQuiltImage,
+  useSetQuiltImageDefault,
   useListQuiltingCategories,
   getListQuiltsQueryKey,
   getGetQuiltQueryKey,
@@ -34,7 +35,11 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { TagSelector } from "@/quilting/components/tag-selector";
-import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
+import { ImageLightbox } from "@/quilting/components/image-lightbox";
+import {
+  ItemImageGallery,
+  extractImageVersion,
+} from "@workspace/image-capture";
 import { downloadCollectionImage } from "@/quilting/lib/svg-export";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
 import {
@@ -44,6 +49,10 @@ import {
 import {
   CollectionDetailHero,
   CollectionDetailPanelStack,
+  CollectionDetailSection,
+  CollectionDetailField,
+  CollectionDetailSkeleton,
+  CollectionErrorState,
   ReminderBellButton,
 } from "@workspace/collection-ui";
 
@@ -64,6 +73,12 @@ type QuiltData = {
     textColor: string | null;
   }>;
   imageUrl: string;
+  images: Array<{
+    id: number;
+    url: string;
+    label: string | null;
+    position: number;
+  }>;
   dominantColors?: string[];
   linkedFabricIds: number[];
   linkedFabrics?: Array<{
@@ -87,7 +102,7 @@ export default function QuiltDetail() {
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
   const [catEditing, setCatEditing] = useState(false);
   const [localNewCats, setLocalNewCats] = useState<QuiltingCategory[]>([]);
-  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [renamingName, setRenamingName] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const rawSearch = useSearch();
@@ -104,7 +119,7 @@ export default function QuiltDetail() {
     completionPercentage: 0,
   });
 
-  const { data: quilt, isLoading, isError } = useGetQuilt(quiltId);
+  const { data: quilt, isLoading, isError, refetch } = useGetQuilt(quiltId);
   const { data: allCategories } = useListQuiltingCategories();
 
   usePageAssistantContext(
@@ -146,6 +161,61 @@ export default function QuiltDetail() {
         toast.success("AI analysis refreshed");
       },
       onError: () => toast.error("Failed to refresh AI analysis."),
+    },
+  });
+
+  const addQuiltImage = useAddQuiltImage({
+    mutation: {
+      onSuccess: () => {
+        void queryClient.invalidateQueries({
+          queryKey: getGetQuiltQueryKey(quiltId),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: getListQuiltsQueryKey(),
+        });
+        toast.success("Photo added");
+      },
+      onError: () => toast.error("Failed to add photo."),
+    },
+  });
+
+  const deleteQuiltImageMutation = useDeleteQuiltImage({
+    mutation: {
+      onSuccess: () => {
+        void queryClient.invalidateQueries({
+          queryKey: getGetQuiltQueryKey(quiltId),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: getListQuiltsQueryKey(),
+        });
+        toast.success("Photo deleted");
+      },
+      onError: () => toast.error("Failed to delete photo."),
+    },
+  });
+
+  const relabelImageMutation = useUpdateQuiltImage({
+    mutation: {
+      onSuccess: () => {
+        void queryClient.invalidateQueries({
+          queryKey: getGetQuiltQueryKey(quiltId),
+        });
+        toast.success("Label saved");
+      },
+      onError: () => toast.error("Failed to save label."),
+    },
+  });
+
+  const setDefaultMutation = useSetQuiltImageDefault({
+    mutation: {
+      onSuccess: (data) => {
+        queryClient.setQueryData(getGetQuiltQueryKey(quiltId), data);
+        void queryClient.invalidateQueries({
+          queryKey: getListQuiltsQueryKey(),
+        });
+        toast.success("Default photo updated");
+      },
+      onError: () => toast.error("Failed to update default photo."),
     },
   });
 
@@ -244,31 +314,15 @@ export default function QuiltDetail() {
   }
 
   if (isLoading) {
-    return (
-      <div>
-        <div className="mb-6 flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => navigate("/quilting/quilts")}
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <Skeleton className="h-6 w-40" />
-        </div>
-        <Skeleton className="aspect-video w-full rounded-xl" />
-      </div>
-    );
+    return <CollectionDetailSkeleton />;
   }
 
   if (isError || !quilt) {
     return (
-      <div className="flex h-60 flex-col items-center justify-center gap-4">
-        <p className="text-muted-foreground">Quilt not found.</p>
-        <Button variant="outline" onClick={() => navigate("/quilting/quilts")}>
-          Back
-        </Button>
-      </div>
+      <CollectionErrorState
+        message="Quilt not found."
+        onRetry={() => refetch()}
+      />
     );
   }
 
@@ -277,6 +331,18 @@ export default function QuiltDetail() {
   const d = draft;
   const set = (k: keyof typeof draft, v: string | number) =>
     setDraft((prev) => ({ ...prev, [k]: v }));
+
+  const sortedSupplementals = (q.images ?? [])
+    .slice()
+    .sort((a, b) => a.position - b.position);
+  const allLightboxImages = [
+    q.imageUrl,
+    ...sortedSupplementals.map((img) => img.url),
+  ];
+  const allLightboxLabels = [
+    "Default",
+    ...sortedSupplementals.map((img, i) => img.label ?? `Photo ${i + 2}`),
+  ];
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -291,31 +357,77 @@ export default function QuiltDetail() {
       </Button>
 
       <CollectionDetailHero>
-        <div
-          className="relative overflow-hidden rounded-2xl border border-card-border bg-muted cursor-zoom-in group"
-          onClick={() => setLightboxOpen(true)}
-        >
-          <img
-            src={q.imageUrl}
-            alt={q.name}
-            className="h-full w-full object-cover"
+        {/* Col 1: shared item image gallery */}
+        <div className="space-y-4">
+          <ImageLightbox
+            src={
+              lightboxIndex !== null
+                ? (allLightboxImages[lightboxIndex] ?? "")
+                : ""
+            }
+            open={lightboxIndex !== null}
+            onClose={() => setLightboxIndex(null)}
+            images={allLightboxImages}
+            currentIndex={lightboxIndex ?? 0}
+            onNavigate={setLightboxIndex}
+            labels={allLightboxLabels}
           />
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition-all group-hover:bg-black/20 group-hover:opacity-100">
-            <ZoomIn className="h-10 w-10 text-white drop-shadow-lg" />
-          </div>
+          <ItemImageGallery
+            images={[
+              { id: -1, url: q.imageUrl, label: null, isPrimary: true },
+              ...sortedSupplementals.map((img) => ({
+                id: img.id,
+                url: img.url,
+                label: img.label ?? null,
+                isPrimary: false,
+              })),
+            ]}
+            onAddImage={async (file) => {
+              await addQuiltImage.mutateAsync({
+                id: quiltId,
+                data: { image: file },
+              });
+            }}
+            onDeleteImage={(imageId, isPrimary) => {
+              if (isPrimary) {
+                toast.error(
+                  "Set another photo as default first, then you can delete this one.",
+                );
+                return;
+              }
+              deleteQuiltImageMutation.mutate({ id: quiltId, imageId });
+            }}
+            onSetPrimary={(imageId) => {
+              const img = sortedSupplementals.find((i) => i.id === imageId);
+              const expectedVersion = img
+                ? extractImageVersion(img.url)
+                : undefined;
+              setDefaultMutation.mutate({
+                id: quiltId,
+                imageId,
+                data: expectedVersion ? { expectedVersion } : {},
+              });
+            }}
+            onRelabel={async (imageId, label) => {
+              await relabelImageMutation.mutateAsync({
+                id: quiltId,
+                imageId,
+                data: { label },
+              });
+            }}
+            onZoom={(url) => {
+              const idx = allLightboxImages.indexOf(url);
+              if (idx >= 0) setLightboxIndex(idx);
+            }}
+            isUploading={addQuiltImage.isPending}
+            isMutating={
+              setDefaultMutation.isPending ||
+              deleteQuiltImageMutation.isPending ||
+              relabelImageMutation.isPending
+            }
+            maxImages={11}
+          />
         </div>
-        <PreviewZoomModal
-          open={lightboxOpen}
-          onClose={() => setLightboxOpen(false)}
-          title={q.name}
-        >
-          <img
-            src={q.imageUrl}
-            alt={q.name}
-            className="max-h-[85vh] max-w-[85vw] rounded object-contain"
-            draggable={false}
-          />
-        </PreviewZoomModal>
 
         <div className="flex flex-col gap-4">
           {/* Title row */}
@@ -473,153 +585,148 @@ export default function QuiltDetail() {
       </CollectionDetailHero>
 
       <CollectionDetailPanelStack>
-        <section className="rounded-xl border border-card-border bg-card p-4">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Quilt details
-          </p>
-          {isEditing ? (
-            <div className="space-y-2">
-              <div>
-                <label className="mb-1 flex items-center text-xs text-muted-foreground">
-                  Name
-                  <LockButton
-                    field="name"
-                    lockedFields={lockedFields}
-                    onToggle={toggleLock}
-                  />
-                </label>
+        <CollectionDetailSection title="Quilt details">
+          {isEditing && (
+            <CollectionDetailField
+              label="Name"
+              value={q.name}
+              editing
+              editSlot={
                 <Input
                   value={d.name}
                   onChange={(e) => set("name", e.target.value)}
                   className="h-8 text-sm"
                 />
-              </div>
-              <div>
-                <label className="mb-1 block text-xs text-muted-foreground">
-                  Completed
-                </label>
+              }
+              locked={lockedFields.includes("name")}
+              onToggleLock={() => toggleLock("name")}
+            />
+          )}
+          {(isEditing || q.dateCompleted) && (
+            <CollectionDetailField
+              label="Completed"
+              value={q.dateCompleted ?? "—"}
+              editing={isEditing}
+              editSlot={
                 <Input
                   value={d.dateCompleted}
                   onChange={(e) => set("dateCompleted", e.target.value)}
                   className="h-8 text-sm"
                   placeholder="2024-06-01"
                 />
+              }
+            />
+          )}
+          {/* WIP progress — quilt-specific slider/bar, not a plain text field */}
+          {isEditing && !d.dateCompleted && (
+            <div className="py-1.5 border-b border-border/60 last:border-0">
+              <label className="mb-1 flex items-center justify-between text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <span>WIP Progress</span>
+                <span className="font-medium text-foreground">
+                  {d.completionPercentage}%
+                </span>
+              </label>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={5}
+                value={d.completionPercentage}
+                onChange={(e) =>
+                  set("completionPercentage", parseInt(e.target.value))
+                }
+                className="w-full accent-primary h-2 cursor-pointer"
+              />
+              <div className="flex justify-between text-[10px] text-muted-foreground/60 mt-0.5">
+                <span>Not started</span>
+                <span>Done</span>
               </div>
-              {!d.dateCompleted && (
-                <div>
-                  <label className="mb-1 flex items-center justify-between text-xs text-muted-foreground">
-                    <span>WIP Progress</span>
-                    <span className="font-medium text-foreground">
-                      {d.completionPercentage}%
-                    </span>
-                  </label>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    step={5}
-                    value={d.completionPercentage}
-                    onChange={(e) =>
-                      set("completionPercentage", parseInt(e.target.value))
-                    }
-                    className="w-full accent-primary h-2 cursor-pointer"
-                  />
-                  <div className="flex justify-between text-[10px] text-muted-foreground/60 mt-0.5">
-                    <span>Not started</span>
-                    <span>Done</span>
-                  </div>
+            </div>
+          )}
+          {!isEditing &&
+            !q.dateCompleted &&
+            (q.completionPercentage ?? 0) > 0 && (
+              <div className="py-1.5 border-b border-border/60 last:border-0">
+                <div className="flex justify-between mb-1">
+                  <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    WIP Progress
+                  </span>
+                  <span className="text-sm font-medium">
+                    {q.completionPercentage ?? 0}%
+                  </span>
                 </div>
-              )}
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="mb-1 block text-xs text-muted-foreground">
-                    Width (in)
-                  </label>
+                <div className="h-2 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{
+                      width: `${q.completionPercentage ?? 0}%`,
+                      backgroundColor:
+                        (q.completionPercentage ?? 0) >= 80
+                          ? "#10b981"
+                          : (q.completionPercentage ?? 0) >= 40
+                            ? "#f59e0b"
+                            : "#f87171",
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+          {isEditing ? (
+            <>
+              <CollectionDetailField
+                label="Width (in)"
+                value={q.sizeWidth ?? "—"}
+                editing
+                editSlot={
                   <Input
                     value={d.sizeWidth}
                     onChange={(e) => set("sizeWidth", e.target.value)}
                     type="number"
                     className="h-8 text-sm"
                   />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs text-muted-foreground">
-                    Height (in)
-                  </label>
+                }
+              />
+              <CollectionDetailField
+                label="Height (in)"
+                value={q.sizeHeight ?? "—"}
+                editing
+                editSlot={
                   <Input
                     value={d.sizeHeight}
                     onChange={(e) => set("sizeHeight", e.target.value)}
                     type="number"
                     className="h-8 text-sm"
                   />
-                </div>
-              </div>
-              <div>
-                <label className="mb-1 block text-xs text-muted-foreground">
-                  Recipient
-                </label>
+                }
+              />
+            </>
+          ) : (
+            q.sizeWidth != null &&
+            q.sizeHeight != null && (
+              <CollectionDetailField
+                label="Size"
+                value={`${q.sizeWidth}" × ${q.sizeHeight}"`}
+              />
+            )
+          )}
+          {(isEditing || q.recipient) && (
+            <CollectionDetailField
+              label="Recipient"
+              value={q.recipient ?? "—"}
+              editing={isEditing}
+              editSlot={
                 <Input
                   value={d.recipient}
                   onChange={(e) => set("recipient", e.target.value)}
                   className="h-8 text-sm"
                 />
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-2 text-sm">
-              {!q.dateCompleted && (q.completionPercentage ?? 0) > 0 && (
-                <div>
-                  <div className="flex justify-between mb-1">
-                    <span className="text-muted-foreground">WIP Progress</span>
-                    <span className="font-medium">
-                      {q.completionPercentage ?? 0}%
-                    </span>
-                  </div>
-                  <div className="h-2 rounded-full bg-muted overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all"
-                      style={{
-                        width: `${q.completionPercentage ?? 0}%`,
-                        backgroundColor:
-                          (q.completionPercentage ?? 0) >= 80
-                            ? "#10b981"
-                            : (q.completionPercentage ?? 0) >= 40
-                              ? "#f59e0b"
-                              : "#f87171",
-                      }}
-                    />
-                  </div>
-                </div>
-              )}
-              {q.dateCompleted && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Completed</span>
-                  <span className="font-medium">{q.dateCompleted}</span>
-                </div>
-              )}
-              {q.sizeWidth && q.sizeHeight && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Size</span>
-                  <span className="font-medium">
-                    {q.sizeWidth}" × {q.sizeHeight}"
-                  </span>
-                </div>
-              )}
-              {q.recipient && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Recipient</span>
-                  <span className="font-medium">{q.recipient}</span>
-                </div>
-              )}
-            </div>
+              }
+            />
           )}
-        </section>
+        </CollectionDetailSection>
 
         {(q.dominantColors?.length ?? 0) > 0 && (
-          <section className="rounded-xl border border-card-border bg-card p-4">
-            <p className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Colours
-            </p>
+          <CollectionDetailSection title="Colours">
             <div className="flex flex-wrap gap-2">
               {q.dominantColors!.map((c) => (
                 <div key={c} className="flex items-center gap-1.5">
@@ -633,15 +740,13 @@ export default function QuiltDetail() {
                 </div>
               ))}
             </div>
-          </section>
+          </CollectionDetailSection>
         )}
 
-        <section className="rounded-xl border border-card-border bg-card p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              <Tag className="h-3 w-3" /> Categories
-            </p>
-            {!catEditing && !isEditing && (
+        <CollectionDetailSection
+          title="Categories"
+          action={
+            !catEditing && !isEditing ? (
               <button
                 onClick={enterCatEdit}
                 className="rounded p-0.5 text-muted-foreground/40 transition-colors hover:text-muted-foreground"
@@ -649,8 +754,9 @@ export default function QuiltDetail() {
               >
                 <Pencil className="h-3 w-3" />
               </button>
-            )}
-          </div>
+            ) : undefined
+          }
+        >
           {isEditing ? (
             <TagSelector
               allCategories={allCategories ?? []}
@@ -737,13 +843,12 @@ export default function QuiltDetail() {
               add
             </p>
           )}
-        </section>
+        </CollectionDetailSection>
 
         {q.linkedFabrics && q.linkedFabrics.length > 0 && (
-          <section className="rounded-xl border border-card-border bg-card p-4">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Fabrics used ({q.linkedFabrics.length})
-            </p>
+          <CollectionDetailSection
+            title={`Fabrics used (${q.linkedFabrics.length})`}
+          >
             {(() => {
               const allColors = [
                 ...new Set(
@@ -806,20 +911,10 @@ export default function QuiltDetail() {
                 </a>
               ))}
             </div>
-          </section>
+          </CollectionDetailSection>
         )}
 
-        <section className="rounded-xl border border-card-border bg-card p-4">
-          <p className="mb-2 flex items-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Notes
-            {!isEditing && AI_FIELDS.includes("notes") && (
-              <LockButton
-                field="notes"
-                lockedFields={lockedFields}
-                onToggle={toggleLock}
-              />
-            )}
-          </p>
+        <CollectionDetailSection title="Notes">
           {isEditing ? (
             <>
               <div className="mb-1 flex items-center">
@@ -840,12 +935,26 @@ export default function QuiltDetail() {
                 placeholder="Notes about this quilt…"
               />
             </>
-          ) : q.notes ? (
-            <p className="text-sm leading-relaxed">{q.notes}</p>
           ) : (
-            <p className="text-xs text-muted-foreground italic">No notes</p>
+            <CollectionDetailField
+              label="Notes"
+              value={
+                q.notes ? (
+                  <span className="leading-relaxed">{q.notes}</span>
+                ) : (
+                  "No notes"
+                )
+              }
+              empty={!q.notes}
+              locked={lockedFields.includes("notes")}
+              onToggleLock={
+                AI_FIELDS.includes("notes")
+                  ? () => toggleLock("notes")
+                  : undefined
+              }
+            />
           )}
-        </section>
+        </CollectionDetailSection>
 
         {!isEditing && (
           <p className="flex items-center gap-1 text-xs text-muted-foreground/60">

@@ -192,6 +192,7 @@ import type {
   QuiltingQuiltingAnalysis,
   QuiltingQuiltsListResponse,
   QuiltingRenameCategoryInput,
+  QuiltingSetImageDefaultBody,
   QuiltingShoppingItem,
   QuiltingShoppingStats,
   QuiltingStaleCount,
@@ -5630,6 +5631,81 @@ export const useDeletePatternImage = <TError = ErrorType<unknown>,
       return useMutation(getDeletePatternImageMutationOptions(options));
     }
 
+export const getSetPatternImageDefaultUrl = (id: number,
+    imageId: number,) => {
+
+
+
+
+  return `/api/quilting/patterns/${id}/images/${imageId}/set-default`
+}
+
+/**
+ * Swaps the supplemental image with the current primary photo so all imageUrl calls immediately serve the new default. The old primary photo becomes a supplemental image and retains its position in the gallery. If the pattern has no primary photo yet, the supplemental image is promoted to primary. Pass expectedVersion (the v cache-buster from the image URL being promoted) for compare-and-swap semantics: a retry or duplicate delivery after the swap has been applied gets a 409 instead of silently swapping back.
+ * @summary Set a supplemental image as the pattern's default photo
+ */
+export const setPatternImageDefault = async (id: number,
+    imageId: number,
+    quiltingSetImageDefaultBody?: QuiltingSetImageDefaultBody, options?: RequestInit): Promise<QuiltingQuiltPattern> => {
+
+  return customFetch<QuiltingQuiltPattern>(getSetPatternImageDefaultUrl(id,imageId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      quiltingSetImageDefaultBody,)
+  }
+);}
+
+
+
+
+export const getSetPatternImageDefaultMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setPatternImageDefault>>, TError,{id: number;imageId: number;data?: BodyType<QuiltingSetImageDefaultBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setPatternImageDefault>>, TError,{id: number;imageId: number;data?: BodyType<QuiltingSetImageDefaultBody>}, TContext> => {
+
+const mutationKey = ['setPatternImageDefault'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setPatternImageDefault>>, {id: number;imageId: number;data?: BodyType<QuiltingSetImageDefaultBody>}> = (props) => {
+          const {id,imageId,data} = props ?? {};
+
+          return  setPatternImageDefault(id,imageId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetPatternImageDefaultMutationResult = NonNullable<Awaited<ReturnType<typeof setPatternImageDefault>>>
+    export type SetPatternImageDefaultMutationBody = BodyType<QuiltingSetImageDefaultBody> | undefined
+    export type SetPatternImageDefaultMutationError = ErrorType<Error>
+
+    /**
+ * @summary Set a supplemental image as the pattern's default photo
+ */
+export const useSetPatternImageDefault = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setPatternImageDefault>>, TError,{id: number;imageId: number;data?: BodyType<QuiltingSetImageDefaultBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setPatternImageDefault>>,
+        TError,
+        {id: number;imageId: number;data?: BodyType<QuiltingSetImageDefaultBody>},
+        TContext
+      > => {
+      return useMutation(getSetPatternImageDefaultMutationOptions(options));
+    }
+
 export const getListQuiltsUrl = (params?: ListQuiltsParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -6552,6 +6628,81 @@ export const useDeleteQuiltImage = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getDeleteQuiltImageMutationOptions(options));
+    }
+
+export const getSetQuiltImageDefaultUrl = (id: number,
+    imageId: number,) => {
+
+
+
+
+  return `/api/quilting/quilts/${id}/images/${imageId}/set-default`
+}
+
+/**
+ * Swaps the supplemental image with the current primary photo so all imageUrl calls immediately serve the new default. The old primary photo becomes a supplemental image and retains its position in the gallery. Pass expectedVersion (the v cache-buster from the image URL being promoted) for compare-and-swap semantics: a retry or duplicate delivery after the swap has been applied gets a 409 instead of silently swapping back.
+ * @summary Set a supplemental image as the quilt's default photo
+ */
+export const setQuiltImageDefault = async (id: number,
+    imageId: number,
+    quiltingSetImageDefaultBody?: QuiltingSetImageDefaultBody, options?: RequestInit): Promise<QuiltingFinishedQuilt> => {
+
+  return customFetch<QuiltingFinishedQuilt>(getSetQuiltImageDefaultUrl(id,imageId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      quiltingSetImageDefaultBody,)
+  }
+);}
+
+
+
+
+export const getSetQuiltImageDefaultMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setQuiltImageDefault>>, TError,{id: number;imageId: number;data?: BodyType<QuiltingSetImageDefaultBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setQuiltImageDefault>>, TError,{id: number;imageId: number;data?: BodyType<QuiltingSetImageDefaultBody>}, TContext> => {
+
+const mutationKey = ['setQuiltImageDefault'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setQuiltImageDefault>>, {id: number;imageId: number;data?: BodyType<QuiltingSetImageDefaultBody>}> = (props) => {
+          const {id,imageId,data} = props ?? {};
+
+          return  setQuiltImageDefault(id,imageId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetQuiltImageDefaultMutationResult = NonNullable<Awaited<ReturnType<typeof setQuiltImageDefault>>>
+    export type SetQuiltImageDefaultMutationBody = BodyType<QuiltingSetImageDefaultBody> | undefined
+    export type SetQuiltImageDefaultMutationError = ErrorType<Error>
+
+    /**
+ * @summary Set a supplemental image as the quilt's default photo
+ */
+export const useSetQuiltImageDefault = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setQuiltImageDefault>>, TError,{id: number;imageId: number;data?: BodyType<QuiltingSetImageDefaultBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setQuiltImageDefault>>,
+        TError,
+        {id: number;imageId: number;data?: BodyType<QuiltingSetImageDefaultBody>},
+        TContext
+      > => {
+      return useMutation(getSetQuiltImageDefaultMutationOptions(options));
     }
 
 export const getCompareFabricUrl = () => {

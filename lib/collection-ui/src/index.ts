@@ -68,3 +68,22 @@ export {
   readValidatedPageSize,
   useValidatedCollectionPageSize,
 } from "./collection-state";
+
+export { CompareModal, CompareFloatingBar } from "./compare-modal";
+export type {
+  CompareItem,
+  CompareField,
+  CompareModalProps,
+  CompareFloatingBarProps,
+} from "./compare-modal";
+
+export { useMultiSelectMode } from "./multi-select-mode";
+export type { MultiSelectMode } from "./multi-select-mode";
+
+export {
+  getAsyncActionStatus,
+  isAsyncActionBusy,
+  trackAsyncAction,
+  useAsyncActionStatus,
+} from "./async-action-status";
+export type { AsyncActionStatus } from "./async-action-status";

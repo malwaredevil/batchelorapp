@@ -1640,6 +1640,53 @@ export const DeletePatternImageParams = zod.object({
 
 
 /**
+ * Swaps the supplemental image with the current primary photo so all imageUrl calls immediately serve the new default. The old primary photo becomes a supplemental image and retains its position in the gallery. If the pattern has no primary photo yet, the supplemental image is promoted to primary. Pass expectedVersion (the v cache-buster from the image URL being promoted) for compare-and-swap semantics: a retry or duplicate delivery after the swap has been applied gets a 409 instead of silently swapping back.
+ * @summary Set a supplemental image as the pattern's default photo
+ */
+export const SetPatternImageDefaultParams = zod.object({
+  "id": zod.coerce.number(),
+  "imageId": zod.coerce.number()
+})
+
+export const setPatternImageDefaultBodyExpectedVersionMax = 64;
+
+
+
+export const SetPatternImageDefaultBody = zod.object({
+  "expectedVersion": zod.string().max(setPatternImageDefaultBodyExpectedVersionMax).optional().describe('The v cache-buster from the supplemental image URL being promoted. When provided, the server verifies the image\'s storage path still hashes to this value before swapping (compare-and-swap); a mismatch returns 409 so a retry cannot reverse an applied swap.')
+})
+
+export const SetPatternImageDefaultResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "designer": zod.string().nullish(),
+  "blockSize": zod.string().nullish(),
+  "difficulty": zod.string().nullish(),
+  "sourceType": zod.string().nullish(),
+  "sourceReference": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "acquiredAt": zod.string().nullish(),
+  "dominantColors": zod.array(zod.string()),
+  "lockedFields": zod.array(zod.string()),
+  "categories": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "bgColor": zod.string().nullish(),
+  "textColor": zod.string().nullish()
+})),
+  "images": zod.array(zod.object({
+  "id": zod.number(),
+  "url": zod.string(),
+  "label": zod.string().nullish(),
+  "position": zod.number()
+})),
+  "imageUrl": zod.string().nullish(),
+  "hasEmbedding": zod.boolean(),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
  * @summary List all finished quilts
  */
 export const listQuiltsQueryPageDefault = 1;
@@ -1976,6 +2023,65 @@ export const UpdateQuiltImageResponse = zod.object({
 export const DeleteQuiltImageParams = zod.object({
   "id": zod.coerce.number(),
   "imageId": zod.coerce.number()
+})
+
+
+/**
+ * Swaps the supplemental image with the current primary photo so all imageUrl calls immediately serve the new default. The old primary photo becomes a supplemental image and retains its position in the gallery. Pass expectedVersion (the v cache-buster from the image URL being promoted) for compare-and-swap semantics: a retry or duplicate delivery after the swap has been applied gets a 409 instead of silently swapping back.
+ * @summary Set a supplemental image as the quilt's default photo
+ */
+export const SetQuiltImageDefaultParams = zod.object({
+  "id": zod.coerce.number(),
+  "imageId": zod.coerce.number()
+})
+
+export const setQuiltImageDefaultBodyExpectedVersionMax = 64;
+
+
+
+export const SetQuiltImageDefaultBody = zod.object({
+  "expectedVersion": zod.string().max(setQuiltImageDefaultBodyExpectedVersionMax).optional().describe('The v cache-buster from the supplemental image URL being promoted. When provided, the server verifies the image\'s storage path still hashes to this value before swapping (compare-and-swap); a mismatch returns 409 so a retry cannot reverse an applied swap.')
+})
+
+export const setQuiltImageDefaultResponseCompletionPercentageMin = 0;
+export const setQuiltImageDefaultResponseCompletionPercentageMax = 100;
+
+
+
+export const SetQuiltImageDefaultResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "dateCompleted": zod.string().nullish(),
+  "sizeWidth": zod.number().nullish(),
+  "sizeHeight": zod.number().nullish(),
+  "recipient": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "dominantColors": zod.array(zod.string()),
+  "lockedFields": zod.array(zod.string()),
+  "completionPercentage": zod.number().min(setQuiltImageDefaultResponseCompletionPercentageMin).max(setQuiltImageDefaultResponseCompletionPercentageMax).optional().describe('WIP completion 0–100. 0 = not started, 100 = finished.'),
+  "categories": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "bgColor": zod.string().nullish(),
+  "textColor": zod.string().nullish()
+})),
+  "images": zod.array(zod.object({
+  "id": zod.number(),
+  "url": zod.string(),
+  "label": zod.string().nullish(),
+  "position": zod.number()
+})),
+  "imageUrl": zod.string(),
+  "linkedFabricIds": zod.array(zod.number()),
+  "linkedPatternIds": zod.array(zod.number()),
+  "linkedFabrics": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "colorway": zod.string().nullish(),
+  "imageUrl": zod.string(),
+  "dominantColors": zod.array(zod.string())
+})),
+  "createdAt": zod.coerce.date()
 })
 
 
@@ -4719,7 +4825,7 @@ export const listOrnamentsQueryPageSizeMax = 200;
 
 
 export const ListOrnamentsQueryParams = zod.object({
-  "q": zod.coerce.string().optional().describe('Text search across name, series\/collection, brand, and notes'),
+  "q": zod.coerce.string().optional().describe('Text search across name, series\/collection, brand, notes, and description'),
   "categoryId": zod.coerce.number().optional(),
   "seriesOrCollection": zod.coerce.string().optional(),
   "year": zod.coerce.number().optional(),
@@ -4749,6 +4855,8 @@ export const ListOrnamentsResponse = zod.object({
   "condition": zod.string().nullish(),
   "origin": zod.string().nullish(),
   "aiDescription": zod.string().nullish(),
+  "description": zod.string().nullish().describe('Verbatim text transcribed from the printed description on the back of the ornament\'s box (distinct from aiDescription, which is AI-authored). When no legible box-back text was found, the AI writes a stand-in instead — see descriptionGenerated.'),
+  "descriptionGenerated": zod.boolean().optional().describe('True when description above is an AI-generated stand-in because no legible box-back text was found (false for manual, verbatim, or catalog text).'),
   "acquiredAt": zod.string().nullish(),
   "dominantColors": zod.array(zod.string()).optional(),
   "motifs": zod.array(zod.string()).optional(),
@@ -4852,6 +4960,8 @@ export const GetOrnamentResponse = zod.object({
   "condition": zod.string().nullish(),
   "origin": zod.string().nullish(),
   "aiDescription": zod.string().nullish(),
+  "description": zod.string().nullish().describe('Verbatim text transcribed from the printed description on the back of the ornament\'s box (distinct from aiDescription, which is AI-authored). When no legible box-back text was found, the AI writes a stand-in instead — see descriptionGenerated.'),
+  "descriptionGenerated": zod.boolean().optional().describe('True when description above is an AI-generated stand-in because no legible box-back text was found (false for manual, verbatim, or catalog text).'),
   "acquiredAt": zod.string().nullish(),
   "dominantColors": zod.array(zod.string()).optional(),
   "motifs": zod.array(zod.string()).optional(),
@@ -4904,6 +5014,7 @@ export const UpdateOrnamentBody = zod.object({
   "notes": zod.string().nullish(),
   "acquiredAt": zod.string().nullish(),
   "aiDescription": zod.string().nullish(),
+  "description": zod.string().nullish(),
   "dimensions": zod.string().nullish(),
   "condition": zod.string().nullish(),
   "origin": zod.string().nullish(),
@@ -4931,6 +5042,8 @@ export const UpdateOrnamentResponse = zod.object({
   "condition": zod.string().nullish(),
   "origin": zod.string().nullish(),
   "aiDescription": zod.string().nullish(),
+  "description": zod.string().nullish().describe('Verbatim text transcribed from the printed description on the back of the ornament\'s box (distinct from aiDescription, which is AI-authored). When no legible box-back text was found, the AI writes a stand-in instead — see descriptionGenerated.'),
+  "descriptionGenerated": zod.boolean().optional().describe('True when description above is an AI-generated stand-in because no legible box-back text was found (false for manual, verbatim, or catalog text).'),
   "acquiredAt": zod.string().nullish(),
   "dominantColors": zod.array(zod.string()).optional(),
   "motifs": zod.array(zod.string()).optional(),
@@ -4994,6 +5107,8 @@ export const ReanalyzeOrnamentResponse = zod.object({
   "condition": zod.string().nullish(),
   "origin": zod.string().nullish(),
   "aiDescription": zod.string().nullish(),
+  "description": zod.string().nullish().describe('Verbatim text transcribed from the printed description on the back of the ornament\'s box (distinct from aiDescription, which is AI-authored). When no legible box-back text was found, the AI writes a stand-in instead — see descriptionGenerated.'),
+  "descriptionGenerated": zod.boolean().optional().describe('True when description above is an AI-generated stand-in because no legible box-back text was found (false for manual, verbatim, or catalog text).'),
   "acquiredAt": zod.string().nullish(),
   "dominantColors": zod.array(zod.string()).optional(),
   "motifs": zod.array(zod.string()).optional(),
@@ -5053,6 +5168,8 @@ export const SetOrnamentPrimaryImageResponse = zod.object({
   "condition": zod.string().nullish(),
   "origin": zod.string().nullish(),
   "aiDescription": zod.string().nullish(),
+  "description": zod.string().nullish().describe('Verbatim text transcribed from the printed description on the back of the ornament\'s box (distinct from aiDescription, which is AI-authored). When no legible box-back text was found, the AI writes a stand-in instead — see descriptionGenerated.'),
+  "descriptionGenerated": zod.boolean().optional().describe('True when description above is an AI-generated stand-in because no legible box-back text was found (false for manual, verbatim, or catalog text).'),
   "acquiredAt": zod.string().nullish(),
   "dominantColors": zod.array(zod.string()).optional(),
   "motifs": zod.array(zod.string()).optional(),
@@ -5248,6 +5365,8 @@ export const RefreshAllOrnamentDataResponse = zod.object({
   "condition": zod.string().nullish(),
   "origin": zod.string().nullish(),
   "aiDescription": zod.string().nullish(),
+  "description": zod.string().nullish().describe('Verbatim text transcribed from the printed description on the back of the ornament\'s box (distinct from aiDescription, which is AI-authored). When no legible box-back text was found, the AI writes a stand-in instead — see descriptionGenerated.'),
+  "descriptionGenerated": zod.boolean().optional().describe('True when description above is an AI-generated stand-in because no legible box-back text was found (false for manual, verbatim, or catalog text).'),
   "acquiredAt": zod.string().nullish(),
   "dominantColors": zod.array(zod.string()).optional(),
   "motifs": zod.array(zod.string()).optional(),
@@ -5303,6 +5422,8 @@ export const RunOrnamentAiAppraisalResponse = zod.object({
   "condition": zod.string().nullish(),
   "origin": zod.string().nullish(),
   "aiDescription": zod.string().nullish(),
+  "description": zod.string().nullish().describe('Verbatim text transcribed from the printed description on the back of the ornament\'s box (distinct from aiDescription, which is AI-authored). When no legible box-back text was found, the AI writes a stand-in instead — see descriptionGenerated.'),
+  "descriptionGenerated": zod.boolean().optional().describe('True when description above is an AI-generated stand-in because no legible box-back text was found (false for manual, verbatim, or catalog text).'),
   "acquiredAt": zod.string().nullish(),
   "dominantColors": zod.array(zod.string()).optional(),
   "motifs": zod.array(zod.string()).optional(),
@@ -5394,6 +5515,8 @@ export const LookupOrnamentBookValueResponse = zod.object({
   "condition": zod.string().nullish(),
   "origin": zod.string().nullish(),
   "aiDescription": zod.string().nullish(),
+  "description": zod.string().nullish().describe('Verbatim text transcribed from the printed description on the back of the ornament\'s box (distinct from aiDescription, which is AI-authored). When no legible box-back text was found, the AI writes a stand-in instead — see descriptionGenerated.'),
+  "descriptionGenerated": zod.boolean().optional().describe('True when description above is an AI-generated stand-in because no legible box-back text was found (false for manual, verbatim, or catalog text).'),
   "acquiredAt": zod.string().nullish(),
   "dominantColors": zod.array(zod.string()).optional(),
   "motifs": zod.array(zod.string()).optional(),

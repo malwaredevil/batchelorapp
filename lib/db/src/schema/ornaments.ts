@@ -30,6 +30,17 @@ export const ornamentsItems = pgTable(
     condition: text("condition"),
     origin: text("origin"),
     acquiredAt: date("acquired_at"),
+    // Verbatim text transcribed from the printed description on the back of
+    // the ornament's box (or entered/looked-up manually) — NOT AI-authored.
+    // Contrast with aiDescription below, which is an AI-written blurb.
+    description: text("description"),
+    // True when `description` above could not be transcribed from a real
+    // box-back photo (no legible printed text found) and was instead written
+    // by the AI as a stand-in. False for manual entries, verbatim
+    // transcriptions, and catalog/barcode-lookup descriptions.
+    descriptionGenerated: boolean("description_generated")
+      .notNull()
+      .default(false),
     aiDescription: text("ai_description"),
     dominantColors: text("dominant_colors")
       .array()

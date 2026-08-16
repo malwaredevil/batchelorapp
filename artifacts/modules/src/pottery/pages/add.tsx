@@ -24,6 +24,7 @@ import { useUploadPottery } from "@/pottery/hooks/use-pottery";
 import { TagSelector } from "@/pottery/components/tag-selector";
 import { CameraModal, ImagePicker } from "@/pottery/components/image-picker";
 import { ImageEditor } from "@/pottery/components/image-editor";
+import { DEFAULT_LABEL_SUGGESTIONS as LABEL_SUGGESTIONS } from "@workspace/image-capture";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -39,17 +40,6 @@ import {
   STANDARD_IMAGE_UPLOAD,
   validateClientUpload,
 } from "@workspace/upload-policy";
-
-const LABEL_SUGGESTIONS = [
-  "Front",
-  "Back",
-  "Left side",
-  "Right side",
-  "Top",
-  "Bottom",
-  "Detail",
-  "Maker's mark",
-];
 
 interface SuppPhoto {
   file: File;

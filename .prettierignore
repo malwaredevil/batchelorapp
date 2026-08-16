@@ -10,3 +10,8 @@ lib/api-client-react/src/
 **/*.semgrep*
 **/semgrep_rules.json
 .config/
+# Throwaway fixture check-scheduler-names.test.ts briefly writes into this
+# real source dir during integration tests. ESLint already excludes it
+# (see eslint.config.mjs); Prettier needs the same exclusion or a `lint`
+# run that overlaps a `test` run can transiently fail on it.
+artifacts/api-server/src/_ci_sentinel_scheduler_names_.ts

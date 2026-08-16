@@ -1442,6 +1442,14 @@ export interface ElaineThresholdsConfig {
   openAICompactionThresholdTokens: number;
   openAIStateMaxAgeDays: number;
   codeDiagnosisRecurrenceThreshold: number;
+  broadcastHourlyLimit: number;
+}
+
+export interface ElaineRuntimeBudgetConfig {
+  maxModelRounds: number;
+  maxToolCalls: number;
+  maxReplans: number;
+  maxElapsedMs: number;
 }
 
 export interface ElaineGlobalConfig {
@@ -1453,6 +1461,7 @@ export interface ElaineGlobalConfig {
   timeouts: ElaineTimeoutsConfig;
   features: ElaineFeaturesConfig;
   thresholds: ElaineThresholdsConfig;
+  runtimeBudget: ElaineRuntimeBudgetConfig;
   updatedAt: string | null;
 }
 
@@ -1498,6 +1507,7 @@ export type UpdateElaineAdminConfigBody = Partial<
   timeouts?: Partial<ElaineTimeoutsConfig>;
   features?: Partial<ElaineFeaturesConfig>;
   thresholds?: Partial<ElaineThresholdsConfig>;
+  runtimeBudget?: Partial<ElaineRuntimeBudgetConfig>;
 };
 
 const putElaineAdminConfigFn = (

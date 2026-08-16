@@ -444,6 +444,16 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
     risk: "high",
   },
   {
+    ...policies(["update_owner_setting"], {
+      ...ACTION_DEFAULTS,
+      domain: "admin",
+      executorPrefix: "ownerAction",
+      auth: "session_and_owner",
+      channels: ["web"],
+    })[0]!,
+    risk: "high",
+  },
+  {
     ...policies(["execute_app_operation"], {
       ...ACTION_DEFAULTS,
       domain: "hub",
@@ -747,6 +757,17 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
     channels: ["web"],
   }),
   ...policies(["check_integrations_health"], {
+    domain: "admin",
+    kind: "read",
+    risk: "none",
+    auth: "session_and_owner",
+    confirmation: "never",
+    executorPrefix: "adminRead",
+    audit: "runtime_observation",
+    retry: "read_only",
+    channels: ["web"],
+  }),
+  ...policies(["get_owner_settings"], {
     domain: "admin",
     kind: "read",
     risk: "none",

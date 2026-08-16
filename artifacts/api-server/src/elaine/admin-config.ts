@@ -112,6 +112,16 @@ export const AdminConfigBody = z.object({
         .min(2)
         .max(20)
         .optional(),
+      broadcastHourlyLimit: z.number().int().min(1).max(20).optional(),
+    })
+    .partial()
+    .optional(),
+  runtimeBudget: z
+    .object({
+      maxModelRounds: z.number().int().min(1).max(20).optional(),
+      maxToolCalls: z.number().int().min(1).max(50).optional(),
+      maxReplans: z.number().int().min(0).max(20).optional(),
+      maxElapsedMs: z.number().int().min(30_000).max(300_000).optional(),
     })
     .partial()
     .optional(),
@@ -134,6 +144,10 @@ export async function applyAdminConfigPatch(
   const nextTimeouts = { ...current.timeouts, ...patch.timeouts };
   const nextFeatures = { ...current.features, ...patch.features };
   const nextThresholds = { ...current.thresholds, ...patch.thresholds };
+  const nextRuntimeBudget = {
+    ...current.runtimeBudget,
+    ...patch.runtimeBudget,
+  };
 
   await db
     .insert(elaineGlobalConfig)
@@ -144,6 +158,7 @@ export async function applyAdminConfigPatch(
       timeouts: nextTimeouts,
       features: nextFeatures,
       thresholds: nextThresholds,
+      runtimeBudget: nextRuntimeBudget,
       updatedByUserId: userId,
       updatedAt: new Date(),
     })
@@ -155,6 +170,7 @@ export async function applyAdminConfigPatch(
         timeouts: nextTimeouts,
         features: nextFeatures,
         thresholds: nextThresholds,
+        runtimeBudget: nextRuntimeBudget,
         updatedByUserId: userId,
         updatedAt: new Date(),
       },
@@ -185,6 +201,7 @@ export async function resetElaineGlobalConfigToDefaults(userId: number) {
       timeouts: defaults.timeouts,
       features: defaults.features,
       thresholds: defaults.thresholds,
+      runtimeBudget: defaults.runtimeBudget,
       updatedByUserId: userId,
       updatedAt: new Date(),
     })
@@ -199,6 +216,7 @@ export async function resetElaineGlobalConfigToDefaults(userId: number) {
         timeouts: defaults.timeouts,
         features: defaults.features,
         thresholds: defaults.thresholds,
+        runtimeBudget: defaults.runtimeBudget,
         updatedByUserId: userId,
         updatedAt: new Date(),
       },

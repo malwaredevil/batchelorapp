@@ -1173,6 +1173,7 @@ async function main() {
       "timeouts",
       "features",
       "thresholds",
+      "runtime_budget",
       "updated_at",
       "updated_by_user_id",
     ],

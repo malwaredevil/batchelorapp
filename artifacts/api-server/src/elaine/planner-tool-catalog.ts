@@ -91,6 +91,8 @@ export const SUGGEST_CLOTHING_LAYERS_TOOL_NAME = "suggest_clothing_layers";
 export const CALCULATE_YARDAGE_TOOL_NAME = "calculate_yardage";
 export const QUERY_HOUSEHOLD_TOOL_NAME = "query_household_data";
 export const CHECK_INTEGRATIONS_HEALTH_TOOL_NAME = "check_integrations_health";
+export const GET_OWNER_SETTINGS_TOOL_NAME = "get_owner_settings";
+export const UPDATE_OWNER_SETTING_TOOL_NAME = "update_owner_setting";
 export const LIST_SENTRY_ISSUES_TOOL_NAME = "list_sentry_issues";
 export const GENERATE_DOCUMENT_TOOL_NAME = "generate_document";
 
@@ -767,6 +769,35 @@ export const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
           },
         },
         required: ["module", "key", "value"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: UPDATE_OWNER_SETTING_TOOL_NAME,
+      description:
+        "Propose changing a single Elaine global AI setting — chat/subagent model, request timeout, response token budget, a model role, feature toggle, timeout, or threshold. Only available to the app owner (isOwner). This is exclusively for the Elaine Global Configuration (Owner Panel → Global Configuration page), not for Control Panel app-config values (use update_app_config for those). Before calling this, always call get_owner_settings to confirm the current value and describe the exact change in your visible reply. This action is owner-only and excluded from SMS/voice/email channels.",
+      parameters: {
+        type: "object",
+        properties: {
+          field: {
+            type: "string",
+            description:
+              "Dot-notation path to the setting to change. Top-level fields: chatModel, subagentModel, requestTimeoutMs, maxResponseTokens. Nested fields use dot notation: models.fastVision, models.smartVision, models.advisor, models.research, models.expertPanelAlt, models.embedding, models.openAIReasoning, models.openAIBalanced, models.openAIFast, models.restrictedTextModel, models.rerank, models.visualEmbed, models.fusionJudge. timeouts.expertConsultMs, timeouts.rerankerMs, timeouts.geocodingMs, timeouts.fusionMs, timeouts.openAIResponsesMs. features.enableAdvisor, features.enableSubagent, features.enableFusionPotteryExpert, features.enableFusionTravelDocFallback, features.enableOpenAIResponses, features.enableOpenAIAppWorkflows, features.enableOpenAIResponsesFallback, features.enableBuiltinWebSearch, features.showReasoningSummary, features.openAIStoreEnabledDefault. thresholds.potterySimilarityYes, thresholds.potterySimilarityMaybe, thresholds.potterySimilarityNo, thresholds.visualEmbedCropTop, thresholds.visualEmbedCropHeight, thresholds.aiJpegQuality, thresholds.potteryZoneAnalysisMaxTokens, thresholds.potteryBackstampMaxTokens, thresholds.travelDocExtractionMaxTokens, thresholds.openAIResponsesMaxOutputTokens, thresholds.openAICompactionThresholdTokens, thresholds.openAIStateMaxAgeDays, thresholds.codeDiagnosisRecurrenceThreshold.",
+          },
+          value: {
+            type: "string",
+            description:
+              "New value as a string. Numbers are coerced automatically (e.g. '1000'). Booleans must be 'true' or 'false'. Model names are strings (e.g. 'openai/gpt-4o').",
+          },
+          currentValue: {
+            type: "string",
+            description:
+              "The current value of the setting, as returned by get_owner_settings. Include this so the confirmation card can show 'changing X from Y to Z'.",
+          },
+        },
+        required: ["field", "value"],
       },
     },
   },
@@ -1720,6 +1751,31 @@ export const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
       parameters: {
         type: "object",
         properties: {},
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: GET_OWNER_SETTINGS_TOOL_NAME,
+      description:
+        "Read-only report of every owner-configurable setting and its CURRENT value: Elaine's global AI configuration (chat/subagent models, per-request timeout, response token budget, model roles, feature toggles, timeouts, thresholds) plus every Control Panel app-config entry (module, key, label, current value, description). Only available to the app owner (isOwner). Use this when the owner asks things like 'what's my current tool-call budget?', 'which model are you using?', 'how often do you check Gmail?', 'what settings can I change?', or 'what is X currently set to?'. Never guess a current value from memory — always call this first. This tool never changes anything; to change a Control Panel value use update_app_config, and point the owner to the Owner Panel / Control Panel for the rest.",
+      parameters: {
+        type: "object",
+        properties: {
+          section: {
+            type: "string",
+            enum: ["all", "elaine", "app_config"],
+            description:
+              "Which settings to return: 'elaine' for the global AI config, 'app_config' for Control Panel entries, or 'all' (default) for both.",
+          },
+          module: {
+            type: "string",
+            description:
+              "Optional Control Panel module name to filter app_config entries (e.g. 'openrouter', 'web_search'). Ignored for the elaine section.",
+          },
+        },
         required: [],
       },
     },

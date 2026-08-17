@@ -1,8 +1,16 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Loader2, Plus, Tags, Pencil, Trash2, Merge } from "lucide-react";
+import {
+  Loader2,
+  Plus,
+  Tags,
+  Pencil,
+  Trash2,
+  Merge,
+  Sparkles,
+} from "lucide-react";
 import {
   useListOrnamentCategories,
   useCreateOrnamentCategory,
@@ -11,6 +19,8 @@ import {
   useDeleteOrnamentCategory,
   useDeleteOrnamentUnusedCategories,
   useMergeOrnamentCategory,
+  useSuggestOrnamentCategories,
+  useCreateAndBackfillOrnamentCategories,
   getListOrnamentCategoriesQueryKey,
   getListOrnamentsQueryKey,
   getGetOrnamentStatsQueryKey,
@@ -18,6 +28,7 @@ import {
 import type { OrnamentsCategory as Category } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { Checkbox } from "@/components/ui/checkbox";
 import { usePageAssistantContext } from "@/ornaments/lib/assistant-context";
 import {
   formatElaineContextEntity,
@@ -338,6 +349,171 @@ function CategoryActionMenu({
   );
 }
 
+export function SuggestCategoriesDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const queryClient = useQueryClient();
+  const suggest = useSuggestOrnamentCategories();
+  const createAndBackfill = useCreateAndBackfillOrnamentCategories();
+
+  const [suggestions, setSuggestions] = useState<string[] | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  const runSuggest = async () => {
+    setSuggestions(null);
+    try {
+      const result = await suggest.mutateAsync();
+      setSuggestions(result.suggestions);
+      setSelected(new Set(result.suggestions));
+    } catch (err) {
+      toast.error("Failed to generate category suggestions");
+      onOpenChange(false);
+    }
+  };
+
+  // The dialog's `open` state is owned by the parent page (a plain
+  // isSuggesting boolean toggled by the "Suggest Categories" button), so
+  // Radix's onOpenChange never fires for that transition — it only fires
+  // for internal close events (Escape, overlay click). Kick off the
+  // suggestion request from an effect keyed on `open` instead, so it runs
+  // the moment the dialog is opened regardless of how `open` became true.
+  useEffect(() => {
+    if (open && suggestions === null && !suggest.isPending) {
+      void runSuggest();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const handleOpenChange = (next: boolean) => {
+    onOpenChange(next);
+    if (!next) {
+      // Reset so the next open re-runs the suggestion analysis.
+      setSuggestions(null);
+      setSelected(new Set());
+    }
+  };
+
+  const toggle = (name: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (!suggestions) return;
+    setSelected((prev) =>
+      prev.size === suggestions.length ? new Set() : new Set(suggestions),
+    );
+  };
+
+  const handleAccept = async () => {
+    if (selected.size === 0) return;
+    try {
+      const result = await createAndBackfill.mutateAsync({
+        data: { names: [...selected] },
+      });
+      queryClient.invalidateQueries({
+        queryKey: getListOrnamentCategoriesQueryKey(),
+      });
+      queryClient.invalidateQueries({ queryKey: getListOrnamentsQueryKey() });
+      queryClient.invalidateQueries({
+        queryKey: getGetOrnamentStatsQueryKey(),
+      });
+      toast.success(
+        `Created ${result.createdCount} ${result.createdCount === 1 ? "category" : "categories"} and matched ${result.assignmentsCreated} ${result.assignmentsCreated === 1 ? "item" : "items"}`,
+      );
+      handleOpenChange(false);
+    } catch (err) {
+      toast.error("Failed to create categories");
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4" /> Suggest Categories
+          </DialogTitle>
+          <DialogDescription>
+            AI looks at the names, series, motifs, colors, brands, and notes
+            already in your collection and proposes categories that reflect
+            what's actually there. Accepted categories are created and
+            immediately matched against every existing ornament.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="py-2">
+          {suggest.isPending ? (
+            <div className="flex items-center justify-center py-10 text-muted-foreground gap-2">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              Analyzing your collection...
+            </div>
+          ) : suggestions && suggestions.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-6 text-center">
+              No new category suggestions right now — either the collection is
+              empty or everything recurring is already covered by an existing
+              category.
+            </p>
+          ) : suggestions ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">
+                  {selected.size} of {suggestions.length} selected
+                </span>
+                <Button size="sm" variant="ghost" onClick={toggleAll}>
+                  {selected.size === suggestions.length
+                    ? "Deselect all"
+                    : "Select all"}
+                </Button>
+              </div>
+              <div className="flex flex-col gap-1 max-h-[320px] overflow-y-auto">
+                {suggestions.map((name) => (
+                  <label
+                    key={name}
+                    className="flex items-center gap-3 p-2 rounded-lg border border-border hover:bg-muted/50 cursor-pointer transition-colors"
+                  >
+                    <Checkbox
+                      checked={selected.has(name)}
+                      onCheckedChange={() => toggle(name)}
+                    />
+                    <span className="text-sm">{name}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => handleOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleAccept}
+            disabled={
+              !suggestions || selected.size === 0 || createAndBackfill.isPending
+            }
+          >
+            {createAndBackfill.isPending && (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            )}
+            Create {selected.size > 0 ? `${selected.size} ` : ""}
+            {selected.size === 1 ? "Category" : "Categories"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function Categories() {
   const { data: categories, isLoading } = useListOrnamentCategories();
   const queryClient = useQueryClient();
@@ -345,6 +521,7 @@ export default function Categories() {
   const deleteUnused = useDeleteOrnamentUnusedCategories();
 
   const [isCreating, setIsCreating] = useState(false);
+  const [isSuggesting, setIsSuggesting] = useState(false);
   const form = useForm<z.infer<typeof createSchema>>({
     resolver: zodResolver(createSchema),
     defaultValues: { name: "", bgColor: "#fed7aa", textColor: "#9a3412" },
@@ -413,11 +590,19 @@ export default function Categories() {
             )}
             Cleanup unused
           </Button>
+          <Button variant="outline" onClick={() => setIsSuggesting(true)}>
+            <Sparkles className="mr-2 h-4 w-4" /> Suggest Categories
+          </Button>
           <Button onClick={() => setIsCreating(true)}>
             <Plus className="mr-2 h-4 w-4" /> New Category
           </Button>
         </div>
       </div>
+
+      <SuggestCategoriesDialog
+        open={isSuggesting}
+        onOpenChange={setIsSuggesting}
+      />
 
       {isCreating && (
         <div className="p-4 rounded-xl border border-primary/30 bg-primary/5 mb-6">

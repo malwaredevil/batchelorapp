@@ -31,6 +31,34 @@ export function isAsyncActionBusy(key: string): boolean {
   return statuses.get(key) === "processing";
 }
 
+/** Mark `key` as in-flight. Prefer `trackAsyncAction` when you have a single
+ * promise to await — use this directly only when a batch/bulk operation needs
+ * to mark several keys "processing" up front, ahead of one shared request. */
+export function markAsyncActionProcessing(key: string): void {
+  statuses.set(key, "processing");
+  notify();
+}
+
+/** Mark `key` "success" or "error" and auto-clear back to idle after the same
+ * short delay `trackAsyncAction` uses. Pair with `markAsyncActionProcessing`
+ * for bulk operations where one request's outcome must be split across many
+ * item keys (e.g. a bulk endpoint's per-item succeeded/failed id lists). */
+export function markAsyncActionSettled(
+  key: string,
+  status: "success" | "error",
+): void {
+  statuses.set(key, status);
+  notify();
+  const displayMs =
+    status === "success" ? SUCCESS_DISPLAY_MS : ERROR_DISPLAY_MS;
+  setTimeout(() => {
+    if (statuses.get(key) === status) {
+      statuses.delete(key);
+      notify();
+    }
+  }, displayMs);
+}
+
 /**
  * Track an in-flight async action (e.g. an AI re-analysis request) under `key`
  * so any component can render its live status via `useAsyncActionStatus`.
@@ -40,29 +68,10 @@ export function isAsyncActionBusy(key: string): boolean {
  * status for display, it never swallows the error.
  */
 export function trackAsyncAction(key: string, promise: Promise<unknown>): void {
-  statuses.set(key, "processing");
-  notify();
+  markAsyncActionProcessing(key);
   promise.then(
-    () => {
-      statuses.set(key, "success");
-      notify();
-      setTimeout(() => {
-        if (statuses.get(key) === "success") {
-          statuses.delete(key);
-          notify();
-        }
-      }, SUCCESS_DISPLAY_MS);
-    },
-    () => {
-      statuses.set(key, "error");
-      notify();
-      setTimeout(() => {
-        if (statuses.get(key) === "error") {
-          statuses.delete(key);
-          notify();
-        }
-      }, ERROR_DISPLAY_MS);
-    },
+    () => markAsyncActionSettled(key, "success"),
+    () => markAsyncActionSettled(key, "error"),
   );
 }
 

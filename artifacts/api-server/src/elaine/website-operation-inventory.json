@@ -310,6 +310,26 @@
     "reason": "Elaine has registered tools that reuse or mirror this website operation."
   },
   {
+    "operationId": "suggestOrnamentCategories",
+    "method": "POST",
+    "path": "/ornaments/categories/suggest",
+    "domain": "ornaments",
+    "summary": "Ask AI to propose category names reflecting recurring themes in the current collection (excludes any that already match an existing category)",
+    "disposition": "direct",
+    "mappedTools": ["suggest_and_create_ornament_categories"],
+    "reason": "Elaine has registered tools that reuse or mirror this website operation."
+  },
+  {
+    "operationId": "createAndBackfillOrnamentCategories",
+    "method": "POST",
+    "path": "/ornaments/categories/create-and-backfill",
+    "domain": "ornaments",
+    "summary": "Create the given category names (skipping ones that already exist) and backfill matching assignments across every existing ornament",
+    "disposition": "direct",
+    "mappedTools": ["suggest_and_create_ornament_categories"],
+    "reason": "Elaine has registered tools that reuse or mirror this website operation."
+  },
+  {
     "operationId": "createPackingItem",
     "method": "POST",
     "path": "/travels/trips/{id}/packing/items",

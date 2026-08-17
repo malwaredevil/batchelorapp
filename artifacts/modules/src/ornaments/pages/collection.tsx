@@ -31,6 +31,7 @@ import {
   CalendarHeart,
   Check,
   Pencil,
+  X,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -67,6 +68,7 @@ import {
   type SortOption,
   type CompareItem,
 } from "@workspace/collection-ui";
+import { useOrnamentsBulkReanalyze } from "@/ornaments/lib/use-ornaments-bulk-reanalyze";
 import { GitCompare, RefreshCw as RefreshCwIcon } from "lucide-react";
 import { GalleryPaginator } from "@/components/GalleryPaginator";
 import { cn } from "@/lib/utils";
@@ -164,10 +166,15 @@ export default function Collection() {
   const compareMode = useMultiSelectMode(5);
   const [showCompareModal, setShowCompareModal] = useState(false);
 
-  // Select (bulk) mode — tap up to 20 cards, then run a bulk action.
-  const bulkMode = useMultiSelectMode(20);
-  const [bulkStatus, setBulkStatus] = useState<string | null>(null);
+  // Select (bulk) mode — useOrnamentsBulkReanalyze owns all state and the
+  // runBulkReanalyze function; we inject the real mutation and invalidator.
   const bulkReanalyze = useBulkReanalyzeOrnaments();
+  const { bulkMode, bulkStatus, setBulkStatus, runBulkReanalyze } =
+    useOrnamentsBulkReanalyze({
+      mutateAsync: bulkReanalyze.mutateAsync,
+      invalidateQueries: () =>
+        queryClient.invalidateQueries({ queryKey: getListOrnamentsQueryKey() }),
+    });
 
   const isSelecting = compareMode.active || bulkMode.active;
 
@@ -175,25 +182,6 @@ export default function Collection() {
     compareMode.exit();
     bulkMode.exit();
     setBulkStatus(null);
-  }
-
-  async function runBulkReanalyze() {
-    if (bulkMode.selectedIds.length === 0) return;
-    setBulkStatus("Analysing…");
-    try {
-      const result = await bulkReanalyze.mutateAsync({
-        data: { ids: bulkMode.selectedIds },
-      });
-      await queryClient.invalidateQueries({
-        queryKey: getListOrnamentsQueryKey(),
-      });
-      setBulkStatus(
-        `Done — ${result.succeeded.length} refreshed${result.failed.length ? `, ${result.failed.length} failed` : ""}.`,
-      );
-      bulkMode.clear();
-    } catch {
-      setBulkStatus("Something went wrong. Please try again.");
-    }
   }
 
   const deleteOrnament = useDeleteOrnament({
@@ -728,8 +716,10 @@ export default function Collection() {
           </div>
         )}
 
-      {/* Bulk pending / status bar */}
-      {bulkMode.active && (bulkReanalyze.isPending || bulkStatus) && (
+      {/* Bulk pending / status bar. Deliberately NOT gated on bulkMode.active
+          — the completion message must keep showing (and be dismissible)
+          even after Select mode itself has already ended. */}
+      {(bulkReanalyze.isPending || bulkStatus) && (
         <div className="fixed inset-x-0 bottom-20 z-30 flex justify-center px-4 md:bottom-6">
           <div className="flex items-center gap-2 rounded-full border border-amber-300/60 bg-background/95 px-5 py-3 shadow-xl backdrop-blur">
             {bulkReanalyze.isPending ? (
@@ -738,7 +728,18 @@ export default function Collection() {
                 <span className="text-sm font-medium">Analysing…</span>
               </>
             ) : (
-              <span className="text-sm font-medium">{bulkStatus}</span>
+              <>
+                <span className="text-sm font-medium">{bulkStatus}</span>
+                <button
+                  type="button"
+                  onClick={() => setBulkStatus(null)}
+                  aria-label="Dismiss"
+                  className="grid h-5 w-5 place-items-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                  data-testid="button-bulk-status-dismiss"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </>
             )}
           </div>
         </div>

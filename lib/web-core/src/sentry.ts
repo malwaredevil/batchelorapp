@@ -51,10 +51,11 @@ export function initBrowserMonitoring({
       Sentry.consoleLoggingIntegration({ levels: ["warn", "error"] }),
     ],
     tracesSampleRate: 1.0,
-    // Always record a slice of normal sessions (not just error sessions) so
-    // there's visibility into everyday usage, not only crashes. Kept modest
-    // to stay within the free plan's monthly replay quota.
-    replaysSessionSampleRate: 0.1,
+    // Error-only replay policy (see task #1075): don't sample normal,
+    // error-free sessions for replay — only capture a replay when an
+    // unhandled error/exception actually occurs, so the shared monthly
+    // replay quota is spent on debugging real problems, not routine usage.
+    replaysSessionSampleRate: 0,
     replaysOnErrorSampleRate: 1.0,
   });
 }

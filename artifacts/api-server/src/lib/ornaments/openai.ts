@@ -225,6 +225,96 @@ export async function appraiseOrnamentImage(
   );
 }
 
+// ---------------------------------------------------------------------------
+// AI-suggested categories (#1077)
+// ---------------------------------------------------------------------------
+
+export interface OrnamentCollectionSignals {
+  names: string[];
+  series: string[];
+  motifs: string[];
+  colors: string[];
+  brands: string[];
+  notes: string[];
+}
+
+const CATEGORY_SUGGESTION_PROMPT = `You are helping organize a household's Hallmark ornament collection into browsable categories.
+
+You will be given the distinct names, series/collections, motifs, dominant colors, brands, and notes already recorded across the household's ornaments. Propose a set of concise, reusable category names that reflect RECURRING themes actually present in this specific data — characters/franchises (e.g. "Peanuts", "Star Wars"), holiday motifs (e.g. "Snowmen", "Santas", "Angels"), or notable series names already used in the data.
+
+Rules:
+- Each name should be a short, reusable noun phrase (1-3 words) that plausibly applies to more than one ornament — never the specific name of a single ornament.
+- Do not propose a category that duplicates or is a trivial variant (different casing, singular/plural, synonym) of one of the "Existing categories" listed below — those are already tracked.
+- Only propose a category when you can see it recurring across more than one distinct ornament's data (name, series, or motifs). Do not invent categories with no evidence in the provided data.
+- Do not propose vague catch-all categories like "Miscellaneous", "Other", or "Ornaments".
+- Propose at most 15 categories, ordered with the ones covering the most ornaments first.
+
+Respond with STRICT JSON only, using exactly this shape: {"categories": ["...", "..."]}. If nothing in the data supports a confident category, return {"categories": []}.`;
+
+/**
+ * Ask the model to propose category names for the given collection signals.
+ * Pure AI call — the caller is responsible for gathering the signals from the
+ * database and for filtering out names that already match an existing
+ * category (see `suggestOrnamentCategories` in routes/ornaments/categories.ts).
+ */
+export async function suggestOrnamentCategoryNames(
+  signals: OrnamentCollectionSignals,
+  existingCategoryNames: string[],
+): Promise<string[]> {
+  const describe = (label: string, values: string[]) =>
+    `${label}: ${values.length ? values.join(", ") : "(none recorded)"}`;
+
+  const userContent = [
+    `Existing categories (do not repeat these): ${
+      existingCategoryNames.length
+        ? existingCategoryNames.join(", ")
+        : "(none yet)"
+    }`,
+    "",
+    "Collection data:",
+    describe("Names", signals.names),
+    describe("Series/collections", signals.series),
+    describe("Motifs", signals.motifs),
+    describe("Colors", signals.colors),
+    describe("Brands", signals.brands),
+    describe("Notes", signals.notes),
+    "",
+    "Respond with JSON only.",
+  ].join("\n");
+
+  const models = await getModels();
+  const completion = await callModel(models.fastVision, (c, model) =>
+    c.chat.completions.create({
+      model,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: CATEGORY_SUGGESTION_PROMPT },
+        { role: "user", content: userContent },
+      ],
+      max_tokens: 1000,
+    }),
+  );
+
+  const raw = completion.choices[0]?.message?.content ?? "{}";
+  const parsed = parseJson(raw);
+  const arr = parsed?.["categories"];
+  if (!Array.isArray(arr)) return [];
+
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of arr) {
+    if (typeof value !== "string") continue;
+    const trimmed = value.trim();
+    if (!trimmed || trimmed.length > 50) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(trimmed);
+    if (out.length >= 15) break;
+  }
+  return out;
+}
+
 export function buildEmbeddingText(analysis: OrnamentAnalysis): string {
   return [
     analysis.name,

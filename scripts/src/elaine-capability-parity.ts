@@ -145,6 +145,10 @@ const DIRECT_TOOL_MAP: Record<string, string[]> = {
   createOrnamentCategory: ["create_ornament_category"],
   deleteOrnamentCategory: ["delete_ornament_category"],
   mergeOrnamentCategory: ["merge_ornament_categories"],
+  suggestOrnamentCategories: ["suggest_and_create_ornament_categories"],
+  createAndBackfillOrnamentCategories: [
+    "suggest_and_create_ornament_categories",
+  ],
   listNotes: ["list_notes"],
   createNote: ["create_note"],
   updateNote: ["update_note"],

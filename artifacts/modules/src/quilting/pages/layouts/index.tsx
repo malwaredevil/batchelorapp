@@ -62,6 +62,7 @@ import {
   formatElaineContextEntity,
 } from "@workspace/elaine-ui";
 import { buildFabricUrlMap } from "@/quilting/components/FabricPicker";
+import { LayoutPreviewSvg } from "@/quilting/components/LayoutPreviewSvg";
 import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
 import { CategoryEditDialog } from "@/quilting/components/CategoryEditDialog";
 import {
@@ -75,11 +76,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
-
-/** URL for the server-rasterised PNG preview of a block. */
-function blockPreviewUrl(blockId: number, sizePx: number): string {
-  return `/api/quilting/blocks/${blockId}/preview.png?size=${sizePx}`;
-}
 
 type LayoutCell = { blockId: number | null; rotation: 0 | 90 | 180 | 270 };
 
@@ -138,355 +134,6 @@ const SORT_LABELS: Record<SortKey, string> = {
   "name-asc": "Name A–Z",
   "name-desc": "Name Z–A",
 };
-
-// ---------------------------------------------------------------------------
-// SVG rendering (shared with visible thumbnail)
-// ---------------------------------------------------------------------------
-
-function SvgCell({
-  x,
-  y,
-  w,
-  h,
-  cell,
-  fabricUrlMap = {},
-  patternPrefix = "",
-}: {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  cell: string;
-  fabricUrlMap?: Record<number, string>;
-  patternPrefix?: string;
-}) {
-  const p = parseCell(cell);
-  const cx = x + w / 2;
-  const cy = y + h / 2;
-  const sw = Math.max(0.4, w * 0.04);
-  const rf = (c: string) => {
-    if (c.startsWith("fab:")) {
-      const n = parseInt(c.slice(4), 10);
-      if (!isNaN(n) && fabricUrlMap[n]) return `url(#${patternPrefix}fab-${n})`;
-      return "#D1D5DB";
-    }
-    return c || "#FFFFFF";
-  };
-
-  switch (p.kind) {
-    case "solid":
-      return <rect x={x} y={y} width={w} height={h} fill={rf(p.color)} />;
-    case "triangle":
-      if (p.type === "nwse")
-        return (
-          <g>
-            <polygon
-              points={`${x},${y} ${x + w},${y} ${x + w},${y + h}`}
-              fill={rf(p.a)}
-            />
-            <polygon
-              points={`${x},${y} ${x},${y + h} ${x + w},${y + h}`}
-              fill={rf(p.b)}
-            />
-          </g>
-        );
-      return (
-        <g>
-          <polygon
-            points={`${x},${y} ${x + w},${y} ${x},${y + h}`}
-            fill={rf(p.a)}
-          />
-          <polygon
-            points={`${x + w},${y} ${x},${y + h} ${x + w},${y + h}`}
-            fill={rf(p.b)}
-          />
-        </g>
-      );
-    case "quad":
-      return (
-        <g>
-          <polygon
-            points={`${x},${y} ${x + w},${y} ${cx},${cy}`}
-            fill={rf(p.top)}
-          />
-          <polygon
-            points={`${x + w},${y} ${x + w},${y + h} ${cx},${cy}`}
-            fill={rf(p.right)}
-          />
-          <polygon
-            points={`${x + w},${y + h} ${x},${y + h} ${cx},${cy}`}
-            fill={rf(p.bottom)}
-          />
-          <polygon
-            points={`${x},${y + h} ${x},${y} ${cx},${cy}`}
-            fill={rf(p.left)}
-          />
-        </g>
-      );
-    case "hsplit":
-      return (
-        <g>
-          <rect x={x} y={y} width={w} height={h / 2} fill={rf(p.top)} />
-          <rect
-            x={x}
-            y={y + h / 2}
-            width={w}
-            height={h / 2}
-            fill={rf(p.bottom)}
-          />
-        </g>
-      );
-    case "vsplit":
-      return (
-        <g>
-          <rect x={x} y={y} width={w / 2} height={h} fill={rf(p.left)} />
-          <rect
-            x={x + w / 2}
-            y={y}
-            width={w / 2}
-            height={h}
-            fill={rf(p.right)}
-          />
-        </g>
-      );
-    case "xsplit":
-      return (
-        <g>
-          <rect x={x} y={y} width={w / 2} height={h / 2} fill={rf(p.tl)} />
-          <rect
-            x={x + w / 2}
-            y={y}
-            width={w / 2}
-            height={h / 2}
-            fill={rf(p.tr)}
-          />
-          <rect
-            x={x}
-            y={y + h / 2}
-            width={w / 2}
-            height={h / 2}
-            fill={rf(p.bl)}
-          />
-          <rect
-            x={x + w / 2}
-            y={y + h / 2}
-            width={w / 2}
-            height={h / 2}
-            fill={rf(p.br)}
-          />
-        </g>
-      );
-    case "line": {
-      const { cs, ce, type } = p;
-      const [x1, y1, x2, y2] =
-        type === "nwse"
-          ? [x + cs * w, y + cs * h, x + ce * w, y + ce * h]
-          : [x + (1 - cs) * w, y + cs * h, x + (1 - ce) * w, y + ce * h];
-      return (
-        <g>
-          <rect x={x} y={y} width={w} height={h} fill="#FFFFFF" />
-          <line
-            x1={x1}
-            y1={y1}
-            x2={x2}
-            y2={y2}
-            stroke="#555"
-            strokeWidth={sw}
-          />
-        </g>
-      );
-    }
-    case "xline": {
-      const { nwseCs, nwseCe, neswCs, neswCe } = p;
-      return (
-        <g>
-          <rect x={x} y={y} width={w} height={h} fill="#FFFFFF" />
-          {nwseCe > nwseCs && (
-            <line
-              x1={x + nwseCs * w}
-              y1={y + nwseCs * h}
-              x2={x + nwseCe * w}
-              y2={y + nwseCe * h}
-              stroke="#555"
-              strokeWidth={sw}
-            />
-          )}
-          {neswCe > neswCs && (
-            <line
-              x1={x + (1 - neswCs) * w}
-              y1={y + neswCs * h}
-              x2={x + (1 - neswCe) * w}
-              y2={y + neswCe * h}
-              stroke="#555"
-              strokeWidth={sw}
-            />
-          )}
-        </g>
-      );
-    }
-    default:
-      return <rect x={x} y={y} width={w} height={h} fill="#FFFFFF" />;
-  }
-}
-
-function LayoutPreview({
-  layout,
-  blocks,
-  size = 160,
-  fabricUrlMap = {},
-  patternPrefix = "",
-}: {
-  layout: LayoutSummary;
-  blocks: BlockSummary[];
-  size: number;
-  fabricUrlMap?: Record<number, string>;
-  patternPrefix?: string;
-}) {
-  const blockMap = new Map(blocks.map((b) => [b.id, b]));
-  const sashW = layout.sashingWidthInches ?? 0;
-  const bordW = layout.borderWidthInches ?? 0;
-  const sashingColor = layout.sashingColor ?? "#d4c5a9";
-  const borderColor = layout.borderColor ?? "#8b6f5e";
-  const cornerstoneColor = layout.cornerstoneColor ?? null;
-
-  // Collect all fabric IDs used in all blocks in this layout
-  const fabIds = (() => {
-    const ids = new Set<number>();
-    const FAB_RE = /fab:(\d+)/g;
-    for (const lc of layout.cells) {
-      if (lc.blockId === null) continue;
-      const block = blockMap.get(lc.blockId);
-      if (!block) continue;
-      for (const c of block.cells) {
-        let m: RegExpExecArray | null;
-        FAB_RE.lastIndex = 0;
-        while ((m = FAB_RE.exec(c)) !== null) {
-          const n = parseInt(m[1], 10);
-          if (!isNaN(n) && fabricUrlMap[n]) ids.add(n);
-        }
-      }
-    }
-    return Array.from(ids);
-  })();
-
-  const unitW = layout.cols + sashW * (layout.cols - 1) + bordW * 2;
-  const unitH = layout.rows + sashW * (layout.rows - 1) + bordW * 2;
-  const scale = size / Math.max(unitW, unitH);
-  const cellPx = scale;
-  const sashPx = sashW * scale;
-  const borderPx = bordW * scale;
-  const W = unitW * scale;
-  const H = unitH * scale;
-
-  return (
-    <svg
-      width={W}
-      height={H}
-      xmlns="http://www.w3.org/2000/svg"
-      className="bg-white"
-    >
-      {fabIds.length > 0 && (
-        <defs>
-          {fabIds.map((id) => (
-            <pattern
-              key={id}
-              id={`${patternPrefix}fab-${id}`}
-              patternUnits="userSpaceOnUse"
-              x="0"
-              y="0"
-              width={cellPx}
-              height={cellPx}
-            >
-              <image
-                href={fabricUrlMap[id]}
-                x="0"
-                y="0"
-                width={cellPx}
-                height={cellPx}
-                preserveAspectRatio="xMidYMid slice"
-              />
-            </pattern>
-          ))}
-        </defs>
-      )}
-      {borderPx > 0 && (
-        <rect x={0} y={0} width={W} height={H} fill={borderColor} />
-      )}
-      {sashPx > 0 ? (
-        <rect
-          x={borderPx}
-          y={borderPx}
-          width={W - borderPx * 2}
-          height={H - borderPx * 2}
-          fill={sashingColor}
-        />
-      ) : (
-        <rect
-          x={borderPx}
-          y={borderPx}
-          width={W - borderPx * 2}
-          height={H - borderPx * 2}
-          fill="#FFFFFF"
-        />
-      )}
-      {sashPx > 0 &&
-        cornerstoneColor &&
-        Array.from({ length: layout.rows - 1 }, (_, r) =>
-          Array.from({ length: layout.cols - 1 }, (_, c) => {
-            const cx2 = borderPx + (c + 1) * (cellPx + sashPx) - sashPx;
-            const cy2 = borderPx + (r + 1) * (cellPx + sashPx) - sashPx;
-            return (
-              <rect
-                key={`cs-${r}-${c}`}
-                x={cx2}
-                y={cy2}
-                width={sashPx}
-                height={sashPx}
-                fill={cornerstoneColor}
-              />
-            );
-          }),
-        )}
-      {layout.cells.map((cell, i) => {
-        const row = Math.floor(i / layout.cols);
-        const col = i % layout.cols;
-        const x = borderPx + col * (cellPx + sashPx);
-        const y = borderPx + row * (cellPx + sashPx);
-        const block = cell.blockId !== null ? blockMap.get(cell.blockId) : null;
-        if (!block)
-          return (
-            <rect
-              key={i}
-              x={x}
-              y={y}
-              width={cellPx}
-              height={cellPx}
-              fill="#F5F5F5"
-              stroke="#E0E0E0"
-              strokeWidth="0.5"
-            />
-          );
-        const cx = x + cellPx / 2;
-        const cy = y + cellPx / 2;
-        return (
-          <g key={i} transform={`rotate(${cell.rotation}, ${cx}, ${cy})`}>
-            <image
-              href={blockPreviewUrl(
-                block.id,
-                Math.max(160, Math.round(cellPx * 2)),
-              )}
-              x={x}
-              y={y}
-              width={cellPx}
-              height={cellPx}
-              preserveAspectRatio="xMidYMid slice"
-            />
-          </g>
-        );
-      })}
-    </svg>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Export helpers
@@ -672,12 +319,13 @@ function LayoutCard({
               setZoomOpen(true);
             }}
           >
-            <LayoutPreview
+            <LayoutPreviewSvg
               layout={layout}
               blocks={blocks}
               size={160}
               fabricUrlMap={fabricUrlMap}
               patternPrefix={`lth-${layout.id}-`}
+              fill
             />
           </div>
           <div className="border-t border-card-border px-3 py-2 pr-8">
@@ -827,13 +475,16 @@ function LayoutCard({
         onClose={() => setZoomOpen(false)}
         title={layout.name}
       >
-        <LayoutPreview
-          layout={layout}
-          blocks={blocks}
-          size={800}
-          fabricUrlMap={fabricUrlMap}
-          patternPrefix={`lzm-${layout.id}-`}
-        />
+        <div style={{ width: "min(85vw, 85vh)", height: "min(85vw, 85vh)" }}>
+          <LayoutPreviewSvg
+            layout={layout}
+            blocks={blocks}
+            size={800}
+            fabricUrlMap={fabricUrlMap}
+            patternPrefix={`lzm-${layout.id}-`}
+            fill
+          />
+        </div>
       </PreviewZoomModal>
     </>
   );

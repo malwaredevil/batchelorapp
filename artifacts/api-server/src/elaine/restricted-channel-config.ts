@@ -344,6 +344,7 @@ export const RESTRICTED_ALLOWED_ACTION_TYPES_SOURCE: readonly string[] = [
   "delete_ornament_photo",
   "promote_ornament_photo",
   "bulk_reanalyze_ornaments",
+  "suggest_and_create_ornament_categories",
   // ── Universal ────────────────────────────────────────────────────────────
   // update_notification_state / bulk_update_notifications /
   // update_notification_preferences are excluded (in-app settings UI required).

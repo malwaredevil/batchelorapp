@@ -19,6 +19,10 @@ import {
   promoteOrnamentImageToPrimary,
   createOrnamentItemFromBuffer,
 } from "../routes/ornaments/ornaments";
+import {
+  suggestOrnamentCategories,
+  createAndBackfillOrnamentCategories,
+} from "../routes/ornaments/categories";
 import { deleteImage } from "../lib/ornaments/storage";
 import {
   lookupOrnamentEbayData,
@@ -129,6 +133,8 @@ export const OrnamentEbayPriceLookupActionPayload = z.object({
   force: z.boolean().optional(),
 });
 
+export const SuggestAndCreateOrnamentCategoriesActionPayload = z.object({});
+
 export const ornamentActionSchemas = [
   z.object({
     type: z.literal("update_ornament_item"),
@@ -178,6 +184,10 @@ export const ornamentActionSchemas = [
     type: z.literal("ornament_ebay_price_lookup"),
     payload: OrnamentEbayPriceLookupActionPayload,
   }),
+  z.object({
+    type: z.literal("suggest_and_create_ornament_categories"),
+    payload: SuggestAndCreateOrnamentCategoriesActionPayload,
+  }),
 ] as const;
 
 export type OrnamentActionType =
@@ -192,7 +202,8 @@ export type OrnamentActionType =
   | "merge_ornament_categories"
   | "bulk_reanalyze_ornaments"
   | "add_photo_to_ornaments"
-  | "ornament_ebay_price_lookup";
+  | "ornament_ebay_price_lookup"
+  | "suggest_and_create_ornament_categories";
 
 async function getOrnamentItemLabelInfo(
   itemId: number,
@@ -723,6 +734,51 @@ export const ornamentActionExecutors: Record<
       return { status: errStatus, body: { error: message } };
     }
   }) as ActionExecutor,
+
+  suggest_and_create_ornament_categories: (async (
+    _payload: z.infer<typeof SuggestAndCreateOrnamentCategoriesActionPayload>,
+    userId: number,
+  ) => {
+    // Enforce the AI rate limit before triggering the paid category-naming
+    // call — same cap as the web POST /categories/suggest route (aiLimiter).
+    const { limited } = await consumeAiRateLimit(userId);
+    if (limited) {
+      return {
+        status: 429,
+        body: { error: "Too many AI requests, please try again later." },
+      };
+    }
+
+    const suggestedNames = await suggestOrnamentCategories();
+    if (suggestedNames.length === 0) {
+      return {
+        status: 200,
+        body: {
+          type: "suggest_and_create_ornament_categories",
+          result: {
+            suggestedNames: [],
+            createdCount: 0,
+            assignmentsCreated: 0,
+          },
+        },
+      };
+    }
+    const result = await createAndBackfillOrnamentCategories(
+      userId,
+      suggestedNames,
+    );
+    return {
+      status: 200,
+      body: {
+        type: "suggest_and_create_ornament_categories",
+        result: {
+          suggestedNames,
+          createdCount: result.createdCount,
+          assignmentsCreated: result.assignmentsCreated,
+        },
+      },
+    };
+  }) as ActionExecutor,
 };
 
 export async function buildOrnamentActionLabel(action: {
@@ -826,6 +882,9 @@ export async function buildOrnamentActionLabel(action: {
       return payload.force
         ? `Refresh eBay prices for ${name} (bypasses cache)`
         : `Look up eBay prices for ${name}`;
+    }
+    case "suggest_and_create_ornament_categories": {
+      return "Analyze the ornament collection for recurring themes, propose new categories, then create the proposed ones and assign them to every matching ornament";
     }
   }
 }
@@ -1029,6 +1088,18 @@ export const ornamentActionTools: OpenAI.Chat.Completions.ChatCompletionTool[] =
             },
           },
           required: ["itemId"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "suggest_and_create_ornament_categories",
+        description:
+          'Propose analyzing the whole ornaments collection (names, series, motifs, colors, brand, notes) to come up with new category names that reflect recurring themes actually in the data, then create the proposed categories and immediately assign every existing matching ornament to them — e.g. "suggest and create some ornament categories" or "organize my ornaments into categories". Names that already match an existing category are skipped automatically. Takes no parameters.',
+        parameters: {
+          type: "object",
+          properties: {},
         },
       },
     },

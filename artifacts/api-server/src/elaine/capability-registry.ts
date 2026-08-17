@@ -260,6 +260,7 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
       "promote_ornament_photo",
       "merge_ornament_categories",
       "bulk_reanalyze_ornaments",
+      "suggest_and_create_ornament_categories",
     ],
     {
       ...ACTION_DEFAULTS,

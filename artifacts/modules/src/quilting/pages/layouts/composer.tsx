@@ -40,10 +40,11 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { fmtInch, parseCell } from "@/quilting/lib/cell-parser";
+import { fmtInch } from "@/quilting/lib/cell-parser";
 import {
   useListBlocks,
   useGetLayout,
+  getGetLayoutQueryKey,
   useCreateLayout,
   useUpdateLayout,
   useListQuiltingCategories,
@@ -69,6 +70,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { downloadSvgAsJpeg, downloadSvgAsPng } from "@/quilting/lib/svg-export";
+import { SvgCell } from "@/quilting/components/SvgCell";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -143,199 +145,6 @@ function QuiltDimDisplay({
       <span>finished quilt{mixed ? " (approx)" : ""}</span>
     </div>
   );
-}
-
-// ---------------------------------------------------------------------------
-// SvgCell — renders one block sub-cell at absolute SVG coordinates
-// ---------------------------------------------------------------------------
-
-function SvgCell({
-  x,
-  y,
-  w,
-  h,
-  cell,
-  id,
-  fabricUrlMap = {},
-  patternPrefix = "layout-fab",
-}: {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  cell: string;
-  id: string;
-  fabricUrlMap?: Record<number, string>;
-  patternPrefix?: string;
-}) {
-  const p = parseCell(cell);
-  const cx = x + w / 2;
-  const cy = y + h / 2;
-  const sw = Math.max(0.4, w * 0.04);
-  const rf = (c: string) => {
-    if (c.startsWith("fab:")) {
-      const n = parseInt(c.slice(4), 10);
-      if (!isNaN(n) && fabricUrlMap[n]) return `url(#${patternPrefix}-${n})`;
-      return "#D1D5DB";
-    }
-    return c || "#FFFFFF";
-  };
-
-  switch (p.kind) {
-    case "solid":
-      return <rect x={x} y={y} width={w} height={h} fill={rf(p.color)} />;
-    case "triangle":
-      if (p.type === "nwse") {
-        return (
-          <g>
-            <polygon
-              points={`${x},${y} ${x + w},${y} ${x + w},${y + h}`}
-              fill={rf(p.a)}
-            />
-            <polygon
-              points={`${x},${y} ${x},${y + h} ${x + w},${y + h}`}
-              fill={rf(p.b)}
-            />
-          </g>
-        );
-      }
-      return (
-        <g>
-          <polygon
-            points={`${x},${y} ${x + w},${y} ${x},${y + h}`}
-            fill={rf(p.a)}
-          />
-          <polygon
-            points={`${x + w},${y} ${x},${y + h} ${x + w},${y + h}`}
-            fill={rf(p.b)}
-          />
-        </g>
-      );
-    case "quad":
-      return (
-        <g>
-          <polygon
-            points={`${x},${y} ${x + w},${y} ${cx},${cy}`}
-            fill={rf(p.top)}
-          />
-          <polygon
-            points={`${x + w},${y} ${x + w},${y + h} ${cx},${cy}`}
-            fill={rf(p.right)}
-          />
-          <polygon
-            points={`${x + w},${y + h} ${x},${y + h} ${cx},${cy}`}
-            fill={rf(p.bottom)}
-          />
-          <polygon
-            points={`${x},${y + h} ${x},${y} ${cx},${cy}`}
-            fill={rf(p.left)}
-          />
-        </g>
-      );
-    case "hsplit":
-      return (
-        <g>
-          <rect x={x} y={y} width={w} height={h / 2} fill={rf(p.top)} />
-          <rect
-            x={x}
-            y={y + h / 2}
-            width={w}
-            height={h / 2}
-            fill={rf(p.bottom)}
-          />
-        </g>
-      );
-    case "vsplit":
-      return (
-        <g>
-          <rect x={x} y={y} width={w / 2} height={h} fill={rf(p.left)} />
-          <rect
-            x={x + w / 2}
-            y={y}
-            width={w / 2}
-            height={h}
-            fill={rf(p.right)}
-          />
-        </g>
-      );
-    case "xsplit":
-      return (
-        <g>
-          <rect x={x} y={y} width={w / 2} height={h / 2} fill={rf(p.tl)} />
-          <rect
-            x={x + w / 2}
-            y={y}
-            width={w / 2}
-            height={h / 2}
-            fill={rf(p.tr)}
-          />
-          <rect
-            x={x}
-            y={y + h / 2}
-            width={w / 2}
-            height={h / 2}
-            fill={rf(p.bl)}
-          />
-          <rect
-            x={x + w / 2}
-            y={y + h / 2}
-            width={w / 2}
-            height={h / 2}
-            fill={rf(p.br)}
-          />
-        </g>
-      );
-    case "line": {
-      const { cs, ce, type } = p;
-      const [x1, y1, x2, y2] =
-        type === "nwse"
-          ? [x + cs * w, y + cs * h, x + ce * w, y + ce * h]
-          : [x + (1 - cs) * w, y + cs * h, x + (1 - ce) * w, y + ce * h];
-      return (
-        <g>
-          <rect x={x} y={y} width={w} height={h} fill="#FFFFFF" />
-          <line
-            x1={x1}
-            y1={y1}
-            x2={x2}
-            y2={y2}
-            stroke="#555"
-            strokeWidth={sw}
-          />
-        </g>
-      );
-    }
-    case "xline": {
-      const { nwseCs, nwseCe, neswCs, neswCe } = p;
-      return (
-        <g>
-          <rect x={x} y={y} width={w} height={h} fill="#FFFFFF" />
-          {nwseCe > nwseCs && (
-            <line
-              x1={x + nwseCs * w}
-              y1={y + nwseCs * h}
-              x2={x + nwseCe * w}
-              y2={y + nwseCe * h}
-              stroke="#555"
-              strokeWidth={sw}
-            />
-          )}
-          {neswCe > neswCs && (
-            <line
-              x1={x + (1 - neswCs) * w}
-              y1={y + neswCs * h}
-              x2={x + (1 - neswCe) * w}
-              y2={y + neswCe * h}
-              stroke="#555"
-              strokeWidth={sw}
-            />
-          )}
-        </g>
-      );
-    }
-    default:
-      return <rect x={x} y={y} width={w} height={h} fill="#FFFFFF" />;
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -447,7 +256,7 @@ function LayoutGrid({
       data-layout-export
       style={{ display: "block", cursor: "pointer" }}
     >
-      {/* Fabric fill patterns for layout sashing / border / cornerstone */}
+      {/* Unified fabric fill patterns for all SVG elements (sashing/border/cornerstone + block cells) */}
       {fabricPatternIds.size > 0 && (
         <defs>
           {Array.from(fabricPatternIds).map((id) => (
@@ -466,32 +275,6 @@ function LayoutGrid({
                 y="0"
                 width={tilePx}
                 height={tilePx}
-                preserveAspectRatio="xMidYMid slice"
-                style={imageFilter ? { filter: imageFilter } : undefined}
-              />
-            </pattern>
-          ))}
-        </defs>
-      )}
-      {/* Fabric fill patterns for block cells (SvgCell references url(#fab-N) with no prefix) */}
-      {fabricPatternIds.size > 0 && (
-        <defs>
-          {Array.from(fabricPatternIds).map((id) => (
-            <pattern
-              key={id}
-              id={`fab-${id}`}
-              patternUnits="userSpaceOnUse"
-              x="0"
-              y="0"
-              width={cellPx}
-              height={cellPx}
-            >
-              <image
-                href={fabricUrlMap[id]}
-                x="0"
-                y="0"
-                width={cellPx}
-                height={cellPx}
                 preserveAspectRatio="xMidYMid slice"
                 style={imageFilter ? { filter: imageFilter } : undefined}
               />
@@ -582,13 +365,13 @@ function LayoutGrid({
                   return (
                     <SvgCell
                       key={j}
-                      id={`${idx}-${j}`}
                       x={x + bc * bCellPx}
                       y={y + br * bCellPx}
                       w={bCellPx}
                       h={bCellPx}
                       cell={blockCell}
                       fabricUrlMap={fabricUrlMap}
+                      patternPrefix="layout-"
                     />
                   );
                 })}
@@ -716,6 +499,12 @@ export default function LayoutComposer() {
 
   const { data: existing, isLoading: loadingExisting } = useGetLayout(
     layoutId ?? 0,
+    {
+      query: {
+        enabled: !isNew,
+        queryKey: getGetLayoutQueryKey(layoutId ?? 0),
+      },
+    },
   );
   const { data: blockList } = useListBlocks();
   const { data: fabricsData, isLoading: fabricsLoading } = useListFabrics({
@@ -727,6 +516,10 @@ export default function LayoutComposer() {
   const [spawnTemplateId, setSpawnTemplateId] = useState<number | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [templateSearch, setTemplateSearch] = useState("");
+  const [selectedTemplateTags, setSelectedTemplateTags] = useState<Set<string>>(
+    new Set(),
+  );
 
   const [name, setName] = useState("Untitled layout");
   const [rows, setRows] = useState(5);
@@ -1095,6 +888,35 @@ export default function LayoutComposer() {
       },
     );
   }
+
+  // Template palette: derive unique tags and filtered list
+  const allTemplateTags = useMemo<string[]>(() => {
+    if (!blockTemplates) return [];
+    const seen = new Set<string>();
+    for (const tpl of blockTemplates) {
+      for (const tag of tpl.tags ?? []) {
+        seen.add(tag);
+      }
+    }
+    return Array.from(seen).sort((a, b) => a.localeCompare(b));
+  }, [blockTemplates]);
+
+  const filteredTemplates = useMemo(() => {
+    if (!blockTemplates) return [];
+    return blockTemplates.filter((tpl) => {
+      if (templateSearch.trim()) {
+        const q = templateSearch.trim().toLowerCase();
+        if (!tpl.name.toLowerCase().includes(q)) return false;
+      }
+      if (selectedTemplateTags.size > 0) {
+        const matches = (tpl.tags ?? []).some((tag) =>
+          selectedTemplateTags.has(tag),
+        );
+        if (!matches) return false;
+      }
+      return true;
+    });
+  }, [blockTemplates, templateSearch, selectedTemplateTags]);
 
   if (!isNew && loadingExisting) {
     return (
@@ -1816,44 +1638,139 @@ export default function LayoutComposer() {
               {templatesOpen && (
                 <div
                   id="layout-library-templates"
-                  className="max-h-[min(32rem,55vh)] space-y-2 overflow-y-auto border-t border-border p-3"
+                  className="border-t border-border"
                 >
-                  {blockTemplates.map((tpl: QuiltingBlockTemplate) => (
-                    <button
-                      type="button"
-                      key={tpl.id}
-                      disabled={spawnTemplateId === tpl.id}
-                      onClick={() => handleSpawnFromTemplate(tpl)}
-                      className="flex w-full items-center gap-3 rounded-lg border border-border p-2 text-left transition-colors hover:border-primary/40 disabled:opacity-60"
-                      title="Create a block from this template and add to palette"
-                    >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded bg-muted/30">
-                        <BlockPreviewSvg
-                          cells={tpl.cells}
-                          gridSize={tpl.gridW}
-                          seams={tpl.seams as BlockSeamLine[]}
-                          size={40}
-                        />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">
-                          {tpl.name}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {tpl.gridW}×{tpl.gridH}
-                        </p>
-                      </div>
-                      <div className="shrink-0 text-primary">
-                        {spawnTemplateId === tpl.id ? (
-                          <span className="text-xs text-muted-foreground">
-                            Adding…
-                          </span>
-                        ) : (
-                          <Plus className="h-4 w-4" />
+                  {/* Search + tag filter */}
+                  <div className="space-y-2 p-3 pb-2">
+                    <div className="relative">
+                      <svg
+                        className="absolute left-1.5 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                      >
+                        <circle cx="11" cy="11" r="8" />
+                        <path d="m21 21-4.35-4.35" />
+                      </svg>
+                      <Input
+                        value={templateSearch}
+                        onChange={(e) => setTemplateSearch(e.target.value)}
+                        placeholder="Search templates…"
+                        className="h-7 pl-6 text-xs"
+                      />
+                    </div>
+
+                    {/* Category chips — only when at least one template has tags */}
+                    {allTemplateTags.length > 0 && (
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap gap-1">
+                          {allTemplateTags.map((tag) => {
+                            const isSelected = selectedTemplateTags.has(tag);
+                            return (
+                              <button
+                                key={tag}
+                                type="button"
+                                onClick={() =>
+                                  setSelectedTemplateTags((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(tag)) next.delete(tag);
+                                    else next.add(tag);
+                                    return next;
+                                  })
+                                }
+                                className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] font-medium transition-all ${
+                                  isSelected
+                                    ? "bg-primary/15 text-primary ring-1 ring-primary/40"
+                                    : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+                                }`}
+                              >
+                                {isSelected && (
+                                  <svg
+                                    className="h-2.5 w-2.5 shrink-0"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                    strokeWidth={3}
+                                  >
+                                    <path d="M20 6 9 17l-5-5" />
+                                  </svg>
+                                )}
+                                {tag}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {selectedTemplateTags.size > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedTemplateTags(new Set())}
+                            className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+                          >
+                            <X className="h-2.5 w-2.5" />
+                            Clear filters
+                          </button>
                         )}
                       </div>
-                    </button>
-                  ))}
+                    )}
+                  </div>
+
+                  {/* Template list */}
+                  <div className="max-h-[min(28rem,50vh)] space-y-2 overflow-y-auto px-3 pb-3">
+                    {filteredTemplates.length === 0 && (
+                      <p className="py-2 text-center text-[11px] text-muted-foreground">
+                        No templates match your search.
+                      </p>
+                    )}
+                    {filteredTemplates.map((tpl: QuiltingBlockTemplate) => (
+                      <button
+                        type="button"
+                        key={tpl.id}
+                        disabled={spawnTemplateId === tpl.id}
+                        onClick={() => handleSpawnFromTemplate(tpl)}
+                        className="flex w-full items-center gap-3 rounded-lg border border-border p-2 text-left transition-colors hover:border-primary/40 disabled:opacity-60"
+                        title="Create a block from this template and add to palette"
+                      >
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded bg-muted/30">
+                          <BlockPreviewSvg
+                            cells={tpl.cells}
+                            gridSize={tpl.gridW}
+                            seams={tpl.seams as BlockSeamLine[]}
+                            size={40}
+                          />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">
+                            {tpl.name}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {tpl.gridW}×{tpl.gridH}
+                            {(tpl.tags ?? []).length > 0 && (
+                              <span className="ml-1.5">
+                                {tpl.tags.map((tag) => (
+                                  <span
+                                    key={tag}
+                                    className="mr-1 inline-block rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground"
+                                  >
+                                    {tag}
+                                  </span>
+                                ))}
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                        <div className="shrink-0 text-primary">
+                          {spawnTemplateId === tpl.id ? (
+                            <span className="text-xs text-muted-foreground">
+                              Adding…
+                            </span>
+                          ) : (
+                            <Plus className="h-4 w-4" />
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
             </section>

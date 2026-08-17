@@ -265,8 +265,8 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   // this file was touched for that task. Genuine owner-configurability
   // candidates, but out of scope here — tracked under the broader
   // hardcoded-config audit rather than folded into an unrelated task's diff.
-  "artifacts/api-server/src/elaine/index.ts:9965", // MAX_ROUNDS (restricted-channel OpenAI-Responses attempt loop)
-  "artifacts/api-server/src/elaine/index.ts:10225", // MAX_ROUNDS (restricted-channel reply loop, SMS/email/Slack)
+  "artifacts/api-server/src/elaine/index.ts:9966", // MAX_ROUNDS (restricted-channel OpenAI-Responses attempt loop)
+  "artifacts/api-server/src/elaine/index.ts:10226", // MAX_ROUNDS (restricted-channel reply loop, SMS/email/Slack)
 
   // ---- routes/ornaments/ornaments.ts ----
   // Pre-existing input-validation caps (notes length, supplemental-image

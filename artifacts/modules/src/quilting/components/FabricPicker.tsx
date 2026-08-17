@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Search } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Search, X as XIcon, Check } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { appendScreenshotToken } from "@workspace/api-client-react";
@@ -9,12 +9,21 @@ import { appendScreenshotToken } from "@workspace/api-client-react";
 // @workspace/api-client-react in a shared component (the token helper below
 // is a plain utility export, not a generated type, so it's fine to import).
 // ---------------------------------------------------------------------------
+
+export interface FabricCategory {
+  id: number;
+  name: string;
+  bgColor?: string | null;
+  textColor?: string | null;
+}
+
 export interface FabricItem {
   id: number;
   name: string;
   imageUrl?: string | null;
   tileImageUrl?: string | null;
   dominantColors?: string[] | null;
+  categories?: FabricCategory[] | null;
 }
 
 export interface FabricTallyItem {
@@ -109,14 +118,51 @@ export function FabricPicker({
   placeholder?: string;
 }) {
   const [search, setSearch] = useState("");
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<Set<number>>(
+    new Set(),
+  );
+
+  // Derive sorted unique categories from all fabrics
+  const allCategories = useMemo<FabricCategory[]>(() => {
+    if (!fabrics) return [];
+    const seen = new Map<number, FabricCategory>();
+    for (const f of fabrics) {
+      for (const cat of f.categories ?? []) {
+        if (!seen.has(cat.id)) seen.set(cat.id, cat);
+      }
+    }
+    return Array.from(seen.values()).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+  }, [fabrics]);
+
+  function toggleCategory(id: number) {
+    setSelectedCategoryIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   const filtered = (fabrics ?? []).filter((f) => {
-    if (!search.trim()) return true;
-    const q = search.trim().toLowerCase();
-    return (
-      f.name.toLowerCase().includes(q) ||
-      (f.dominantColors ?? []).some((c) => c.toLowerCase().includes(q))
-    );
+    // Text search filter
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      const matchesText =
+        f.name.toLowerCase().includes(q) ||
+        (f.dominantColors ?? []).some((c) => c.toLowerCase().includes(q));
+      if (!matchesText) return false;
+    }
+    // Category chip filter (OR logic across selected chips)
+    if (selectedCategoryIds.size > 0) {
+      const fabricCatIds = new Set((f.categories ?? []).map((c) => c.id));
+      const matchesCategory = Array.from(selectedCategoryIds).some((id) =>
+        fabricCatIds.has(id),
+      );
+      if (!matchesCategory) return false;
+    }
+    return true;
   });
 
   return (
@@ -173,6 +219,54 @@ export function FabricPicker({
           className="h-7 pl-6 text-xs"
         />
       </div>
+
+      {/* ── Category chip filter ─── */}
+      {allCategories.length > 0 && (
+        <div className="space-y-1">
+          <div className="flex flex-wrap gap-1">
+            {allCategories.map((cat) => {
+              const isSelected = selectedCategoryIds.has(cat.id);
+              const hasBgColor = !!cat.bgColor;
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => toggleCategory(cat.id)}
+                  title={cat.name}
+                  className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] font-medium transition-all ${
+                    isSelected
+                      ? hasBgColor
+                        ? "ring-2 ring-offset-1 ring-primary/60 opacity-100"
+                        : "bg-primary/15 text-primary ring-1 ring-primary/40"
+                      : hasBgColor
+                        ? "opacity-60 hover:opacity-90"
+                        : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+                  }`}
+                  style={
+                    hasBgColor
+                      ? {
+                          backgroundColor: cat.bgColor ?? undefined,
+                          color: cat.textColor ?? undefined,
+                        }
+                      : undefined
+                  }
+                >
+                  {isSelected && <Check className="h-2.5 w-2.5 shrink-0" />}
+                  {cat.name}
+                </button>
+              );
+            })}
+          </div>
+          {selectedCategoryIds.size > 0 && (
+            <button
+              onClick={() => setSelectedCategoryIds(new Set())}
+              className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <XIcon className="h-2.5 w-2.5" />
+              Clear filters
+            </button>
+          )}
+        </div>
+      )}
 
       {/* ── Loading ─── */}
       {!fabrics && (

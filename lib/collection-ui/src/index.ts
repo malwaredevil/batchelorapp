@@ -83,6 +83,8 @@ export type { MultiSelectMode } from "./multi-select-mode";
 export {
   getAsyncActionStatus,
   isAsyncActionBusy,
+  markAsyncActionProcessing,
+  markAsyncActionSettled,
   trackAsyncAction,
   useAsyncActionStatus,
 } from "./async-action-status";

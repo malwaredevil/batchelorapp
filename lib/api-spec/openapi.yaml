@@ -5367,6 +5367,38 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /ornaments/categories/suggest:
+    post:
+      operationId: suggestOrnamentCategories
+      tags:
+        - ornaments
+      summary: Ask AI to propose category names reflecting recurring themes in the current collection (excludes any that already match an existing category)
+      responses:
+        "200":
+          description: Proposed category names
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrnamentsSuggestCategoriesResult"
+  /ornaments/categories/create-and-backfill:
+    post:
+      operationId: createAndBackfillOrnamentCategories
+      tags:
+        - ornaments
+      summary: Create the given category names (skipping ones that already exist) and backfill matching assignments across every existing ornament
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrnamentsCreateAndBackfillCategoriesInput"
+      responses:
+        "200":
+          description: Updated category list with counts, plus creation/backfill totals
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrnamentsCreateAndBackfillCategoriesResult"
   /office/notes:
     get:
       operationId: listNotes
@@ -10338,6 +10370,45 @@ components:
       properties:
         intoId:
           type: integer
+    OrnamentsSuggestCategoriesResult:
+      type: object
+      required:
+        - suggestions
+      properties:
+        suggestions:
+          type: array
+          items:
+            type: string
+    OrnamentsCreateAndBackfillCategoriesInput:
+      type: object
+      required:
+        - names
+      properties:
+        names:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: string
+            minLength: 1
+            maxLength: 50
+    OrnamentsCreateAndBackfillCategoriesResult:
+      type: object
+      required:
+        - categories
+        - createdCount
+        - assignmentsCreated
+      properties:
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrnamentsCategory"
+        createdCount:
+          type: integer
+          description: Number of new categories actually created (existing-name matches are skipped)
+        assignmentsCreated:
+          type: integer
+          description: Number of new item-category assignments made during backfill
     OrnamentsOrnamentImage:
       type: object
       required:

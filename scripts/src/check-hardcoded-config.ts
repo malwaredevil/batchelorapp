@@ -302,6 +302,14 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   "lib/collection-ui/src/async-action-status.ts:6", // SUCCESS_DISPLAY_MS
   "lib/collection-ui/src/async-action-status.ts:7", // ERROR_DISPLAY_MS
 
+  // ---- lib/elaine-ui/src/CommandPalette.tsx ----
+  // Pre-existing client-side UI constant (size of the "Recent" search-history
+  // list kept in localStorage) unrelated to Task #1106 (adding ornaments to
+  // global search); flagged only because that task touched this file for an
+  // unrelated import/icon addition. Not an owner-facing limit/budget — purely
+  // a UI-polish cap on a local list length.
+  "lib/elaine-ui/src/CommandPalette.tsx:81", // MAX_RECENT
+
   // ---- elaine/runtime/trace-store.ts ----
   // Zero-initializers for usage counters inside a trace summary object.
   "artifacts/api-server/src/elaine/runtime/trace-store.ts:115",

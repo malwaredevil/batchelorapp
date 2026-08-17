@@ -8,8 +8,8 @@ import {
   getAsyncActionStatus,
   clearSettledAsyncActionStatuses,
   clearAsyncActionStatuses,
+  useBulkReanalyzeRun,
 } from "@workspace/collection-ui";
-import { useBulkReanalyzeRun } from "./use-bulk-reanalyze-run";
 
 const keyFor = (id: number) => `test-bulk:${id}`;
 

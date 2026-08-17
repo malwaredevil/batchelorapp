@@ -52,8 +52,8 @@ import {
   isAsyncActionBusy,
   useAsyncActionStatus,
   clearSettledAsyncActionStatuses,
+  useBulkReanalyzeRun,
 } from "@workspace/collection-ui";
-import { useBulkReanalyzeRun } from "@/quilting/hooks/use-bulk-reanalyze-run";
 import {
   quiltReanalyzeKey,
   QUILT_REANALYZE_KEY_PREFIX,

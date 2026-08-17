@@ -66,14 +66,18 @@ import {
   isAsyncActionBusy,
   useAsyncActionStatus,
   BulkActionBar,
+  useBulkReanalyzeRun,
+  clearSettledAsyncActionStatuses,
   type SortOption,
   type CompareItem,
 } from "@workspace/collection-ui";
-import { useOrnamentsBulkReanalyze } from "@/ornaments/lib/use-ornaments-bulk-reanalyze";
 import { GitCompare, RefreshCw as RefreshCwIcon } from "lucide-react";
 import { GalleryPaginator } from "@/components/GalleryPaginator";
 import { cn } from "@/lib/utils";
-import { ornamentReanalyzeKey } from "@/ornaments/lib/reanalyze-status";
+import {
+  ornamentReanalyzeKey,
+  ORNAMENT_REANALYZE_KEY_PREFIX,
+} from "@/ornaments/lib/reanalyze-status";
 
 // Thin wrappers so each card/row's live "Refresh AI" status is read via its
 // own hook call (one per rendered instance), rather than calling a hook
@@ -167,15 +171,46 @@ export default function Collection() {
   const compareMode = useMultiSelectMode(5);
   const [showCompareModal, setShowCompareModal] = useState(false);
 
-  // Select (bulk) mode — useOrnamentsBulkReanalyze owns all state and the
-  // runBulkReanalyze function; we inject the real mutation and invalidator.
+  // Select (bulk) mode — bulkMode owns the selection (shared hook, unchanged
+  // by this migration); useBulkReanalyzeRun owns the shared run/dismiss/
+  // per-card status lifecycle (also used by Quilting's quilts/patterns).
+  const bulkMode = useMultiSelectMode(20);
+  const [bulkStatus, setBulkStatus] = useState<string | null>(null);
   const bulkReanalyze = useBulkReanalyzeOrnaments();
-  const { bulkMode, bulkStatus, setBulkStatus, runBulkReanalyze, finishBulk } =
-    useOrnamentsBulkReanalyze({
-      mutateAsync: bulkReanalyze.mutateAsync,
-      invalidateQueries: () =>
-        queryClient.invalidateQueries({ queryKey: getListOrnamentsQueryKey() }),
-    });
+  const bulkRun = useBulkReanalyzeRun({
+    mutateAsync: bulkReanalyze.mutateAsync,
+    keyFor: ornamentReanalyzeKey,
+    invalidate: () =>
+      queryClient.invalidateQueries({ queryKey: getListOrnamentsQueryKey() }),
+    onSettled: ({ succeeded, failed }) => {
+      // Stay in Select mode (selection cleared) so the per-card check/X
+      // outcome icons stay visible until the user presses "Done"
+      // (finishBulk), which exits the mode and clears them.
+      bulkMode.clear();
+      setBulkStatus(
+        `Done — ${succeeded.length} refreshed${failed.length ? `, ${failed.length} failed` : ""}.`,
+      );
+    },
+    onFailed: () => {
+      bulkMode.clear();
+      setBulkStatus("Something went wrong. Please try again.");
+    },
+  });
+
+  function runBulkReanalyze() {
+    void bulkRun.run(bulkMode.selectedIds);
+  }
+
+  // The "Done" button: exit Select mode, dismiss the status message, and
+  // clear the sticky per-card outcome icons. A still-in-flight run's late
+  // result is dropped by bulkRun's own generation guard, so it can never
+  // resurrect the icons after this runs.
+  function finishBulk() {
+    bulkRun.dismiss();
+    bulkMode.exit();
+    setBulkStatus(null);
+    clearSettledAsyncActionStatuses(ORNAMENT_REANALYZE_KEY_PREFIX);
+  }
 
   const isSelecting = compareMode.active || bulkMode.active;
 
@@ -478,7 +513,7 @@ export default function Collection() {
           onDone={finishBulk}
           onRun={runBulkReanalyze}
           runLabel={`Refresh AI + eBay (${bulkMode.selectedIds.length})`}
-          isPending={bulkReanalyze.isPending}
+          isPending={bulkRun.isPending}
           emptyHint={`Tap cards to select (up to ${bulkMode.maxItems})`}
         />
       )}
@@ -711,10 +746,10 @@ export default function Collection() {
       {/* Bulk pending / status bar. Deliberately NOT gated on bulkMode.active
           — the completion message must keep showing (and be dismissible)
           even after Select mode itself has already ended. */}
-      {(bulkReanalyze.isPending || bulkStatus) && (
+      {(bulkRun.isPending || bulkStatus) && (
         <div className="fixed inset-x-0 bottom-20 z-30 flex justify-center px-4 md:bottom-6">
           <div className="flex items-center gap-2 rounded-full border border-amber-300/60 bg-background/95 px-5 py-3 shadow-xl backdrop-blur">
-            {bulkReanalyze.isPending ? (
+            {bulkRun.isPending ? (
               <>
                 <RefreshCwIcon className="h-4 w-4 animate-spin text-amber-600" />
                 <span className="text-sm font-medium">

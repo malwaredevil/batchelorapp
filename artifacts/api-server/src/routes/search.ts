@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, ilike, or } from "drizzle-orm";
+import { and, eq, ilike, isNull, or } from "drizzle-orm";
 import {
   db,
   potteryItems,
@@ -10,6 +10,7 @@ import {
   reminders,
   elaineHistoryConversations,
   elaineHistoryMessages,
+  ornamentsItems,
 } from "@workspace/db";
 import { requireAuth } from "../middleware/auth";
 
@@ -84,6 +85,7 @@ router.get("/search", requireAuth, async (req, res) => {
     reminderResults,
     conversationTitleMatches,
     conversationContentMatches,
+    ornamentResults,
   ] = await Promise.all([
     db
       .select({
@@ -206,6 +208,26 @@ router.get("/search", requireAuth, async (req, res) => {
         and(
           eq(elaineHistoryConversations.userId, userId),
           ilike(elaineHistoryMessages.content, pattern),
+        ),
+      )
+      .limit(perSource),
+
+    db
+      .select({
+        id: ornamentsItems.id,
+        name: ornamentsItems.name,
+        brand: ornamentsItems.brand,
+        description: ornamentsItems.description,
+      })
+      .from(ornamentsItems)
+      .where(
+        and(
+          isNull(ornamentsItems.deletedAt),
+          or(
+            ilike(ornamentsItems.name, pattern),
+            ilike(ornamentsItems.brand, pattern),
+            ilike(ornamentsItems.description, pattern),
+          ),
         ),
       )
       .limit(perSource),
@@ -332,6 +354,28 @@ router.get("/search", requireAuth, async (req, res) => {
             : staticSubtitle,
           matchedContent,
           url: `/modules/quilting/fabrics/${r.id}`,
+        };
+      }),
+    });
+  }
+
+  if (ornamentResults.length > 0) {
+    groups.push({
+      type: "ornaments",
+      label: "Ornaments",
+      results: ornamentResults.map((r) => {
+        const matchedContent =
+          !matchesField(r.name, q) &&
+          !matchesField(r.brand, q) &&
+          matchesField(r.description, q);
+        return {
+          id: r.id,
+          title: r.name,
+          subtitle: matchedContent
+            ? buildMessageSnippet(r.description ?? "", q)
+            : r.brand,
+          matchedContent,
+          url: `/modules/ornaments/ornament/${r.id}`,
         };
       }),
     });

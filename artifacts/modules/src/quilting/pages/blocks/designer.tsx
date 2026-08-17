@@ -2508,7 +2508,7 @@ export default function BlockDesigner() {
     !templateMode ? (blockId ?? 0) : 0,
     {
       query: {
-        enabled: !templateMode,
+        enabled: !templateMode && !isNew,
         queryKey: getGetBlockQueryKey(!templateMode ? (blockId ?? 0) : 0),
       },
     },
@@ -2516,7 +2516,7 @@ export default function BlockDesigner() {
   const { data: existingTemplate, isLoading: loadingExistingTemplate } =
     useGetBlockTemplate(templateMode ? (blockId ?? 0) : 0, {
       query: {
-        enabled: templateMode,
+        enabled: templateMode && !isNew,
         queryKey: getGetBlockTemplateQueryKey(
           templateMode ? (blockId ?? 0) : 0,
         ),

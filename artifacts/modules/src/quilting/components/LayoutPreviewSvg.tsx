@@ -26,6 +26,7 @@ export function LayoutPreviewSvg({
   fabricUrlMap = {},
   fabricTileRepeats = 1,
   patternPrefix = "",
+  fill = false,
 }: {
   layout: LayoutSummaryMin;
   blocks: BlockSummaryMin[];
@@ -40,6 +41,18 @@ export function LayoutPreviewSvg({
    * Defaults to "" (backward-compatible for single-panel pages).
    */
   patternPrefix?: string;
+  /**
+   * When true, the SVG scales to fill whatever definite-size container it's
+   * placed in (via viewBox + 100% width/height + preserveAspectRatio),
+   * instead of rendering at a fixed `size`×`size` pixel box. `size` still
+   * drives internal geometry/resolution (pattern tiling, stroke widths).
+   * Only set this when the immediate parent has a definite width/height
+   * (e.g. an `aspect-square` card or an explicitly sized wrapper) — a
+   * percentage-sized SVG inside an auto-sized parent falls back to the
+   * browser's indefinite-size default instead of the intended dimensions.
+   * Defaults to false for backward compatibility with existing callers.
+   */
+  fill?: boolean;
 }) {
   const blockMap = new Map(blocks.map((b) => [b.id, b]));
   const sashW = layout.sashingWidthInches ?? 0;
@@ -78,8 +91,10 @@ export function LayoutPreviewSvg({
 
   return (
     <svg
-      width={W}
-      height={H}
+      viewBox={`0 0 ${W} ${H}`}
+      width={fill ? "100%" : W}
+      height={fill ? "100%" : H}
+      preserveAspectRatio="xMidYMid meet"
       xmlns="http://www.w3.org/2000/svg"
       className="bg-white"
     >

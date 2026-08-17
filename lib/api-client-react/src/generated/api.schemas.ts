@@ -2212,6 +2212,26 @@ export interface OrnamentsMergeCategoryInput {
   intoId: number;
 }
 
+export interface OrnamentsSuggestCategoriesResult {
+  suggestions: string[];
+}
+
+export interface OrnamentsCreateAndBackfillCategoriesInput {
+  /**
+     * @minItems 1
+     * @maxItems 50
+     */
+  names: string[];
+}
+
+export interface OrnamentsCreateAndBackfillCategoriesResult {
+  categories: OrnamentsCategory[];
+  /** Number of new categories actually created (existing-name matches are skipped) */
+  createdCount: number;
+  /** Number of new item-category assignments made during backfill */
+  assignmentsCreated: number;
+}
+
 export interface OrnamentsOrnamentImage {
   id: number;
   url: string;

@@ -5773,6 +5773,40 @@ export const MergeOrnamentCategoryBody = zod.object({
 
 
 /**
+ * @summary Ask AI to propose category names reflecting recurring themes in the current collection (excludes any that already match an existing category)
+ */
+export const SuggestOrnamentCategoriesResponse = zod.object({
+  "suggestions": zod.array(zod.string())
+})
+
+
+/**
+ * @summary Create the given category names (skipping ones that already exist) and backfill matching assignments across every existing ornament
+ */
+export const createAndBackfillOrnamentCategoriesBodyNamesItemMax = 50;
+
+export const createAndBackfillOrnamentCategoriesBodyNamesMax = 50;
+
+
+
+export const CreateAndBackfillOrnamentCategoriesBody = zod.object({
+  "names": zod.array(zod.string().min(1).max(createAndBackfillOrnamentCategoriesBodyNamesItemMax)).min(1).max(createAndBackfillOrnamentCategoriesBodyNamesMax)
+})
+
+export const CreateAndBackfillOrnamentCategoriesResponse = zod.object({
+  "categories": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "bgColor": zod.string().nullish(),
+  "textColor": zod.string().nullish(),
+  "count": zod.number().optional().describe('Number of ornaments assigned this category (only present on the category-list endpoint)')
+})),
+  "createdCount": zod.number().describe('Number of new categories actually created (existing-name matches are skipped)'),
+  "assignmentsCreated": zod.number().describe('Number of new item-category assignments made during backfill')
+})
+
+
+/**
  * @summary List all household notes
  */
 export const ListNotesResponseItem = zod.object({

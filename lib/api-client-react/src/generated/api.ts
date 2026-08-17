@@ -114,6 +114,8 @@ import type {
   OrnamentsCategory,
   OrnamentsCategoryColorInput,
   OrnamentsCategoryInput,
+  OrnamentsCreateAndBackfillCategoriesInput,
+  OrnamentsCreateAndBackfillCategoriesResult,
   OrnamentsEbayPriceResult,
   OrnamentsMergeCategoryInput,
   OrnamentsOrnamentImage,
@@ -125,6 +127,7 @@ import type {
   OrnamentsSeriesCount,
   OrnamentsStatsResponse,
   OrnamentsStragglers,
+  OrnamentsSuggestCategoriesResult,
   OverrideOperationBudgetBody,
   PaletteMatchFabricsBody,
   PaletteMatchPatternsBody,
@@ -16935,6 +16938,147 @@ export const useMergeOrnamentCategory = <TError = ErrorType<Error>,
         TContext
       > => {
       return useMutation(getMergeOrnamentCategoryMutationOptions(options));
+    }
+
+export const getSuggestOrnamentCategoriesUrl = () => {
+
+
+
+
+  return `/api/ornaments/categories/suggest`
+}
+
+/**
+ * @summary Ask AI to propose category names reflecting recurring themes in the current collection (excludes any that already match an existing category)
+ */
+export const suggestOrnamentCategories = async ( options?: RequestInit): Promise<OrnamentsSuggestCategoriesResult> => {
+
+  return customFetch<OrnamentsSuggestCategoriesResult>(getSuggestOrnamentCategoriesUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getSuggestOrnamentCategoriesMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof suggestOrnamentCategories>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof suggestOrnamentCategories>>, TError,void, TContext> => {
+
+const mutationKey = ['suggestOrnamentCategories'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof suggestOrnamentCategories>>, void> = () => {
+
+
+          return  suggestOrnamentCategories(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SuggestOrnamentCategoriesMutationResult = NonNullable<Awaited<ReturnType<typeof suggestOrnamentCategories>>>
+
+    export type SuggestOrnamentCategoriesMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Ask AI to propose category names reflecting recurring themes in the current collection (excludes any that already match an existing category)
+ */
+export const useSuggestOrnamentCategories = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof suggestOrnamentCategories>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof suggestOrnamentCategories>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getSuggestOrnamentCategoriesMutationOptions(options));
+    }
+
+export const getCreateAndBackfillOrnamentCategoriesUrl = () => {
+
+
+
+
+  return `/api/ornaments/categories/create-and-backfill`
+}
+
+/**
+ * @summary Create the given category names (skipping ones that already exist) and backfill matching assignments across every existing ornament
+ */
+export const createAndBackfillOrnamentCategories = async (ornamentsCreateAndBackfillCategoriesInput: OrnamentsCreateAndBackfillCategoriesInput, options?: RequestInit): Promise<OrnamentsCreateAndBackfillCategoriesResult> => {
+
+  return customFetch<OrnamentsCreateAndBackfillCategoriesResult>(getCreateAndBackfillOrnamentCategoriesUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      ornamentsCreateAndBackfillCategoriesInput,)
+  }
+);}
+
+
+
+
+export const getCreateAndBackfillOrnamentCategoriesMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAndBackfillOrnamentCategories>>, TError,{data: BodyType<OrnamentsCreateAndBackfillCategoriesInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createAndBackfillOrnamentCategories>>, TError,{data: BodyType<OrnamentsCreateAndBackfillCategoriesInput>}, TContext> => {
+
+const mutationKey = ['createAndBackfillOrnamentCategories'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createAndBackfillOrnamentCategories>>, {data: BodyType<OrnamentsCreateAndBackfillCategoriesInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createAndBackfillOrnamentCategories(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateAndBackfillOrnamentCategoriesMutationResult = NonNullable<Awaited<ReturnType<typeof createAndBackfillOrnamentCategories>>>
+    export type CreateAndBackfillOrnamentCategoriesMutationBody = BodyType<OrnamentsCreateAndBackfillCategoriesInput>
+    export type CreateAndBackfillOrnamentCategoriesMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create the given category names (skipping ones that already exist) and backfill matching assignments across every existing ornament
+ */
+export const useCreateAndBackfillOrnamentCategories = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAndBackfillOrnamentCategories>>, TError,{data: BodyType<OrnamentsCreateAndBackfillCategoriesInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createAndBackfillOrnamentCategories>>,
+        TError,
+        {data: BodyType<OrnamentsCreateAndBackfillCategoriesInput>},
+        TContext
+      > => {
+      return useMutation(getCreateAndBackfillOrnamentCategoriesMutationOptions(options));
     }
 
 export const getListNotesUrl = () => {

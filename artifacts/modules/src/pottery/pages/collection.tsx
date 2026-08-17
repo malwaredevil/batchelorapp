@@ -68,6 +68,7 @@ import {
 import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
 import { DominantColorDots } from "@/components/collection/DominantColorDots";
 import { CollectionErrorState } from "@workspace/collection-ui";
+import { usePotteryBulkReanalyze } from "@/pottery/lib/use-pottery-bulk-reanalyze";
 import { QuantityBadge } from "@/components/collection/QuantityBadge";
 
 // ---------------------------------------------------------------------------
@@ -817,13 +818,22 @@ export default function Collection() {
 
   // Bulk reanalyze mode
   const queryClient = useQueryClient();
-  const [bulkMode, setBulkMode] = useState(false);
-  const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<number>>(
-    new Set(),
-  );
-  const [bulkStatus, setBulkStatus] = useState<string | null>(null);
-  const { mutateAsync: bulkReanalyze, isPending: isBulkPending } =
+  const { mutateAsync: bulkMutateAsync, isPending: isBulkPending } =
     useBulkReanalyzePottery();
+  const {
+    bulkMode,
+    bulkSelectedIds,
+    bulkStatus,
+    setBulkStatus,
+    enterBulkMode,
+    exitBulkMode,
+    toggleBulkSelect,
+    runBulkReanalyze,
+  } = usePotteryBulkReanalyze({
+    mutateAsync: bulkMutateAsync,
+    invalidateQueries: () =>
+      queryClient.invalidateQueries({ queryKey: getListPotteryQueryKey() }),
+  });
 
   const { mutate: reanalyzeItem } = useReanalyzePottery({
     mutation: {
@@ -858,40 +868,6 @@ export default function Collection() {
       onError: () => toast.error("Failed to save categories"),
     },
   });
-
-  function toggleBulkSelect(id: number) {
-    setBulkSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else if (next.size < 20) next.add(id);
-      return next;
-    });
-  }
-
-  function exitBulkMode() {
-    setBulkMode(false);
-    setBulkSelectedIds(new Set());
-    setBulkStatus(null);
-  }
-
-  async function runBulkReanalyze() {
-    if (bulkSelectedIds.size === 0) return;
-    setBulkStatus("Analysing…");
-    try {
-      const result = await bulkReanalyze({
-        data: { ids: [...bulkSelectedIds] },
-      });
-      await queryClient.invalidateQueries({
-        queryKey: getListPotteryQueryKey(),
-      });
-      setBulkStatus(
-        `Done — ${result.succeeded.length} refreshed${result.failed.length ? `, ${result.failed.length} failed` : ""}.`,
-      );
-      setBulkSelectedIds(new Set());
-    } catch {
-      setBulkStatus("Something went wrong. Please try again.");
-    }
-  }
 
   const filtered = useMemo(() => {
     if (!data) return [];
@@ -1007,7 +983,7 @@ export default function Collection() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setBulkMode(true)}
+                  onClick={enterBulkMode}
                   data-testid="button-bulk-reanalyze-mode"
                 >
                   <RefreshCw className="h-4 w-4" />
@@ -1298,13 +1274,30 @@ export default function Collection() {
             </div>
           )}
 
-          {bulkMode && (
-            <div className="mb-3 rounded-xl border border-amber-300/50 bg-amber-50/60 px-4 py-2.5 text-sm text-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
-              {bulkStatus ??
-                (bulkSelectedIds.size === 0
-                  ? "Select up to 20 pieces to refresh their AI analysis."
-                  : `${bulkSelectedIds.size} selected${bulkSelectedIds.size === 20 ? " (max)" : ""}`)}
+          {/* Bulk status message is deliberately NOT gated on `bulkMode` — it
+              must keep showing (and stay dismissible) even after Select mode
+              itself has already ended once the bulk job completes. */}
+          {bulkStatus ? (
+            <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-amber-300/50 bg-amber-50/60 px-4 py-2.5 text-sm text-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+              <span>{bulkStatus}</span>
+              <button
+                type="button"
+                onClick={() => setBulkStatus(null)}
+                aria-label="Dismiss"
+                className="grid h-5 w-5 shrink-0 place-items-center rounded-full transition hover:bg-amber-200/60 dark:hover:bg-amber-800/40"
+                data-testid="button-bulk-status-dismiss"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
             </div>
+          ) : (
+            bulkMode && (
+              <div className="mb-3 rounded-xl border border-amber-300/50 bg-amber-50/60 px-4 py-2.5 text-sm text-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+                {bulkSelectedIds.size === 0
+                  ? "Select up to 20 pieces to refresh their AI analysis."
+                  : `${bulkSelectedIds.size} selected${bulkSelectedIds.size === 20 ? " (max)" : ""}`}
+              </div>
+            )
           )}
 
           {filtered.length === 0 ? (

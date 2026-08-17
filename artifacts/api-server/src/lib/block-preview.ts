@@ -16,10 +16,11 @@ import { downloadImageBuffer } from "./storage";
 import { logger } from "./logger";
 
 // ─── In-memory PNG cache ────────────────────────────────────────────────────
-// Keyed by cache key string (encodes blockId + createdAt + sizePx + fabric
-// imagePath signature). Avoids re-fetching Supabase fabric images + re-
-// rasterising on every request once a block has been rendered at a given size.
-// Max 500 entries; evicts oldest (Map insertion order) when full.
+// Keyed by cache key string (encodes blockId + content hash of cells/seams/
+// gridSize + sizePx + fabric imagePath signature). Avoids re-fetching Supabase
+// fabric images + re-rasterising on every request once a block has been
+// rendered at a given size. Max 500 entries; evicts oldest (Map insertion
+// order) when full.
 const PNG_CACHE = new Map<string, Buffer>();
 
 /** djb2 hash — fast, non-cryptographic, good enough for cache key discrimination. */
@@ -377,7 +378,6 @@ export async function renderBlockPreviewPng(
       cells: blocks.cells,
       gridSize: blocks.gridSize,
       seams: blocks.seams,
-      createdAt: blocks.createdAt,
     })
     .from(blocks)
     .where(eq(blocks.id, blockId))
@@ -404,17 +404,23 @@ export async function renderBlockPreviewPng(
       .where(inArray(fabrics.id, fabIds));
   }
 
-  // 2a. Build cache key — include fabric imagePath values so the ETag changes
-  // whenever a fabric's default image changes, not just when the block itself
-  // is edited.  djb2 over the sorted "id:path" tuples gives a compact,
-  // deterministic discriminator.
+  // 2a. Build cache key — keyed on a hash of all block design fields that
+  // affect the rendered output: cells, seams, and gridSize. (gridSize
+  // controls the SVG cell layout and preview height, so a gridSize-only
+  // PATCH must also bust the cache.) Uses a JSON-serialized envelope to
+  // avoid delimiter-collision between cell strings and seam JSON.
+  // blocks.createdAt never changes on edit, so it is intentionally excluded.
+  // Also includes fabric imagePath values so the ETag changes when a
+  // fabric's default image changes.  djb2 is fast and non-cryptographic,
+  // good enough for cache key discrimination.
+  const contentSig = djb2(JSON.stringify({ gridSize, cells, seams }));
   const fabricSig = djb2(
     fabRows
       .map((f) => `${f.id}:${f.imagePath ?? ""}`)
       .sort()
       .join("|"),
   );
-  const cacheKey = `blk-${blockId}-${row.createdAt?.getTime() ?? 0}-${clampedSize}-f${fabricSig}`;
+  const cacheKey = `blk-${blockId}-c${contentSig}-${clampedSize}-f${fabricSig}`;
 
   // 2b. Check in-memory cache — avoids re-downloading Supabase fabric images
   // and re-rasterising as long as the block and its fabric images are unchanged.

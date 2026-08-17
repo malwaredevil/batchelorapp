@@ -82,6 +82,18 @@ const FIRST_CHECK_DELAY_MS = 3 * 60 * 1000; // 3 minutes
 export const CLAIM_GRACE_MS = 2 * 60 * 1000; // 2 minutes
 
 /**
+ * How long a claimed-but-not-yet-succeeded run is treated as "still in
+ * progress" rather than "abandoned". Shared between claimScheduledTaskRun's
+ * crash-recovery arm (a stuck claim can be re-claimed once it's this old) and
+ * the heartbeat's staleness anchor below (a claim younger than this is
+ * evidence the task is actively working, not stale). Named once here so the
+ * two stay in sync instead of drifting as separate hardcoded "10 minutes"
+ * literals — see recordScheduledTaskSuccess-adjacent comment in the
+ * heartbeat for why the second use matters.
+ */
+export const STUCK_CLAIM_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
+
+/**
  * Records that a scheduled task completed successfully.
  * Call this after the task's work finishes without error so that
  * scheduler_runs.last_success_at is kept up to date for observability.
@@ -254,7 +266,8 @@ async function claimScheduledTaskRun(
               AND scheduler_runs.last_run_at > scheduler_runs.last_success_at
               AND scheduler_runs.last_success_at
                 < now() - (${claimWindowMs}::text || ' milliseconds')::interval
-              AND scheduler_runs.last_run_at < now() - interval '10 minutes'
+              AND scheduler_runs.last_run_at
+                < now() - (${STUCK_CLAIM_THRESHOLD_MS}::text || ' milliseconds')::interval
             )
             THEN true
             ELSE false
@@ -269,7 +282,8 @@ async function claimScheduledTaskRun(
               AND scheduler_runs.last_run_at > scheduler_runs.last_success_at
               AND scheduler_runs.last_success_at
                 < now() - (${claimWindowMs}::text || ' milliseconds')::interval
-              AND scheduler_runs.last_run_at < now() - interval '10 minutes'
+              AND scheduler_runs.last_run_at
+                < now() - (${STUCK_CLAIM_THRESHOLD_MS}::text || ' milliseconds')::interval
             )
             THEN now()
             ELSE scheduler_runs.last_run_at
@@ -438,12 +452,15 @@ export async function reconcileSchedulerRuns(): Promise<void> {
  * cadence and inspects every row in scheduler_runs to decide whether ANY
  * task has gone quiet for longer than its own expected interval allows.
  *
- * A task counts as stale once `now - COALESCE(last_success_at, last_run_at)`
- * exceeds `expected_interval_ms + tolerance` (tolerance = the larger of 15
- * minutes or half the task's own interval). Using last_run_at as the
- * fallback when last_success_at is null means a brand-new task gets one
- * full interval + tolerance of grace before it can be flagged, instead of
- * being reported stale the instant it's first claimed.
+ * A task counts as stale once `now - anchor` exceeds `expected_interval_ms +
+ * tolerance` (tolerance = the larger of 15 minutes or half the task's own
+ * interval). `anchor` is last_success_at, EXCEPT when last_run_at is both
+ * more recent (a claim with no matching success yet) and younger than
+ * STUCK_CLAIM_THRESHOLD_MS — that combination means a run is genuinely in
+ * progress (or brand-new, when last_success_at is null), so last_run_at is
+ * used instead to give it room to finish before being flagged. See the
+ * anchor computation below for why this matters for real production
+ * incidents, not just brand-new tasks.
  *
  * Per-task detail (which task, how overdue) goes to a structured
  * logger.error/info line — already flowing into Sentry Logs via the pino
@@ -507,8 +524,40 @@ export function startSchedulerHeartbeat(): () => void {
       for (const row of result.rows) {
         const expectedMs = row.expected_interval_ms;
         if (!expectedMs) continue;
-        const anchor = row.last_success_at ?? row.last_run_at;
-        const anchorMs = new Date(anchor).getTime();
+        // Anchor on whichever of last_run_at / last_success_at is more
+        // recent, but only trust a claim (last_run_at) newer than
+        // last_success_at as "alive" while it's still younger than
+        // STUCK_CLAIM_THRESHOLD_MS.
+        //
+        // claimScheduledTaskRun() advances last_run_at the instant a claim is
+        // granted — BEFORE the task's own work (Sentry/AI/API calls, DB
+        // writes) starts. A task that's overdue on cold boot gets claimed at
+        // its own STARTUP_DELAY_MS, but its real work can legitimately take
+        // longer than the ~1 minute of margin between that delay and this
+        // heartbeat's own FIRST_CHECK_DELAY_MS. Reading only last_success_at
+        // in that window sees the OLD success timestamp and reports a false
+        // "gone silent" for a task that is actively mid-run — confirmed
+        // against production as the cause of sustained 2026-08 overnight
+        // "gone silent" streaks tracking the platform's autoscale
+        // restart/cold-start cadence: every restart re-triggers the same
+        // startup race, one heartbeat check-in at a time.
+        //
+        // Once a claim is older than STUCK_CLAIM_THRESHOLD_MS without a
+        // matching success, it stops counting as "alive" — a task that keeps
+        // getting re-claimed (crash-recovery arm) but never once succeeds
+        // must still age out via the stale last_success_at, or a genuinely
+        // broken task would look healthy forever.
+        const runMs = new Date(row.last_run_at).getTime();
+        const successMs =
+          row.last_success_at != null
+            ? new Date(row.last_success_at).getTime()
+            : null;
+        const claimIsFreshAndUnconfirmed =
+          runMs > (successMs ?? -Infinity) &&
+          now - runMs < STUCK_CLAIM_THRESHOLD_MS;
+        const anchorMs = claimIsFreshAndUnconfirmed
+          ? runMs
+          : (successMs ?? runMs);
         const toleranceMs = Math.max(15 * 60 * 1000, expectedMs / 2);
         const ageMs = now - anchorMs;
         if (ageMs > expectedMs + toleranceMs) {

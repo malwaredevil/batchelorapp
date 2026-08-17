@@ -760,6 +760,69 @@ describe("startSchedulerHeartbeat", () => {
     expect(statuses).not.toContain("error");
   });
 
+  // ── In-flight claim anchor (2026-08 overnight false-alert regression) ─────
+
+  it("in-flight claim (last_run_at fresh, last_success_at overdue) is NOT reported stale", async () => {
+    // Regression test for the sustained 2026-08 overnight "gone silent"
+    // streaks: claimScheduledTaskRun() advances last_run_at the instant a
+    // claim is granted, BEFORE the task's own work (Sentry/AI/DB calls)
+    // starts. A task that's overdue on cold boot gets claimed at its own
+    // STARTUP_DELAY_MS (e.g. sentry-error-nudges' 2 minutes) and can still be
+    // mid-run when this heartbeat's FIRST_CHECK_DELAY_MS (3 minutes) fires —
+    // only ~1 minute of margin. Reading only the old last_success_at in that
+    // window used to report a false "gone silent" for a task that was
+    // actively working and finished moments later.
+    const successAgeMs = 91 * 60 * 1000; // well past the 1-hour stale threshold
+    const runAgeMs = 60 * 1000; // claimed 1 minute ago — actively running
+
+    setupHeartbeatMock([
+      makeRow({
+        name: "mid-run-task",
+        expectedIntervalMs: ONE_HOUR_MS,
+        successAgeMs,
+        runAgeMs,
+      }),
+    ]);
+
+    stopHeartbeat = startSchedulerHeartbeat();
+    await vi.advanceTimersByTimeAsync(FIRST_CHECK_DELAY_MS + 1);
+
+    const statuses = (
+      Sentry.captureCheckIn as ReturnType<typeof vi.fn>
+    ).mock.calls.map((args) => (args[0] as { status: string }).status);
+    expect(statuses).toContain("ok");
+    expect(statuses).not.toContain("error");
+  });
+
+  it("a claim older than STUCK_CLAIM_THRESHOLD_MS with no matching success still reports stale", async () => {
+    // A task that keeps getting re-claimed (the crash-recovery arm in
+    // claimScheduledTaskRun) but never once succeeds must still be flagged
+    // eventually — a fresh-looking last_run_at alone must not mask a
+    // genuinely broken task forever. Once the claim itself is older than
+    // STUCK_CLAIM_THRESHOLD_MS (10 min) without a success, the anchor falls
+    // back to the stale last_success_at.
+    const successAgeMs = 91 * 60 * 1000;
+    const runAgeMs = 11 * 60 * 1000; // claim itself is older than the 10-min grace
+
+    setupHeartbeatMock([
+      makeRow({
+        name: "stuck-task",
+        expectedIntervalMs: ONE_HOUR_MS,
+        successAgeMs,
+        runAgeMs,
+      }),
+    ]);
+
+    stopHeartbeat = startSchedulerHeartbeat();
+    await vi.advanceTimersByTimeAsync(FIRST_CHECK_DELAY_MS + 1);
+
+    const statuses = (
+      Sentry.captureCheckIn as ReturnType<typeof vi.fn>
+    ).mock.calls.map((args) => (args[0] as { status: string }).status);
+    expect(statuses).toContain("error");
+    expect(statuses).not.toContain("ok");
+  });
+
   // ── FIRST_CHECK_DELAY_MS contract ─────────────────────────────────────────
 
   it("does not query the DB before FIRST_CHECK_DELAY_MS has elapsed", async () => {

@@ -49,8 +49,18 @@ import {
   CompareModal,
   CompareFloatingBar,
   type CompareItem,
+  trackAsyncAction,
+  isAsyncActionBusy,
+  useAsyncActionStatus,
+  clearSettledAsyncActionStatuses,
 } from "@workspace/collection-ui";
-import { GitCompare } from "lucide-react";
+import { useBulkReanalyzeRun } from "@/quilting/hooks/use-bulk-reanalyze-run";
+import {
+  patternReanalyzeKey,
+  PATTERN_REANALYZE_KEY_PREFIX,
+} from "@/quilting/lib/reanalyze-status";
+import { cn } from "@/lib/utils";
+import { GitCompare, Check, X } from "lucide-react";
 import { useCollectionPage } from "@/quilting/hooks/useCollectionPage";
 import { CollectionPageShell } from "@/quilting/components/CollectionPageShell";
 import { QuickEditPatternSheet } from "@/quilting/components/quick-edit-pattern-sheet";
@@ -113,6 +123,7 @@ function PatternCard({
 }) {
   const [, navigate] = useLocation();
   const [zoomOpen, setZoomOpen] = useState(false);
+  const aiStatus = useAsyncActionStatus(patternReanalyzeKey(pattern.id));
   return (
     <>
       <div
@@ -121,6 +132,31 @@ function PatternCard({
           if (isBulkMode) onToggleSelect(pattern.id);
         }}
       >
+        {aiStatus && (
+          <div
+            className={cn(
+              "absolute bottom-2 right-2 z-10 flex h-6 w-6 items-center justify-center rounded-full shadow-sm",
+              aiStatus === "processing" && "bg-primary text-primary-foreground",
+              aiStatus === "success" && "bg-green-600 text-white",
+              aiStatus === "error" &&
+                "bg-destructive text-destructive-foreground",
+            )}
+            title={
+              aiStatus === "processing"
+                ? "Refreshing AI analysis…"
+                : aiStatus === "success"
+                  ? "AI analysis refreshed"
+                  : "AI refresh failed"
+            }
+            data-testid={`ai-status-${pattern.id}`}
+          >
+            {aiStatus === "processing" && (
+              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+            )}
+            {aiStatus === "success" && <Check className="h-3.5 w-3.5" />}
+            {aiStatus === "error" && <X className="h-3.5 w-3.5" />}
+          </div>
+        )}
         {isBulkMode && (
           <div
             className={`absolute left-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full shadow-sm transition-colors ${isSelected ? "bg-primary text-primary-foreground" : "bg-background/90 text-muted-foreground"}`}
@@ -412,24 +448,28 @@ export default function Patterns() {
     },
   });
 
-  const bulkReanalyze = useBulkReanalyzePatterns({
-    mutation: {
-      onSuccess: ({ succeeded, failed }) => {
-        queryClient.invalidateQueries({ queryKey: getListPatternsQueryKey() });
-        pageState.setSelectedIds(new Set());
-        pageState.setIsBulkMode(false);
-        if (failed.length === 0) {
-          toast.success(
-            `Refreshed AI for ${succeeded.length} pattern${succeeded.length !== 1 ? "s" : ""}`,
-          );
-        } else {
-          toast.success(
-            `Refreshed ${succeeded.length}, failed ${failed.length}`,
-          );
-        }
-      },
-      onError: () => toast.error("Bulk refresh failed."),
+  const bulkReanalyzeMutation = useBulkReanalyzePatterns();
+  // Shared bulk-run lifecycle: per-card processing → sticky success/error
+  // badges (persist until "Done"), with a per-run generation guard so a
+  // dismissed run's late result can never write icons back.
+  const bulkRun = useBulkReanalyzeRun({
+    mutateAsync: bulkReanalyzeMutation.mutateAsync,
+    keyFor: patternReanalyzeKey,
+    invalidate: () =>
+      queryClient.invalidateQueries({ queryKey: getListPatternsQueryKey() }),
+    onSettled: ({ succeeded, failed }) => {
+      // Stay in Select mode so the per-card check/X icons are visible;
+      // "Done" exits and clears them.
+      pageState.setSelectedIds(new Set());
+      if (failed.length === 0) {
+        toast.success(
+          `Refreshed AI for ${succeeded.length} pattern${succeeded.length !== 1 ? "s" : ""}`,
+        );
+      } else {
+        toast.success(`Refreshed ${succeeded.length}, failed ${failed.length}`);
+      }
     },
+    onFailed: () => toast.error("Bulk refresh failed."),
   });
 
   function handleDelete(id: number) {
@@ -437,8 +477,14 @@ export default function Patterns() {
   }
 
   function handleReanalyze(id: number) {
-    reanalyzePattern.mutate({ id });
+    const key = patternReanalyzeKey(id);
+    if (isAsyncActionBusy(key)) return;
+    trackAsyncAction(key, reanalyzePattern.mutateAsync({ id }));
     toast.info("Refreshing AI analysis…");
+  }
+
+  function handleBulkReanalyze(ids: number[]) {
+    void bulkRun.run(ids);
   }
 
   function toggleCompareMode() {
@@ -454,6 +500,12 @@ export default function Patterns() {
   // Compare mode first — prevents both modes being simultaneously active.
   function handleToggleBulkMode() {
     if (compareMode.active) compareMode.exit();
+    // Leaving Select mode ("Done") also clears the sticky per-card outcome
+    // icons from the last bulk run (in-flight spinners are left alone).
+    if (pageState.isBulkMode) {
+      bulkRun.dismiss();
+      clearSettledAsyncActionStatuses(PATTERN_REANALYZE_KEY_PREFIX);
+    }
     pageState.toggleBulkMode();
   }
 
@@ -530,8 +582,8 @@ export default function Patterns() {
         emptyIcon={<BookOpen className="h-10 w-10 text-muted-foreground/40" />}
         emptyDescription="Add quilt patterns to your library"
         localStorageKey="quilting-patterns-page-size"
-        onBulkReanalyze={(ids) => bulkReanalyze.mutate({ data: { ids } })}
-        isBulkReanalyzePending={bulkReanalyze.isPending}
+        onBulkReanalyze={handleBulkReanalyze}
+        isBulkReanalyzePending={bulkRun.isPending}
         extraHeaderActions={
           patterns.length >= 2 ? (
             <Button

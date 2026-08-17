@@ -11,6 +11,8 @@
  * in flight for the same item, so the user gets a live status badge instead
  * of accidentally re-triggering (and paying for) a duplicate AI call.
  */
+export const ORNAMENT_REANALYZE_KEY_PREFIX = "ornament-reanalyze:";
+
 export function ornamentReanalyzeKey(id: number): string {
-  return `ornament-reanalyze:${id}`;
+  return `${ORNAMENT_REANALYZE_KEY_PREFIX}${id}`;
 }

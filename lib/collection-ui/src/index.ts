@@ -80,9 +80,14 @@ export type {
 export { useMultiSelectMode } from "./multi-select-mode";
 export type { MultiSelectMode } from "./multi-select-mode";
 
+export { BulkActionBar } from "./bulk-action-bar";
+export type { BulkActionBarProps } from "./bulk-action-bar";
+
 export {
   getAsyncActionStatus,
   isAsyncActionBusy,
+  clearSettledAsyncActionStatuses,
+  clearAsyncActionStatuses,
   markAsyncActionProcessing,
   markAsyncActionSettled,
   trackAsyncAction,

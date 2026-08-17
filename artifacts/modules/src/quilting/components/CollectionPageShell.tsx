@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { GalleryPaginator } from "@/components/GalleryPaginator";
 import { Button } from "@/components/ui/button";
+import { BulkActionBar } from "@workspace/collection-ui";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -239,6 +240,10 @@ export function CollectionPageShell<T extends CollectionPageItem>({
               variant={isBulkMode ? "secondary" : "outline"}
               size="sm"
               onClick={toggleBulkMode}
+              // Match the shared bar's Done button: while a bulk run is in
+              // flight, Select mode can't be dismissed (a dismissal mid-run
+              // would strand the run's per-card statuses).
+              disabled={isBulkMode && isBulkReanalyzePending}
             >
               {isBulkMode ? "Done" : "Select"}
             </Button>
@@ -261,41 +266,19 @@ export function CollectionPageShell<T extends CollectionPageItem>({
         </div>
       </div>
 
-      {/* Bulk mode action bar */}
+      {/* Bulk mode action bar — shared pattern: count / All / None / run / Done */}
       {isBulkMode && (
-        <div className="mb-4 flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5">
-          <span className="flex-1 text-sm font-medium">
-            {selectedIds.size === 0
-              ? "Tap cards to select"
-              : `${selectedIds.size} selected`}
-          </span>
-          <button
-            onClick={() =>
-              sorted && setSelectedIds(new Set(sorted.map((i) => i.id)))
-            }
-            className="text-xs text-primary hover:underline"
-          >
-            All
-          </button>
-          <button
-            onClick={() => setSelectedIds(new Set())}
-            className="text-xs text-muted-foreground hover:underline"
-          >
-            None
-          </button>
-          {selectedIds.size > 0 && (
-            <Button
-              size="sm"
-              onClick={() => onBulkReanalyze(Array.from(selectedIds))}
-              disabled={isBulkReanalyzePending}
-            >
-              <RefreshCw
-                className={`mr-2 h-3.5 w-3.5 ${isBulkReanalyzePending ? "animate-spin" : ""}`}
-              />
-              Refresh AI ({selectedIds.size})
-            </Button>
-          )}
-        </div>
+        <BulkActionBar
+          selectedCount={selectedIds.size}
+          onSelectAll={() =>
+            sorted && setSelectedIds(new Set(sorted.map((i) => i.id)))
+          }
+          onClearSelection={() => setSelectedIds(new Set())}
+          onDone={toggleBulkMode}
+          onRun={() => onBulkReanalyze(Array.from(selectedIds))}
+          runLabel={`Refresh AI (${selectedIds.size})`}
+          isPending={isBulkReanalyzePending}
+        />
       )}
 
       {/* Search + sort + page size toolbar */}

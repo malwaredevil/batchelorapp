@@ -1805,23 +1805,34 @@ router.post("/items/:id/ai-appraisal", aiLimiter, async (req, res) => {
 // Refresh all — reanalyze + book value + eBay + AI appraisal in parallel
 // ---------------------------------------------------------------------------
 
-router.post("/items/:id/refresh-all", aiLimiter, async (req, res) => {
-  const { id } = GetOrnamentParams.parse(req.params);
-
+/**
+ * The full per-item refresh pipeline behind the detail page's "Refresh All":
+ * AI vision reanalysis + book value + retail value + eBay market data (normal
+ * cache-aware lookup, never forced) + AI appraisal. Shared by the
+ * /items/:id/refresh-all route and the bulk-reanalyze flow so a bulk run
+ * refreshes exactly what a single-item "Refresh All" does.
+ *
+ * Throws if the item doesn't exist or the core AI reanalysis fails; the
+ * auxiliary lookups (book/retail/eBay/appraisal) are non-fatal.
+ */
+export async function refreshOrnamentItemAllData(
+  id: number,
+  log: { warn: (obj: unknown, msg: string) => void },
+): Promise<void> {
   const [item] = await db
     .select(itemColumns)
     .from(ornamentsItems)
     .where(eq(ornamentsItems.id, id))
     .limit(1);
   if (!item) {
-    res.status(404).json({ error: "Ornament not found." });
-    return;
+    throw Object.assign(new Error("Ornament not found."), { status: 404 });
   }
 
   // Run all 5 in parallel — each independently stores its result.
   // Non-fatal: a failure in book-value/retail-value/eBay/appraisal doesn't
-  // abort the whole refresh.
-  await Promise.allSettled([
+  // abort the whole refresh — but a failed core reanalysis does mark the
+  // whole item refresh as failed (matching the bulk endpoint's semantics).
+  const [analysisResult] = await Promise.allSettled([
     // 1. AI vision reanalysis (description, colors, motifs, name, barcode)
     runItemAnalysis(id),
     // 2. Book value — barcode cache first (hallmarkCollectorPriceUsd), then scrape
@@ -1840,7 +1851,7 @@ router.post("/items/:id/refresh-all", aiLimiter, async (req, res) => {
             }
           }
         } catch (err) {
-          req.log.warn(
+          log.warn(
             { err },
             "refresh-all: barcode cache lookup failed, falling through to scrape",
           );
@@ -1852,7 +1863,7 @@ router.post("/items/:id/refresh-all", aiLimiter, async (req, res) => {
           seriesOrCollection: item.seriesOrCollection,
           year: item.year,
         }).catch((err) => {
-          req.log.warn({ err }, "refresh-all: book-value lookup failed");
+          log.warn({ err }, "refresh-all: book-value lookup failed");
           return null;
         });
       }
@@ -1888,7 +1899,7 @@ router.post("/items/:id/refresh-all", aiLimiter, async (req, res) => {
         }
       })
       .catch((err) => {
-        req.log.warn({ err }, "refresh-all: retail-value lookup failed");
+        log.warn({ err }, "refresh-all: retail-value lookup failed");
       }),
     // 4. eBay market data
     env.ebayAppId
@@ -1901,7 +1912,7 @@ router.post("/items/:id/refresh-all", aiLimiter, async (req, res) => {
           const ebayResult = await lookupOrnamentEbayData(query, {
             upc: item.barcodeValue ?? undefined,
           }).catch((err) => {
-            req.log.warn({ err }, "refresh-all: eBay lookup failed");
+            log.warn({ err }, "refresh-all: eBay lookup failed");
             return null;
           });
           if (ebayResult) {
@@ -1935,11 +1946,30 @@ router.post("/items/:id/refresh-all", aiLimiter, async (req, res) => {
       : Promise.resolve(),
     // 4. AI collector appraisal
     runItemAppraisal(id).catch((err) => {
-      req.log.warn({ err }, "refresh-all: AI appraisal failed");
+      log.warn({ err }, "refresh-all: AI appraisal failed");
     }),
   ]);
 
-  // Return the fully updated ornament (re-fetch after all 4 have stored)
+  if (analysisResult.status === "rejected") {
+    throw analysisResult.reason;
+  }
+}
+
+router.post("/items/:id/refresh-all", aiLimiter, async (req, res) => {
+  const { id } = GetOrnamentParams.parse(req.params);
+
+  try {
+    await refreshOrnamentItemAllData(id, req.log);
+  } catch (err: unknown) {
+    const status = (err as { status?: number }).status;
+    if (status === 404) {
+      res.status(404).json({ error: "Ornament not found." });
+      return;
+    }
+    throw err;
+  }
+
+  // Return the fully updated ornament (re-fetch after everything has stored)
   const [final] = await db
     .select(itemColumns)
     .from(ornamentsItems)
@@ -1955,12 +1985,15 @@ export async function bulkReanalyzeOrnamentItems(
   const succeeded: number[] = [];
   const failed: number[] = [];
 
+  // Each item runs the same full refresh pipeline as the detail page's
+  // "Refresh All" (AI reanalysis + book value + retail value + cache-aware
+  // eBay lookup + appraisal) — see refreshOrnamentItemAllData above.
   const limit = pLimit(3);
   await Promise.all(
     capped.map((id) =>
       limit(async () => {
         try {
-          await runItemAnalysis(id);
+          await refreshOrnamentItemAllData(id, logger);
           succeeded.push(id);
         } catch (err) {
           logger.error({ itemId: id, err }, "bulk-reanalyze: item failed");

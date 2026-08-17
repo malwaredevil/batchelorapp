@@ -1,19 +1,20 @@
 /**
- * Regression tests: usePotteryBulkReanalyze must exit Select mode
- * in every completion branch (success, partial-failure, thrown error).
+ * Regression tests: usePotteryBulkReanalyze bulk-run lifecycle.
  *
- * WHY: Task 1076 fixed a bug where the Pottery gallery left "Select" mode
- * running forever after a bulk job finished — cards kept showing empty
- * selection circles until a full page reload. The fix is in
- * usePotteryBulkReanalyze (lib/use-pottery-bulk-reanalyze.ts): it calls
- * setBulkMode(false) and setBulkSelectedIds(new Set()) in every branch of
- * runBulkReanalyze. These tests import and exercise that real hook so that
- * removing either setter call from any branch will cause a test failure.
+ * WHY: Task 1076 fixed a bug where the Pottery gallery left "Select" mode in
+ * a broken state after a bulk job finished. Task 1101 then changed the
+ * intended behavior: after a bulk run the gallery STAYS in Select mode (with
+ * the selection cleared) so the per-card sticky success/error icons remain
+ * visible, and the user presses "Done" (exitBulkMode) to exit the mode and
+ * clear those icons. These tests exercise the real hook so that regressing
+ * either the stay-in-mode behavior or the Done cleanup will fail.
  */
 
 import { describe, it, expect, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { usePotteryBulkReanalyze } from "../lib/use-pottery-bulk-reanalyze";
+import { potteryReanalyzeKey } from "../lib/reanalyze-status";
+import { getAsyncActionStatus } from "@workspace/collection-ui";
 
 function makeHook(
   mutateAsync: (args: { data: { ids: number[] } }) => Promise<{
@@ -30,8 +31,8 @@ function makeHook(
   };
 }
 
-describe("usePotteryBulkReanalyze — Select mode exits in every branch", () => {
-  it("exits Select mode and sets a completion message on full success", async () => {
+describe("usePotteryBulkReanalyze — bulk-run lifecycle", () => {
+  it("stays in Select mode with the selection cleared on full success", async () => {
     const mutateAsync = vi
       .fn()
       .mockResolvedValue({ succeeded: [1, 2], failed: [] });
@@ -47,15 +48,25 @@ describe("usePotteryBulkReanalyze — Select mode exits in every branch", () => 
 
     await act(() => result.current.runBulkReanalyze());
 
-    // Both pieces of Select mode state must be cleared
-    expect(result.current.bulkMode).toBe(false);
+    // Mode stays active so per-card outcome icons remain visible; selection
+    // itself is cleared.
+    expect(result.current.bulkMode).toBe(true);
     expect(result.current.bulkSelectedIds.size).toBe(0);
-    // Completion message must still be visible
     expect(result.current.bulkStatus).toMatch(/Done/);
     expect(result.current.bulkStatus).toMatch(/2 refreshed/);
+    // Sticky per-item outcome statuses persist until "Done"
+    expect(getAsyncActionStatus(potteryReanalyzeKey(1))).toBe("success");
+    expect(getAsyncActionStatus(potteryReanalyzeKey(2))).toBe("success");
+
+    // exitBulkMode (the "Done" button) exits the mode and clears the icons
+    act(() => result.current.exitBulkMode());
+    expect(result.current.bulkMode).toBe(false);
+    expect(result.current.bulkStatus).toBeNull();
+    expect(getAsyncActionStatus(potteryReanalyzeKey(1))).toBeUndefined();
+    expect(getAsyncActionStatus(potteryReanalyzeKey(2))).toBeUndefined();
   });
 
-  it("exits Select mode and reports partial failure when some ids fail", async () => {
+  it("marks per-item success/error statuses on partial failure", async () => {
     const mutateAsync = vi
       .fn()
       .mockResolvedValue({ succeeded: [1], failed: [2] });
@@ -69,13 +80,19 @@ describe("usePotteryBulkReanalyze — Select mode exits in every branch", () => 
 
     await act(() => result.current.runBulkReanalyze());
 
-    expect(result.current.bulkMode).toBe(false);
+    expect(result.current.bulkMode).toBe(true);
     expect(result.current.bulkSelectedIds.size).toBe(0);
     expect(result.current.bulkStatus).toMatch(/1 refreshed/);
     expect(result.current.bulkStatus).toMatch(/1 failed/);
+    expect(getAsyncActionStatus(potteryReanalyzeKey(1))).toBe("success");
+    expect(getAsyncActionStatus(potteryReanalyzeKey(2))).toBe("error");
+
+    act(() => result.current.exitBulkMode());
+    expect(getAsyncActionStatus(potteryReanalyzeKey(1))).toBeUndefined();
+    expect(getAsyncActionStatus(potteryReanalyzeKey(2))).toBeUndefined();
   });
 
-  it("exits Select mode on a thrown error (network failure, 5xx, etc.)", async () => {
+  it("marks all items failed on a thrown error (network failure, 5xx, etc.)", async () => {
     const mutateAsync = vi
       .fn()
       .mockRejectedValue(new Error("Internal Server Error"));
@@ -88,13 +105,16 @@ describe("usePotteryBulkReanalyze — Select mode exits in every branch", () => 
 
     await act(() => result.current.runBulkReanalyze());
 
-    // Both pieces of Select mode state must be cleared even on throw
-    expect(result.current.bulkMode).toBe(false);
+    expect(result.current.bulkMode).toBe(true);
     expect(result.current.bulkSelectedIds.size).toBe(0);
     expect(result.current.bulkStatus).toMatch(/went wrong/i);
+    expect(getAsyncActionStatus(potteryReanalyzeKey(5))).toBe("error");
+
+    act(() => result.current.exitBulkMode());
+    expect(getAsyncActionStatus(potteryReanalyzeKey(5))).toBeUndefined();
   });
 
-  it("exits Select mode when invalidateQueries rejects after a successful mutation", async () => {
+  it("handles invalidateQueries rejecting after a successful mutation", async () => {
     const mutateAsync = vi
       .fn()
       .mockResolvedValue({ succeeded: [7], failed: [] });
@@ -112,8 +132,11 @@ describe("usePotteryBulkReanalyze — Select mode exits in every branch", () => 
 
     await act(() => result.current.runBulkReanalyze());
 
-    expect(result.current.bulkMode).toBe(false);
+    expect(result.current.bulkMode).toBe(true);
     expect(result.current.bulkSelectedIds.size).toBe(0);
+
+    act(() => result.current.exitBulkMode());
+    expect(result.current.bulkMode).toBe(false);
   });
 
   it("does not call mutateAsync and leaves mode active when no items are selected", async () => {
@@ -130,42 +153,88 @@ describe("usePotteryBulkReanalyze — Select mode exits in every branch", () => 
     expect(result.current.bulkSelectedIds.size).toBe(0);
   });
 
-  it("clears both bulkMode and bulkSelectedIds (not just one) on success", async () => {
-    const mutateAsync = vi
-      .fn()
-      .mockResolvedValue({ succeeded: [3], failed: [] });
+  it("selectAllBulk selects the given ids (capped) and clearBulkSelection empties it", () => {
+    const { result } = makeHook(vi.fn());
+
+    act(() => result.current.enterBulkMode());
+    act(() =>
+      result.current.selectAllBulk(Array.from({ length: 30 }, (_, i) => i + 1)),
+    );
+    // Capped at the bulk max (20)
+    expect(result.current.bulkSelectedIds.size).toBe(20);
+
+    act(() => result.current.clearBulkSelection());
+    expect(result.current.bulkSelectedIds.size).toBe(0);
+    expect(result.current.bulkMode).toBe(true);
+  });
+
+  it("Done pressed mid-flight: a late success must not resurrect icons", async () => {
+    let resolveRun!: (v: { succeeded: number[]; failed: number[] }) => void;
+    const mutateAsync = vi.fn().mockReturnValue(
+      new Promise<{ succeeded: number[]; failed: number[] }>((res) => {
+        resolveRun = res;
+      }),
+    );
     const { result } = makeHook(mutateAsync);
 
     act(() => {
       result.current.enterBulkMode();
-      result.current.toggleBulkSelect(3);
+      result.current.toggleBulkSelect(1);
+      result.current.toggleBulkSelect(2);
     });
 
-    await act(() => result.current.runBulkReanalyze());
+    let runPromise!: Promise<void>;
+    act(() => {
+      runPromise = result.current.runBulkReanalyze();
+    });
+    expect(result.current.bulkPending).toBe(true);
 
-    // A partial fix that only clears one leaves either lingering circles
-    // (selectedIds still populated) or a stuck mode flag (bulkMode still true)
+    // User dismisses the run before it resolves
+    act(() => result.current.exitBulkMode());
     expect(result.current.bulkMode).toBe(false);
-    expect(result.current.bulkSelectedIds.size).toBe(0);
+
+    await act(async () => {
+      resolveRun({ succeeded: [1], failed: [2] });
+      await runPromise;
+    });
+
+    // The stale completion must not write sticky icons or status text back
+    expect(getAsyncActionStatus(potteryReanalyzeKey(1))).toBeUndefined();
+    expect(getAsyncActionStatus(potteryReanalyzeKey(2))).toBeUndefined();
+    expect(result.current.bulkStatus).toBeNull();
+    expect(result.current.bulkPending).toBe(false);
   });
 
-  it("clears both bulkMode and bulkSelectedIds (not just one) on error", async () => {
-    const mutateAsync = vi.fn().mockRejectedValue(new Error("timeout"));
+  it("Done pressed mid-flight: a late failure must not resurrect icons", async () => {
+    let rejectRun!: (e: Error) => void;
+    const mutateAsync = vi.fn().mockReturnValue(
+      new Promise((_res, rej) => {
+        rejectRun = rej;
+      }),
+    );
     const { result } = makeHook(mutateAsync);
 
     act(() => {
       result.current.enterBulkMode();
-      result.current.toggleBulkSelect(4);
-      result.current.toggleBulkSelect(5);
+      result.current.toggleBulkSelect(7);
     });
 
-    await act(() => result.current.runBulkReanalyze());
+    let runPromise!: Promise<void>;
+    act(() => {
+      runPromise = result.current.runBulkReanalyze();
+    });
+    act(() => result.current.exitBulkMode());
 
-    expect(result.current.bulkMode).toBe(false);
-    expect(result.current.bulkSelectedIds.size).toBe(0);
+    await act(async () => {
+      rejectRun(new Error("timeout"));
+      await runPromise;
+    });
+
+    expect(getAsyncActionStatus(potteryReanalyzeKey(7))).toBeUndefined();
+    expect(result.current.bulkStatus).toBeNull();
   });
 
-  it("bulkStatus is independently settable after Select mode exits", async () => {
+  it("a new Select session can start after Done without stale state", async () => {
     const mutateAsync = vi
       .fn()
       .mockResolvedValue({ succeeded: [9], failed: [] });
@@ -177,10 +246,11 @@ describe("usePotteryBulkReanalyze — Select mode exits in every branch", () => 
     });
 
     await act(() => result.current.runBulkReanalyze());
+    act(() => result.current.exitBulkMode());
 
-    // A new Select session can be opened without clearing the old message
     act(() => result.current.enterBulkMode());
     expect(result.current.bulkMode).toBe(true);
-    expect(result.current.bulkStatus).toMatch(/Done/);
+    expect(result.current.bulkSelectedIds.size).toBe(0);
+    expect(result.current.bulkStatus).toBeNull();
   });
 });

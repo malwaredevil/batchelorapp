@@ -81,6 +81,7 @@ import {
   useMultiSelectMode,
   CompareModal,
   CompareFloatingBar,
+  BulkActionBar,
   type CompareItem,
 } from "@workspace/collection-ui";
 
@@ -944,54 +945,32 @@ export default function Fabrics() {
       )}
 
       {isBulkMode && !bulkCreaseProgress && (
-        <div className="mb-4 flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-2.5">
-          <span className="flex-1 text-sm font-medium">
-            {selectedIds.size === 0
-              ? "Tap cards to select"
-              : `${selectedIds.size} selected`}
-          </span>
-          <button
-            onClick={selectAll}
-            className="text-xs text-primary hover:underline"
-          >
-            All
-          </button>
-          <button
-            onClick={() => setSelectedIds(new Set())}
-            className="text-xs text-muted-foreground hover:underline"
-          >
-            None
-          </button>
-          {selectedIds.size > 0 && (
-            <>
-              <Button
-                size="sm"
-                variant="outline"
+        <BulkActionBar
+          selectedCount={selectedIds.size}
+          onSelectAll={selectAll}
+          onClearSelection={() => setSelectedIds(new Set())}
+          onDone={toggleBulkMode}
+          onRun={() =>
+            bulkReanalyze.mutate({ data: { ids: Array.from(selectedIds) } })
+          }
+          runLabel={`Refresh AI (${selectedIds.size})`}
+          isPending={bulkReanalyze.isPending || bulkCreaseFixMutation.isPending}
+          extraActions={
+            selectedIds.size > 0 ? (
+              <button
+                type="button"
                 onClick={runBulkCreaseFix}
                 disabled={bulkCreaseFixMutation.isPending}
+                className="inline-flex h-8 items-center gap-2 rounded-md border border-input bg-background px-3 text-xs font-medium shadow-sm transition hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
               >
                 <Sparkles
-                  className={`mr-2 h-3.5 w-3.5 ${bulkCreaseFixMutation.isPending ? "animate-pulse" : ""}`}
+                  className={`h-3.5 w-3.5 ${bulkCreaseFixMutation.isPending ? "animate-pulse" : ""}`}
                 />
                 AI Enhance ({selectedIds.size})
-              </Button>
-              <Button
-                size="sm"
-                onClick={() =>
-                  bulkReanalyze.mutate({
-                    data: { ids: Array.from(selectedIds) },
-                  })
-                }
-                disabled={bulkReanalyze.isPending}
-              >
-                <RefreshCw
-                  className={`mr-2 h-3.5 w-3.5 ${bulkReanalyze.isPending ? "animate-spin" : ""}`}
-                />
-                Refresh AI ({selectedIds.size})
-              </Button>
-            </>
-          )}
-        </div>
+              </button>
+            ) : undefined
+          }
+        />
       )}
 
       {/* Compare mode floating bar + modal */}

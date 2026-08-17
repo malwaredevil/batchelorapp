@@ -65,6 +65,7 @@ import {
   trackAsyncAction,
   isAsyncActionBusy,
   useAsyncActionStatus,
+  BulkActionBar,
   type SortOption,
   type CompareItem,
 } from "@workspace/collection-ui";
@@ -169,7 +170,7 @@ export default function Collection() {
   // Select (bulk) mode — useOrnamentsBulkReanalyze owns all state and the
   // runBulkReanalyze function; we inject the real mutation and invalidator.
   const bulkReanalyze = useBulkReanalyzeOrnaments();
-  const { bulkMode, bulkStatus, setBulkStatus, runBulkReanalyze } =
+  const { bulkMode, bulkStatus, setBulkStatus, runBulkReanalyze, finishBulk } =
     useOrnamentsBulkReanalyze({
       mutateAsync: bulkReanalyze.mutateAsync,
       invalidateQueries: () =>
@@ -180,8 +181,7 @@ export default function Collection() {
 
   function exitSelectionModes() {
     compareMode.exit();
-    bulkMode.exit();
-    setBulkStatus(null);
+    finishBulk();
   }
 
   const deleteOrnament = useDeleteOrnament({
@@ -469,6 +469,20 @@ export default function Collection() {
         extraControls={yearFilter}
       />
 
+      {/* Bulk-select action bar (shared pattern: count / All / None / run / Done) */}
+      {bulkMode.active && (
+        <BulkActionBar
+          selectedCount={bulkMode.selectedIds.length}
+          onSelectAll={() => bulkMode.selectAll(pagedItems.map((i) => i.id))}
+          onClearSelection={bulkMode.clear}
+          onDone={finishBulk}
+          onRun={runBulkReanalyze}
+          runLabel={`Refresh AI + eBay (${bulkMode.selectedIds.length})`}
+          isPending={bulkReanalyze.isPending}
+          emptyHint={`Tap cards to select (up to ${bulkMode.maxItems})`}
+        />
+      )}
+
       {/* Grid View */}
       {viewMode === "grid" && (
         <CollectionGrid>
@@ -694,28 +708,6 @@ export default function Collection() {
         />
       )}
 
-      {/* Bulk reanalyze floating bar */}
-      {bulkMode.active &&
-        bulkMode.selectedIds.length > 0 &&
-        !bulkReanalyze.isPending &&
-        !bulkStatus && (
-          <div className="fixed inset-x-0 bottom-20 z-30 flex justify-center px-4 md:bottom-6">
-            <div className="flex items-center gap-3 rounded-full border border-amber-300/60 bg-background/95 px-5 py-3 shadow-xl backdrop-blur">
-              <span className="text-sm font-medium text-muted-foreground">
-                {bulkMode.selectedIds.length} selected
-              </span>
-              <Button
-                size="sm"
-                onClick={runBulkReanalyze}
-                data-testid="button-bulk-reanalyze-run"
-              >
-                <RefreshCwIcon className="h-4 w-4" />
-                Refresh AI ({bulkMode.selectedIds.length})
-              </Button>
-            </div>
-          </div>
-        )}
-
       {/* Bulk pending / status bar. Deliberately NOT gated on bulkMode.active
           — the completion message must keep showing (and be dismissible)
           even after Select mode itself has already ended. */}
@@ -725,7 +717,9 @@ export default function Collection() {
             {bulkReanalyze.isPending ? (
               <>
                 <RefreshCwIcon className="h-4 w-4 animate-spin text-amber-600" />
-                <span className="text-sm font-medium">Analysing…</span>
+                <span className="text-sm font-medium">
+                  Refreshing AI + eBay prices…
+                </span>
               </>
             ) : (
               <>

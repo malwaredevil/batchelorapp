@@ -587,7 +587,7 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   // pipeline; controls how many images are sent per batch to stay within
   // provider rate limits. Not owner-configurable because changing it
   // requires coordinated server-side limit adjustments.
-  "artifacts/modules/src/quilting/pages/fabrics/index.tsx:545",
+  "artifacts/modules/src/quilting/pages/fabrics/index.tsx:546",
 
   // ---- web/control-panel ----
   // DB reconnect status polling interval — implementation detail.

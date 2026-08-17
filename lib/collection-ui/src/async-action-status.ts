@@ -46,9 +46,19 @@ export function markAsyncActionProcessing(key: string): void {
 export function markAsyncActionSettled(
   key: string,
   status: "success" | "error",
+  opts?: {
+    /**
+     * When true, the settled status stays visible until explicitly cleared
+     * (via `clearSettledAsyncActionStatuses`) instead of auto-clearing after
+     * a short delay. Used by bulk runs, where the per-card check/X icons
+     * should persist until the user presses "Done".
+     */
+    sticky?: boolean;
+  },
 ): void {
   statuses.set(key, status);
   notify();
+  if (opts?.sticky) return;
   const displayMs =
     status === "success" ? SUCCESS_DISPLAY_MS : ERROR_DISPLAY_MS;
   setTimeout(() => {
@@ -57,6 +67,38 @@ export function markAsyncActionSettled(
       notify();
     }
   }, displayMs);
+}
+
+/**
+ * Clear all settled ("success"/"error") statuses whose key starts with
+ * `prefix`, leaving in-flight "processing" entries untouched. Used by a bulk
+ * run's "Done" button to dismiss the sticky per-card outcome icons without
+ * disturbing any single-item refresh that may still be running.
+ */
+export function clearSettledAsyncActionStatuses(prefix: string): void {
+  let changed = false;
+  for (const [key, status] of statuses) {
+    if (key.startsWith(prefix) && status !== "processing") {
+      statuses.delete(key);
+      changed = true;
+    }
+  }
+  if (changed) notify();
+}
+
+/**
+ * Unconditionally clear the statuses for the given keys (including
+ * "processing" entries). Used when a bulk run's results arrive after the user
+ * already dismissed the run (pressed "Done" mid-flight): the stale outcome
+ * must not surface as sticky icons, and the "processing" spinners it left
+ * behind must not linger forever.
+ */
+export function clearAsyncActionStatuses(keys: Iterable<string>): void {
+  let changed = false;
+  for (const key of keys) {
+    if (statuses.delete(key)) changed = true;
+  }
+  if (changed) notify();
 }
 
 /**

@@ -1022,20 +1022,6 @@ export default function OrnamentDetail() {
                           : ""}
                       </span>
                     )}
-                    {ornament.retailValueProductUrl && (
-                      <>
-                        {" "}
-                        ·{" "}
-                        <a
-                          href={ornament.retailValueProductUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-primary underline underline-offset-2"
-                        >
-                          View product page
-                        </a>
-                      </>
-                    )}
                   </span>
                 }
               />

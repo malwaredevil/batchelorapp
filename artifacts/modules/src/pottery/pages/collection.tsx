@@ -67,7 +67,14 @@ import {
 } from "@workspace/elaine-ui";
 import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
 import { DominantColorDots } from "@/components/collection/DominantColorDots";
-import { CollectionErrorState } from "@workspace/collection-ui";
+import {
+  CollectionErrorState,
+  BulkActionBar,
+  trackAsyncAction,
+  isAsyncActionBusy,
+  useAsyncActionStatus,
+} from "@workspace/collection-ui";
+import { potteryReanalyzeKey } from "@/pottery/lib/reanalyze-status";
 import { usePotteryBulkReanalyze } from "@/pottery/lib/use-pottery-bulk-reanalyze";
 import { QuantityBadge } from "@/components/collection/QuantityBadge";
 
@@ -242,11 +249,41 @@ function PieceCard({
   const [imgLoaded, setImgLoaded] = useState(false);
   const [zoomOpen, setZoomOpen] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
+  const aiStatus = useAsyncActionStatus(potteryReanalyzeKey(item.id));
   useEffect(() => {
     if (imgRef.current?.complete) setImgLoaded(true);
   }, []);
   return (
     <div className="relative group">
+      {/* AI refresh status badge — bottom-right of the thumbnail, always
+          visible so it works as an in-progress/done/failed indicator during
+          single-item and bulk refresh runs alike. */}
+      {aiStatus && (
+        <div
+          className={cn(
+            "absolute bottom-2 right-2 z-10 flex h-6 w-6 items-center justify-center rounded-full shadow-sm",
+            aiStatus === "processing" && "bg-primary text-primary-foreground",
+            aiStatus === "success" && "bg-green-600 text-white",
+            aiStatus === "error" &&
+              "bg-destructive text-destructive-foreground",
+          )}
+          title={
+            aiStatus === "processing"
+              ? "Refreshing AI analysis…"
+              : aiStatus === "success"
+                ? "AI analysis refreshed"
+                : "AI refresh failed"
+          }
+          data-testid={`ai-status-${item.id}`}
+        >
+          {aiStatus === "processing" && (
+            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+          )}
+          {aiStatus === "success" && <Check className="h-3.5 w-3.5" />}
+          {aiStatus === "error" && <X className="h-3.5 w-3.5" />}
+        </div>
+      )}
+
       {/* Selection checkbox (selecting mode) — top-left */}
       {selecting && (
         <button
@@ -828,6 +865,8 @@ export default function Collection() {
     enterBulkMode,
     exitBulkMode,
     toggleBulkSelect,
+    selectAllBulk,
+    clearBulkSelection,
     runBulkReanalyze,
   } = usePotteryBulkReanalyze({
     mutateAsync: bulkMutateAsync,
@@ -835,7 +874,7 @@ export default function Collection() {
       queryClient.invalidateQueries({ queryKey: getListPotteryQueryKey() }),
   });
 
-  const { mutate: reanalyzeItem } = useReanalyzePottery({
+  const { mutateAsync: reanalyzeItemAsync } = useReanalyzePottery({
     mutation: {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListPotteryQueryKey() });
@@ -844,7 +883,9 @@ export default function Collection() {
   });
 
   function handleReanalyze(id: number) {
-    reanalyzeItem({ id });
+    const key = potteryReanalyzeKey(id);
+    if (isAsyncActionBusy(key)) return;
+    trackAsyncAction(key, reanalyzeItemAsync({ id }));
   }
 
   const deletePotteryItem = useDeletePottery({
@@ -1292,11 +1333,24 @@ export default function Collection() {
             </div>
           ) : (
             bulkMode && (
-              <div className="mb-3 rounded-xl border border-amber-300/50 bg-amber-50/60 px-4 py-2.5 text-sm text-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
-                {bulkSelectedIds.size === 0
-                  ? "Select up to 20 pieces to refresh their AI analysis."
-                  : `${bulkSelectedIds.size} selected${bulkSelectedIds.size === 20 ? " (max)" : ""}`}
-              </div>
+              <BulkActionBar
+                className="mb-3"
+                selectedCount={bulkSelectedIds.size}
+                onSelectAll={() =>
+                  selectAllBulk(
+                    (makerGroups
+                      ? makerGroups.flatMap(([, items]) => items)
+                      : paged
+                    ).map((i) => i.id),
+                  )
+                }
+                onClearSelection={clearBulkSelection}
+                onDone={exitBulkMode}
+                onRun={runBulkReanalyze}
+                runLabel={`Refresh AI (${bulkSelectedIds.size})`}
+                isPending={isBulkPending}
+                emptyHint="Select up to 20 pieces to refresh their AI analysis."
+              />
             )
           )}
 
@@ -1420,28 +1474,6 @@ export default function Collection() {
           </div>
         </div>
       )}
-
-      {/* Bulk reanalyze floating bar */}
-      {bulkMode &&
-        bulkSelectedIds.size > 0 &&
-        !isBulkPending &&
-        !bulkStatus && (
-          <div className="fixed inset-x-0 bottom-20 z-30 flex justify-center px-4 md:bottom-6">
-            <div className="flex items-center gap-3 rounded-full border border-amber-300/60 bg-background/95 px-5 py-3 shadow-xl backdrop-blur">
-              <span className="text-sm font-medium text-muted-foreground">
-                {bulkSelectedIds.size} selected
-              </span>
-              <Button
-                size="sm"
-                onClick={runBulkReanalyze}
-                data-testid="button-bulk-reanalyze-run"
-              >
-                <RefreshCw className="h-4 w-4" />
-                Refresh AI ({bulkSelectedIds.size})
-              </Button>
-            </div>
-          </div>
-        )}
 
       {/* Bulk pending bar */}
       {isBulkPending && (

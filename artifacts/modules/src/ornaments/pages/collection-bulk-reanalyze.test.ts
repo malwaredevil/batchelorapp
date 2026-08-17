@@ -1,20 +1,82 @@
 /**
- * Regression tests: useOrnamentsBulkReanalyze bulk-run lifecycle.
+ * Regression tests: Ornaments' bulk-reanalyze run/dismiss/status lifecycle.
  *
  * WHY: Task 1076 fixed a bug where the Ornaments gallery left "Select" mode
  * in a broken state after a bulk job finished. Task 1101 then changed the
  * intended behavior: after a bulk run the gallery STAYS in Select mode (with
  * the selection cleared) so the per-card sticky success/error icons remain
- * visible, and the user presses "Done" (finishBulk) to exit the mode and
- * clear those icons. These tests exercise the real hook so that regressing
- * either the stay-in-mode behavior or the Done cleanup will fail.
+ * visible, and the user presses "Done" to exit the mode and clear those
+ * icons. Task 1108 migrated the module-local hook that implemented this onto
+ * the shared `useBulkReanalyzeRun` hook (also used by Quilting), composed
+ * here with `useMultiSelectMode` and a small status-message wrapper — the
+ * same composition collection.tsx uses — so a regression in that wiring
+ * still fails a test instead of only showing up in the running app.
  */
 
+import { useState } from "react";
 import { describe, it, expect, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
-import { useOrnamentsBulkReanalyze } from "../lib/use-ornaments-bulk-reanalyze";
-import { ornamentReanalyzeKey } from "../lib/reanalyze-status";
-import { getAsyncActionStatus } from "@workspace/collection-ui";
+import {
+  useMultiSelectMode,
+  useBulkReanalyzeRun,
+  clearSettledAsyncActionStatuses,
+  getAsyncActionStatus,
+} from "@workspace/collection-ui";
+import {
+  ornamentReanalyzeKey,
+  ORNAMENT_REANALYZE_KEY_PREFIX,
+} from "../lib/reanalyze-status";
+
+// Mirrors the bulk-reanalyze wiring in collection.tsx: bulkMode owns
+// selection (shared `useMultiSelectMode`), `useBulkReanalyzeRun` owns the
+// run/dismiss/per-card-status lifecycle, and this wrapper owns only the
+// sticky status-message string collection.tsx renders.
+function useOrnamentsBulkReanalyzeForTest(
+  mutateAsync: (args: { data: { ids: number[] } }) => Promise<{
+    succeeded: number[];
+    failed: number[];
+  }>,
+  invalidateQueries: () => Promise<void>,
+) {
+  const bulkMode = useMultiSelectMode(20);
+  const [bulkStatus, setBulkStatus] = useState<string | null>(null);
+  const bulkRun = useBulkReanalyzeRun({
+    mutateAsync,
+    keyFor: ornamentReanalyzeKey,
+    invalidate: () => {
+      invalidateQueries().catch(() => undefined);
+    },
+    onSettled: ({ succeeded, failed }) => {
+      bulkMode.clear();
+      setBulkStatus(
+        `Done — ${succeeded.length} refreshed${failed.length ? `, ${failed.length} failed` : ""}.`,
+      );
+    },
+    onFailed: () => {
+      bulkMode.clear();
+      setBulkStatus("Something went wrong. Please try again.");
+    },
+  });
+
+  function runBulkReanalyze() {
+    return bulkRun.run(bulkMode.selectedIds);
+  }
+
+  function finishBulk() {
+    bulkRun.dismiss();
+    bulkMode.exit();
+    setBulkStatus(null);
+    clearSettledAsyncActionStatuses(ORNAMENT_REANALYZE_KEY_PREFIX);
+  }
+
+  return {
+    bulkMode,
+    bulkStatus,
+    bulkPending: bulkRun.isPending,
+    runBulkReanalyze,
+    finishBulk,
+  };
+}
 
 function makeHook(
   mutateAsync: (args: { data: { ids: number[] } }) => Promise<{
@@ -25,13 +87,13 @@ function makeHook(
   const invalidateQueries = vi.fn().mockResolvedValue(undefined);
   return {
     ...renderHook(() =>
-      useOrnamentsBulkReanalyze({ mutateAsync, invalidateQueries }),
+      useOrnamentsBulkReanalyzeForTest(mutateAsync, invalidateQueries),
     ),
     invalidateQueries,
   };
 }
 
-describe("useOrnamentsBulkReanalyze — bulk-run lifecycle", () => {
+describe("Ornaments bulk-reanalyze — bulk-run lifecycle", () => {
   it("stays in Select mode with the selection cleared on full success", async () => {
     const mutateAsync = vi
       .fn()
@@ -124,7 +186,7 @@ describe("useOrnamentsBulkReanalyze — bulk-run lifecycle", () => {
       .fn()
       .mockRejectedValue(new Error("cache error"));
     const { result } = renderHook(() =>
-      useOrnamentsBulkReanalyze({ mutateAsync, invalidateQueries }),
+      useOrnamentsBulkReanalyzeForTest(mutateAsync, invalidateQueries),
     );
 
     act(() => {
@@ -132,12 +194,15 @@ describe("useOrnamentsBulkReanalyze — bulk-run lifecycle", () => {
       result.current.bulkMode.toggle(5);
     });
 
+    // The shared hook's invalidate() call isn't awaited, so a rejection here
+    // must not reject runBulkReanalyze()'s own promise or crash the run.
     await act(() => result.current.runBulkReanalyze());
 
-    // invalidateQueries rejection falls through to the catch branch, which
-    // must still leave a coherent state (mode active, selection cleared)
+    // invalidateQueries rejection must still leave a coherent state (mode
+    // active, selection cleared, success status recorded).
     expect(result.current.bulkMode.active).toBe(true);
     expect(result.current.bulkMode.selectedIds).toHaveLength(0);
+    expect(getAsyncActionStatus(ornamentReanalyzeKey(5))).toBe("success");
 
     act(() => result.current.finishBulk());
     expect(result.current.bulkMode.active).toBe(false);

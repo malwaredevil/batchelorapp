@@ -6,6 +6,7 @@ import {
   Package,
   Scissors,
   MessageCircle,
+  Gift,
   X,
 } from "lucide-react";
 
@@ -140,6 +141,9 @@ function ResultIcon({ type }: { type: string }) {
         style={{ color: "#10b981" }}
       />
     );
+  }
+  if (type === "ornaments") {
+    return <Gift className="h-4 w-4 shrink-0" style={{ color: "#dc2626" }} />;
   }
   return <Clock className="h-4 w-4 shrink-0 text-muted-foreground" />;
 }

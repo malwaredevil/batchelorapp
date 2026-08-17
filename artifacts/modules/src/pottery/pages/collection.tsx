@@ -73,9 +73,15 @@ import {
   trackAsyncAction,
   isAsyncActionBusy,
   useAsyncActionStatus,
+  useMultiSelectMode,
+  useBulkReanalyzeRun,
+  clearSettledAsyncActionStatuses,
 } from "@workspace/collection-ui";
-import { potteryReanalyzeKey } from "@/pottery/lib/reanalyze-status";
-import { usePotteryBulkReanalyze } from "@/pottery/lib/use-pottery-bulk-reanalyze";
+import {
+  potteryReanalyzeKey,
+  POTTERY_REANALYZE_KEY_PREFIX,
+  POTTERY_BULK_MAX,
+} from "@/pottery/lib/reanalyze-status";
 import { QuantityBadge } from "@/components/collection/QuantityBadge";
 
 // ---------------------------------------------------------------------------
@@ -853,26 +859,48 @@ export default function Collection() {
     setSelectedIds([]);
   }
 
-  // Bulk reanalyze mode
+  // Bulk reanalyze mode — the shared selection-mode hook (also used by
+  // ornaments) owns enter/exit/toggle/select-all/clear, and the shared
+  // bulk-run hook (also used by quilting) owns the run/dismiss/status
+  // lifecycle: per-card processing → sticky success/error badges that
+  // persist until "Done", with a generation guard so a dismissed run's
+  // late result can never write icons back.
   const queryClient = useQueryClient();
-  const { mutateAsync: bulkMutateAsync, isPending: isBulkPending } =
-    useBulkReanalyzePottery();
-  const {
-    bulkMode,
-    bulkSelectedIds,
-    bulkStatus,
-    setBulkStatus,
-    enterBulkMode,
-    exitBulkMode,
-    toggleBulkSelect,
-    selectAllBulk,
-    clearBulkSelection,
-    runBulkReanalyze,
-  } = usePotteryBulkReanalyze({
+  const { mutateAsync: bulkMutateAsync } = useBulkReanalyzePottery();
+  const bulkMode = useMultiSelectMode(POTTERY_BULK_MAX);
+  const [bulkStatus, setBulkStatus] = useState<string | null>(null);
+  const bulkRun = useBulkReanalyzeRun({
     mutateAsync: bulkMutateAsync,
-    invalidateQueries: () =>
+    keyFor: potteryReanalyzeKey,
+    invalidate: () =>
       queryClient.invalidateQueries({ queryKey: getListPotteryQueryKey() }),
+    onSettled: ({ succeeded, failed }) => {
+      // Stay in Select mode (selection cleared) so the per-card check/X
+      // outcome icons stay visible until the user presses "Done".
+      bulkMode.clear();
+      setBulkStatus(
+        `Done — ${succeeded.length} refreshed${failed.length ? `, ${failed.length} failed` : ""}.`,
+      );
+    },
+    onFailed: () => {
+      bulkMode.clear();
+      setBulkStatus("Something went wrong. Please try again.");
+    },
   });
+
+  function runBulkReanalyze() {
+    void bulkRun.run(bulkMode.selectedIds);
+  }
+
+  // The "Done" button: exit Select mode, dismiss the status message, and
+  // clear the sticky per-card outcome icons (leaving any still-running
+  // single-item refresh badge untouched).
+  function exitBulkMode() {
+    bulkRun.dismiss();
+    bulkMode.exit();
+    setBulkStatus(null);
+    clearSettledAsyncActionStatuses(POTTERY_REANALYZE_KEY_PREFIX);
+  }
 
   const { mutateAsync: reanalyzeItemAsync } = useReanalyzePottery({
     mutation: {
@@ -1007,7 +1035,7 @@ export default function Collection() {
           </p>
         </div>
         <div className="flex shrink-0 gap-2">
-          {!compareMode && !bulkMode ? (
+          {!compareMode && !bulkMode.active ? (
             <>
               {data && data.length >= 2 && (
                 <Button
@@ -1024,7 +1052,7 @@ export default function Collection() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={enterBulkMode}
+                  onClick={bulkMode.enter}
                   data-testid="button-bulk-reanalyze-mode"
                 >
                   <RefreshCw className="h-4 w-4" />
@@ -1332,24 +1360,24 @@ export default function Collection() {
               </button>
             </div>
           ) : (
-            bulkMode && (
+            bulkMode.active && (
               <BulkActionBar
                 className="mb-3"
-                selectedCount={bulkSelectedIds.size}
+                selectedCount={bulkMode.selectedIds.length}
                 onSelectAll={() =>
-                  selectAllBulk(
+                  bulkMode.selectAll(
                     (makerGroups
                       ? makerGroups.flatMap(([, items]) => items)
                       : paged
                     ).map((i) => i.id),
                   )
                 }
-                onClearSelection={clearBulkSelection}
+                onClearSelection={bulkMode.clear}
                 onDone={exitBulkMode}
                 onRun={runBulkReanalyze}
-                runLabel={`Refresh AI (${bulkSelectedIds.size})`}
-                isPending={isBulkPending}
-                emptyHint="Select up to 20 pieces to refresh their AI analysis."
+                runLabel={`Refresh AI (${bulkMode.selectedIds.length})`}
+                isPending={bulkRun.isPending}
+                emptyHint={`Select up to ${POTTERY_BULK_MAX} pieces to refresh their AI analysis.`}
               />
             )
           )}
@@ -1387,14 +1415,14 @@ export default function Collection() {
                       <PieceCard
                         key={item.id}
                         item={item}
-                        selecting={compareMode || bulkMode}
+                        selecting={compareMode || bulkMode.active}
                         selected={
-                          bulkMode
-                            ? bulkSelectedIds.has(item.id)
+                          bulkMode.active
+                            ? bulkMode.selectedIds.includes(item.id)
                             : selectedIds.includes(item.id)
                         }
                         onToggleSelect={
-                          bulkMode ? toggleBulkSelect : toggleSelect
+                          bulkMode.active ? bulkMode.toggle : toggleSelect
                         }
                         onQuickEdit={setQuickEditItem}
                         onReanalyze={handleReanalyze}
@@ -1425,13 +1453,15 @@ export default function Collection() {
                   <PieceCard
                     key={item.id}
                     item={item}
-                    selecting={compareMode || bulkMode}
+                    selecting={compareMode || bulkMode.active}
                     selected={
-                      bulkMode
-                        ? bulkSelectedIds.has(item.id)
+                      bulkMode.active
+                        ? bulkMode.selectedIds.includes(item.id)
                         : selectedIds.includes(item.id)
                     }
-                    onToggleSelect={bulkMode ? toggleBulkSelect : toggleSelect}
+                    onToggleSelect={
+                      bulkMode.active ? bulkMode.toggle : toggleSelect
+                    }
                     onQuickEdit={setQuickEditItem}
                     onReanalyze={handleReanalyze}
                     onColorFilter={(c) =>
@@ -1476,7 +1506,7 @@ export default function Collection() {
       )}
 
       {/* Bulk pending bar */}
-      {isBulkPending && (
+      {bulkRun.isPending && (
         <div className="fixed inset-x-0 bottom-20 z-30 flex justify-center px-4 md:bottom-6">
           <div className="flex items-center gap-2 rounded-full border border-amber-300/60 bg-background/95 px-5 py-3 shadow-xl backdrop-blur">
             <RefreshCw className="h-4 w-4 animate-spin text-amber-600" />

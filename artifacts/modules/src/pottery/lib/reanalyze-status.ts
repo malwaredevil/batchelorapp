@@ -10,3 +10,6 @@ export const POTTERY_REANALYZE_KEY_PREFIX = "pottery-reanalyze:";
 export function potteryReanalyzeKey(id: number): string {
   return `${POTTERY_REANALYZE_KEY_PREFIX}${id}`;
 }
+
+/** Max number of pieces selectable at once in the bulk Select-mode run. */
+export const POTTERY_BULK_MAX = 20;

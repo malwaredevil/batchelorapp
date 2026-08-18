@@ -16,6 +16,8 @@ import {
   ChevronDown,
   ChevronUp,
   ExternalLink,
+  PlusCircle,
+  Copy,
 } from "lucide-react";
 import { LockButton } from "@/quilting/components/LockButton";
 import { Button } from "@/components/ui/button";
@@ -36,10 +38,13 @@ import {
   useUpdatePatternImage,
   useSetPatternImageDefault,
   useListQuiltingCategories,
+  useCreateBlock,
   getListPatternsQueryKey,
   getGetPatternQueryKey,
+  getListBlocksQueryKey,
   type QuiltingExtractBlocksResult,
   type QuiltingCategory,
+  type QuiltingCreateBlockInputGridSize,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { TagSelector } from "@/quilting/components/tag-selector";
@@ -63,6 +68,8 @@ import {
   CollectionDetailSkeleton,
   CollectionErrorState,
   ReminderBellButton,
+  useToggleLockedField,
+  mergeSelectedCategoryNames,
 } from "@workspace/collection-ui";
 
 type PatternData = {
@@ -217,6 +224,41 @@ export default function PatternDetail() {
     },
   });
 
+  const createBlockFromExtraction = useCreateBlock({
+    mutation: {
+      onSuccess: (data) => {
+        queryClient.invalidateQueries({ queryKey: getListBlocksQueryKey() });
+        toast.success("Block design created — opening in the Block Designer");
+        navigate(`/quilting/blocks/${String(data.id)}/edit`);
+      },
+      onError: () => toast.error("Failed to create block design."),
+    },
+  });
+
+  function handleCreateBlockFromExtraction() {
+    if (!extractedBlocks || !pattern) return;
+    const p = pattern as unknown as PatternData;
+    createBlockFromExtraction.mutate({
+      data: {
+        name: `${p.name} block`,
+        gridSize: extractedBlocks.gridSize as QuiltingCreateBlockInputGridSize,
+        cells: extractedBlocks.cells,
+      },
+    });
+  }
+
+  async function handleCopyExtractedJson() {
+    if (!extractedBlocks) return;
+    try {
+      await navigator.clipboard.writeText(
+        JSON.stringify(extractedBlocks, null, 2),
+      );
+      toast.success("Schema copied to clipboard");
+    } catch {
+      toast.error("Could not copy to clipboard");
+    }
+  }
+
   const addPatternImage = useAddPatternImage({
     mutation: {
       onSuccess: () => {
@@ -309,18 +351,12 @@ export default function PatternDetail() {
     });
   }
 
-  function toggleLock(field: string) {
-    if (!pattern) return;
-    const p = pattern as unknown as PatternData;
-    const current = p.lockedFields ?? [];
-    const next = current.includes(field)
-      ? current.filter((x) => x !== field)
-      : [...current, field];
-    updatePattern.mutate({ id: patternId, data: { lockedFields: next } });
-    toast.success(
-      next.includes(field) ? `"${field}" locked` : `"${field}" unlocked`,
-    );
-  }
+  const toggleLock = useToggleLockedField(
+    pattern as unknown as PatternData | undefined,
+    (p) => p.lockedFields,
+    (next) =>
+      updatePattern.mutate({ id: patternId, data: { lockedFields: next } }),
+  );
 
   function handleRefreshAI() {
     reanalyzePattern.mutate({ id: patternId });
@@ -343,15 +379,11 @@ export default function PatternDetail() {
   }
 
   function handleSaveCategories() {
-    const merged = [
-      ...(allCategories ?? []),
-      ...localNewCats.filter(
-        (nc) => !(allCategories ?? []).some((a) => a.id === nc.id),
-      ),
-    ];
-    const categoryNames = merged
-      .filter((c) => selectedCategoryIds.includes(c.id))
-      .map((c) => c.name);
+    const categoryNames = mergeSelectedCategoryNames(
+      allCategories,
+      localNewCats,
+      selectedCategoryIds,
+    );
     updatePattern.mutate(
       { id: patternId, data: { categories: categoryNames } },
       {
@@ -796,14 +828,40 @@ export default function PatternDetail() {
               )}
             </button>
             {showExtracted && (
-              <div className="mt-3 space-y-2">
+              <div className="mt-3 space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  {extractedBlocks.cells.length} cells extracted. Open the block
-                  designer and paste the schema to start designing.
+                  {extractedBlocks.cells.length} cells extracted. Create a block
+                  design from this schema to start editing it in the Block
+                  Designer.
                 </p>
-                <pre className="overflow-x-auto rounded-lg bg-muted p-2 text-xs leading-relaxed">
-                  {JSON.stringify(extractedBlocks, null, 2)}
-                </pre>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    size="sm"
+                    onClick={handleCreateBlockFromExtraction}
+                    disabled={createBlockFromExtraction.isPending}
+                  >
+                    <PlusCircle className="mr-2 h-4 w-4" />
+                    {createBlockFromExtraction.isPending
+                      ? "Creating…"
+                      : "Create block design"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void handleCopyExtractedJson()}
+                  >
+                    <Copy className="mr-2 h-4 w-4" />
+                    Copy JSON
+                  </Button>
+                </div>
+                <details className="text-xs text-muted-foreground">
+                  <summary className="cursor-pointer select-none">
+                    View raw schema
+                  </summary>
+                  <pre className="mt-2 overflow-x-auto rounded-lg bg-muted p-2 leading-relaxed">
+                    {JSON.stringify(extractedBlocks, null, 2)}
+                  </pre>
+                </details>
               </div>
             )}
           </section>

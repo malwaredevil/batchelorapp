@@ -27,6 +27,7 @@ import {
 import { rerankCandidates, reciprocalRankFusion } from "../../lib/reranker";
 import { downloadAndShrinkImageForAi } from "../../lib/pottery/storage";
 import { serializeItems } from "../../lib/pottery/serialize";
+import { buildPotterySearchDocument } from "../../lib/collection-search";
 import { getThresholds } from "../../lib/ai-client";
 
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -63,37 +64,6 @@ const {
   zoneEmbedding: _zoneEmbedding,
   ...itemColumns
 } = getTableColumns(potteryItems);
-
-/**
- * Build a plain-text document from a pottery piece's structured attributes —
- * this is what the Voyage reranker scores against the uploaded piece's text.
- */
-function buildPotteryDocument(attrs: {
-  name: string | null;
-  style?: string | null;
-  shape?: string | null;
-  maker?: string | null;
-  patternDescription?: string | null;
-  motifs?: unknown;
-  dominantColors?: unknown;
-  aiDescription?: string | null;
-}): string {
-  const parts: string[] = [];
-  if (attrs.name) parts.push(`Name: ${attrs.name}`);
-  if (attrs.style) parts.push(`Style: ${attrs.style}`);
-  if (attrs.shape) parts.push(`Shape: ${attrs.shape}`);
-  if (attrs.maker) parts.push(`Maker: ${attrs.maker}`);
-  if (attrs.patternDescription)
-    parts.push(`Pattern: ${attrs.patternDescription}`);
-  const motifs = Array.isArray(attrs.motifs) ? (attrs.motifs as string[]) : [];
-  if (motifs.length) parts.push(`Motifs: ${motifs.join(", ")}`);
-  const colors = Array.isArray(attrs.dominantColors)
-    ? (attrs.dominantColors as string[])
-    : [];
-  if (colors.length) parts.push(`Colours: ${colors.join(", ")}`);
-  if (attrs.aiDescription) parts.push(attrs.aiDescription);
-  return parts.join(". ") || "Unknown pottery piece";
-}
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -257,7 +227,7 @@ router.post(
       const row = rowById.get(id);
       return {
         id,
-        text: row ? buildPotteryDocument(row) : "Unknown pottery piece",
+        text: row ? buildPotterySearchDocument(row) : "Unknown pottery piece",
       };
     });
     const rerankedIds = await rerankCandidates(rerankQuery, rerankDocs, TOP_K);

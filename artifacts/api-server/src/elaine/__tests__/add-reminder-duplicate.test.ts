@@ -95,9 +95,11 @@ function makeInsertedRow(id: number, tripId = TRIP_ID, title = TITLE) {
 function queueNoDuplicate(insertId: number, tripId = TRIP_ID) {
   // 1. Trip lookup
   selectQueue.push({ direct: [{ id: tripId, title: "Trip" }], limited: [] });
-  // 2. Duplicate check — no existing row
+  // 2. getUserTimezone — no timezone row → executor falls back to DEFAULT_TIMEZONE
   selectQueue.push({ direct: [], limited: [] });
-  // 3. Insert result
+  // 3. Duplicate check — no existing row
+  selectQueue.push({ direct: [], limited: [] });
+  // 4. Insert result
   insertQueue.push([makeInsertedRow(insertId, tripId)]);
 }
 
@@ -109,12 +111,14 @@ function queueWithDuplicate(
 ) {
   // 1. Trip lookup
   selectQueue.push({ direct: [TRIP_ROW], limited: [] });
-  // 2. Duplicate check — existing row found
+  // 2. getUserTimezone — no timezone row → executor falls back to DEFAULT_TIMEZONE
+  selectQueue.push({ direct: [], limited: [] });
+  // 3. Duplicate check — existing row found
   selectQueue.push({
     direct: [],
     limited: [{ id: duplicateId, dueAt: duplicateDueAt }],
   });
-  // 3. Insert result
+  // 4. Insert result
   insertQueue.push([makeInsertedRow(insertId)]);
 }
 
@@ -251,9 +255,10 @@ describe("executeAddReminderAction — duplicate detection wiring", () => {
     // Spy on the insert to confirm the duplicate check has already completed.
     let duplicateCheckDone = false;
 
-    // Override: make the duplicate check record when it resolves.
-    selectQueue.push({ direct: [TRIP_ROW], limited: [] }); // trip
-    selectQueue.push({ direct: [], limited: [] }); // duplicate check (no match)
+    // Three selects in order: trip lookup → getUserTimezone → duplicate check.
+    selectQueue.push({ direct: [TRIP_ROW], limited: [] }); // 1. trip
+    selectQueue.push({ direct: [], limited: [] }); // 2. getUserTimezone (no tz row → default)
+    selectQueue.push({ direct: [], limited: [] }); // 3. duplicate check (no match)
 
     // Intercept the insert to verify ordering.
     let insertCalledAfterDuplicateCheck = false;
@@ -267,9 +272,8 @@ describe("executeAddReminderAction — duplicate detection wiring", () => {
       })),
     }));
 
-    // Mark duplicate check as done after the select .limit() is consumed.
+    // 1st select: trip lookup — plain passthrough.
     dbMock.select.mockImplementationOnce(() => {
-      // This is the trip lookup.
       const entry = selectQueue.shift()!;
       return {
         from: vi.fn(() => ({
@@ -281,8 +285,23 @@ describe("executeAddReminderAction — duplicate detection wiring", () => {
         })),
       };
     });
+
+    // 2nd select: getUserTimezone — plain passthrough (returns no row → default tz).
     dbMock.select.mockImplementationOnce(() => {
-      // This is the duplicate check — mark it done when .limit() resolves.
+      const entry = selectQueue.shift()!;
+      return {
+        from: vi.fn(() => ({
+          where: vi.fn(() =>
+            Object.assign(Promise.resolve(entry.direct), {
+              limit: vi.fn(async () => entry.limited),
+            }),
+          ),
+        })),
+      };
+    });
+
+    // 3rd select: duplicate check — mark it done when .limit() resolves.
+    dbMock.select.mockImplementationOnce(() => {
       const entry = selectQueue.shift()!;
       return {
         from: vi.fn(() => ({

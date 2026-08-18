@@ -17,7 +17,7 @@ import {
   quiltPatternLinks,
 } from "@workspace/db";
 
-type EntityType = "fabric" | "pattern" | "quilt";
+type EntityType = "fabric" | "pattern" | "quilt" | "block" | "layout";
 
 // Embedding is excluded from list/detail queries — serialize only needs the rest.
 export type FabricRowForSerialization = Omit<
@@ -135,7 +135,7 @@ export interface SerializedQuilt {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-async function fetchCategoriesForEntities(
+export async function fetchCategoriesForEntities(
   entityType: EntityType,
   entityIds: number[],
 ): Promise<Map<number, CategoryResult[]>> {

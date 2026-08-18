@@ -74,10 +74,6 @@ import {
   generateZoneEmbedding,
 } from "../../lib/visual-embed";
 import { serializeItem, serializeItems } from "../../lib/pottery/serialize";
-import {
-  lookupEbayMarketValue,
-  buildEbayQuery,
-} from "../../lib/pottery/ebay-market-value";
 import { env } from "../../lib/env";
 import { logger } from "../../lib/logger";
 import pLimit from "p-limit";
@@ -96,6 +92,7 @@ import {
   mergeExistingCategoryIds,
   parsePositiveIntegerArray,
 } from "../../lib/collection-parsing";
+import { getElaineGlobalConfig } from "../../lib/elaine-config";
 
 // All columns except the three embedding vectors — the 1536-dim text embedding,
 // the 1024-dim whole-piece visual embedding, and the 1024-dim zone embedding are
@@ -115,13 +112,6 @@ const MAX_LABEL = 100;
 
 /** Hard cap on how many supplemental images one pottery item may have. */
 const MAX_SUPPLEMENTAL_IMAGES = 20;
-/**
- * Maximum number of supplemental images forwarded to the AI in a single
- * analysis call (primary + this many supplemental = MAX_AI_IMAGES + 1 total).
- * Keeps in-memory buffer use and OpenAI token cost bounded regardless of how
- * many images are stored.
- */
-const MAX_AI_SUPPLEMENTAL = 5;
 
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
@@ -1055,11 +1045,15 @@ async function syncDuplicateCategory(
 // ---------------------------------------------------------------------------
 
 export async function runItemAnalysis(id: number): Promise<unknown> {
-  const [item] = await db
-    .select(itemColumns)
-    .from(potteryItems)
-    .where(eq(potteryItems.id, id))
-    .limit(1);
+  const [item, elaineConfig] = await Promise.all([
+    db
+      .select(itemColumns)
+      .from(potteryItems)
+      .where(eq(potteryItems.id, id))
+      .limit(1)
+      .then((rows) => rows[0]),
+    getElaineGlobalConfig(),
+  ]);
   if (!item)
     throw Object.assign(new Error("Pottery piece not found."), { status: 404 });
 
@@ -1069,7 +1063,7 @@ export async function runItemAnalysis(id: number): Promise<unknown> {
       .from(potteryImages)
       .where(eq(potteryImages.itemId, id))
       .orderBy(asc(potteryImages.position))
-  ).slice(0, MAX_AI_SUPPLEMENTAL);
+  ).slice(0, elaineConfig.thresholds.potteryMaxAiSupplemental);
 
   const [primaryResult, ...suppResults] = await Promise.all([
     downloadImageBuffer(item.imagePath),
@@ -1238,12 +1232,14 @@ router.post("/items/:id/reanalyze", aiLimiter, async (req, res) => {
 // Bulk re-analyze with AI
 // ---------------------------------------------------------------------------
 
-export const MAX_BULK_REANALYZE = 20;
-
 export async function bulkReanalyzePotteryItems(
   ids: number[],
 ): Promise<{ succeeded: number[]; failed: number[] }> {
-  const capped = [...new Set(ids)].slice(0, MAX_BULK_REANALYZE);
+  const elaineConfig = await getElaineGlobalConfig();
+  const capped = [...new Set(ids)].slice(
+    0,
+    elaineConfig.thresholds.potteryBulkReanalyzeLimit,
+  );
   const succeeded: number[] = [];
   const failed: number[] = [];
 
@@ -1339,139 +1335,6 @@ router.post("/items/:id/set-primary-image", aiLimiter, async (req, res) => {
     const message = err instanceof Error ? err.message : "Unknown error.";
     res.status(status).json({ error: message });
   }
-});
-
-// ---------------------------------------------------------------------------
-// #213 — eBay market-value estimate (on-demand)
-// ---------------------------------------------------------------------------
-
-/** Cached eBay data (sold-price scraper + Browse API) is reused for 7 days. */
-const EBAY_CACHE_STALE_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
-
-router.post("/items/:id/estimate-market-value", aiLimiter, async (req, res) => {
-  const { id } = GetPotteryParams.parse(req.params);
-
-  if (!env.ebayAppId) {
-    res.status(503).json({ error: "eBay API not configured." });
-    return;
-  }
-
-  const [item] = await db
-    .select({
-      id: potteryItems.id,
-      name: potteryItems.name,
-      maker: potteryItems.maker,
-      style: potteryItems.style,
-      ebayPriceCachedAt: potteryItems.ebayPriceCachedAt,
-      ebayPriceMinUsd: potteryItems.ebayPriceMinUsd,
-      ebayPriceMaxUsd: potteryItems.ebayPriceMaxUsd,
-      ebayPriceMedianUsd: potteryItems.ebayPriceMedianUsd,
-      ebayPriceListings: potteryItems.ebayPriceListings,
-    })
-    .from(potteryItems)
-    .where(eq(potteryItems.id, id));
-
-  if (!item) {
-    res.status(404).json({ error: "Item not found." });
-    return;
-  }
-
-  const force = (req.body as { force?: boolean } | undefined)?.force === true;
-
-  // Return cached eBay data immediately when it is still fresh — this avoids
-  // a paid Apify sold-price scraper run on every user-initiated refresh.
-  // When `force: true` is passed the cache is bypassed and a fresh run fires.
-  const cacheAgeMs = item.ebayPriceCachedAt
-    ? Date.now() - item.ebayPriceCachedAt.getTime()
-    : Infinity;
-  if (
-    !force &&
-    cacheAgeMs < EBAY_CACHE_STALE_AFTER_MS &&
-    item.ebayPriceMinUsd != null
-  ) {
-    const cached = item.ebayPriceListings as {
-      sourceType?: string;
-      items?: unknown[];
-    } | null;
-    const searchQuery = buildEbayQuery(item.name, {
-      maker: item.maker,
-      style: item.style,
-    });
-    logger.info(
-      { id, cacheAgeMs: Math.round(cacheAgeMs / 1000 / 60) + "min" },
-      "pottery: returning cached eBay data (skipping paid Apify run)",
-    );
-    res.json({
-      priceMinUsd: Number(item.ebayPriceMinUsd),
-      priceMaxUsd: item.ebayPriceMaxUsd ? Number(item.ebayPriceMaxUsd) : null,
-      priceMedianUsd: item.ebayPriceMedianUsd
-        ? Number(item.ebayPriceMedianUsd)
-        : null,
-      cachedAt: item.ebayPriceCachedAt!.toISOString(),
-      listingCount: cached?.items?.length ?? 0,
-      listings: cached?.items ?? [],
-      sourceType: cached?.sourceType ?? "active_listing",
-      searchQuery,
-      fromCache: true,
-    });
-    return;
-  }
-
-  const query = buildEbayQuery(item.name, {
-    maker: item.maker,
-    style: item.style,
-  });
-
-  const result = await lookupEbayMarketValue(query);
-  if (!result) {
-    res.status(422).json({
-      error: "No eBay listings found for this item. Try refining the search.",
-    });
-    return;
-  }
-
-  // Cache result on the item. Store the listings array alongside sourceType so
-  // the UI can display accurate wording ("sold prices" vs "asking prices").
-  const listingsWithSource = {
-    sourceType: result.sourceType,
-    items: result.listings,
-  };
-  const [updated] = await db
-    .update(potteryItems)
-    .set({
-      ebayPriceMinUsd: String(result.priceMinUsd),
-      ebayPriceMaxUsd: String(result.priceMaxUsd),
-      ebayPriceMedianUsd: String(result.priceMedianUsd),
-      ebayPriceCachedAt: new Date(),
-      ebayPriceListings: listingsWithSource as unknown as Record<
-        string,
-        unknown
-      >,
-    })
-    .where(eq(potteryItems.id, id))
-    .returning({
-      ebayPriceMinUsd: potteryItems.ebayPriceMinUsd,
-      ebayPriceMaxUsd: potteryItems.ebayPriceMaxUsd,
-      ebayPriceMedianUsd: potteryItems.ebayPriceMedianUsd,
-      ebayPriceCachedAt: potteryItems.ebayPriceCachedAt,
-    });
-
-  res.json({
-    priceMinUsd: updated.ebayPriceMinUsd
-      ? Number(updated.ebayPriceMinUsd)
-      : null,
-    priceMaxUsd: updated.ebayPriceMaxUsd
-      ? Number(updated.ebayPriceMaxUsd)
-      : null,
-    priceMedianUsd: updated.ebayPriceMedianUsd
-      ? Number(updated.ebayPriceMedianUsd)
-      : null,
-    cachedAt: updated.ebayPriceCachedAt?.toISOString() ?? null,
-    listingCount: result.listingCount,
-    listings: result.listings,
-    sourceType: result.sourceType,
-    searchQuery: query,
-  });
 });
 
 /**

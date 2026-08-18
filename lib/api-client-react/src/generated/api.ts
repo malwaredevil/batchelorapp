@@ -35,7 +35,6 @@ import type {
   DeleteQuiltingUnusedCategories200,
   DismissWatchlistAlert200,
   Error,
-  EstimatePotteryMarketValueBody,
   ExtractPatternRequirements200,
   ForgotPasswordInput,
   GetBlockPreviewPngParams,
@@ -138,7 +137,6 @@ import type {
   PotteryCollectionStats,
   PotteryCompareResult,
   PotteryCreateWatchlistItemBody,
-  PotteryEbayPriceResult,
   PotteryMergeCategoryInput,
   PotteryPotteryBulkReanalyzeInput,
   PotteryPotteryBulkReanalyzeResult,
@@ -2089,78 +2087,6 @@ export const useSetPrimaryImage = <TError = ErrorType<Error>,
         TContext
       > => {
       return useMutation(getSetPrimaryImageMutationOptions(options));
-    }
-
-export const getEstimatePotteryMarketValueUrl = (id: number,) => {
-
-
-
-
-  return `/api/pottery/items/${id}/estimate-market-value`
-}
-
-/**
- * @summary Look up eBay sold-listing prices and cache them on the item
- */
-export const estimatePotteryMarketValue = async (id: number,
-    estimatePotteryMarketValueBody?: EstimatePotteryMarketValueBody, options?: RequestInit): Promise<PotteryEbayPriceResult> => {
-
-  return customFetch<PotteryEbayPriceResult>(getEstimatePotteryMarketValueUrl(id),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(
-      estimatePotteryMarketValueBody,)
-  }
-);}
-
-
-
-
-export const getEstimatePotteryMarketValueMutationOptions = <TError = ErrorType<Error>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof estimatePotteryMarketValue>>, TError,{id: number;data?: BodyType<EstimatePotteryMarketValueBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof estimatePotteryMarketValue>>, TError,{id: number;data?: BodyType<EstimatePotteryMarketValueBody>}, TContext> => {
-
-const mutationKey = ['estimatePotteryMarketValue'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof estimatePotteryMarketValue>>, {id: number;data?: BodyType<EstimatePotteryMarketValueBody>}> = (props) => {
-          const {id,data} = props ?? {};
-
-          return  estimatePotteryMarketValue(id,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type EstimatePotteryMarketValueMutationResult = NonNullable<Awaited<ReturnType<typeof estimatePotteryMarketValue>>>
-    export type EstimatePotteryMarketValueMutationBody = BodyType<EstimatePotteryMarketValueBody> | undefined
-    export type EstimatePotteryMarketValueMutationError = ErrorType<Error>
-
-    /**
- * @summary Look up eBay sold-listing prices and cache them on the item
- */
-export const useEstimatePotteryMarketValue = <TError = ErrorType<Error>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof estimatePotteryMarketValue>>, TError,{id: number;data?: BodyType<EstimatePotteryMarketValueBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof estimatePotteryMarketValue>>,
-        TError,
-        {id: number;data?: BodyType<EstimatePotteryMarketValueBody>},
-        TContext
-      > => {
-      return useMutation(getEstimatePotteryMarketValueMutationOptions(options));
     }
 
 export const getListWatchlistItemsUrl = () => {

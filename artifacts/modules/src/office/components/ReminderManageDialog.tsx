@@ -40,16 +40,27 @@ import {
 // nothing is ever silently discarded (per the household's data-loss
 // preference — see ReminderEditDialog.tsx for the same pattern in Travels).
 //
+// Also doubles as the create dialog (`mode="create"`) for a standalone
+// reminder with no entity — the "Add reminder" button on the Office
+// Reminders tab. Both modes share the same field set/UI; only the submit
+// call (POST vs PATCH) and the delete section differ, so this one component
+// stays the single source of truth instead of forking a near-duplicate form.
+//
 // Calendar linking itself is intentionally NOT editable here — that stays a
 // Travels-specific flow tied to a trip's own connected calendars. This
-// dialog shows the linked event as a read-only link when present.
+// dialog shows the linked event as a read-only link when present (edit mode
+// only).
 
 interface ReminderManageDialogProps {
+  mode: "edit" | "create";
+  // Required (non-null) in edit mode; ignored in create mode.
   reminder: Reminder | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved: () => void;
 }
+
+const BLANK_LEAD_TIMES: ReminderLeadTime[] = [{ value: 0, unit: "minutes" }];
 
 function toLocalInputValue(iso: string | null): string {
   if (!iso) return "";
@@ -62,6 +73,7 @@ function toLocalInputValue(iso: string | null): string {
 }
 
 export function ReminderManageDialog({
+  mode,
   reminder,
   open,
   onOpenChange,
@@ -72,9 +84,8 @@ export function ReminderManageDialog({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [dueAt, setDueAt] = useState("");
-  const [leadTimes, setLeadTimes] = useState<ReminderLeadTime[]>([
-    { value: 0, unit: "minutes" },
-  ]);
+  const [leadTimes, setLeadTimes] =
+    useState<ReminderLeadTime[]>(BLANK_LEAD_TIMES);
   const [recurrenceMode, setRecurrenceMode] = useState<RecurrenceMode>("none");
   const [intervalValue, setIntervalValue] = useState(1);
   const [intervalUnit, setIntervalUnit] = useState("days");
@@ -92,14 +103,13 @@ export function ReminderManageDialog({
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
-    if (reminder && open) {
+    if (!open) return;
+    if (mode === "edit" && reminder) {
       setTitle(reminder.title);
       setDescription(reminder.description ?? "");
       setDueAt(toLocalInputValue(reminder.dueAt));
       setLeadTimes(
-        reminder.leadTimes.length > 0
-          ? reminder.leadTimes
-          : [{ value: 0, unit: "minutes" }],
+        reminder.leadTimes.length > 0 ? reminder.leadTimes : BLANK_LEAD_TIMES,
       );
       setRecurrenceMode(recurrenceModeOf(reminder));
       setIntervalValue(reminder.recurrenceIntervalValue ?? 1);
@@ -118,8 +128,26 @@ export function ReminderManageDialog({
       setCallRecipients(reminder.callRecipientUserIds);
       setSlackRecipients(reminder.slackRecipientUserIds);
       setConfirmingDelete(false);
+    } else if (mode === "create") {
+      setTitle("");
+      setDescription("");
+      setDueAt("");
+      setLeadTimes(BLANK_LEAD_TIMES);
+      setRecurrenceMode("none");
+      setIntervalValue(1);
+      setIntervalUnit("days");
+      setWeekday(0);
+      setDayOfMonth(1);
+      setRecurrenceEndDate("");
+      setRecurrenceMaxOccurrences("");
+      setEmailRecipients([]);
+      setCustomEmail("");
+      setSmsRecipients([]);
+      setCallRecipients([]);
+      setSlackRecipients([]);
+      setConfirmingDelete(false);
     }
-  }, [reminder, open]);
+  }, [reminder, open, mode]);
 
   function toggleIn(
     list: number[],
@@ -142,7 +170,7 @@ export function ReminderManageDialog({
   }
 
   async function handleSave() {
-    if (!reminder) return;
+    if (mode === "edit" && !reminder) return;
     if (!title.trim()) {
       toast.error("Title is required");
       return;
@@ -184,22 +212,31 @@ export function ReminderManageDialog({
       }
 
       // raw-fetch-ok — generic reminders endpoint isn't in the OpenAPI spec yet, no Orval hook
-      const res = await fetch(`/api/reminders/${reminder.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(body),
-      });
+      const res = await fetch(
+        mode === "create" ? "/api/reminders" : `/api/reminders/${reminder!.id}`,
+        {
+          method: mode === "create" ? "POST" : "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(body),
+        },
+      );
       if (!res.ok) {
         const data = await res.json().catch(() => null);
         throw new Error(data?.error ?? `Request failed (${res.status})`);
       }
-      toast.success("Reminder updated");
+      toast.success(
+        mode === "create" ? "Reminder created" : "Reminder updated",
+      );
       onOpenChange(false);
       onSaved();
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Couldn't update the reminder",
+        err instanceof Error
+          ? err.message
+          : mode === "create"
+            ? "Couldn't create the reminder"
+            : "Couldn't update the reminder",
       );
     } finally {
       setSaving(false);
@@ -235,13 +272,15 @@ export function ReminderManageDialog({
     (e) => !appUsers.some((u: TravelsAppUser) => u.email === e),
   );
 
-  if (!reminder) return null;
+  if (mode === "edit" && !reminder) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Edit reminder</DialogTitle>
+          <DialogTitle>
+            {mode === "create" ? "New reminder" : "Edit reminder"}
+          </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-3 max-h-[65vh] overflow-y-auto pr-0.5">
@@ -264,7 +303,7 @@ export function ReminderManageDialog({
             />
           </div>
 
-          {reminder.calendarConnectionId != null ? (
+          {reminder?.calendarConnectionId != null ? (
             <p className="text-xs text-muted-foreground">
               Due date follows a linked calendar event
               {reminder.googleEventHtmlLink && (
@@ -568,7 +607,7 @@ export function ReminderManageDialog({
         </div>
 
         <DialogFooter className="flex flex-row items-center sm:justify-between gap-2">
-          {confirmingDelete ? (
+          {mode === "edit" && confirmingDelete ? (
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">Delete?</span>
               <Button
@@ -587,7 +626,7 @@ export function ReminderManageDialog({
                 Cancel
               </Button>
             </div>
-          ) : (
+          ) : mode === "edit" ? (
             <Button
               size="sm"
               variant="ghost"
@@ -596,6 +635,8 @@ export function ReminderManageDialog({
             >
               <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Delete
             </Button>
+          ) : (
+            <div />
           )}
           {!confirmingDelete && (
             <div className="flex gap-2">
@@ -607,7 +648,7 @@ export function ReminderManageDialog({
                 Cancel
               </Button>
               <Button size="sm" onClick={handleSave} disabled={saving}>
-                Save
+                {mode === "create" ? "Create" : "Save"}
               </Button>
             </div>
           )}

@@ -1,15 +1,14 @@
-import { and, inArray, isNull } from "drizzle-orm";
 import { pathCacheBuster } from "../path-cache-buster";
-import { eq } from "drizzle-orm";
 import type { PotteryItemRow } from "@workspace/db";
 import {
-  db,
   potteryItemCategories as itemCategories,
   potteryCategories as categories,
   potteryImages,
 } from "@workspace/db";
 import {
   createCollectionSerializer,
+  makeFetchRawCategories,
+  makeFetchRawImages,
   type CategoryResult,
   type ImageResult,
 } from "../collection-item-serializer";
@@ -51,40 +50,8 @@ const { serializeItem, serializeItems } = createCollectionSerializer<
   ItemRowForSerialization,
   SerializedItem
 >({
-  async fetchRawCategories(itemIds) {
-    if (itemIds.length === 0) return [];
-    return db
-      .select({
-        itemId: itemCategories.itemId,
-        id: categories.id,
-        name: categories.name,
-        bgColor: categories.bgColor,
-        textColor: categories.textColor,
-      })
-      .from(itemCategories)
-      .innerJoin(categories, eq(itemCategories.categoryId, categories.id))
-      .where(inArray(itemCategories.itemId, itemIds));
-  },
-
-  async fetchRawImages(itemIds) {
-    if (itemIds.length === 0) return [];
-    const rows = await db
-      .select()
-      .from(potteryImages)
-      .where(
-        and(
-          inArray(potteryImages.itemId, itemIds),
-          isNull(potteryImages.deletedAt),
-        ),
-      );
-    return rows.map((r) => ({
-      itemId: r.itemId,
-      id: r.id,
-      url: `/api/pottery/items/${r.itemId}/images/${r.id}?v=${pathCacheBuster(r.storagePath)}`,
-      label: r.label,
-      position: r.position,
-    }));
-  },
+  fetchRawCategories: makeFetchRawCategories(itemCategories, categories),
+  fetchRawImages: makeFetchRawImages(potteryImages, "pottery"),
 
   toItem(row, cats, imgs) {
     return {

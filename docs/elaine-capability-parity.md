@@ -4,9 +4,9 @@ Generated from the committed OpenAPI specification and the reviewed operation in
 
 ## Summary
 
-- Website operations inventoried: 274
+- Website operations inventoried: 273
 - Direct Elaine mappings: 89
-- Universal authenticated operation bridge: 128
+- Universal authenticated operation bridge: 127
 - Covered by general read tools: 27
 - Attachment/camera prerequisites: 19
 - Interactive authentication: 10
@@ -37,7 +37,7 @@ Generated from the committed OpenAPI specification and the reviewed operation in
 | operations      |                  7 |                       7 |            0 |
 | ornaments       |                 32 |                      29 |            0 |
 | patterns        |                 16 |                      13 |            0 |
-| pottery         |                 28 |                      26 |            0 |
+| pottery         |                 27 |                      25 |            0 |
 | quilting        |                 17 |                      17 |            0 |
 | quilts          |                 13 |                       9 |            0 |
 | shopping        |                  7 |                       7 |            0 |

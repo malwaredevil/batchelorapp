@@ -286,6 +286,7 @@ const BASE_PROMPT_PARAMS = {
   memoryBlock: "(no relevant durable memory)",
   actionConfirmationMode: "auto_run",
   isTravelsApp: false,
+  userTimezone: "Europe/Berlin",
 };
 
 function reminderMistakeLesson(

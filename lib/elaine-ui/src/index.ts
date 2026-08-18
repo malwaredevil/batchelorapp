@@ -1,6 +1,7 @@
 export * from "./CommandPalette";
 export * from "./ElaineAvatar";
 export * from "./AppSwitcher";
+export * from "./AppTileLogo";
 export * from "./ElainePageContext";
 export * from "./useElaineChat";
 export * from "./ElaineChatPanel";

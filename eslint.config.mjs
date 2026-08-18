@@ -28,6 +28,7 @@ export default [
       "artifacts/modules/src/ornaments/components/use-barcode-camera.test.ts",
       "artifacts/modules/src/pottery/pages/collection-bulk-reanalyze.test.ts",
       "artifacts/modules/src/quilting/hooks/bulk-reanalyze-run.test.ts",
+      "artifacts/modules/src/quilting/components/image-viewer-pan-bounds.test.tsx",
       "lib/api-client-react/src/custom-fetch.test.ts",
       "lib/api-client-react/src/elaine.test.ts",
       "lib/api-client-react/src/ornaments-hallmark.test.ts",

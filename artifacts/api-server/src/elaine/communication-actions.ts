@@ -22,12 +22,17 @@ import { getElaineGlobalConfig } from "../lib/elaine-config";
 import { logger } from "../lib/logger";
 import {
   resolveRelativeTime,
+  resolveNaiveIsoInTimeZone,
+  hasUtcOffset,
   getUserTimezone,
   RelativeTimeResolutionError,
   RelativeTimeSpecZod,
   RELATIVE_TIME_SPEC_JSON_SCHEMA,
+  explicitTimezoneField,
+  EXPLICIT_TIMEZONE_JSON_SCHEMA,
   type RelativeTimeSpec,
 } from "../lib/relative-time-resolver";
+import { isValidIanaTimeZone } from "../lib/timezone";
 
 // ---------------------------------------------------------------------------
 // Schemas
@@ -39,31 +44,73 @@ import {
 // scheduler worker polls every minute for due rows and dispatches them.
 // resolveScheduleAt() below normalizes either form to a concrete ISO string
 // before it's stored.
+// `local: true` additionally accepts offset-less datetimes
+// ("2026-08-17T16:15:00") — fallback/OpenRouter models routinely emit these
+// even when told to include an offset (#1110); resolveScheduleAt interprets
+// them as wall-clock time in the requesting user's timezone.
 const scheduleAtField = z
-  .union([z.string().datetime({ offset: true }), RelativeTimeSpecZod])
+  .union([
+    z.string().datetime({ offset: true, local: true }),
+    RelativeTimeSpecZod,
+  ])
   .optional()
   .describe(
     "Either an exact ISO 8601 datetime, or a structured relative-time spec (see its own description), to fire this action at. Omit to execute immediately.",
   );
 
 // Resolves a scheduleAt field (already-exact ISO string, or a
-// RelativeTimeSpec the model produced) to a concrete ISO datetime string in
-// the requesting user's timezone. Throws RelativeTimeResolutionError for a
-// malformed spec — callers must surface that as "please clarify", never
-// guess a fallback time.
-async function resolveScheduleAt(
+// RelativeTimeSpec the model produced) to a concrete ISO datetime string.
+// `timezone` must already be the EFFECTIVE timezone for this request (see
+// resolveEffectiveTimezone) — the user's own profile timezone by default, or
+// an explicit override the user named for this specific request. Throws
+// RelativeTimeResolutionError for a malformed spec — callers must surface
+// that as "please clarify", never guess a fallback time.
+function resolveScheduleAt(
   scheduleAt: string | RelativeTimeSpec,
+  timezone: string,
+): string {
+  if (typeof scheduleAt === "string") {
+    if (hasUtcOffset(scheduleAt)) return scheduleAt;
+    // Naive (offset-less) datetime — fallback/OpenRouter models routinely
+    // emit these (#1110): interpret as wall-clock time in the effective
+    // timezone.
+    return resolveNaiveIsoInTimeZone(scheduleAt, timezone).toISOString();
+  }
+  return resolveRelativeTime(scheduleAt, timezone).toISOString();
+}
+
+function normalizeExactIsoForDisplay(iso: string, tz: string): string {
+  if (hasUtcOffset(iso)) return iso;
+  try {
+    return resolveNaiveIsoInTimeZone(iso, tz).toISOString();
+  } catch {
+    return iso;
+  }
+}
+
+// Picks the timezone to use for BOTH resolving a scheduled time and
+// formatting its confirmation for a single request: the user's explicit
+// override when they named one and it's a valid IANA identifier, otherwise
+// their own profile timezone. Every scheduling call site must go through
+// this rather than calling getUserTimezone directly, so an explicit
+// override is honored consistently everywhere the tz is needed (resolution,
+// duplicate-warning text, and the confirmation message) instead of only
+// some of them.
+async function resolveEffectiveTimezone(
   userId: number,
+  explicitTimezone?: string,
 ): Promise<string> {
-  if (typeof scheduleAt === "string") return scheduleAt;
-  const tz = await getUserTimezone(userId);
-  return resolveRelativeTime(scheduleAt, tz).toISOString();
+  if (explicitTimezone && isValidIanaTimeZone(explicitTimezone)) {
+    return explicitTimezone;
+  }
+  return getUserTimezone(userId);
 }
 
 const CallContactPayload = z.object({
   contactName: z.string().min(1).max(100),
   message: z.string().min(1).max(500),
   scheduleAt: scheduleAtField,
+  timezone: explicitTimezoneField,
 });
 
 // Canonical channel enum values for message_contact. Exported so the JSON
@@ -96,6 +143,7 @@ const MessageContactPayload = z.object({
   //                it appears in their Elaine chat widget / main Elaine page
   channel: z.enum(MESSAGE_CONTACT_CHANNEL_ENUM).default("auto"),
   scheduleAt: scheduleAtField,
+  timezone: explicitTimezoneField,
 });
 
 const CancelScheduledContactPayload = z.object({
@@ -401,6 +449,7 @@ const CallMePayload = z.object({
       "Opening words Elaine says when the call connects. Omit for the default warm greeting.",
     ),
   scheduleAt: scheduleAtField,
+  timezone: explicitTimezoneField,
 });
 
 export const communicationActionSchemas = [
@@ -865,19 +914,39 @@ type ActionExecutor = (
 // Exported for reuse by reminder-actions.ts's create_reminder confirmation
 // message — keep this the single formatting implementation rather than
 // duplicating it (see the "always consolidate" convention in replit.md).
-export function formatScheduledTime(iso: string): string {
+//
+// `timezone` MUST be the requesting user's own profile timezone (from
+// getUserTimezone) — every caller must resolve and pass it. Without it,
+// Intl falls back to the server process's local timezone, which has no
+// relationship to where the user actually is: a user in Stuttgart could see
+// a confirmation card rendered in whatever zone the container happens to run
+// in (historically UTC), silently disagreeing with the time Elaine just
+// confirmed in her reply text (see the JST/UTC/Stuttgart display-mismatch
+// bug this parameter fixes).
+export function formatScheduledTime(iso: string, timezone: string): string {
   try {
     const d = new Date(iso);
     const now = new Date();
-    const sameDay = d.toDateString() === now.toDateString();
+    // Compare calendar day in the USER'S timezone, not the server's — a
+    // server-local "same day" check can disagree with what the user
+    // actually sees once the instant is rendered in their own zone.
+    const dayFmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+    });
+    const sameDay = dayFmt.format(d) === dayFmt.format(now);
     if (sameDay) {
       return d.toLocaleTimeString("en-US", {
+        timeZone: timezone,
         hour: "numeric",
         minute: "2-digit",
         hour12: true,
       });
     }
     return d.toLocaleString("en-US", {
+      timeZone: timezone,
       month: "short",
       day: "numeric",
       hour: "numeric",
@@ -898,9 +967,10 @@ export const communicationActionExecutors: Record<
     userId: number,
   ) => {
     if (payload.scheduleAt) {
+      const tz = await resolveEffectiveTimezone(userId, payload.timezone);
       let scheduledFor: string;
       try {
-        scheduledFor = await resolveScheduleAt(payload.scheduleAt, userId);
+        scheduledFor = resolveScheduleAt(payload.scheduleAt, tz);
       } catch (err) {
         if (err instanceof RelativeTimeResolutionError) {
           return {
@@ -940,7 +1010,7 @@ export const communicationActionExecutors: Record<
           elaineActionPayload: storedPayload,
         })
         .returning({ id: reminders.id });
-      const formattedTime = formatScheduledTime(scheduledFor);
+      const formattedTime = formatScheduledTime(scheduledFor, tz);
       logger.info(
         {
           scheduledActionId: row?.id,
@@ -962,7 +1032,7 @@ export const communicationActionExecutors: Record<
             scheduledFor,
             contactName: contact?.displayName ?? payload.contactName,
             ...(duplicate ? { duplicateOfReminderId: duplicate.id } : {}),
-            confirmationMessage: `Got it — I'll call ${contact?.displayName ?? payload.contactName} at ${formattedTime}.${duplicate ? duplicateWarningClause(duplicate) : ""}`,
+            confirmationMessage: `Got it — I'll call ${contact?.displayName ?? payload.contactName} at ${formattedTime}.${duplicate ? duplicateWarningClause(duplicate, tz) : ""}`,
           },
         },
       };
@@ -980,9 +1050,10 @@ export const communicationActionExecutors: Record<
       : [payload.contactName];
 
     if (payload.scheduleAt) {
+      const tz = await resolveEffectiveTimezone(userId, payload.timezone);
       let scheduledFor: string;
       try {
-        scheduledFor = await resolveScheduleAt(payload.scheduleAt, userId);
+        scheduledFor = resolveScheduleAt(payload.scheduleAt, tz);
       } catch (err) {
         if (err instanceof RelativeTimeResolutionError) {
           return {
@@ -996,7 +1067,7 @@ export const communicationActionExecutors: Record<
       }
       // Deferred — write one reminders row per recipient (entityType
       // 'elaine_action') and return a summary.
-      const formattedTime = formatScheduledTime(scheduledFor);
+      const formattedTime = formatScheduledTime(scheduledFor, tz);
 
       const rows = await Promise.all(
         names.map(async (name) => {
@@ -1049,7 +1120,7 @@ export const communicationActionExecutors: Record<
         duplicates.length === 0
           ? ""
           : duplicates.length === 1
-            ? duplicateWarningClause(duplicates[0]!.duplicate)
+            ? duplicateWarningClause(duplicates[0]!.duplicate, tz)
             : ` Heads up — some of these (${duplicates.map((d) => d.name).join(", ")}) already had a near-identical message scheduled moments ago (reminder #${duplicates.map((d) => d.duplicate.id).join(", #")}). I've left both in place for each; let me know if you'd like me to cancel any.`;
       return {
         status: 200,
@@ -1435,9 +1506,10 @@ export const communicationActionExecutors: Record<
 
   call_me: (async (payload: z.infer<typeof CallMePayload>, userId: number) => {
     if (payload.scheduleAt) {
+      const tz = await resolveEffectiveTimezone(userId, payload.timezone);
       let scheduledFor: string;
       try {
-        scheduledFor = await resolveScheduleAt(payload.scheduleAt, userId);
+        scheduledFor = resolveScheduleAt(payload.scheduleAt, tz);
       } catch (err) {
         if (err instanceof RelativeTimeResolutionError) {
           return {
@@ -1467,7 +1539,7 @@ export const communicationActionExecutors: Record<
           elaineActionPayload: storedPayload,
         })
         .returning({ id: reminders.id });
-      const formattedTime = formatScheduledTime(scheduledFor);
+      const formattedTime = formatScheduledTime(scheduledFor, tz);
       logger.info(
         { scheduledActionId: row?.id, scheduledFor, userId },
         "elaine: scheduled self-callback call",
@@ -1738,18 +1810,42 @@ export const listScheduledContactsTool: OpenAI.Chat.Completions.ChatCompletionTo
 // Label builder
 // ---------------------------------------------------------------------------
 
-export async function buildCommunicationActionLabel(action: {
-  type: CommunicationActionType;
-  payload: unknown;
-}): Promise<string> {
+// Formats a scheduleAt field (exact ISO string OR a RelativeTimeSpec) for the
+// pre-confirm label card using `tz`. For a RelativeTimeSpec this actually
+// resolves it (resolveRelativeTime is pure/synchronous) rather than showing a
+// generic "the resolved time" placeholder — so the card the user approves
+// shows the SAME computed time the executor will confirm a moment later, in
+// the same effective timezone. Falls back to a placeholder only if resolution
+// throws (surfaced properly as an error once the user actually confirms).
+function describeScheduledTime(
+  scheduleAt: string | RelativeTimeSpec,
+  tz: string,
+): string {
+  if (typeof scheduleAt === "string")
+    return formatScheduledTime(normalizeExactIsoForDisplay(scheduleAt, tz), tz);
+  try {
+    return formatScheduledTime(
+      resolveRelativeTime(scheduleAt, tz).toISOString(),
+      tz,
+    );
+  } catch {
+    return "the resolved time";
+  }
+}
+
+export async function buildCommunicationActionLabel(
+  action: {
+    type: CommunicationActionType;
+    payload: unknown;
+  },
+  userId: number,
+): Promise<string> {
   switch (action.type) {
     case "call_contact": {
       const payload = CallContactPayload.parse(action.payload);
       if (payload.scheduleAt) {
-        const when =
-          typeof payload.scheduleAt === "string"
-            ? formatScheduledTime(payload.scheduleAt)
-            : "the resolved time";
+        const tz = await resolveEffectiveTimezone(userId, payload.timezone);
+        const when = describeScheduledTime(payload.scheduleAt, tz);
         return `Schedule a call to ${payload.contactName} at ${when}`;
       }
       return `Call ${payload.contactName}`;
@@ -1765,10 +1861,8 @@ export async function buildCommunicationActionLabel(action: {
           : names.slice(0, -1).join(", ") + ` and ${names[names.length - 1]}`;
       const via = payload.channel !== "auto" ? ` via ${payload.channel}` : "";
       if (payload.scheduleAt) {
-        const when =
-          typeof payload.scheduleAt === "string"
-            ? formatScheduledTime(payload.scheduleAt)
-            : "the resolved time";
+        const tz = await resolveEffectiveTimezone(userId, payload.timezone);
+        const when = describeScheduledTime(payload.scheduleAt, tz);
         return `Schedule a message to ${recipientStr}${via} at ${when}`;
       }
       return `Message ${recipientStr}${via}`;
@@ -1785,10 +1879,8 @@ export async function buildCommunicationActionLabel(action: {
     case "call_me": {
       const payload = CallMePayload.parse(action.payload);
       if (payload.scheduleAt) {
-        const when =
-          typeof payload.scheduleAt === "string"
-            ? formatScheduledTime(payload.scheduleAt)
-            : "the resolved time";
+        const tz = await resolveEffectiveTimezone(userId, payload.timezone);
+        const when = describeScheduledTime(payload.scheduleAt, tz);
         return `Schedule a call-back at ${when}`;
       }
       return "Call me back on my phone";
@@ -1817,7 +1909,8 @@ export const communicationActionTools: OpenAI.Chat.Completions.ChatCompletionToo
           "WRONG: 'Jonathan asked me to remind you to pick up the cat.' " +
           "RIGHT: 'Hey, just a reminder to pick up the cat from the vet today!' " +
           "Confirm the contact name and message wording before proposing this action. " +
-          "If the user wants the call at a future time, include `scheduleAt` — either an exact ISO 8601 datetime, or (preferred whenever the user speaks relatively, e.g. 'tomorrow', 'in an hour') the structured relative-time spec described on that field; never compute the datetime yourself from a relative phrase. " +
+          "If the user wants the call at a future time, include `scheduleAt` — either an exact ISO 8601 datetime, or (STRONGLY preferred, including for a bare clock time like 'at 3:45pm' with no explicit day) the structured relative-time spec described on that field; never hand-compute the datetime (or its UTC offset) yourself. " +
+          "Only include `timezone` when the user explicitly names a different timezone/city for this call than their own (see that field's description) — omit it otherwise. " +
           "When scheduling: confirm the resolved time in your visible reply before calling this tool. " +
           "After the tool returns, the result includes a `callStatus` field — incorporate it naturally: " +
           "'answered' → 'I called [name] — they answered.'; " +
@@ -1848,8 +1941,9 @@ export const communicationActionTools: OpenAI.Chat.Completions.ChatCompletionToo
                 RELATIVE_TIME_SPEC_JSON_SCHEMA,
               ],
               description:
-                "Optional. Omit to call immediately. Otherwise either an exact ISO datetime or a relative-time spec — prefer the relative-time spec whenever the user spoke relatively.",
+                "Optional. Omit to call immediately. Otherwise either an exact ISO datetime or a relative-time spec — strongly prefer the relative-time spec, including its at-clock-time kind for a bare time of day.",
             },
+            timezone: EXPLICIT_TIMEZONE_JSON_SCHEMA,
           },
           required: ["contactName", "message"],
         },
@@ -1868,7 +1962,8 @@ export const communicationActionTools: OpenAI.Chat.Completions.ChatCompletionToo
           "IMPORTANT: if the user hasn't specified a channel, call list_contact_channels first to see what's available, then ask which they prefer. " +
           "For multi-recipient ('tell B, C, and D'), pass an array in contactName. " +
           "Confirm contact(s) and message wording before proposing. " +
-          "If the user wants the message at a future time, include `scheduleAt` — either an exact ISO 8601 datetime, or (preferred whenever the user speaks relatively, e.g. 'tomorrow', 'in an hour') the structured relative-time spec described on that field; never compute the datetime yourself from a relative phrase. " +
+          "If the user wants the message at a future time, include `scheduleAt` — either an exact ISO 8601 datetime, or (STRONGLY preferred, including for a bare clock time like 'at 3:45pm' with no explicit day) the structured relative-time spec described on that field; never hand-compute the datetime (or its UTC offset) yourself. " +
+          "Only include `timezone` when the user explicitly names a different timezone/city for this message than their own (see that field's description) — omit it otherwise. " +
           "When scheduling: confirm the resolved time in your visible reply before calling this tool.",
         parameters: {
           type: "object",
@@ -1911,8 +2006,9 @@ export const communicationActionTools: OpenAI.Chat.Completions.ChatCompletionToo
                 RELATIVE_TIME_SPEC_JSON_SCHEMA,
               ],
               description:
-                "Optional. Omit to send immediately. Otherwise either an exact ISO datetime or a relative-time spec — prefer the relative-time spec whenever the user spoke relatively.",
+                "Optional. Omit to send immediately. Otherwise either an exact ISO datetime or a relative-time spec — strongly prefer the relative-time spec, including its at-clock-time kind for a bare time of day.",
             },
+            timezone: EXPLICIT_TIMEZONE_JSON_SCHEMA,
           },
           required: ["contactName", "message"],
         },
@@ -2007,10 +2103,12 @@ export const communicationActionTools: OpenAI.Chat.Completions.ChatCompletionToo
           "Available on web and SMS channels. NOT available over email. " +
           "If the user wants the call at a future time (e.g. 'call me at 2:30', 'call me in an hour', " +
           "'call me tomorrow morning and remind me to X'), include `scheduleAt` — either an exact ISO 8601 " +
-          "datetime, or (preferred whenever the user speaks relatively, e.g. 'tomorrow', 'in an hour') the " +
-          "structured relative-time spec described on that field; never compute the datetime yourself from a " +
-          "relative phrase. Put any reminder content the user wants ('remind me to pick up X') into `greeting` " +
-          "so Elaine says it as soon as the call connects. " +
+          "datetime, or (STRONGLY preferred, including for a bare clock time like 'call me at 2:30' with no " +
+          "explicit day — use the at-clock-time spec kind) the structured relative-time spec described on that " +
+          "field; never hand-compute the datetime (or its UTC offset) yourself. Put any reminder content the " +
+          "user wants ('remind me to pick up X') into `greeting` so Elaine says it as soon as the call connects. " +
+          "Only include `timezone` when the user explicitly names a different timezone/city for this call than " +
+          "their own (see that field's description) — omit it otherwise. " +
           "When scheduling: confirm the resolved time in your visible reply before calling this tool. " +
           "After proposing, confirm in your reply that Elaine is calling them (now, or at the scheduled time). " +
           "If they have no verified phone number, the executor returns an error message you should relay.",
@@ -2032,8 +2130,9 @@ export const communicationActionTools: OpenAI.Chat.Completions.ChatCompletionToo
                 RELATIVE_TIME_SPEC_JSON_SCHEMA,
               ],
               description:
-                "Optional. Omit to call immediately. Otherwise either an exact ISO datetime or a relative-time spec — prefer the relative-time spec whenever the user spoke relatively.",
+                "Optional. Omit to call immediately. Otherwise either an exact ISO datetime or a relative-time spec — strongly prefer the relative-time spec, including its at-clock-time kind for a bare time of day.",
             },
+            timezone: EXPLICIT_TIMEZONE_JSON_SCHEMA,
           },
           required: [],
         },
@@ -2082,8 +2181,11 @@ interface DuplicateReminderMatch {
  * scheduled moments ago — points the user at both list_scheduled_contacts
  * and cancel_scheduled_contact so they can resolve it themselves rather than
  * Elaine silently guessing which one (if either) to remove. */
-function duplicateWarningClause(duplicate: DuplicateReminderMatch): string {
-  return ` Heads up — you already had a near-identical one scheduled for ${formatScheduledTime(duplicate.dueAt.toISOString())} (reminder #${duplicate.id}). I've left both in place; let me know if you'd like me to cancel one.`;
+function duplicateWarningClause(
+  duplicate: DuplicateReminderMatch,
+  timezone: string,
+): string {
+  return ` Heads up — you already had a near-identical one scheduled for ${formatScheduledTime(duplicate.dueAt.toISOString(), timezone)} (reminder #${duplicate.id}). I've left both in place; let me know if you'd like me to cancel one.`;
 }
 
 const DUPLICATE_LOOKBACK_MS = 2 * 60 * 60 * 1000;

@@ -1,17 +1,18 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { and, eq, desc, asc, inArray } from "drizzle-orm";
-import {
-  db,
-  blocks,
-  fabrics,
-  entityCategories,
-  quiltingCategories as categories,
-} from "@workspace/db";
+import { db, blocks, fabrics, entityCategories } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import { aiLimiter } from "../../middleware/rateLimit";
 import { detectBlockSeams } from "../../lib/openai";
 import { renderBlockPreviewPng } from "../../lib/block-preview";
+import {
+  MAX_CATEGORY_NAMES,
+  MAX_CATEGORY_NAME_LEN,
+  type CategoryResult,
+  resolveOrCreateCategories,
+  fetchEntityCategories,
+} from "./category-helpers";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -22,9 +23,6 @@ type GridSize = (typeof VALID_GRID_SIZES)[number];
 function isValidGridSize(n: number): n is GridSize {
   return (VALID_GRID_SIZES as readonly number[]).includes(n);
 }
-
-const MAX_CATEGORY_NAMES = 20;
-const MAX_CATEGORY_NAME_LEN = 100;
 
 const SeamLineSchema = z.object({
   axis: z.enum(["h", "v"]),
@@ -76,97 +74,9 @@ const UpdateBlockSchema = z.object({
     .optional(),
 });
 
-// ---------------------------------------------------------------------------
-// Category helpers
-// ---------------------------------------------------------------------------
-
-interface CategoryResult {
-  id: number;
-  name: string;
-  bgColor: string | null;
-  textColor: string | null;
-}
-
-function isUniqueConstraintViolation(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as { code: string }).code === "23505"
-  );
-}
-
-/** Resolve category names → IDs, creating shared household categories as needed. */
-async function resolveOrCreateCategories(names: string[]): Promise<number[]> {
-  const unique = [...new Set(names.map((n) => n.trim()).filter(Boolean))].slice(
-    0,
-    MAX_CATEGORY_NAMES,
-  );
-  const ids: number[] = [];
-  for (const name of unique) {
-    const [existing] = await db
-      .select({ id: categories.id })
-      .from(categories)
-      .where(eq(categories.name, name))
-      .limit(1);
-    if (existing) {
-      ids.push(existing.id);
-    } else {
-      try {
-        const [created] = await db
-          .insert(categories)
-          .values({ name })
-          .returning({ id: categories.id });
-        if (created) ids.push(created.id);
-      } catch (err) {
-        if (!isUniqueConstraintViolation(err)) throw err;
-        // Created concurrently by another request — look it up.
-        const [race] = await db
-          .select({ id: categories.id })
-          .from(categories)
-          .where(eq(categories.name, name))
-          .limit(1);
-        if (race) ids.push(race.id);
-      }
-    }
-  }
-  return ids;
-}
-
 /** Fetch categories for a batch of block IDs. */
-async function fetchBlockCategories(
-  blockIds: number[],
-): Promise<Map<number, CategoryResult[]>> {
-  if (blockIds.length === 0) return new Map();
-  const rows = await db
-    .select({
-      entityId: entityCategories.entityId,
-      id: categories.id,
-      name: categories.name,
-      bgColor: categories.bgColor,
-      textColor: categories.textColor,
-    })
-    .from(entityCategories)
-    .innerJoin(categories, eq(entityCategories.categoryId, categories.id))
-    .where(
-      and(
-        eq(entityCategories.entityType, "block"),
-        inArray(entityCategories.entityId, blockIds),
-      ),
-    );
-
-  const map = new Map<number, CategoryResult[]>();
-  for (const row of rows) {
-    if (!map.has(row.entityId)) map.set(row.entityId, []);
-    map.get(row.entityId)!.push({
-      id: row.id,
-      name: row.name,
-      bgColor: row.bgColor,
-      textColor: row.textColor,
-    });
-  }
-  return map;
-}
+const fetchBlockCategories = (blockIds: number[]) =>
+  fetchEntityCategories("block", blockIds);
 
 const FAB_RE = /\bfab:(\d+)/g;
 const HEX_RE = /#[0-9a-fA-F]{6}(?:[0-9a-fA-F]{2})?/g;

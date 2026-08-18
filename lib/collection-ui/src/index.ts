@@ -40,6 +40,9 @@ export type {
   CollectionDetailSectionProps,
 } from "./collection-detail-field";
 
+export { InfoTooltip } from "./info-tooltip";
+export type { InfoTooltipProps } from "./info-tooltip";
+
 export { CategoryChipPicker } from "./category-chip-picker";
 export type { CategoryChipPickerProps } from "./category-chip-picker";
 export { CategoryTagSelector } from "./category-tag-selector";
@@ -64,6 +67,13 @@ export type {
 } from "./create-reminder-dialog";
 
 export { PreviewZoomModal } from "./preview-zoom-modal";
+export { ImageLightbox } from "./image-lightbox";
+export type { ImageLightboxProps } from "./image-lightbox";
+export {
+  clampPanOffset,
+  computePanLimit,
+  clampPanToBounds,
+} from "./pan-bounds";
 export {
   readValidatedPageSize,
   useValidatedCollectionPageSize,
@@ -97,3 +107,10 @@ export type { AsyncActionStatus } from "./async-action-status";
 
 export { useBulkReanalyzeRun } from "./use-bulk-reanalyze-run";
 export type { BulkReanalyzeRunDeps } from "./use-bulk-reanalyze-run";
+
+export {
+  toggleLockedField,
+  useToggleLockedField,
+  mergeSelectedCategoryNames,
+} from "./use-toggle-locked-field";
+export type { ToggleLockedFieldMessages } from "./use-toggle-locked-field";

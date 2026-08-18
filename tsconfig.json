@@ -50,6 +50,9 @@
     },
     {
       "path": "./lib/ai-actions"
+    },
+    {
+      "path": "./lib/ornaments-shared"
     }
   ]
 }

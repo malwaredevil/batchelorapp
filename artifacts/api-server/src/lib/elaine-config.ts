@@ -128,6 +128,15 @@ export interface ThresholdsConfig {
   // the DB so the cap survives server restarts. Raise if a household needs to
   // send bulk announcements more frequently.
   broadcastHourlyLimit: number;
+  // Max supplemental images forwarded to the AI per pottery analysis call
+  // (primary + this many supplemental). Keeps in-memory buffer use and token
+  // cost bounded regardless of how many supplemental images are stored.
+  potteryMaxAiSupplemental: number;
+  // Max pottery items per bulk-reanalyze request. Raise if the owner needs
+  // to re-process large batches in a single call.
+  potteryBulkReanalyzeLimit: number;
+  // Max ornament items per bulk-reanalyze request.
+  ornamentsBulkReanalyzeLimit: number;
 }
 
 /**
@@ -222,6 +231,9 @@ export const DEFAULT_THRESHOLDS: ThresholdsConfig = {
   openAIStateMaxAgeDays: 29,
   codeDiagnosisRecurrenceThreshold: 3,
   broadcastHourlyLimit: 3,
+  potteryMaxAiSupplemental: 5,
+  potteryBulkReanalyzeLimit: 20,
+  ornamentsBulkReanalyzeLimit: 20,
 };
 
 export const DEFAULT_RUNTIME_BUDGET: RuntimeBudgetConfig = {

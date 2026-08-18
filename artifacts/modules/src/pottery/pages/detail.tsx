@@ -6,7 +6,6 @@ import {
   useListPottery,
   useUpdatePottery,
   useDeletePottery,
-  useEstimatePotteryMarketValue,
   useReanalyzePottery,
   useSetPrimaryImage,
   useListPotteryCategories as useListCategories,
@@ -21,7 +20,6 @@ import type {
   PotteryPotteryItem as PotteryItem,
 } from "@workspace/api-client-react";
 import { toast } from "sonner";
-import { EbayPricePanel } from "../components/EbayPricePanel";
 import {
   ArrowLeft,
   Camera,
@@ -35,7 +33,6 @@ import {
   RefreshCcw,
   Save,
   Star,
-  TrendingUp,
   Trash2,
   X,
 } from "lucide-react";
@@ -791,63 +788,6 @@ export default function PieceDetail() {
     },
   });
 
-  const estimateMarketValue = useEstimatePotteryMarketValue();
-  const [ebayResult, setEbayResult] = useState<{
-    priceMinUsd: number;
-    priceMaxUsd: number;
-    priceMedianUsd: number;
-    listingCount: number;
-    searchQuery?: string;
-    sourceType: "sold" | "active_listing";
-    fromCache?: boolean;
-    cachedAt?: string;
-  } | null>(null);
-  const [forceRefreshing, setForceRefreshing] = useState(false);
-
-  async function handleEstimateMarketValue(force = false) {
-    try {
-      if (force) {
-        setForceRefreshing(true);
-      } else {
-        toast.loading("Searching eBay listings…", { id: "ebay" });
-      }
-      const result = await estimateMarketValue.mutateAsync({
-        id,
-        data: force ? { force: true } : undefined,
-      });
-      if (!force) toast.dismiss("ebay");
-      if (result.listingCount > 0) {
-        setEbayResult({
-          priceMinUsd: result.priceMinUsd,
-          priceMaxUsd: result.priceMaxUsd,
-          priceMedianUsd: result.priceMedianUsd,
-          listingCount: result.listingCount,
-          searchQuery: result.searchQuery,
-          sourceType:
-            (result as { sourceType?: string }).sourceType === "sold"
-              ? "sold"
-              : "active_listing",
-          fromCache: (result as { fromCache?: boolean }).fromCache ?? false,
-          cachedAt: (result as { cachedAt?: string }).cachedAt,
-        });
-        if (force) {
-          toast.success("eBay prices refreshed");
-        } else {
-          toast.success(
-            `Found ${result.listingCount} listing${result.listingCount !== 1 ? "s" : ""} — median $${result.priceMedianUsd.toFixed(0)}`,
-          );
-        }
-      } else {
-        toast.error("No eBay listings found for this piece.");
-      }
-    } catch {
-      if (!force) toast.dismiss("ebay");
-      toast.error("Failed to look up eBay price");
-    } finally {
-      if (force) setForceRefreshing(false);
-    }
-  }
-
   const update = useUpdatePottery({
     mutation: {
       onSuccess: () => {
@@ -1012,19 +952,6 @@ export default function PieceDetail() {
                 <Button
                   variant="outline"
                   size="icon"
-                  onClick={() => handleEstimateMarketValue()}
-                  disabled={estimateMarketValue.isPending}
-                  title="Look up eBay market value"
-                >
-                  {estimateMarketValue.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <TrendingUp className="h-4 w-4" />
-                  )}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
                   onClick={() => reanalyze.mutate({ id })}
                   disabled={reanalyze.isPending}
                   title="Re-run AI analysis"
@@ -1100,22 +1027,6 @@ export default function PieceDetail() {
               </div>
             )}
           </div>
-
-          {ebayResult && (
-            <EbayPricePanel
-              priceMinUsd={ebayResult.priceMinUsd}
-              priceMedianUsd={ebayResult.priceMedianUsd}
-              priceMaxUsd={ebayResult.priceMaxUsd}
-              listingCount={ebayResult.listingCount}
-              searchQuery={ebayResult.searchQuery}
-              sourceType={ebayResult.sourceType}
-              fromCache={ebayResult.fromCache}
-              cachedAt={ebayResult.cachedAt}
-              onForceRefresh={() => handleEstimateMarketValue(true)}
-              forceRefreshing={forceRefreshing}
-              onDismiss={() => setEbayResult(null)}
-            />
-          )}
 
           {/* AI description */}
           {editing ? (

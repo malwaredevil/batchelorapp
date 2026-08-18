@@ -192,11 +192,29 @@ export async function callModelWithAdvisor<T>(
 }
 
 /**
+ * Returns true when `err` is an OpenRouter/OpenAI 5xx response — a transient
+ * upstream failure that may warrant a degraded retry without optional server
+ * tools (subagent/advisor) rather than burning the caller's full turn budget.
+ */
+export function is5xxError(err: unknown): boolean {
+  if (err != null && typeof err === "object" && "status" in err) {
+    const status = (err as { status: unknown }).status;
+    return typeof status === "number" && status >= 500 && status < 600;
+  }
+  return false;
+}
+
+/**
  * Like callModel(), but offers the executing (frontier) model an
  * `openrouter:subagent` server tool so it can delegate self-contained,
  * routine sub-tasks (summarizing, extracting, reformatting) to
  * MODELS.SUBAGENT_WORKER mid-generation instead of spending its own,
  * more expensive tokens on busywork.
+ *
+ * Pass `forceDisableSubagent: true` to skip the subagent tool for this call
+ * even when the global feature flag is on — used by the streaming orchestrator
+ * to retry a round without the subagent after an OpenRouter 5xx, at the layer
+ * where SSE/accumulator state can be properly reset before retrying.
  */
 export async function callModelWithSubagent<T>(
   model: string,
@@ -206,20 +224,21 @@ export async function callModelWithSubagent<T>(
     model: string,
     tools: OpenRouterServerTool[],
   ) => Promise<T>,
-  options?: { subagentModel?: string },
+  options?: { subagentModel?: string; forceDisableSubagent?: boolean },
 ): Promise<T> {
   const config = await getElaineGlobalConfig();
-  const tools: OpenRouterServerTool[] = config.features.enableSubagent
-    ? [
-        {
-          type: "openrouter:subagent",
-          parameters: {
-            model: options?.subagentModel ?? config.subagentModel,
-            instructions: subagentInstructions,
+  const tools: OpenRouterServerTool[] =
+    config.features.enableSubagent && !options?.forceDisableSubagent
+      ? [
+          {
+            type: "openrouter:subagent",
+            parameters: {
+              model: options?.subagentModel ?? config.subagentModel,
+              instructions: subagentInstructions,
+            },
           },
-        },
-      ]
-    : [];
+        ]
+      : [];
   return fn(await getOpenRouterClient(), model, tools);
 }
 

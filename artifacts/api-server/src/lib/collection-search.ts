@@ -106,6 +106,42 @@ export async function semanticCollectionSearch({
   return rerankedIds.slice(0, limit);
 }
 
+/**
+ * One entry of a plain-text search/rerank document:
+ *   - `{ label, value }` — emitted as "Label: value" when the value is truthy.
+ *   - `{ label, list }`  — emitted as "Label: a, b" when the (unknown-typed)
+ *     value is a non-empty array; anything else is treated as empty.
+ *   - `{ text }`         — emitted verbatim when truthy (free-form prose).
+ */
+type SearchDocumentPart =
+  | { label: string; value: string | number | null | undefined }
+  | { label: string; list: unknown }
+  | { text: string | null | undefined };
+
+/**
+ * Shared document builder behind every per-domain build*Document function
+ * (pottery search + compare, fabric search, ornament search): render the
+ * truthy parts in order, joined by ". ", falling back to `fallback` when
+ * nothing is present.
+ */
+export function buildSearchDocument(
+  parts: SearchDocumentPart[],
+  fallback: string,
+): string {
+  const rendered: string[] = [];
+  for (const part of parts) {
+    if ("list" in part) {
+      const items = Array.isArray(part.list) ? (part.list as string[]) : [];
+      if (items.length) rendered.push(`${part.label}: ${items.join(", ")}`);
+    } else if ("value" in part) {
+      if (part.value) rendered.push(`${part.label}: ${part.value}`);
+    } else if (part.text) {
+      rendered.push(part.text);
+    }
+  }
+  return rendered.join(". ") || fallback;
+}
+
 export function buildPotterySearchDocument(attrs: {
   name: string | null;
   style?: string | null;
@@ -116,21 +152,19 @@ export function buildPotterySearchDocument(attrs: {
   dominantColors?: unknown;
   aiDescription?: string | null;
 }): string {
-  const parts: string[] = [];
-  if (attrs.name) parts.push(`Name: ${attrs.name}`);
-  if (attrs.style) parts.push(`Style: ${attrs.style}`);
-  if (attrs.shape) parts.push(`Shape: ${attrs.shape}`);
-  if (attrs.maker) parts.push(`Maker: ${attrs.maker}`);
-  if (attrs.patternDescription)
-    parts.push(`Pattern: ${attrs.patternDescription}`);
-  const motifs = Array.isArray(attrs.motifs) ? (attrs.motifs as string[]) : [];
-  if (motifs.length) parts.push(`Motifs: ${motifs.join(", ")}`);
-  const colors = Array.isArray(attrs.dominantColors)
-    ? (attrs.dominantColors as string[])
-    : [];
-  if (colors.length) parts.push(`Colours: ${colors.join(", ")}`);
-  if (attrs.aiDescription) parts.push(attrs.aiDescription);
-  return parts.join(". ") || "Unknown pottery piece";
+  return buildSearchDocument(
+    [
+      { label: "Name", value: attrs.name },
+      { label: "Style", value: attrs.style },
+      { label: "Shape", value: attrs.shape },
+      { label: "Maker", value: attrs.maker },
+      { label: "Pattern", value: attrs.patternDescription },
+      { label: "Motifs", list: attrs.motifs },
+      { label: "Colours", list: attrs.dominantColors },
+      { text: attrs.aiDescription },
+    ],
+    "Unknown pottery piece",
+  );
 }
 
 export function buildFabricSearchDocument(attrs: {
@@ -142,18 +176,18 @@ export function buildFabricSearchDocument(attrs: {
   dominantColors?: unknown;
   aiDescription?: string | null;
 }): string {
-  const parts: string[] = [];
-  if (attrs.name) parts.push(`Name: ${attrs.name}`);
-  if (attrs.designer) parts.push(`Designer: ${attrs.designer}`);
-  if (attrs.manufacturer) parts.push(`Manufacturer: ${attrs.manufacturer}`);
-  if (attrs.colorway) parts.push(`Colorway: ${attrs.colorway}`);
-  const colors = Array.isArray(attrs.dominantColors)
-    ? (attrs.dominantColors as string[])
-    : [];
-  if (colors.length) parts.push(`Colours: ${colors.join(", ")}`);
-  if (attrs.notes) parts.push(`Notes: ${attrs.notes}`);
-  if (attrs.aiDescription) parts.push(attrs.aiDescription);
-  return parts.join(". ") || "Unknown fabric";
+  return buildSearchDocument(
+    [
+      { label: "Name", value: attrs.name },
+      { label: "Designer", value: attrs.designer },
+      { label: "Manufacturer", value: attrs.manufacturer },
+      { label: "Colorway", value: attrs.colorway },
+      { label: "Colours", list: attrs.dominantColors },
+      { label: "Notes", value: attrs.notes },
+      { text: attrs.aiDescription },
+    ],
+    "Unknown fabric",
+  );
 }
 
 export function buildOrnamentSearchDocument(attrs: {
@@ -167,20 +201,18 @@ export function buildOrnamentSearchDocument(attrs: {
   aiDescription?: string | null;
   description?: string | null;
 }): string {
-  const parts: string[] = [];
-  if (attrs.name) parts.push(`Name: ${attrs.name}`);
-  if (attrs.brand) parts.push(`Brand: ${attrs.brand}`);
-  if (attrs.seriesOrCollection)
-    parts.push(`Series: ${attrs.seriesOrCollection}`);
-  if (attrs.year) parts.push(`Year: ${attrs.year}`);
-  const motifs = Array.isArray(attrs.motifs) ? (attrs.motifs as string[]) : [];
-  if (motifs.length) parts.push(`Motifs: ${motifs.join(", ")}`);
-  const colors = Array.isArray(attrs.dominantColors)
-    ? (attrs.dominantColors as string[])
-    : [];
-  if (colors.length) parts.push(`Colours: ${colors.join(", ")}`);
-  if (attrs.notes) parts.push(`Notes: ${attrs.notes}`);
-  if (attrs.aiDescription) parts.push(attrs.aiDescription);
-  if (attrs.description) parts.push(attrs.description);
-  return parts.join(". ") || "Unknown ornament";
+  return buildSearchDocument(
+    [
+      { label: "Name", value: attrs.name },
+      { label: "Brand", value: attrs.brand },
+      { label: "Series", value: attrs.seriesOrCollection },
+      { label: "Year", value: attrs.year },
+      { label: "Motifs", list: attrs.motifs },
+      { label: "Colours", list: attrs.dominantColors },
+      { label: "Notes", value: attrs.notes },
+      { text: attrs.aiDescription },
+      { text: attrs.description },
+    ],
+    "Unknown ornament",
+  );
 }

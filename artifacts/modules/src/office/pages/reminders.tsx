@@ -18,6 +18,7 @@ import {
   Ban,
   Clock,
   SkipForward,
+  Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -148,6 +149,7 @@ export default function OfficeReminders() {
   const [status, setStatus] = useState<StatusFilter>("active");
   const [when, setWhen] = useState<WhenFilter>("all");
   const [editing, setEditing] = useState<Reminder | null>(null);
+  const [creating, setCreating] = useState(false);
 
   const queryKey = ["office-reminders", status, when] as const;
   const { data: reminders = [], isLoading } = useQuery({
@@ -223,15 +225,23 @@ export default function OfficeReminders() {
 
   return (
     <div className="py-8 space-y-6">
-      <div>
-        <h1 className="flex items-center gap-2 font-serif text-2xl text-foreground">
-          <Bell className="h-6 w-6" />
-          Reminders
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Every reminder across the household, however it was created — edit,
-          snooze, or manage delivery here after it fires.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="flex items-center gap-2 font-serif text-2xl text-foreground">
+            <Bell className="h-6 w-6" />
+            Reminders
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Every reminder across the household, however it was created — edit,
+            snooze, or manage delivery here after it fires.
+          </p>
+        </div>
+        <Button
+          onClick={() => setCreating(true)}
+          data-testid="button-add-reminder"
+        >
+          <Plus className="w-4 h-4 mr-1.5" /> Add reminder
+        </Button>
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -461,6 +471,15 @@ export default function OfficeReminders() {
       </div>
 
       <ReminderManageDialog
+        mode="create"
+        reminder={null}
+        open={creating}
+        onOpenChange={setCreating}
+        onSaved={invalidate}
+      />
+
+      <ReminderManageDialog
+        mode="edit"
         reminder={editing}
         open={editing != null}
         onOpenChange={(open) => {

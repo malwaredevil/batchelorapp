@@ -820,16 +820,6 @@
     "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
-    "operationId": "estimatePotteryMarketValue",
-    "method": "POST",
-    "path": "/pottery/items/{id}/estimate-market-value",
-    "domain": "pottery",
-    "summary": "Look up eBay sold-listing prices and cache them on the item",
-    "disposition": "universal_bridge",
-    "mappedTools": ["discover_app_operations", "execute_app_operation"],
-    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
-  },
-  {
     "operationId": "exploreDestination",
     "method": "POST",
     "path": "/travels/explore",

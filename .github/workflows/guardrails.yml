@@ -45,3 +45,6 @@ jobs:
 
       - name: "Ban: hardcoded configuration values (should be owner-adjustable)"
         run: pnpm --filter @workspace/scripts run check-hardcoded-config -- --base origin/main
+
+      - name: "Ban: likely duplicate code (heuristic structural match)"
+        run: pnpm --filter @workspace/scripts run check-duplicate-code -- --base origin/main

@@ -31,6 +31,7 @@ import sentryIssuesRouter from "./admin/sentry-issues";
 import elaineCodeSuggestionsRouter from "./admin/elaine-code-suggestions";
 import richTextRouter from "./rich-text";
 import remindersRouter from "./reminders";
+// scaffold:anchor:module-route-imports — scaffold-collection-module inserts imports below; do not remove
 
 const router: IRouter = Router();
 
@@ -49,6 +50,7 @@ router.use(searchRouter);
 router.use("/pottery", potteryRouter);
 router.use("/quilting", quiltingRouter);
 router.use("/ornaments", ornamentsRouter);
+// scaffold:anchor:module-route-mounts — scaffold-collection-module inserts mounts below; do not remove
 router.use("/office", officeRouter);
 router.use("/travels", travelsRouter);
 router.use(recycleBinRouter);

@@ -33,6 +33,7 @@ import "@/quilting/features";
 import "@/ornaments/features";
 import "@/travels/features";
 import "@/office/features";
+// scaffold:anchor:feature-imports — scaffold-collection-module inserts feature imports below; do not remove
 import { MessengerNotification } from "@workspace/messenger-ui";
 import { BulkAddProvider } from "@/quilting/contexts/bulk-add-context";
 import { Layout as TravelsLayout } from "@/travels/components/Layout";
@@ -108,6 +109,8 @@ const FabricPhotoPreviewDevPage = lazy(
 
 // Barcode lookup (hub-level, not app-specific)
 const BarcodeLookupPage = lazy(() => import("@/pages/barcode-lookup"));
+
+// scaffold:anchor:lazy-pages — scaffold-collection-module inserts lazy page imports below; do not remove
 
 // Ornaments
 const OrnamentsCollection = lazy(() => import("@/ornaments/pages/collection"));
@@ -420,6 +423,7 @@ function Routes() {
                   path="/ornaments/ornament/:id"
                   component={OrnamentsDetail}
                 />
+                {/* scaffold:anchor:module-routes — scaffold-collection-module inserts routes below; do not remove */}
                 <Route path="/office">
                   <Redirect to="/office/gmail" />
                 </Route>

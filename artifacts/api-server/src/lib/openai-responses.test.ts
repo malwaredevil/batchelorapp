@@ -76,6 +76,9 @@ const config: ElaineGlobalConfig = {
     openAIStateMaxAgeDays: 29,
     codeDiagnosisRecurrenceThreshold: 3,
     broadcastHourlyLimit: 3,
+    potteryMaxAiSupplemental: 5,
+    potteryBulkReanalyzeLimit: 20,
+    ornamentsBulkReanalyzeLimit: 20,
   },
   runtimeBudget: {
     maxModelRounds: 8,

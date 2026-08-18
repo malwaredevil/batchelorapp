@@ -53,6 +53,11 @@ export const elaineSettings = pgTable("elaine_settings", {
     .notNull()
     .default("one_by_one"),
   chatWindowSize: text("chat_window_size").notNull().default("compact"),
+  // Persistent "hide the floating bubble forever" choice from the widget's
+  // close control. Distinct from `enabled` (the full on/off toggle): Elaine
+  // stays enabled, only the floating bubble is hidden until re-enabled from
+  // the settings card.
+  widgetHidden: boolean("widget_hidden").notNull().default(false),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

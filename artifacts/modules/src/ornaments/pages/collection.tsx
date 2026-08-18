@@ -98,6 +98,14 @@ function OrnamentListRow(
   return <CollectionListRow {...props} aiStatus={aiStatus} />;
 }
 
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
 const ORNAMENTS_PAGE_SIZE_KEY = "ornaments-collection-page-size";
 const PAGE_SIZE_OPTIONS = [20, 50, 100, 200];
 
@@ -303,6 +311,34 @@ export default function Collection() {
       { value: data?.stats.categoryCount ?? 0, label: "Categories" },
       { value: data?.stats.brandCount ?? 0, label: "Brands" },
       { value: yearRange, label: "Year range" },
+      {
+        value: formatCurrency(data?.stats.aiAppraisalLowTotal ?? 0),
+        label: "AI Appraisal (Low)",
+        sub:
+          data && data.stats.itemsWithAiAppraisal > 0
+            ? `${data.stats.itemsWithAiAppraisal} appraised item${data.stats.itemsWithAiAppraisal === 1 ? "" : "s"}`
+            : undefined,
+      },
+      {
+        value: formatCurrency(data?.stats.aiAppraisalHighTotal ?? 0),
+        label: "AI Appraisal (High)",
+      },
+      {
+        value: formatCurrency(data?.stats.consensusValueTotal ?? 0),
+        label: "Consensus Value",
+        sub:
+          data && data.stats.itemsWithConsensusValue > 0
+            ? `${data.stats.itemsWithConsensusValue} item${data.stats.itemsWithConsensusValue === 1 ? "" : "s"} priced`
+            : undefined,
+      },
+      {
+        value: formatCurrency(data?.stats.retailValueTotal ?? 0),
+        label: "Retail Value",
+        sub:
+          data && data.stats.itemsWithRetailValue > 0
+            ? `${data.stats.itemsWithRetailValue} item${data.stats.itemsWithRetailValue === 1 ? "" : "s"} on file`
+            : undefined,
+      },
     ];
   }, [data]);
 

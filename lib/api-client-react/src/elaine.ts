@@ -447,6 +447,8 @@ export interface AssistantSettings {
   enabled: boolean;
   actionConfirmationMode: ActionConfirmationMode;
   chatWindowSize: ChatWindowSize;
+  /** Floating bubble hidden "forever" via the widget's close control. */
+  widgetHidden: boolean;
 }
 
 export type MemoryScope = "household" | "personal" | "temporary";
@@ -1443,6 +1445,9 @@ export interface ElaineThresholdsConfig {
   openAIStateMaxAgeDays: number;
   codeDiagnosisRecurrenceThreshold: number;
   broadcastHourlyLimit: number;
+  potteryMaxAiSupplemental: number;
+  potteryBulkReanalyzeLimit: number;
+  ornamentsBulkReanalyzeLimit: number;
 }
 
 export interface ElaineRuntimeBudgetConfig {

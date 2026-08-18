@@ -19,6 +19,15 @@ import {
   travelsWishlist,
 } from "@workspace/db";
 import { getAllConfig } from "../lib/app-config";
+import { computeOrnamentValuationTotals } from "../lib/ornaments/valuation-aggregate";
+
+function formatUsd(amount: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
 
 export async function queryHouseholdData(include: string[]): Promise<string> {
   const parts: string[] = [];
@@ -71,11 +80,21 @@ export async function queryHouseholdData(include: string[]): Promise<string> {
       .where(isNull(ornamentsItems.deletedAt))
       .orderBy(desc(ornamentsItems.createdAt))
       .limit(3);
+    const valuation = await computeOrnamentValuationTotals(
+      isNull(ornamentsItems.deletedAt),
+    );
+    const valuationText =
+      valuation.itemsWithAiAppraisal > 0 ||
+      valuation.itemsWithConsensusValue > 0 ||
+      valuation.itemsWithRetailValue > 0
+        ? ` Estimated collection value — AI collector appraisal range: ${formatUsd(valuation.aiAppraisalLowTotal)} (low) to ${formatUsd(valuation.aiAppraisalHighTotal)} (high), based on ${valuation.itemsWithAiAppraisal} appraised item(s). Consensus value (averaging AI appraisal, eBay asking prices, and book value where available): ${formatUsd(valuation.consensusValueTotal)}, based on ${valuation.itemsWithConsensusValue} priced item(s). Retail value on file: ${formatUsd(valuation.retailValueTotal)}, based on ${valuation.itemsWithRetailValue} item(s).`
+        : "";
     parts.push(
       `Ornaments collection: ${ornRow?.total ?? 0} ornaments total.` +
         (ornRecent.length > 0
           ? ` Recently added: ${ornRecent.map((r) => r.name).join(", ")}.`
-          : ""),
+          : "") +
+        valuationText,
     );
   }
 

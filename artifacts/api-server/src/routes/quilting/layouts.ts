@@ -1,21 +1,18 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { and, eq, desc, inArray } from "drizzle-orm";
-import {
-  db,
-  layouts,
-  blocks,
-  fabrics,
-  entityCategories,
-  quiltingCategories as categories,
-} from "@workspace/db";
+import { db, layouts, blocks, fabrics, entityCategories } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
+import {
+  MAX_CATEGORY_NAMES,
+  MAX_CATEGORY_NAME_LEN,
+  type CategoryResult,
+  resolveOrCreateCategories,
+  fetchEntityCategories,
+} from "./category-helpers";
 
 const router: IRouter = Router();
 router.use(requireAuth);
-
-const MAX_CATEGORY_NAMES = 20;
-const MAX_CATEGORY_NAME_LEN = 100;
 
 const LayoutCellSchema = z.object({
   blockId: z.number().int().nullable(),
@@ -70,91 +67,9 @@ const UpdateLayoutSchema = z.object({
 
 type LayoutCell = z.infer<typeof LayoutCellSchema>;
 
-interface CategoryResult {
-  id: number;
-  name: string;
-  bgColor: string | null;
-  textColor: string | null;
-}
-
-function isUniqueConstraintViolation(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as { code: string }).code === "23505"
-  );
-}
-
-async function resolveOrCreateCategories(names: string[]): Promise<number[]> {
-  const unique = [...new Set(names.map((n) => n.trim()).filter(Boolean))].slice(
-    0,
-    MAX_CATEGORY_NAMES,
-  );
-  const ids: number[] = [];
-  for (const name of unique) {
-    const [existing] = await db
-      .select({ id: categories.id })
-      .from(categories)
-      .where(eq(categories.name, name))
-      .limit(1);
-    if (existing) {
-      ids.push(existing.id);
-    } else {
-      try {
-        const [created] = await db
-          .insert(categories)
-          .values({ name })
-          .returning({ id: categories.id });
-        if (created) ids.push(created.id);
-      } catch (err) {
-        if (!isUniqueConstraintViolation(err)) throw err;
-        // Created concurrently by another request — look it up.
-        const [race] = await db
-          .select({ id: categories.id })
-          .from(categories)
-          .where(eq(categories.name, name))
-          .limit(1);
-        if (race) ids.push(race.id);
-      }
-    }
-  }
-  return ids;
-}
-
-async function fetchLayoutCategories(
-  layoutIds: number[],
-): Promise<Map<number, CategoryResult[]>> {
-  if (layoutIds.length === 0) return new Map();
-  const rows = await db
-    .select({
-      entityId: entityCategories.entityId,
-      id: categories.id,
-      name: categories.name,
-      bgColor: categories.bgColor,
-      textColor: categories.textColor,
-    })
-    .from(entityCategories)
-    .innerJoin(categories, eq(entityCategories.categoryId, categories.id))
-    .where(
-      and(
-        eq(entityCategories.entityType, "layout"),
-        inArray(entityCategories.entityId, layoutIds),
-      ),
-    );
-
-  const map = new Map<number, CategoryResult[]>();
-  for (const row of rows) {
-    if (!map.has(row.entityId)) map.set(row.entityId, []);
-    map.get(row.entityId)!.push({
-      id: row.id,
-      name: row.name,
-      bgColor: row.bgColor,
-      textColor: row.textColor,
-    });
-  }
-  return map;
-}
+/** Fetch categories for a batch of layout IDs. */
+const fetchLayoutCategories = (layoutIds: number[]) =>
+  fetchEntityCategories("layout", layoutIds);
 
 function normalizeCells(
   cells: LayoutCell[],

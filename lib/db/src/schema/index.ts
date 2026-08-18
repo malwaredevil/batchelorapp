@@ -20,3 +20,4 @@ export * from "./knowledge";
 export * from "./slack";
 export * from "./webhook-side-effects";
 export * from "./reminders";
+// scaffold:anchor:schema-exports — scaffold-collection-module inserts exports below; do not remove

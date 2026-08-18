@@ -513,36 +513,6 @@ export const SetPrimaryImageResponse = zod.object({
 
 
 /**
- * @summary Look up eBay sold-listing prices and cache them on the item
- */
-export const EstimatePotteryMarketValueParams = zod.object({
-  "id": zod.coerce.number()
-})
-
-export const EstimatePotteryMarketValueBody = zod.object({
-  "force": zod.boolean().optional().describe('When true, skip the 7-day staleness cache and fire a fresh Apify sold-listings run regardless of the last fetch date.\n')
-})
-
-export const EstimatePotteryMarketValueResponse = zod.object({
-  "priceMinUsd": zod.number(),
-  "priceMaxUsd": zod.number(),
-  "priceMedianUsd": zod.number(),
-  "listingCount": zod.number(),
-  "listings": zod.array(zod.object({
-  "title": zod.string(),
-  "soldPrice": zod.number(),
-  "currency": zod.string(),
-  "soldDate": zod.string().nullish(),
-  "condition": zod.string().nullish(),
-  "imageUrl": zod.string().nullish(),
-  "itemUrl": zod.string().nullish()
-})),
-  "cachedAt": zod.string().nullish(),
-  "searchQuery": zod.string().optional()
-})
-
-
-/**
  * @summary List all pottery watchlist items (household-shared)
  */
 export const ListWatchlistItemsResponseItem = zod.object({
@@ -4902,7 +4872,14 @@ export const ListOrnamentsResponse = zod.object({
   "categoryCount": zod.number(),
   "brandCount": zod.number(),
   "minYear": zod.number().nullish(),
-  "maxYear": zod.number().nullish()
+  "maxYear": zod.number().nullish(),
+  "aiAppraisalLowTotal": zod.number().describe('Sum of each matching item\'s parsed AI-appraisal low estimate × quantity.'),
+  "aiAppraisalHighTotal": zod.number().describe('Sum of each matching item\'s parsed AI-appraisal high estimate × quantity.'),
+  "itemsWithAiAppraisal": zod.number().describe('How many matching items contributed a parseable AI appraisal range.'),
+  "consensusValueTotal": zod.number().describe('Sum of each matching item\'s consensus value (average of available signals) × quantity.'),
+  "itemsWithConsensusValue": zod.number().describe('How many matching items had at least two value signals to average.'),
+  "retailValueTotal": zod.number().describe('Sum of each matching item\'s retail value on file × quantity.'),
+  "itemsWithRetailValue": zod.number().describe('How many matching items had a retail value on file.')
 })
 })
 

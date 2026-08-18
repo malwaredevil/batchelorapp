@@ -101,9 +101,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      # `pnpm run lint` shells out to check-duplicate-code with
+      # `--base origin/main`, which needs a real, resolvable origin/main ref
+      # to diff against (see guardrails.yml, which needs the same thing for
+      # its own origin/main-based checks). The default shallow checkout only
+      # fetches the PR head commit, so origin/main doesn't exist locally and
+      # the check fails loudly with "Cannot resolve base ref" — not a real
+      # lint error. fetch-depth: "0" (full history) makes the ref resolvable.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+          fetch-depth: "0"
       - uses: ./.github/actions/setup-workspace
       - run: pnpm run lint
 

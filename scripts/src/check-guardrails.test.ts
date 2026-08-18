@@ -164,6 +164,23 @@ assert.deepEqual(checkExclusionSetShrink(baseSource, baseSource), []);
 // Missing base (new file / new repo) never counts as a shrink.
 assert.deepEqual(checkExclusionSetShrink(shrunkSource, null), []);
 
+// A removed entry whose action type was deleted everywhere else in the same
+// change (isActionStillLive returns false) is dead weight, not a loosening.
+assert.deepEqual(
+  checkExclusionSetShrink(shrunkSource, baseSource, () => false),
+  [],
+);
+// But if even one removed entry's action type is still callable elsewhere,
+// it's a real loosening and must still fail.
+assert.equal(
+  checkExclusionSetShrink(
+    shrunkSource,
+    baseSource,
+    (actionType) => actionType === "delete_trip",
+  ).length > 0,
+  true,
+);
+
 // --- Elaine chat integration tests must mock elaine-lessons ---
 const ELAINE_TEST_PATH = "artifacts/api-server/src/elaine/my-feature.test.ts";
 

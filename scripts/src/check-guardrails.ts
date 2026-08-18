@@ -23,6 +23,7 @@ import {
   readFileOrNull,
   repoRoot,
   resolveBase,
+  walkFiles,
 } from "./lib/git-diff-utils.js";
 
 export interface CheckResult {
@@ -184,9 +185,10 @@ export const DESTRUCTIVE_SQL_HELP = [
 ].join("\n");
 
 // ---------------------------------------------------------------------------
-// Check 6: the restricted-channel exclusion set may only grow, never shrink.
+// Check 6: the restricted-channel exclusion set may only grow, never shrink
+// for an action type that is still a live, callable tool.
 // ---------------------------------------------------------------------------
-export function countExclusionEntries(source: string): number {
+export function extractExclusionEntries(source: string): string[] {
   // Match from the array declaration through to its closing `];`, not a
   // fixed character window — per-entry explanatory comments (e.g. for
   // create_reminder/snooze_reminder) can push the array well past a fixed
@@ -196,24 +198,51 @@ export function countExclusionEntries(source: string): number {
   const match = source.match(
     /RESTRICTED_EXCLUDED_ACTION_TYPES_SOURCE[\s\S]*?\n\];/,
   );
-  if (!match) return 0;
-  return (match[0].match(/^\s*"[a-z][a-z_]+"/gm) || []).length;
+  if (!match) return [];
+  return (match[0].match(/^\s*"[a-z][a-z_]+"/gm) || []).map((line) =>
+    line.trim().replace(/^"/, "").replace(/"$/, ""),
+  );
 }
 
+export function countExclusionEntries(source: string): number {
+  return extractExclusionEntries(source).length;
+}
+
+/**
+ * A removed entry is only a real security loosening if the action type it
+ * names is still a live, callable tool. If the tool itself was deleted in
+ * the same change (a deprecated-capability removal), the exclusion entry is
+ * dead weight referencing nothing — removing it doesn't loosen any actual
+ * restriction. `isActionStillLive` lets the real guard run cross-check the
+ * removed name against the current codebase; it defaults to "assume still
+ * live" so callers that don't wire it up keep the strict, conservative
+ * behavior (and so existing unit tests are unaffected).
+ */
 export function checkExclusionSetShrink(
   currentSource: string | null,
   baseSource: string | null,
+  isActionStillLive: (actionType: string) => boolean = () => true,
 ): string[] {
-  const current = currentSource ? countExclusionEntries(currentSource) : 0;
-  const baseline = baseSource ? countExclusionEntries(baseSource) : 0;
-  return current < baseline
-    ? [`base: ${baseline} entries, this commit: ${current} entries`]
+  const currentEntries = currentSource
+    ? extractExclusionEntries(currentSource)
     : [];
+  const baseEntries = baseSource ? extractExclusionEntries(baseSource) : [];
+  const currentSet = new Set(currentEntries);
+  const removed = baseEntries.filter((entry) => !currentSet.has(entry));
+  const stillLive = removed.filter((entry) => isActionStillLive(entry));
+  if (stillLive.length === 0) return [];
+  return [
+    `base: ${baseEntries.length} entries, this commit: ${currentEntries.length} entries`,
+    `Removed but still a live tool elsewhere in the codebase: ${stillLive.join(", ")}`,
+  ];
 }
 
 export const EXCLUSION_SHRINK_HELP = [
   "This set is a deliberate security boundary for AgentPhone SMS/voice",
-  "and inbound email channels. It cannot be reduced without a reviewed",
+  "and inbound email channels. An entry can only be removed here if the",
+  "action type it names was deleted entirely (no longer a callable tool",
+  "anywhere in the codebase) in the same change. Removing it while the",
+  "tool still exists is a security loosening and requires a reviewed",
   "security decision documented in the PR body.",
 ].join("\n");
 
@@ -476,6 +505,27 @@ export function runGuardrailChecks(base: string): CheckResult[] {
   const currentExclusionSource =
     readFile(RESTRICTED_EXCLUSION_SOURCE_PATH) ?? readFile(ELAINE_INDEX_PATH);
 
+  // A removed exclusion entry is only a real loosening if the action type it
+  // names is still a live, callable tool somewhere else in the current
+  // codebase (capability registry, executor, planner catalog, etc). If the
+  // tool itself was deleted in the same change, the entry is dead weight and
+  // its removal isn't a security regression. Scan every current .ts/.tsx
+  // file except the exclusion-list file itself for the literal quoted name.
+  const isActionStillLive = (actionType: string): boolean => {
+    const needle = `"${actionType}"`;
+    return walkFiles(root, [".ts", ".tsx"]).some((file) => {
+      const rel = path.relative(root, file);
+      if (
+        rel === RESTRICTED_EXCLUSION_SOURCE_PATH ||
+        rel === ELAINE_INDEX_PATH
+      ) {
+        return false;
+      }
+      const content = readFileOrNull(root, rel);
+      return content !== null && content.includes(needle);
+    });
+  };
+
   // Enumerate every .ts file currently in the scaffolded-tools directory so
   // the TODO(scaffold) check covers ALL tools, not just the ones touched in
   // this diff. A tool merged with stubs in a previous PR would otherwise slip
@@ -521,6 +571,7 @@ export function runGuardrailChecks(base: string): CheckResult[] {
       violations: checkExclusionSetShrink(
         currentExclusionSource,
         baseExclusionSource,
+        isActionStillLive,
       ),
       helpText: EXCLUSION_SHRINK_HELP,
     },

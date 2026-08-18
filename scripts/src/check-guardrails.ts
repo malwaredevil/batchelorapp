@@ -15,8 +15,15 @@
  * real git repository. `runGuardrailChecks()` is the only part that shells
  * out to git, wiring live repo state into those pure functions.
  */
-import { execFileSync } from "node:child_process";
-import fs from "node:fs";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import {
+  getChangedFiles,
+  git,
+  readFileOrNull,
+  repoRoot,
+  resolveBase,
+} from "./lib/git-diff-utils.js";
 
 export interface CheckResult {
   name: string;
@@ -264,6 +271,138 @@ export const ELAINE_CHAT_LESSONS_MOCK_HELP = [
 ].join("\n");
 
 // ---------------------------------------------------------------------------
+// Check 8: Scaffolded Elaine tool stubs must not ship with TODO(scaffold)
+// markers. The generator intentionally leaves these as placeholders for the
+// human-authored executor body, model-facing description, and confirmation
+// label. Placeholder test files (*.test.ts) are exempt — they assert 501
+// until real business-logic tests are written.
+// ---------------------------------------------------------------------------
+export const SCAFFOLDED_TOOLS_DIR =
+  "artifacts/api-server/src/elaine/scaffolded-tools";
+const SCAFFOLD_TODO_MARKER = "TODO(scaffold)";
+
+export function checkScaffoldedTodosFromFiles(
+  files: string[],
+  readFile: (file: string) => string | null,
+): string[] {
+  const violations: string[] = [];
+  for (const file of files) {
+    if (!file.startsWith(SCAFFOLDED_TOOLS_DIR + "/")) continue;
+    if (file.endsWith(".test.ts")) continue; // placeholder tests are exempt
+    if (!file.endsWith(".ts")) continue;
+    const content = readFile(file);
+    if (content === null) continue; // deleted — nothing to enforce
+    content.split("\n").forEach((line, index) => {
+      if (line.includes(SCAFFOLD_TODO_MARKER)) {
+        violations.push(`${file}:${index + 1}:${line.trim()}`);
+      }
+    });
+  }
+  return violations;
+}
+
+export const SCAFFOLDED_TODOS_HELP = [
+  "One or more scaffolded Elaine tool stubs still contain TODO(scaffold)",
+  "markers. These must be replaced with human-authored content before the",
+  "tool ships. Remaining work (search TODO(scaffold) in each file above):",
+  "",
+  "  1. Implement the executor body in the scaffolded stub .ts file",
+  "     (replace the 501 stub return with real business logic).",
+  "  2. Write the model-facing tool description — when to call it, example",
+  "     user phrasings, and any id-visibility requirements.",
+  "  3. Write the confirmation label in the domain actions file",
+  "     (e.g. pottery-actions.ts / quilting-actions.ts / ornaments-actions.ts).",
+  "  4. Add a system-prompt paragraph in index.ts if the tool needs",
+  "     behavioural guidance not covered by the description alone.",
+  "",
+  "Placeholder test files (*.test.ts) are exempt — they may keep their",
+  "TODO(scaffold) comment until real business-logic tests are written.",
+].join("\n");
+
+// ---------------------------------------------------------------------------
+// Check 9: Domain action files must not contain scaffolded TODO confirm labels.
+// The scaffold generator inserts `return "TODO: confirm <name>";` as a
+// placeholder in the confirmation-label switch inside the domain action files.
+// Shipping without replacing it shows the literal TODO string on the
+// confirm/cancel card shown to users before an action runs.
+// ---------------------------------------------------------------------------
+export const DOMAIN_ACTION_FILES = [
+  "artifacts/api-server/src/elaine/pottery-actions.ts",
+  "artifacts/api-server/src/elaine/quilting-actions.ts",
+  "artifacts/api-server/src/elaine/ornaments-actions.ts",
+];
+const CONFIRM_TODO_MARKER = 'return "TODO: confirm ';
+
+export function checkDomainActionConfirmLabels(
+  files: string[],
+  readFile: (file: string) => string | null,
+): string[] {
+  const violations: string[] = [];
+  for (const file of files) {
+    if (!DOMAIN_ACTION_FILES.includes(file)) continue;
+    const content = readFile(file);
+    if (content === null) continue;
+    content.split("\n").forEach((line, index) => {
+      if (line.includes(CONFIRM_TODO_MARKER)) {
+        violations.push(`${file}:${index + 1}:${line.trim()}`);
+      }
+    });
+  }
+  return violations;
+}
+
+export const DOMAIN_ACTION_CONFIRM_LABELS_HELP = [
+  "One or more domain action files still contain a scaffolded TODO confirm label.",
+  'The scaffold generator inserts return "TODO: confirm <name>"; as a placeholder.',
+  'Shipping it shows "TODO: confirm add_pottery_note" on the user-facing confirm card.',
+  "",
+  "Replace each TODO return with a human-readable label, e.g.:",
+  '  return `Add note to "${itemName}"`;',
+  "",
+  "Files to fix (search for 'TODO: confirm' in each file listed above).",
+].join("\n");
+
+// ---------------------------------------------------------------------------
+// Check 10: Scaffold-injected TODO(scaffold) comments in capability-registry.ts
+// and restricted-channel-config.ts must be replaced before the tool ships.
+// These two files receive soft review comments from the generator — unlike the
+// hard scaffolded-tools stubs, the comments are in the files that ship and are
+// visible in logs and code review.
+// ---------------------------------------------------------------------------
+export const CAPABILITY_CONFIG_FILES = [
+  "artifacts/api-server/src/elaine/capability-registry.ts",
+  "artifacts/api-server/src/elaine/restricted-channel-config.ts",
+];
+
+export function checkCapabilityConfigTodos(
+  files: string[],
+  readFile: (file: string) => string | null,
+): string[] {
+  const violations: string[] = [];
+  for (const file of files) {
+    if (!CAPABILITY_CONFIG_FILES.includes(file)) continue;
+    const content = readFile(file);
+    if (content === null) continue;
+    content.split("\n").forEach((line, index) => {
+      if (line.includes(SCAFFOLD_TODO_MARKER)) {
+        violations.push(`${file}:${index + 1}:${line.trim()}`);
+      }
+    });
+  }
+  return violations;
+}
+
+export const CAPABILITY_CONFIG_TODOS_HELP = [
+  "One or more capability/channel config files still contain TODO(scaffold) markers",
+  "injected by the scaffold generator. These must be replaced before the tool ships.",
+  "",
+  "  capability-registry.ts: fill in the real channel policy for the new tool.",
+  "  restricted-channel-config.ts: decide whether the tool belongs in",
+  "    RESTRICTED_ALLOWED_ACTION_TYPES_SOURCE or RESTRICTED_EXCLUDED_ACTION_TYPES_SOURCE",
+  "    and remove the TODO(scaffold) comment.",
+].join("\n");
+
+// ---------------------------------------------------------------------------
 // Git-backed wiring (not unit tested directly — exercised end-to-end in CI
 // and via manual `--base` runs).
 // ---------------------------------------------------------------------------
@@ -287,92 +426,10 @@ const RESTRICTED_EXCLUSION_SOURCE_PATH =
 // wherever the array actually lives today, or it silently reads 0 entries
 // from index.ts (which now only imports the name) and false-positives on
 // every PR. Update RESTRICTED_EXCLUSION_SOURCE_PATH if it moves again.
-function repoRoot(): string {
-  return execFileSync("git", ["rev-parse", "--show-toplevel"], {
-    encoding: "utf8",
-  }).trim();
-}
-
-function git(root: string, args: string[]): string {
-  try {
-    return execFileSync("git", ["-C", root, ...args], {
-      encoding: "utf8",
-      maxBuffer: 1024 * 1024 * 128,
-    });
-  } catch (error) {
-    const err = error as { stdout?: string };
-    if (typeof err.stdout === "string") return err.stdout;
-    throw error;
-  }
-}
-
-function refResolves(root: string, ref: string): boolean {
-  try {
-    execFileSync(
-      "git",
-      ["-C", root, "rev-parse", "--verify", "--quiet", `${ref}^{commit}`],
-      { encoding: "utf8" },
-    );
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// This repo's CI checkout (actions/checkout) always creates a remote named
-// "origin", but the live Replit workspace's git-to-GitHub connection is a
-// remote named "github" instead — "origin" does not exist there. Without
-// this fallback, every local run would silently diff against nothing (see
-// below) even though a real, resolvable upstream ref is available.
-const LOCAL_BASE_FALLBACK: Record<string, string> = {
-  "origin/main": "github/main",
-};
-
-/**
- * `git diff base...HEAD` silently succeeds with empty output if `base` can't
- * be resolved at all (unknown ref) — which would make every check below
- * report a false-clean "no violations" instead of failing loudly. Resolve to
- * a real ref (falling back to this environment's actual upstream remote when
- * the CI-only default isn't present), or fail loudly if nothing resolves.
- */
-function resolveBase(root: string, base: string): string {
-  if (refResolves(root, base)) return base;
-  const fallback = LOCAL_BASE_FALLBACK[base];
-  if (fallback && refResolves(root, fallback)) {
-    console.error(
-      `(note: "${base}" not found in this checkout — diffing against "${fallback}" instead)`,
-    );
-    return fallback;
-  }
-  throw new Error(
-    `Cannot resolve base ref "${base}"${fallback ? ` (or fallback "${fallback}")` : ""} — ` +
-      `no such branch/remote in this checkout, so the diff would silently be empty and ` +
-      `every guardrail check below would falsely report "no violations" instead of ` +
-      `actually checking anything. In CI this ref is "origin/main" (created by ` +
-      `actions/checkout). Locally, pass a --base that actually exists in this ` +
-      `checkout, or fetch the missing ref.`,
-  );
-}
-
-function readFileOrNull(root: string, file: string): string | null {
-  try {
-    return fs.readFileSync(`${root}/${file}`, "utf8");
-  } catch {
-    return null;
-  }
-}
-
 export function runGuardrailChecks(base: string): CheckResult[] {
   const root = repoRoot();
   const resolvedBase = resolveBase(root, base);
-  const changedFiles = git(root, [
-    "diff",
-    "--name-only",
-    `${resolvedBase}...HEAD`,
-  ])
-    .split("\n")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const changedFiles = getChangedFiles(root, resolvedBase);
 
   const fullDiff = git(root, [
     "diff",
@@ -419,6 +476,20 @@ export function runGuardrailChecks(base: string): CheckResult[] {
   const currentExclusionSource =
     readFile(RESTRICTED_EXCLUSION_SOURCE_PATH) ?? readFile(ELAINE_INDEX_PATH);
 
+  // Enumerate every .ts file currently in the scaffolded-tools directory so
+  // the TODO(scaffold) check covers ALL tools, not just the ones touched in
+  // this diff. A tool merged with stubs in a previous PR would otherwise slip
+  // past a diff-only check.
+  let scaffoldedFiles: string[] = [];
+  try {
+    const scaffoldedDir = path.join(root, SCAFFOLDED_TOOLS_DIR);
+    scaffoldedFiles = fs
+      .readdirSync(scaffoldedDir)
+      .map((f) => `${SCAFFOLDED_TOOLS_DIR}/${f}`);
+  } catch {
+    // Directory doesn't exist yet — no scaffolded tools to check.
+  }
+
   return [
     {
       name: "Ban: drizzle-kit push",
@@ -457,6 +528,25 @@ export function runGuardrailChecks(base: string): CheckResult[] {
       name: "Guard: Elaine chat integration tests must mock elaine-lessons",
       violations: checkElaineChatTestMissingLessonsMock(changedFiles, readFile),
       helpText: ELAINE_CHAT_LESSONS_MOCK_HELP,
+    },
+    {
+      name: "Guard: scaffolded Elaine tools must not ship with TODO(scaffold) stubs",
+      violations: checkScaffoldedTodosFromFiles(scaffoldedFiles, readFile),
+      helpText: SCAFFOLDED_TODOS_HELP,
+    },
+    // Check 9: domain action files always scanned (not just when in the diff)
+    // so a tool merged with a TODO label in a previous PR is still caught.
+    {
+      name: "Guard: domain action files must not contain TODO confirm labels",
+      violations: checkDomainActionConfirmLabels(DOMAIN_ACTION_FILES, readFile),
+      helpText: DOMAIN_ACTION_CONFIRM_LABELS_HELP,
+    },
+    // Check 10: capability-registry.ts and restricted-channel-config.ts always
+    // scanned for scaffold-injected TODO(scaffold) review comments.
+    {
+      name: "Guard: capability/channel config files must not contain TODO(scaffold) markers",
+      violations: checkCapabilityConfigTodos(CAPABILITY_CONFIG_FILES, readFile),
+      helpText: CAPABILITY_CONFIG_TODOS_HELP,
     },
   ];
 }

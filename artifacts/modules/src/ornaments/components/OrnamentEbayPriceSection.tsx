@@ -76,6 +76,7 @@ export function OrnamentEbayPriceSection({
       {hasEbayForSale && (
         <CollectionDetailField
           label="eBay — For Sale Now"
+          tooltip="The price range of active eBay listings found for this ornament — what sellers are currently asking, not a confirmed sale price."
           value={
             <span className="flex items-center gap-2 flex-wrap">
               <span>
@@ -96,6 +97,7 @@ export function OrnamentEbayPriceSection({
       {hasEbayLastSold && (
         <CollectionDetailField
           label="eBay — Last Sold"
+          tooltip="The price of the most recent completed eBay sale found for this ornament."
           value={
             <span className="flex items-center gap-2 flex-wrap">
               <span>

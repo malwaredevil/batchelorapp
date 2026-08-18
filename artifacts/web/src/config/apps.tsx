@@ -170,6 +170,7 @@ export const APPS: AppEntry[] = [
       "Chat with your household's AI assistant — full context on pottery, quilting, and travels, with viewable, editable settings.",
     cta: "Chat with Elaine",
   },
+  // scaffold:anchor:hub-cards — scaffold-collection-module inserts hub card stubs below; do not remove
 ];
 
 /* ── Widget catalogue ──────────────────────────────────────────────────────── *

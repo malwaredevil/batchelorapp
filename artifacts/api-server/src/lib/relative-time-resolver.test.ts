@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   resolveRelativeTime,
+  resolveNaiveIsoInTimeZone,
+  hasUtcOffset,
   RelativeTimeResolutionError,
+  RelativeTimeSpecZod,
 } from "./relative-time-resolver";
 
 // Fixed "now" for deterministic tests: Wednesday, 2026-08-12 15:30 local
@@ -120,10 +123,7 @@ describe("resolveRelativeTime", () => {
     expect(localParts(result)).toBe("2026-08-19 00:01");
   });
 
-  it("rejects a non-positive count instead of guessing", () => {
-    expect(() =>
-      resolveRelativeTime({ kind: "days-from-now", count: 0 }, TZ, NOW),
-    ).toThrow(RelativeTimeResolutionError);
+  it("rejects a negative count instead of guessing (0 = today is allowed for days-from-now)", () => {
     expect(() =>
       resolveRelativeTime({ kind: "days-from-now", count: -2 }, TZ, NOW),
     ).toThrow(RelativeTimeResolutionError);
@@ -181,5 +181,82 @@ describe("resolveRelativeTime", () => {
     );
     expect(result instanceof Date).toBe(true);
     expect(Number.isNaN(result.getTime())).toBe(false);
+  });
+});
+
+describe("hasUtcOffset / resolveNaiveIsoInTimeZone", () => {
+  it("detects presence and absence of a UTC offset", () => {
+    expect(hasUtcOffset("2026-08-17T16:15:00+02:00")).toBe(true);
+    expect(hasUtcOffset("2026-08-17T16:15:00Z")).toBe(true);
+    expect(hasUtcOffset("2026-08-17T16:15:00-0500")).toBe(true);
+    expect(hasUtcOffset("2026-08-17T16:15:00")).toBe(false);
+    expect(hasUtcOffset("2026-08-17T16:15")).toBe(false);
+  });
+
+  it("interprets a naive datetime as wall-clock time in the given zone", () => {
+    // Berlin is UTC+2 in August (CEST).
+    const result = resolveNaiveIsoInTimeZone(
+      "2026-08-17T16:15:00",
+      "Europe/Berlin",
+    );
+    expect(result.toISOString()).toBe("2026-08-17T14:15:00.000Z");
+  });
+
+  it("handles winter (standard-time) dates across DST", () => {
+    // Berlin is UTC+1 in December (CET).
+    const result = resolveNaiveIsoInTimeZone(
+      "2026-12-01T09:00",
+      "Europe/Berlin",
+    );
+    expect(result.toISOString()).toBe("2026-12-01T08:00:00.000Z");
+  });
+
+  it("rejects garbage input", () => {
+    expect(() =>
+      resolveNaiveIsoInTimeZone("tomorrow at 4", "Europe/Berlin"),
+    ).toThrow(RelativeTimeResolutionError);
+  });
+});
+
+describe("days-from-now count 0 (today)", () => {
+  it('resolves "today at 16:45" to the same local calendar day', () => {
+    const result = resolveRelativeTime(
+      { kind: "days-from-now", count: 0, clockTime: { hour: 16, minute: 45 } },
+      TZ,
+      NOW,
+    );
+    expect(localParts(result)).toBe("2026-08-12 16:45");
+  });
+
+  it("rejects count 0 without an explicit clockTime (would resolve to the past)", () => {
+    expect(() =>
+      resolveRelativeTime({ kind: "days-from-now", count: 0 }, TZ, NOW),
+    ).toThrow(RelativeTimeResolutionError);
+    expect(
+      RelativeTimeSpecZod.safeParse({ kind: "days-from-now", count: 0 })
+        .success,
+    ).toBe(false);
+    expect(
+      RelativeTimeSpecZod.safeParse({
+        kind: "days-from-now",
+        count: 0,
+        clockTime: { hour: 16, minute: 45 },
+      }).success,
+    ).toBe(true);
+  });
+
+  it("still rejects count 0 for the other kinds", () => {
+    expect(() =>
+      resolveRelativeTime({ kind: "weeks-from-now", count: 0 }, TZ, NOW),
+    ).toThrow(RelativeTimeResolutionError);
+    expect(() =>
+      resolveRelativeTime({ kind: "months-from-now", count: 0 }, TZ, NOW),
+    ).toThrow(RelativeTimeResolutionError);
+  });
+
+  it("rejects negative days-from-now", () => {
+    expect(() =>
+      resolveRelativeTime({ kind: "days-from-now", count: -1 }, TZ, NOW),
+    ).toThrow(RelativeTimeResolutionError);
   });
 });

@@ -21,6 +21,7 @@
     "@workspace/ai-actions": "workspace:*",
     "@workspace/api-zod": "workspace:*",
     "@workspace/db": "workspace:*",
+    "@workspace/ornaments-shared": "workspace:*",
     "@workspace/upload-policy": "workspace:*",
     "@workspace/upload-validation": "workspace:*",
     "bcryptjs": "^3.0.3",

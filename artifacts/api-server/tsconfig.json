@@ -15,9 +15,11 @@
   // an intentionally-invalid fixture instead of a real error.
   "exclude": [
     "src/_ci_sentinel_scheduler_names_.ts",
-    // Throwaway fixture check-domain-composition.test.ts briefly writes
-    // into src/routes/ during its integration tests — same race as above.
-    "src/routes/_temp_composition_guard_test_b_fixture.ts"
+    // Throwaway fixtures check-domain-composition.test.ts briefly writes
+    // anywhere under src/ during its integration tests (all use a _temp
+    // prefix) — same race as above: a concurrent typecheck can catch one
+    // mid-existence and fail with TS6053 or on intentionally-invalid code.
+    "src/**/_temp*"
   ],
   "references": [
     {

@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@workspace/ui";
 import { ElaineAvatar, ElaineWordmark, ElaineName } from "./ElaineAvatar";
+import { ELAINE_WIDGET_UNHIDE_EVENT } from "./ElaineWidget";
 
 /**
  * Shared "Elaine" settings card — enable/disable, action-confirmation mode,
@@ -171,6 +172,56 @@ export function ElaineSettingsCard({
           </SelectContent>
         </Select>
       </div>
+
+      {assistantSettings?.widgetHidden && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-card-border p-4">
+          <div>
+            <p className="text-sm font-medium text-foreground">
+              Floating bubble hidden
+            </p>
+            <p className="text-xs text-muted-foreground">
+              You hid <ElaineName />
+              's floating bubble. Turn it back on to see it on every page again.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={settingsLoading || updateAssistantSettings.isPending}
+            onClick={() =>
+              updateAssistantSettings.mutate(
+                { widgetHidden: false },
+                {
+                  onSuccess: (result) => {
+                    qc.setQueryData(getGetElaineSettingsQueryKey(), result);
+                    try {
+                      sessionStorage.removeItem("elaineWidgetSessionHidden");
+                    } catch {
+                      // sessionStorage unavailable — persistent flag is off.
+                    }
+                    // Let an already-mounted widget reappear without a reload.
+                    window.dispatchEvent(new Event(ELAINE_WIDGET_UNHIDE_EVENT));
+                    toast.success(
+                      <>
+                        <ElaineName />
+                        's bubble is back
+                      </>,
+                    );
+                  },
+                  onError: () =>
+                    toast.error(
+                      <>
+                        Failed to update <ElaineName /> settings
+                      </>,
+                    ),
+                },
+              )
+            }
+          >
+            Show bubble
+          </Button>
+        </div>
+      )}
 
       <div className="space-y-2 rounded-lg border border-card-border p-4">
         <p className="text-sm font-medium text-foreground">Chat window size</p>

@@ -106,6 +106,8 @@ import {
   mergeExistingCategoryIds,
   parsePositiveIntegerArray,
 } from "../../lib/collection-parsing";
+import { computeOrnamentValuationTotals } from "../../lib/ornaments/valuation-aggregate";
+import { getElaineGlobalConfig } from "../../lib/elaine-config";
 
 // Excludes the embedding + visualEmbedding vectors from list/detail queries —
 // they're large and only needed internally, never surfaced via the API.
@@ -122,7 +124,6 @@ const MAX_LABEL = 100;
 
 const MAX_SUPPLEMENTAL_IMAGES = 20;
 const MAX_AI_SUPPLEMENTAL = 5;
-export const MAX_BULK_REANALYZE = 20;
 
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
@@ -184,26 +185,28 @@ async function ornamentListMeta(
   total: number,
   pageSize: number,
 ) {
-  const [colorsResult, statsResult, categoryResult] = await Promise.all([
-    db.execute<{ color: string }>(sql`
+  const [colorsResult, statsResult, categoryResult, valuationTotals] =
+    await Promise.all([
+      db.execute<{ color: string }>(sql`
       select distinct unnest(dominant_colors) as color
       from ornaments_items
       where ${where}
       order by color
     `),
-    db.execute<{
-      brand_count: number;
-      min_year: number | null;
-      max_year: number | null;
-    }>(sql`
+      db.execute<{
+        brand_count: number;
+        min_year: number | null;
+        max_year: number | null;
+      }>(sql`
       select count(distinct brand)::int as brand_count,
              min(year)::int as min_year,
              max(year)::int as max_year
       from ornaments_items
       where ${where}
     `),
-    db.select({ value: count() }).from(categories),
-  ]);
+      db.select({ value: count() }).from(categories),
+      computeOrnamentValuationTotals(where),
+    ]);
   const stats = statsResult.rows[0];
   return {
     totalPages: total === 0 ? 1 : Math.ceil(total / pageSize),
@@ -215,6 +218,7 @@ async function ornamentListMeta(
       brandCount: Number(stats?.brand_count ?? 0),
       minYear: stats?.min_year ?? null,
       maxYear: stats?.max_year ?? null,
+      ...valuationTotals,
     },
   };
 }
@@ -1981,7 +1985,11 @@ router.post("/items/:id/refresh-all", aiLimiter, async (req, res) => {
 export async function bulkReanalyzeOrnamentItems(
   ids: number[],
 ): Promise<{ succeeded: number[]; failed: number[] }> {
-  const capped = [...new Set(ids)].slice(0, MAX_BULK_REANALYZE);
+  const elaineConfig = await getElaineGlobalConfig();
+  const capped = [...new Set(ids)].slice(
+    0,
+    elaineConfig.thresholds.ornamentsBulkReanalyzeLimit,
+  );
   const succeeded: number[] = [];
   const failed: number[] = [];
 

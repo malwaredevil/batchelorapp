@@ -1,8 +1,7 @@
 /**
  * ebay-force-refresh-executor.test.ts
  *
- * Focused executor tests for estimate_pottery_market_value and
- * ornament_ebay_price_lookup, verifying that:
+ * Focused executor tests for ornament_ebay_price_lookup, verifying that:
  *   1. force: true bypasses a fresh cache and calls the external lookup
  *   2. force omitted / false returns cached data without calling the lookup
  *   3. A stale cache always triggers a fresh lookup regardless of force
@@ -146,7 +145,6 @@ vi.mock("../lib/ornaments/storage", () => ({ deleteImage: vi.fn() }));
 // ── Subject imports (after mocks) ─────────────────────────────────────────────
 
 import { consumeAiRateLimit } from "../middleware/rateLimit";
-import { potteryActionExecutors } from "./pottery-actions";
 import { ornamentActionExecutors } from "./ornaments-actions";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -155,42 +153,6 @@ const FRESH_CACHE_DATE = new Date(Date.now() - 1 * 60 * 60 * 1000); // 1 hour ag
 const STALE_CACHE_DATE = new Date(
   Date.now() - 8 * 24 * 60 * 60 * 1000, // 8 days — beyond 7-day TTL
 );
-
-const POTTERY_ITEM_CACHED = {
-  id: 42,
-  name: "Blue Willow Bowl",
-  maker: "Wedgwood",
-  style: "Transferware",
-  ebayPriceCachedAt: FRESH_CACHE_DATE,
-  ebayPriceMinUsd: "12.50",
-  ebayPriceMaxUsd: "28.00",
-  ebayPriceMedianUsd: "18.00",
-  ebayPriceListings: { sourceType: "active_listing", items: [{}] },
-};
-
-const POTTERY_ITEM_STALE = {
-  ...POTTERY_ITEM_CACHED,
-  ebayPriceCachedAt: STALE_CACHE_DATE,
-};
-
-const POTTERY_ITEM_NO_CACHE = {
-  id: 42,
-  name: "Blue Willow Bowl",
-  maker: "Wedgwood",
-  style: "Transferware",
-  ebayPriceCachedAt: null,
-  ebayPriceMinUsd: null,
-  ebayPriceMaxUsd: null,
-  ebayPriceMedianUsd: null,
-  ebayPriceListings: null,
-};
-
-const UPDATED_POTTERY_ROW = {
-  ebayPriceMinUsd: "10",
-  ebayPriceMaxUsd: "30",
-  ebayPriceMedianUsd: "20",
-  ebayPriceCachedAt: new Date(),
-};
 
 const ORNAMENT_ITEM_CACHED = {
   id: 99,
@@ -211,137 +173,6 @@ const ORNAMENT_ITEM_STALE = {
   ...ORNAMENT_ITEM_CACHED,
   ebayPriceCachedAt: STALE_CACHE_DATE,
 };
-
-// ── estimate_pottery_market_value ─────────────────────────────────────────────
-
-describe("estimate_pottery_market_value executor", () => {
-  beforeEach(() => {
-    selectQueue.length = 0;
-    updateReturnQueue.length = 0;
-    vi.clearAllMocks();
-    envMock.ebayAppId = "test-app-id";
-  });
-
-  it("returns 503 when eBay is not configured", async () => {
-    envMock.ebayAppId = "";
-    const result = await potteryActionExecutors.estimate_pottery_market_value(
-      { itemId: 42 } as never,
-      1,
-    );
-    expect(result.status).toBe(503);
-  });
-
-  it("returns 404 when item not found", async () => {
-    selectQueue.push([]);
-    const result = await potteryActionExecutors.estimate_pottery_market_value(
-      { itemId: 42 } as never,
-      1,
-    );
-    expect(result.status).toBe(404);
-    expect(ebayMocks.lookupEbayMarketValue).not.toHaveBeenCalled();
-  });
-
-  it("returns cached data (fromCache: true) when cache is fresh and force is omitted", async () => {
-    selectQueue.push([POTTERY_ITEM_CACHED]);
-    const result = await potteryActionExecutors.estimate_pottery_market_value(
-      { itemId: 42 } as never,
-      1,
-    );
-    expect(result.status).toBe(200);
-    const body = result.body as { result: { fromCache: boolean } };
-    expect(body.result.fromCache).toBe(true);
-    expect(ebayMocks.lookupEbayMarketValue).not.toHaveBeenCalled();
-  });
-
-  it("returns cached data (fromCache: true) when cache is fresh and force is false", async () => {
-    selectQueue.push([POTTERY_ITEM_CACHED]);
-    const result = await potteryActionExecutors.estimate_pottery_market_value(
-      { itemId: 42, force: false } as never,
-      1,
-    );
-    expect(result.status).toBe(200);
-    const body = result.body as { result: { fromCache: boolean } };
-    expect(body.result.fromCache).toBe(true);
-    expect(ebayMocks.lookupEbayMarketValue).not.toHaveBeenCalled();
-  });
-
-  it("bypasses fresh cache and calls lookup when force is true", async () => {
-    selectQueue.push([POTTERY_ITEM_CACHED]);
-    updateReturnQueue.push([UPDATED_POTTERY_ROW]);
-    const result = await potteryActionExecutors.estimate_pottery_market_value(
-      { itemId: 42, force: true } as never,
-      1,
-    );
-    expect(result.status).toBe(200);
-    const body = result.body as { result: { fromCache: boolean } };
-    expect(body.result.fromCache).toBe(false);
-    expect(ebayMocks.lookupEbayMarketValue).toHaveBeenCalledOnce();
-  });
-
-  it("calls lookup when cache is stale regardless of force flag", async () => {
-    selectQueue.push([POTTERY_ITEM_STALE]);
-    updateReturnQueue.push([UPDATED_POTTERY_ROW]);
-    const result = await potteryActionExecutors.estimate_pottery_market_value(
-      { itemId: 42 } as never,
-      1,
-    );
-    expect(result.status).toBe(200);
-    expect(ebayMocks.lookupEbayMarketValue).toHaveBeenCalledOnce();
-  });
-
-  it("calls lookup when there is no cached data yet", async () => {
-    selectQueue.push([POTTERY_ITEM_NO_CACHE]);
-    updateReturnQueue.push([UPDATED_POTTERY_ROW]);
-    const result = await potteryActionExecutors.estimate_pottery_market_value(
-      { itemId: 42 } as never,
-      1,
-    );
-    expect(result.status).toBe(200);
-    expect(ebayMocks.lookupEbayMarketValue).toHaveBeenCalledOnce();
-  });
-
-  it("returns 422 when the external lookup finds no listings", async () => {
-    selectQueue.push([POTTERY_ITEM_NO_CACHE]);
-    ebayMocks.lookupEbayMarketValue.mockResolvedValueOnce(null as never);
-    const result = await potteryActionExecutors.estimate_pottery_market_value(
-      { itemId: 42 } as never,
-      1,
-    );
-    expect(result.status).toBe(422);
-  });
-
-  it("returns 429 when rate-limited before a live lookup", async () => {
-    selectQueue.push([POTTERY_ITEM_NO_CACHE]);
-    vi.mocked(consumeAiRateLimit).mockResolvedValueOnce({ limited: true });
-    const result = await potteryActionExecutors.estimate_pottery_market_value(
-      { itemId: 42 } as never,
-      1,
-    );
-    expect(result.status).toBe(429);
-    expect(ebayMocks.lookupEbayMarketValue).not.toHaveBeenCalled();
-  });
-
-  it("does not call rate limiter when returning fresh cached data", async () => {
-    selectQueue.push([POTTERY_ITEM_CACHED]);
-    await potteryActionExecutors.estimate_pottery_market_value(
-      { itemId: 42 } as never,
-      1,
-    );
-    expect(vi.mocked(consumeAiRateLimit)).not.toHaveBeenCalled();
-  });
-
-  it("returns 503 when the external lookup throws", async () => {
-    selectQueue.push([POTTERY_ITEM_NO_CACHE]);
-    ebayMocks.lookupEbayMarketValue.mockRejectedValueOnce(
-      new Error("Apify timeout"),
-    );
-    const result = await potteryActionExecutors.estimate_pottery_market_value(
-      { itemId: 42 } as never,
-      1,
-    );
-    expect(result.status).toBe(503);
-  });
-});
 
 // ── ornament_ebay_price_lookup ────────────────────────────────────────────────
 

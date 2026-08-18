@@ -20,11 +20,17 @@ export interface CategoryRow {
 // Abstract DB operations — each domain provides its own implementation
 // ---------------------------------------------------------------------------
 
+/**
+ * All read/mutate ops receive the authenticated user's id as an optional
+ * trailing argument. Household-shared domains (pottery, ornaments) ignore
+ * it; owner-scoped domains (scaffolded collection modules) use it to
+ * constrain every query/mutation to the caller's own rows.
+ */
 export interface CategoryOps {
   /** Full list with per-category item counts, ordered by name. */
-  listWithCounts(): Promise<CategoryRow[]>;
+  listWithCounts(userId?: number): Promise<CategoryRow[]>;
   /** Single row with count, or null when not found. */
-  fetchWithCount(id: number): Promise<CategoryRow | null>;
+  fetchWithCount(id: number, userId?: number): Promise<CategoryRow | null>;
   /** Insert and return the new row's id. */
   create(
     userId: number,
@@ -33,32 +39,40 @@ export interface CategoryOps {
     textColor: string | null,
   ): Promise<number>;
   /** Update name; return whether the row existed. */
-  rename(id: number, name: string): Promise<boolean>;
+  rename(id: number, name: string, userId?: number): Promise<boolean>;
   /** Update colors; return whether the row existed. */
   updateColors(
     id: number,
     bgColor: string | null,
     textColor: string | null,
+    userId?: number,
   ): Promise<boolean>;
   /** Delete by id; return whether the row existed. */
-  deleteById(id: number): Promise<boolean>;
+  deleteById(id: number, userId?: number): Promise<boolean>;
   /** Delete categories with no assigned items; return count deleted. */
-  deleteUnused(): Promise<number>;
+  deleteUnused(userId?: number): Promise<number>;
   /** Return true if the category row exists (for merge validation). */
-  categoryExists(id: number): Promise<boolean>;
+  categoryExists(id: number, userId?: number): Promise<boolean>;
   /**
    * For merge: collect all join-table rows currently assigned to
    * `categoryId`. The shape is opaque to the factory — it is passed
    * straight back to `reattachAssignments`.
    */
-  getAssignmentsForCategory(categoryId: number): Promise<unknown[]>;
+  getAssignmentsForCategory(
+    categoryId: number,
+    userId?: number,
+  ): Promise<unknown[]>;
   /**
    * For merge: insert the collected assignments with `targetId` as the
    * new category, ignoring conflicts.
    */
-  reattachAssignments(assignments: unknown[], targetId: number): Promise<void>;
+  reattachAssignments(
+    assignments: unknown[],
+    targetId: number,
+    userId?: number,
+  ): Promise<void>;
   /** Hard-delete the category row (used at the end of merge). */
-  deleteCategoryRow(id: number): Promise<void>;
+  deleteCategoryRow(id: number, userId?: number): Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -153,25 +167,26 @@ export async function mergeCategoriesOp(
   ops: CategoryOps,
   id: number,
   targetId: number,
+  userId?: number,
 ): Promise<MergeResult> {
   if (id === targetId) {
     return { status: 400, error: "Cannot merge a category into itself." };
   }
 
   const [sourceExists, targetExists] = await Promise.all([
-    ops.categoryExists(id),
-    ops.categoryExists(targetId),
+    ops.categoryExists(id, userId),
+    ops.categoryExists(targetId, userId),
   ]);
 
   if (!sourceExists || !targetExists) {
     return { status: 404, error: "Category not found." };
   }
 
-  const assignments = await ops.getAssignmentsForCategory(id);
+  const assignments = await ops.getAssignmentsForCategory(id, userId);
   if (assignments.length > 0) {
-    await ops.reattachAssignments(assignments, targetId);
+    await ops.reattachAssignments(assignments, targetId, userId);
   }
-  await ops.deleteCategoryRow(id);
+  await ops.deleteCategoryRow(id, userId);
 
   return { status: 204, merged: assignments.length };
 }
@@ -191,10 +206,11 @@ export async function renameCategoryOp(
   normalize: (raw: string) => string,
   id: number,
   rawName: string,
+  userId?: number,
 ): Promise<RenameResult> {
   const name = normalize(rawName);
   try {
-    const found = await ops.rename(id, name);
+    const found = await ops.rename(id, name, userId);
     if (!found) return { status: 404, error: "Category not found." };
     return { status: 200, row: { id } };
   } catch (err) {
@@ -215,9 +231,9 @@ export async function renameCategoryOp(
 export interface BuiltCategoryRouter {
   router: IRouter;
   /** Shared rename logic — for Elaine action executors. */
-  rename(id: number, rawName: string): Promise<RenameResult>;
+  rename(id: number, rawName: string, userId?: number): Promise<RenameResult>;
   /** Shared merge logic — for Elaine action executors. */
-  merge(id: number, targetId: number): Promise<MergeResult>;
+  merge(id: number, targetId: number, userId?: number): Promise<MergeResult>;
 }
 
 export function buildCategoryRouter(
@@ -230,8 +246,8 @@ export function buildCategoryRouter(
   router.use(requireAuth);
 
   // GET /categories
-  router.get("/categories", async (_req, res) => {
-    const rows = await ops.listWithCounts();
+  router.get("/categories", async (req, res) => {
+    const rows = await ops.listWithCounts(req.session.userId!);
     res.json(schemas.listResponse.parse(rows));
   });
 
@@ -251,7 +267,7 @@ export function buildCategoryRouter(
         body.bgColor ?? null,
         body.textColor ?? null,
       );
-      const withCount = await ops.fetchWithCount(id);
+      const withCount = await ops.fetchWithCount(id, userId);
       res.status(201).json(schemas.listItem.parse(withCount));
     } catch (err) {
       if (isUniqueConstraintViolation(err)) {
@@ -268,12 +284,19 @@ export function buildCategoryRouter(
   router.patch("/categories/:id", async (req, res) => {
     const { id } = schemas.renameParams.parse(req.params) as { id: number };
     const body = schemas.renameBody.parse(req.body) as { name: string };
-    const result = await renameCategoryOp(ops, normalize, id, body.name);
+    const userId = req.session.userId!;
+    const result = await renameCategoryOp(
+      ops,
+      normalize,
+      id,
+      body.name,
+      userId,
+    );
     if (result.status !== 200) {
       res.status(result.status).json({ error: result.error });
       return;
     }
-    const withCount = await ops.fetchWithCount(id);
+    const withCount = await ops.fetchWithCount(id, userId);
     res.json(schemas.listItem.parse(withCount));
   });
 
@@ -286,29 +309,31 @@ export function buildCategoryRouter(
       bgColor?: string | null;
       textColor?: string | null;
     };
+    const userId = req.session.userId!;
     const found = await ops.updateColors(
       id,
       body.bgColor ?? null,
       body.textColor ?? null,
+      userId,
     );
     if (!found) {
       res.status(404).json({ error: "Category not found." });
       return;
     }
-    const withCount = await ops.fetchWithCount(id);
+    const withCount = await ops.fetchWithCount(id, userId);
     res.json(schemas.listItem.parse(withCount));
   });
 
   // DELETE /categories/unused — must be before /:id so "unused" is not an :id
-  router.delete("/categories/unused", async (_req, res) => {
-    const deleted = await ops.deleteUnused();
+  router.delete("/categories/unused", async (req, res) => {
+    const deleted = await ops.deleteUnused(req.session.userId!);
     res.json({ deleted });
   });
 
   // DELETE /categories/:id
   router.delete("/categories/:id", async (req, res) => {
     const { id } = schemas.deleteParams.parse(req.params) as { id: number };
-    const found = await ops.deleteById(id);
+    const found = await ops.deleteById(id, req.session.userId!);
     if (!found) {
       res.status(404).json({ error: "Category not found." });
       return;
@@ -321,7 +346,12 @@ export function buildCategoryRouter(
     const { id } = schemas.deleteParams.parse(req.params) as { id: number };
     const body = schemas.mergeBody.parse(req.body) as Record<string, number>;
     const targetId = body[schemas.mergeSourceIdField];
-    const result = await mergeCategoriesOp(ops, id, targetId);
+    const result = await mergeCategoriesOp(
+      ops,
+      id,
+      targetId,
+      req.session.userId!,
+    );
     if (result.status === 400 || result.status === 404) {
       res.status(result.status).json({ error: result.error });
       return;
@@ -335,7 +365,9 @@ export function buildCategoryRouter(
 
   return {
     router,
-    rename: (id, rawName) => renameCategoryOp(ops, normalize, id, rawName),
-    merge: (id, targetId) => mergeCategoriesOp(ops, id, targetId),
+    rename: (id, rawName, userId) =>
+      renameCategoryOp(ops, normalize, id, rawName, userId),
+    merge: (id, targetId, userId) =>
+      mergeCategoriesOp(ops, id, targetId, userId),
   };
 }

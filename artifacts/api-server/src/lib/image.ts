@@ -6,8 +6,15 @@ import {
   PathSimplifyMode,
 } from "@neplex/vectorizer";
 import { getThresholds } from "./ai-client";
+import { sniffImageType } from "@workspace/upload-validation";
 
 export type SupportedImageType = "image/jpeg" | "image/png" | "image/webp";
+
+/**
+ * Magic-byte image sniffing lives in @workspace/upload-validation; re-exported
+ * here so the historical `lib/image` import surface is unchanged.
+ */
+export { sniffImageType };
 
 /**
  * Hard ceiling on the number of pixels Sharp will decode from any input. This
@@ -31,39 +38,6 @@ const MAX_STORAGE_DIMENSION = 2048;
  * turning a handful of stored images into hundreds of megabytes of request body.
  */
 const MAX_AI_DIMENSION = 1024;
-
-/**
- * Sniff the real image type from the file's magic bytes. Returns null for any
- * content that is not a supported image, regardless of the declared MIME type.
- */
-export function sniffImageType(buffer: Buffer): SupportedImageType | null {
-  if (buffer.length < 12) return null;
-
-  // JPEG: FF D8 FF
-  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
-    return "image/jpeg";
-  }
-
-  // PNG: 89 50 4E 47 0D 0A 1A 0A
-  if (
-    buffer[0] === 0x89 &&
-    buffer[1] === 0x50 &&
-    buffer[2] === 0x4e &&
-    buffer[3] === 0x47
-  ) {
-    return "image/png";
-  }
-
-  // WEBP: "RIFF" .... "WEBP"
-  if (
-    buffer.toString("ascii", 0, 4) === "RIFF" &&
-    buffer.toString("ascii", 8, 12) === "WEBP"
-  ) {
-    return "image/webp";
-  }
-
-  return null;
-}
 
 export function toDataUrl(buffer: Buffer, contentType: string): string {
   return `data:${contentType};base64,${buffer.toString("base64")}`;

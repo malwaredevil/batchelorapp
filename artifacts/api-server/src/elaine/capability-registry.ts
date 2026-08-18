@@ -202,16 +202,6 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
     executorPrefix: "potteryAction",
     channels: ["web"],
   }),
-  // estimate_pottery_market_value: web-only because it requires the item's
-  // numeric id to be visible on screen (page context), and force:true can
-  // trigger a paid Apify scraper run that should only be user-initiated from
-  // the web UI.
-  ...policies(["estimate_pottery_market_value"], {
-    ...ACTION_DEFAULTS,
-    domain: "pottery",
-    executorPrefix: "potteryAction",
-    channels: ["web"],
-  }),
   ...policies(
     [
       "update_fabric",

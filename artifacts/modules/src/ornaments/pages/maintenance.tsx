@@ -7,7 +7,6 @@ import {
   RefreshCw,
   CheckCircle2,
   ChevronRight,
-  FileDown,
 } from "lucide-react";
 import {
   useGetOrnamentStragglers,
@@ -25,6 +24,7 @@ import {
   useAppConfigSummary,
 } from "@workspace/elaine-ui";
 import { generateInsurancePdf } from "@/ornaments/lib/pdf-export";
+import { InsuranceExportCard } from "@/components/insurance-export-card";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -34,59 +34,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-
-function InsuranceExportCard({ items }: { items: OrnamentItem[] | undefined }) {
-  const [progress, setProgress] = useState<string | null>(null);
-  const generating = progress !== null;
-
-  const handleExport = async () => {
-    if (!items || items.length === 0) {
-      toast.error("No items to export");
-      return;
-    }
-    setProgress("Starting…");
-    try {
-      await generateInsurancePdf(items, setProgress);
-      toast.success(`PDF downloaded — ${items.length} ornaments`);
-    } catch (err) {
-      console.error("PDF export failed", err);
-      toast.error("PDF generation failed. Try again.");
-    } finally {
-      setProgress(null);
-    }
-  };
-
-  return (
-    <Card className="border-card-border shadow-sm">
-      <CardContent className="flex items-center justify-between gap-4 pt-6">
-        <div className="flex items-start gap-3">
-          <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <FileDown className="h-5 w-5" />
-          </span>
-          <div className="min-w-0">
-            <h2 className="font-semibold font-serif">Export for insurance</h2>
-            <p className="mt-0.5 text-sm text-muted-foreground">
-              Download a PDF with photos and details of every ornament.
-            </p>
-          </div>
-        </div>
-        <Button
-          variant="outline"
-          onClick={handleExport}
-          disabled={generating || !items}
-          className="shrink-0"
-        >
-          {generating ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <FileDown className="h-4 w-4" />
-          )}
-          {generating ? progress : "Export PDF"}
-        </Button>
-      </CardContent>
-    </Card>
-  );
-}
 
 export default function Maintenance() {
   const { data: stragglers, isLoading } = useGetOrnamentStragglers();
@@ -164,7 +111,13 @@ export default function Maintenance() {
         </p>
       </div>
 
-      <InsuranceExportCard items={listData?.items} />
+      <InsuranceExportCard
+        items={listData?.items}
+        generatePdf={generateInsurancePdf}
+        itemNounPlural="ornaments"
+        description="Download a PDF with photos and details of every ornament."
+        variant="card"
+      />
 
       <Card className="border-card-border shadow-sm">
         <CardHeader>

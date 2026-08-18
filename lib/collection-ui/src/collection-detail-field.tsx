@@ -1,6 +1,7 @@
 import { type ReactNode } from "react";
 import { Lock, Unlock } from "lucide-react";
 import { cn } from "@workspace/web-core/utils";
+import { InfoTooltip } from "./info-tooltip";
 
 // NOTE: Pottery is the visual gold standard these components were extracted
 // from, but its detail page (artifacts/modules/src/pottery/pages/detail.tsx)
@@ -24,6 +25,9 @@ export interface CollectionDetailFieldProps {
   valueClassName?: string;
   /** Dimmed when no value */
   empty?: boolean;
+  /** Plain-language explanation of how this value was collected/calculated,
+   * shown via an info icon next to the label on hover/focus. */
+  tooltip?: string;
 }
 
 export function CollectionDetailField({
@@ -36,13 +40,17 @@ export function CollectionDetailField({
   editSlot,
   valueClassName,
   empty,
+  tooltip,
 }: CollectionDetailFieldProps) {
   return (
     <div className="flex items-start justify-between gap-3 py-1.5 border-b border-border/60 last:border-0">
       <div className="flex-1 min-w-0">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-0.5">
-          {label}
-        </p>
+        <div className="flex items-center gap-1 mb-0.5">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            {label}
+          </p>
+          {tooltip && <InfoTooltip text={tooltip} />}
+        </div>
         {editing && editSlot ? (
           editSlot
         ) : (

@@ -32,16 +32,56 @@ import {
 const router: IRouter = Router();
 router.use(requireAuth);
 
-const CreateReminderBody = z.object({
-  entityType: z.string().min(1).max(50),
-  entityId: z.number().int().positive(),
-  title: z.string().min(1).max(200),
-  description: z.string().nullable().optional(),
-  // ISO datetime string. Omit for a bare reminder with no due date (visible
-  // only on the central Reminders page / entity's own reminder list until
-  // one is set there).
-  dueAt: z.string().datetime().optional(),
+const LEAD_TIME_UNITS = ["minutes", "hours", "days", "weeks"] as const;
+const LeadTimeInput = z.object({
+  value: z.number().int().min(0),
+  unit: z.enum(LEAD_TIME_UNITS),
 });
+
+const RECURRENCE_INTERVAL_UNITS = [
+  "minutes",
+  "hours",
+  "days",
+  "weeks",
+  "months",
+  "years",
+] as const;
+
+// entityType/entityId are optional and must travel together: pass both to
+// attach the reminder to a record (the collection-ui bell-button flow), or
+// omit both for a standalone reminder with no entity — the only path used
+// by the central Office Reminders tab's "Add reminder" button (issue #… —
+// there was previously no way to create a reminder that wasn't tied to a
+// record or created conversationally through Elaine).
+const CreateReminderBody = z
+  .object({
+    entityType: z.string().min(1).max(50).nullable().optional(),
+    entityId: z.number().int().positive().nullable().optional(),
+    title: z.string().min(1).max(200),
+    description: z.string().nullable().optional(),
+    // ISO datetime string. Omit/null for a bare reminder with no due date
+    // (visible only on the central Reminders page / entity's own reminder
+    // list until one is set there).
+    dueAt: z.string().datetime().nullable().optional(),
+    leadTimes: z.array(LeadTimeInput).optional(),
+    recurrenceIntervalValue: z.number().int().positive().nullable().optional(),
+    recurrenceIntervalUnit: z
+      .enum(RECURRENCE_INTERVAL_UNITS)
+      .nullable()
+      .optional(),
+    recurrenceWeekday: z.number().int().min(0).max(6).nullable().optional(),
+    recurrenceDayOfMonth: z.number().int().min(1).max(31).nullable().optional(),
+    recurrenceEndDate: z.string().nullable().optional(),
+    recurrenceMaxOccurrences: z.number().int().positive().nullable().optional(),
+    emailRecipients: z.array(z.email()).optional(),
+    smsRecipientUserIds: z.array(z.number().int()).optional(),
+    callRecipientUserIds: z.array(z.number().int()).optional(),
+    slackRecipientUserIds: z.array(z.number().int()).optional(),
+    messengerRecipientUserIds: z.array(z.number().int()).optional(),
+  })
+  .refine((data) => (data.entityType == null) === (data.entityId == null), {
+    message: "entityType and entityId must both be present or both absent",
+  });
 
 router.post("/", async (req, res) => {
   const parsed = CreateReminderBody.safeParse(req.body);
@@ -49,25 +89,52 @@ router.post("/", async (req, res) => {
     return res.status(400).json({ error: z.prettifyError(parsed.error) });
   }
   const userId = req.session.userId!;
-  const { entityType, entityId, title, description, dueAt } = parsed.data;
+  const body = parsed.data;
+
+  const smsRecipientUserIds = body.smsRecipientUserIds
+    ? await filterVerifiedPhoneUserIds(body.smsRecipientUserIds)
+    : [];
+  const callRecipientUserIds = body.callRecipientUserIds
+    ? await filterVerifiedPhoneUserIds(body.callRecipientUserIds)
+    : [];
+  const slackRecipientUserIds = body.slackRecipientUserIds
+    ? await filterSlackLinkedUserIds(body.slackRecipientUserIds)
+    : [];
 
   const [row] = await db
     .insert(reminders)
     .values({
-      entityType,
-      entityId,
+      entityType: body.entityType ?? null,
+      entityId: body.entityId ?? null,
       createdByUserId: userId,
-      title,
-      description: description ?? null,
-      dueAt: dueAt ? new Date(dueAt) : null,
-      leadTimes: dueAt ? [{ value: 0, unit: "minutes" }] : [],
-      messengerRecipientUserIds: [userId],
+      title: body.title,
+      description: body.description ?? null,
+      dueAt: body.dueAt ? new Date(body.dueAt) : null,
+      leadTimes:
+        body.leadTimes ?? (body.dueAt ? [{ value: 0, unit: "minutes" }] : []),
+      recurrenceIntervalValue: body.recurrenceIntervalValue ?? null,
+      recurrenceIntervalUnit: body.recurrenceIntervalUnit ?? null,
+      recurrenceWeekday: body.recurrenceWeekday ?? null,
+      recurrenceDayOfMonth: body.recurrenceDayOfMonth ?? null,
+      recurrenceEndDate: body.recurrenceEndDate ?? null,
+      recurrenceMaxOccurrences: body.recurrenceMaxOccurrences ?? null,
+      emailRecipients: body.emailRecipients ?? [],
+      smsRecipientUserIds,
+      callRecipientUserIds,
+      slackRecipientUserIds,
+      messengerRecipientUserIds: body.messengerRecipientUserIds ?? [userId],
     })
     .returning();
 
   logger.info(
-    { reminderId: row?.id, entityType, entityId, userId },
-    "reminders: created entity-scoped reminder",
+    {
+      reminderId: row?.id,
+      entityType: body.entityType ?? null,
+      entityId: body.entityId ?? null,
+      userId,
+      standalone: body.entityType == null,
+    },
+    "reminders: created reminder",
   );
 
   return res.status(201).json({ reminder: row });
@@ -100,21 +167,6 @@ router.get("/", async (req, res) => {
   const result = await listManageableReminders(userId, parsed.data);
   return res.json({ reminders: result });
 });
-
-const LEAD_TIME_UNITS = ["minutes", "hours", "days", "weeks"] as const;
-const LeadTimeInput = z.object({
-  value: z.number().int().min(0),
-  unit: z.enum(LEAD_TIME_UNITS),
-});
-
-const RECURRENCE_INTERVAL_UNITS = [
-  "minutes",
-  "hours",
-  "days",
-  "weeks",
-  "months",
-  "years",
-] as const;
 
 const UpdateReminderBody = z.object({
   title: z.string().min(1).max(200).optional(),

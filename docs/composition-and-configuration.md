@@ -8,6 +8,26 @@ should not copy and rename the capability.
 This is the highest-priority design rule for new and changed code after the
 repository's safety, data-integrity, and security boundaries in `AGENTS.md`.
 
+## The seven techniques behind the rule
+
+"Composition and configuration" is shorthand for seven concrete techniques.
+`AGENTS.md` §4.10 has the full detail; in one line each:
+
+1. **DRY** — the same logic/string/literal never exists in two places on purpose.
+2. **Reusable modules/components** — a stable-interface unit published from `lib/*`.
+3. **Generic programming** — parameterize by type/config instead of writing one
+   near-identical function per entity (`getPotteryFoo`/`getQuiltingFoo`/... is a
+   smell; a single generic function with a type parameter is the fix).
+4. **Composition** — assemble small focused pieces instead of one bespoke
+   implementation per call site.
+5. **Shared layouts/page shells** — `@workspace/app-shell` and
+   `@workspace/collection-ui` own page structure; domains supply content.
+6. **Adapter/strategy pattern** — inject differing behavior behind a shared
+   interface instead of branching inside a shared implementation.
+7. **Scaffolding/code generation** — start a new Elaine action tool, collection
+   module, or shared `lib/*` package from `pnpm --filter @workspace/scripts run
+scaffold:*` instead of hand-copying an existing example.
+
 ## Required decision order
 
 Before adding or changing behavior:
@@ -71,9 +91,24 @@ Every implementation and pre-publish review must answer:
 - Copying a server query and changing only table names when a typed adapter or a
   shared policy function would remain coherent.
 
+## Scaffolding and code generation
+
+Three structures recur often enough to warrant a generator instead of a manual
+checklist. Start from these when building one of them, and complete the same
+checklist by hand if you don't use the generator:
+
+- **New Elaine action tool** — `pnpm --filter @workspace/scripts run scaffold:elaine-action -- <name>`
+  (encodes the 9-step checklist in `AGENTS.md` §7).
+- **New collection module** — `pnpm --filter @workspace/scripts run scaffold:module -- <name>`
+  (encodes the `new-batchelor-module` skill's conformity checklist).
+- **New shared `lib/*` package** — `pnpm --filter @workspace/scripts run scaffold:lib -- <name>`
+  (wires `package.json`/`tsconfig.json`/exports/workspace references).
+
 ## Automated detection
 
 `scripts/src/check-domain-composition.ts` runs two complementary sections.
+`scripts/src/check-duplicate-code.ts` runs a third, described in
+[Section 3](#section-3--heuristic-duplicate-code-detection) below.
 
 ### Section 1 — Named-file requirements
 
@@ -132,3 +167,24 @@ migration note.
 The automated check is intentionally a boundary check, not a complete design
 review. Passing it does not permit copy/paste architecture that the review
 questions would reject.
+
+### Section 3 — Heuristic duplicate-code detection
+
+`scripts/src/check-duplicate-code.ts` is diff-scoped (only inspects files
+touched in the current diff, the same pattern as
+`check-hardcoded-config.ts`). For each function/component added or changed in
+the diff, it strips identifiers/literals/comments to a structural fingerprint
+and compares it against the same fingerprint computed for every function in
+the rest of the repository. A near-exact structural match is reported as a
+likely duplicate.
+
+This complements Section 1/2 above: those sections protect boundaries that
+were explicitly named when the check was written (Sentry init, OpenAI client
+construction, Elaine context formatting). Section 3 has no fixed list — it can
+flag a brand-new kind of duplication the day it's introduced, at the cost of
+being an imprecise heuristic (structural similarity, not semantic
+understanding). Treat a flagged match as a prompt to look, not as proof that
+extraction is always the right call — genuinely independent code that happens
+to be shaped similarly today is a valid reason to allowlist a match (see
+`DUPLICATE_CODE_ALLOWLIST` in the script), not to force an artificial shared
+abstraction.

@@ -34,9 +34,15 @@
  *   pnpm --filter @workspace/scripts run check-hardcoded-config -- --base origin/main
  *   pnpm --filter @workspace/scripts run check-hardcoded-config -- --audit
  */
-import { execFileSync } from "node:child_process";
-import fs from "node:fs";
 import path from "node:path";
+import fs from "node:fs";
+import {
+  getChangedFiles,
+  readFileOrNull,
+  repoRoot,
+  resolveBase,
+  walkFiles,
+} from "./lib/git-diff-utils.js";
 
 export interface HardcodedConfigViolation {
   file: string;
@@ -242,6 +248,31 @@ export function findTunableConstantsInFile(
  * miss, fix the code instead.
  */
 export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
+  // ---- scripts/scaffold-collection-module.ts ----
+  // minLength/maxLength inside the generated OpenAPI YAML templates for
+  // category/item name fields — input-validation caps mirroring the existing
+  // modules' specs, part of code-generation template strings, never
+  // owner-facing runtime config.
+  "scripts/src/scaffold-collection-module.ts:791",
+  "scripts/src/scaffold-collection-module.ts:792",
+  "scripts/src/scaffold-collection-module.ts:1012",
+  "scripts/src/scaffold-collection-module.ts:1023",
+
+  // ---- scripts/check-duplicate-code.ts ----
+  // MIN_TOKENS: fixed algorithm parameter of the duplicate-code detector
+  // (minimum normalized-token length for a body to be comparable). A
+  // guardrail-internal tuning constant, never owner-facing product config.
+  "scripts/src/check-duplicate-code.ts:62",
+
+  // ---- elaine/index.ts — pre-existing internal constants surfaced when the
+  // file entered a diff (scaffolded-read-registry dispatch hook). All three are
+  // fixed algorithm/abuse-guard parameters, not owner-facing product config:
+  // MAX_PHONE_CODE_ATTEMPTS: brute-force guard on phone verification codes.
+  "artifacts/api-server/src/elaine/index.ts:914",
+  // MAX_ROUNDS: bounded tool-loop iteration caps in two internal helpers.
+  "artifacts/api-server/src/elaine/index.ts:10156",
+  "artifacts/api-server/src/elaine/index.ts:10418",
+
   // ---- observability / request-logging threshold ----
   // Fixed monitoring constant; changing it has no product-visible effect.
   "artifacts/api-server/src/app.ts:24",
@@ -257,27 +288,25 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
 
   // ---- elaine/index.ts ----
   // Auth security: max verification-code attempts before lockout.
-  "artifacts/api-server/src/elaine/index.ts:904",
-  // maxModelRounds/maxToolCalls/maxReplans/maxElapsedMs are now owner-config
-  // (Task #1046 — see RuntimeBudgetConfig in lib/elaine-config.ts), not
-  // hardcoded here anymore.
-  // Pre-existing constants unrelated to Task #1046, flagged only because
-  // this file was touched for that task. Genuine owner-configurability
-  // candidates, but out of scope here — tracked under the broader
-  // hardcoded-config audit rather than folded into an unrelated task's diff.
-  "artifacts/api-server/src/elaine/index.ts:9966", // MAX_ROUNDS (restricted-channel OpenAI-Responses attempt loop)
-  "artifacts/api-server/src/elaine/index.ts:10226", // MAX_ROUNDS (restricted-channel reply loop, SMS/email/Slack)
+  "artifacts/api-server/src/elaine/index.ts:910",
+  // MAX_ROUNDS: fixed 3-attempt ceiling inside the restricted-channel OpenAI
+  // Responses attempt loop and the SMS/email/Slack reply loop. Not
+  // owner-facing — the outer RuntimeBudgetConfig controls the agentic turn
+  // budget; these inner loops are implementation guards for the restricted
+  // channel path that are too tightly coupled to the response-parsing logic
+  // to be safely raised by the owner.
+  "artifacts/api-server/src/elaine/index.ts:10146", // MAX_ROUNDS (restricted-channel OpenAI-Responses attempt loop)
+  "artifacts/api-server/src/elaine/index.ts:10408", // MAX_ROUNDS (restricted-channel reply loop, SMS/email/Slack)
 
   // ---- routes/ornaments/ornaments.ts ----
   // Pre-existing input-validation caps (notes length, supplemental-image
-  // counts, bulk-reanalyze batch size) unrelated to the retail-value-lookup
-  // feature; flagged only because that feature touched this file. Genuine
-  // owner-configurability candidates for the broader hardcoded-config audit,
-  // not this task's scope.
-  "artifacts/api-server/src/routes/ornaments/ornaments.ts:119", // MAX_NOTES
-  "artifacts/api-server/src/routes/ornaments/ornaments.ts:123", // MAX_SUPPLEMENTAL_IMAGES
-  "artifacts/api-server/src/routes/ornaments/ornaments.ts:124", // MAX_AI_SUPPLEMENTAL
-  "artifacts/api-server/src/routes/ornaments/ornaments.ts:125", // MAX_BULK_REANALYZE
+  // counts) — not owner-facing: these are DB column-length guards and
+  // a fixed storage cap tied to the upload pipeline.
+  "artifacts/api-server/src/routes/ornaments/ornaments.ts:119", // MAX_NOTES (covers blank/non-const line harmlessly)
+  "artifacts/api-server/src/routes/ornaments/ornaments.ts:125", // MAX_SUPPLEMENTAL_IMAGES
+  "artifacts/api-server/src/routes/ornaments/ornaments.ts:126", // MAX_AI_SUPPLEMENTAL
+  // ornaments MAX_BULK_REANALYZE is now owner-configurable via
+  // thresholds.ornamentsBulkReanalyzeLimit in the Elaine config store.
 
   // ---- routes/quilting/patterns.ts & quilts.ts ----
   // Pre-existing input-validation caps (field/notes/label lengths, reanalyze
@@ -285,6 +314,11 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   // additions for that task placed adjacent diff context around them.
   // Genuine owner-configurability candidates for the broader hardcoded-config
   // audit, not this task's scope.
+  // Pre-existing input-validation caps moved verbatim from blocks.ts/layouts.ts
+  // into the shared category helper (Task dedupe of category helpers); same
+  // rationale as the patterns/quilts caps below.
+  "artifacts/api-server/src/routes/quilting/category-helpers.ts:16", // MAX_CATEGORY_NAMES
+  "artifacts/api-server/src/routes/quilting/category-helpers.ts:17", // MAX_CATEGORY_NAME_LEN
   "artifacts/api-server/src/routes/quilting/patterns.ts:60", // MAX_NOTES
   "artifacts/api-server/src/routes/quilting/patterns.ts:61", // MAX_LABEL
   "artifacts/api-server/src/routes/quilting/patterns.ts:309", // MAX_REANALYZE_IMAGES
@@ -387,13 +421,13 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
 
   // ---- lib/image.ts ----
   // Decompression-bomb and storage/AI-payload dimension limits.
-  "artifacts/api-server/src/lib/image.ts:18",
   "artifacts/api-server/src/lib/image.ts:25",
-  "artifacts/api-server/src/lib/image.ts:33",
+  "artifacts/api-server/src/lib/image.ts:32",
+  "artifacts/api-server/src/lib/image.ts:40",
   // VTracer vectorization algorithm knobs — fixed tuning presets, not owner config.
-  "artifacts/api-server/src/lib/image.ts:494",
-  "artifacts/api-server/src/lib/image.ts:546",
-  "artifacts/api-server/src/lib/image.ts:564",
+  "artifacts/api-server/src/lib/image.ts:468",
+  "artifacts/api-server/src/lib/image.ts:520",
+  "artifacts/api-server/src/lib/image.ts:538",
 
   // ---- lib/integrations-health-nudges.ts ----
   // Background job rate guard and startup delay.
@@ -498,25 +532,33 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   "artifacts/api-server/src/routes/ornaments/ornaments.ts:116",
   "artifacts/api-server/src/routes/ornaments/ornaments.ts:117",
   "artifacts/api-server/src/routes/ornaments/ornaments.ts:118",
-  // Image count and AI reanalysis cost guards.
+  // DB field-length validation limits.
   "artifacts/api-server/src/routes/ornaments/ornaments.ts:120",
   "artifacts/api-server/src/routes/ornaments/ornaments.ts:121",
   "artifacts/api-server/src/routes/ornaments/ornaments.ts:122",
+  "artifacts/api-server/src/routes/ornaments/ornaments.ts:123",
 
   // ---- routes/pottery/compare.ts ----
   // Pottery compare: extra-image fan-out cost guard.
-  "artifacts/api-server/src/routes/pottery/compare.ts:52",
+  "artifacts/api-server/src/routes/pottery/compare.ts:53",
+
+  // ---- scripts/check-duplicate-code.ts ----
+  // Duplicate-detection algorithm tuning (minimum body size) — a fixed
+  // detector parameter, not owner-facing configuration.
+  "scripts/src/check-duplicate-code.ts:62",
 
   // ---- routes/pottery/pottery.ts ----
-  // DB field-length validation limits.
+  // DB field-length validation limits — tied to schema column sizes, not
+  // owner-adjustable.
+  "artifacts/api-server/src/routes/pottery/pottery.ts:108",
+  "artifacts/api-server/src/routes/pottery/pottery.ts:109",
+  "artifacts/api-server/src/routes/pottery/pottery.ts:110",
   "artifacts/api-server/src/routes/pottery/pottery.ts:111",
-  "artifacts/api-server/src/routes/pottery/pottery.ts:112",
-  "artifacts/api-server/src/routes/pottery/pottery.ts:113",
+  // MAX_SUPPLEMENTAL_IMAGES: hard storage cap per item (tied to the upload
+  // pipeline's slot count), not an AI cost control — not owner-adjustable.
   "artifacts/api-server/src/routes/pottery/pottery.ts:114",
-  // Image count and AI reanalysis cost guards.
-  "artifacts/api-server/src/routes/pottery/pottery.ts:117",
-  "artifacts/api-server/src/routes/pottery/pottery.ts:124",
-  "artifacts/api-server/src/routes/pottery/pottery.ts:1241",
+  // potteryMaxAiSupplemental and potteryBulkReanalyzeLimit are now
+  // owner-configurable via the Elaine config store — no allowlist needed.
 
   // ---- routes/quilting/fabrics.ts ----
   // DB field-length validation limits.
@@ -607,9 +649,10 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   // Inline citation collapse threshold and scroll-triggered load threshold.
   "lib/elaine-ui/src/ElaineChatPanel.tsx:350",
   "lib/elaine-ui/src/ElaineChatPanel.tsx:543",
-  // Widget minimum dimensions — layout constraints.
-  "lib/elaine-ui/src/ElaineWidget.tsx:30",
-  "lib/elaine-ui/src/ElaineWidget.tsx:31",
+  // Widget minimum dimensions — layout constraints preventing the chat
+  // window from becoming too small to use. Not owner-facing config.
+  "lib/elaine-ui/src/ElaineWidget.tsx:33",
+  "lib/elaine-ui/src/ElaineWidget.tsx:34",
   // Web Speech API rate bounds — browser API constraint.
   "lib/elaine-ui/src/useTTS.ts:8",
   "lib/elaine-ui/src/useTTS.ts:9",
@@ -648,10 +691,10 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
 
   // ---- lib/image.ts (additional VTracer presets) ----
   // Additional named vectorization presets (smooth, crisp, high-detail, etc.).
-  "artifacts/api-server/src/lib/image.ts:582",
-  "artifacts/api-server/src/lib/image.ts:604",
-  "artifacts/api-server/src/lib/image.ts:626",
-  "artifacts/api-server/src/lib/image.ts:644",
+  "artifacts/api-server/src/lib/image.ts:556",
+  "artifacts/api-server/src/lib/image.ts:578",
+  "artifacts/api-server/src/lib/image.ts:600",
+  "artifacts/api-server/src/lib/image.ts:618",
 
   // ---- routes/quilting/block-templates.ts ----
   // DB field-length validation limits for block template tags and names.
@@ -734,130 +777,12 @@ export const HARDCODED_CONFIG_HELP = [
 // Git-backed wiring (diff mode) + whole-repo walk (audit mode)
 // ---------------------------------------------------------------------------
 
-function repoRoot(): string {
-  return execFileSync("git", ["rev-parse", "--show-toplevel"], {
-    encoding: "utf8",
-  }).trim();
-}
-
-function git(root: string, args: string[]): string {
-  try {
-    return execFileSync("git", ["-C", root, ...args], {
-      encoding: "utf8",
-      maxBuffer: 1024 * 1024 * 128,
-    });
-  } catch (error) {
-    const err = error as { stdout?: string };
-    if (typeof err.stdout === "string") return err.stdout;
-    throw error;
-  }
-}
-
-function refResolves(root: string, ref: string): boolean {
-  try {
-    execFileSync(
-      "git",
-      ["-C", root, "rev-parse", "--verify", "--quiet", `${ref}^{commit}`],
-      {
-        encoding: "utf8",
-      },
-    );
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// This repo's CI checkout (actions/checkout) always creates a remote named
-// "origin", but the live Replit workspace's git-to-GitHub connection is a
-// remote named "github" instead — "origin" does not exist there. Without
-// this fallback, every local run would silently diff against nothing (see
-// below) even though a real, resolvable upstream ref is available.
-const LOCAL_BASE_FALLBACK: Record<string, string> = {
-  "origin/main": "github/main",
-};
-
-/**
- * `git diff base...HEAD` silently succeeds with empty output if `base` can't
- * be resolved at all (unknown ref) — which would make this check report a
- * false-clean "no violations" instead of failing loudly. Resolve to a real
- * ref (falling back to this environment's actual upstream remote when the
- * CI-only default isn't present), or fail loudly if nothing resolves.
- */
-function resolveBase(root: string, base: string): string {
-  if (refResolves(root, base)) return base;
-  const fallback = LOCAL_BASE_FALLBACK[base];
-  if (fallback && refResolves(root, fallback)) {
-    console.error(
-      `(note: "${base}" not found in this checkout — diffing against "${fallback}" instead)`,
-    );
-    return fallback;
-  }
-  throw new Error(
-    `Cannot resolve base ref "${base}"${fallback ? ` (or fallback "${fallback}")` : ""} — ` +
-      `no such branch/remote in this checkout, so the diff would silently be empty and ` +
-      `this check would falsely report "no violations" instead of actually checking ` +
-      `anything. In CI this ref is "origin/main" (created by actions/checkout). Locally, ` +
-      `pass a --base that actually exists in this checkout, or fetch the missing ref.`,
-  );
-}
-
-function readFileOrNull(root: string, file: string): string | null {
-  try {
-    return fs.readFileSync(`${root}/${file}`, "utf8");
-  } catch {
-    return null;
-  }
-}
-
-const AUDIT_SKIP_DIRS = new Set([
-  "node_modules",
-  ".git",
-  "dist",
-  "build",
-  ".turbo",
-  ".cache",
-]);
-
-function walkFiles(dir: string, extensions: string[]): string[] {
-  const results: string[] = [];
-  function walk(current: string) {
-    let entries: string[];
-    try {
-      entries = fs.readdirSync(current);
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      if (AUDIT_SKIP_DIRS.has(entry)) continue;
-      const full = path.join(current, entry);
-      let st;
-      try {
-        st = fs.statSync(full);
-      } catch {
-        continue;
-      }
-      if (st.isDirectory()) walk(full);
-      else if (extensions.includes(path.extname(entry))) results.push(full);
-    }
-  }
-  walk(dir);
-  return results;
-}
-
 export function runHardcodedConfigCheck(
   base: string,
 ): HardcodedConfigViolation[] {
   const root = repoRoot();
   const resolvedBase = resolveBase(root, base);
-  const changedFiles = git(root, [
-    "diff",
-    "--name-only",
-    `${resolvedBase}...HEAD`,
-  ])
-    .split("\n")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const changedFiles = getChangedFiles(root, resolvedBase);
   return checkHardcodedConfigFromFiles(changedFiles, (f) =>
     readFileOrNull(root, f),
   );

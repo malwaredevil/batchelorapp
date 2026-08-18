@@ -252,6 +252,16 @@ in code you touch or in check output (lint/typecheck/test) you run:
   on. Call `proposeFollowUpTasks` (see the `follow-up-tasks` skill) before marking your
   task complete, even though it's unrelated to what you were asked to build. If you are
   unsure which bucket a finding falls into, treat it as the second bucket.
+- **A composition/DRY violation you notice in code you're already touching**
+  (duplicated logic, a hand-copied structure that should have used a
+  generator, a missing adapter) — if the fix is small and contained to the
+  file(s) you're already editing, fix it inline as part of the same change.
+  If it's large enough to need its own review (a multi-file extraction, a new
+  shared package), do not fold it into your current task's diff and do not
+  silently leave it either — file a scoped follow-up task via
+  `proposeFollowUpTasks` before marking your task complete. Never defer this
+  kind of finding to "a future cleanup pass" with no task behind it — that is
+  how duplication accumulates.
 
 ### 3f. New or changed logic needs its own test
 
@@ -404,6 +414,39 @@ callbacks, adapters, slots, and small wrappers. This rule is **hardwired** and
 applies to every feature, repair, refactor, PR review, GitHub sync, and
 pre-publishing task.
 
+This design rule is built from seven concrete techniques. Apply the one that
+fits, in this rough order of preference:
+
+1. **DRY (Don't Repeat Yourself)** — the same logic, string, or literal never
+   exists in two places on purpose. A second copy is a bug waiting to drift.
+2. **Reusable modules/components** — a self-contained unit with a stable
+   interface, published from `lib/*`, consumed by every domain that needs it.
+3. **Generic programming** — when the same _shape_ of logic must handle
+   different data types or entities, parameterize it (TypeScript generics, a
+   typed config object, a keyed lookup) instead of writing one near-identical
+   function per entity. If you find yourself writing `getPotteryFoo`,
+   `getQuiltingFoo`, and `getOrnamentsFoo` with the same body and a different
+   table name, that is a generic function with one type parameter, not three
+   functions.
+4. **Composition** — build a feature by assembling small, focused pieces
+   (hooks, components, middleware) rather than one large bespoke
+   implementation per call site.
+5. **Shared layouts / page shells** — page-level structure (chrome, headers,
+   detail-page skeletons, collection-page skeletons) is owned by a shared
+   component (`@workspace/app-shell`, `@workspace/collection-ui`); a domain
+   supplies content and callbacks, never a parallel hand-rolled layout.
+6. **Adapter / strategy pattern** — when domains genuinely need different
+   _behavior_ behind the same shared mechanism (e.g. a different query
+   predicate, a different provider), express that as an injected
+   adapter/strategy object with a shared interface, not as `if (domain ===
+"pottery")` branches sprinkled through a shared implementation.
+7. **Scaffolding / code generation** — for a small number of well-understood,
+   frequently repeated structures (a new Elaine action tool, a new collection
+   module, a new shared `lib/*` package), start from the repo's generator
+   (see "Scaffolding and code generation" below) instead of hand-copying an
+   existing example and renaming fields. A generator that encodes the
+   checklist cannot forget a step; a human copying a similar file can.
+
 #### Mandatory search-first checklist — complete every step before writing code
 
 1. **Search** — `grep -r "<the behavior>" artifacts/ lib/` to find any existing
@@ -423,15 +466,64 @@ pre-publishing task.
 
 #### Specifically prohibited patterns (the automated guard detects these)
 
-| Prohibited                                                                | Correct alternative                                                                     |
-| ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `Sentry.init(` in any SPA file                                            | `initBrowserMonitoring()` from `@workspace/web-core/sentry`                             |
-| `new OpenAI(` in `routes/**`                                              | `getOpenRouterClient()` / `callModel()` from `lib/ai-client.ts`                         |
-| `usePageAssistantContext` in a new `.tsx` without `@workspace/elaine-ui`  | `formatElaineContextList()` + `formatElaineContextEntity()` from `@workspace/elaine-ui` |
-| Inline `.join()` / `.slice().map()` to build Elaine context               | `formatElaineContextList()` from `@workspace/elaine-ui`                                 |
-| Local `Sentry.replayIntegration` config                                   | Stays in `lib/web-core/src/sentry.ts` only                                              |
-| Route handler reimplementing household data query                         | `queryHouseholdData()` / `searchHouseholdData()` from elaine shared fns                 |
-| Literal limit/timeout/budget/threshold/cap baked into business-logic code | Owner-configurable field on `elaineGlobalConfig` — see "No hardcoded config" below      |
+| Prohibited                                                                                                    | Correct alternative                                                                              |
+| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `Sentry.init(` in any SPA file                                                                                | `initBrowserMonitoring()` from `@workspace/web-core/sentry`                                      |
+| `new OpenAI(` in `routes/**`                                                                                  | `getOpenRouterClient()` / `callModel()` from `lib/ai-client.ts`                                  |
+| `usePageAssistantContext` in a new `.tsx` without `@workspace/elaine-ui`                                      | `formatElaineContextList()` + `formatElaineContextEntity()` from `@workspace/elaine-ui`          |
+| Inline `.join()` / `.slice().map()` to build Elaine context                                                   | `formatElaineContextList()` from `@workspace/elaine-ui`                                          |
+| Local `Sentry.replayIntegration` config                                                                       | Stays in `lib/web-core/src/sentry.ts` only                                                       |
+| Route handler reimplementing household data query                                                             | `queryHouseholdData()` / `searchHouseholdData()` from elaine shared fns                          |
+| Literal limit/timeout/budget/threshold/cap baked into business-logic code                                     | Owner-configurable field on `elaineGlobalConfig` — see "No hardcoded config" below               |
+| A function/component whose body is near-identical to one elsewhere in the repo, with only names/table changed | Extract to `lib/*` and parameterize (generic programming) — see "Duplicate-code detection" below |
+
+#### Scaffolding and code generation
+
+Three structures recur often enough, and are error-prone enough to hand-copy,
+that they have (or will have) a generator instead of a manual checklist:
+
+- **A new Elaine action tool** — `pnpm --filter @workspace/scripts run scaffold:elaine-action -- <name>`.
+  Encodes the 9-step checklist in §7 (schema, union, label, executor, tool
+  definition, nav paths, system prompt, app map, exclusion check) so none of
+  the 9 steps can be silently skipped.
+- **A new collection module** (a new domain like pottery/quilting/ornaments) —
+  `pnpm --filter @workspace/scripts run scaffold:module -- <name>`. Encodes the
+  conformity checklist in the `new-batchelor-module` skill (schema, routes,
+  UI, feature-nav registry entry, Elaine parity).
+- **A new shared `lib/*` package** — `pnpm --filter @workspace/scripts run scaffold:lib -- <name>`.
+  Wires `package.json`, `tsconfig.json`, exports, and the workspace reference
+  so a new shared package is importable on the first try.
+
+If a generator exists for what you are building, start from it. If you hand-write
+one of these three structures instead, you are responsible for completing every
+step its checklist requires — the generator existing does not relax the rule,
+it just makes following it the path of least resistance. These generators are a
+starting point, not a constraint: edit the generated code freely to fit the
+feature. Propose a new generator (as a follow-up task) when you notice a fourth
+structure being hand-copied three or more times.
+
+#### Duplicate-code detection
+
+- **Enforced by** `scripts/src/check-duplicate-code.ts` — a diff-scoped,
+  heuristic guard (only inspects files touched in the current diff), run via
+  `pnpm --filter @workspace/scripts run check-duplicate-code -- --base origin/main`,
+  the GitHub Guardrails workflow, and `pre-publish.sh`. It flags new or
+  changed functions/components whose normalized body is a near-exact match
+  (structure-only: identifiers, literals, and comments stripped before
+  comparing) for one already in the repo.
+- This check is **heuristic by design** — it catches copy-paste-and-rename
+  duplication with a name change, not every conceptual duplication a human
+  reviewer would catch, and it can occasionally flag legitimately similar
+  but independent code (e.g. two short functions that happen to share a
+  common shape by coincidence).
+- **Fix:** extract the shared logic to the narrowest appropriate `lib/*`
+  package (or a focused server lib) and parameterize the difference via
+  generic programming, configuration, or an adapter — then have both call
+  sites import it.
+- **Genuine exceptions** (independently-evolving code that is only
+  superficially similar today) go in `DUPLICATE_CODE_ALLOWLIST` in the
+  script, with a comment explaining why extraction would make the contract
+  less coherent — never rename/reformat around the check.
 
 #### No hardcoded config values
 
@@ -464,12 +556,12 @@ impossible to raise without a code change.
 
 #### Enforcement gates (all three must pass; none can be skipped)
 
-1. **`pnpm run lint`** — `check-domain-composition` is the last step; any
-   violation fails the lint run.
-2. **`scripts/src/pre-publish.sh`** — runs `check-domain-composition` as a
-   blocking parallel gate before sync or publish.
-3. **GitHub CI Guardrails workflow** — runs the same check on every PR; the PR
-   cannot merge until it passes.
+1. **`pnpm run lint`** — `check-domain-composition` and `check-duplicate-code`
+   both run; any violation fails the lint run.
+2. **`scripts/src/pre-publish.sh`** — runs `check-domain-composition` and
+   `check-duplicate-code` as blocking parallel gates before sync or publish.
+3. **GitHub CI Guardrails workflow** — runs the same checks on every PR; the
+   PR cannot merge until they pass.
 
 See `docs/composition-and-configuration.md` for the decision order, review
 questions, accepted/rejected examples, and the current list of protected

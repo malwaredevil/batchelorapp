@@ -54,7 +54,16 @@ export type RelativeTimeSpec =
   | { kind: "next-month-start"; clockTime?: ClockTime }
   // "next Tuesday" -> the next upcoming occurrence of that weekday, always
   // strictly in the future (if today IS that weekday, resolves 7 days out).
-  | { kind: "next-weekday"; dayOfWeek: number; clockTime?: ClockTime };
+  | { kind: "next-weekday"; dayOfWeek: number; clockTime?: ClockTime }
+  // "at 3:45pm" / "call me at 9am" -> a bare clock time with NO explicit day.
+  // Resolves to the next upcoming occurrence: today if that time hasn't
+  // passed yet (in the target timezone), otherwise tomorrow. This exists so
+  // the model NEVER has to compute an exact ISO datetime (with the correct
+  // UTC offset) itself for an absolute time-of-day request — doing so was
+  // the root cause of a real incident where "call me at 3:45 PM my time"
+  // came back with a wildly wrong timezone, because there was previously no
+  // structured way to express "today/next occurrence at this clock time".
+  | { kind: "at-clock-time"; clockTime: ClockTime };
 
 // Zod mirror of RelativeTimeSpec above — the single source of truth for
 // validating this shape wherever a tool payload accepts it (reminder-actions.ts's
@@ -75,11 +84,21 @@ export const RelativeTimeSpecZod = z.discriminatedUnion("kind", [
     kind: z.literal("hours-from-now"),
     count: z.number().int().positive(),
   }),
-  z.object({
-    kind: z.literal("days-from-now"),
-    count: z.number().int().positive(),
-    clockTime: ClockTimeZod.optional(),
-  }),
+  z
+    .object({
+      kind: z.literal("days-from-now"),
+      // 0 is allowed here (and only here): "today at 4:45 PM" is naturally
+      // expressed as days-from-now count=0 + clockTime by models (#1110).
+      // A clockTime is REQUIRED with count 0 — otherwise the default 00:01
+      // resolves to a time already in the past, which the scheduler would
+      // dispatch immediately.
+      count: z.number().int().nonnegative(),
+      clockTime: ClockTimeZod.optional(),
+    })
+    .refine((v) => v.count > 0 || v.clockTime !== undefined, {
+      message: 'days-from-now count 0 ("today") requires an explicit clockTime',
+      path: ["clockTime"],
+    }),
   z.object({
     kind: z.literal("weeks-from-now"),
     count: z.number().int().positive(),
@@ -103,6 +122,10 @@ export const RelativeTimeSpecZod = z.discriminatedUnion("kind", [
     dayOfWeek: z.number().int().min(0).max(6),
     clockTime: ClockTimeZod.optional(),
   }),
+  z.object({
+    kind: z.literal("at-clock-time"),
+    clockTime: ClockTimeZod,
+  }),
 ]);
 
 // Shared JSON-schema fragment for tool definitions that accept a
@@ -124,16 +147,18 @@ export const RELATIVE_TIME_SPEC_JSON_SCHEMA = {
         "next-week-start",
         "next-month-start",
         "next-weekday",
+        "at-clock-time",
       ],
       description:
         '"minutes-from-now"/count for "in 20 minutes"; ' +
         '"hours-from-now"/count for "in 2 hours" or "in an hour" (count=1); ' +
-        '"days-from-now"/count for "tomorrow" (count=1) or "in N days"; ' +
+        '"days-from-now"/count for "tomorrow" (count=1), "in N days", or "today at <time>" (count=0 — clockTime is REQUIRED with count 0); ' +
         '"weeks-from-now"/count for "in a week" (count=1) or "in N weeks"; ' +
         '"months-from-now"/count for "in N months"; ' +
         '"next-week-start" for "next week" (Sunday of the following week); ' +
         '"next-month-start" for "next month" (1st of the following month); ' +
-        '"next-weekday"/dayOfWeek for "next Tuesday" etc (0=Sunday..6=Saturday) — always resolves to a future date, never today even if today is that weekday.',
+        '"next-weekday"/dayOfWeek for "next Tuesday" etc (0=Sunday..6=Saturday) — always resolves to a future date, never today even if today is that weekday; ' +
+        '"at-clock-time"/clockTime for a bare time of day with NO explicit day, e.g. "at 3:45pm", "call me at 9am", "today at 2pm" — resolves to today if that time hasn\'t passed yet, otherwise tomorrow. ALWAYS use this (never an exact ISO datetime you compute yourself) whenever the user names a clock time without an explicit future day.',
     },
     count: {
       type: "integer",
@@ -148,7 +173,7 @@ export const RELATIVE_TIME_SPEC_JSON_SCHEMA = {
     clockTime: {
       type: "object",
       description:
-        'Only include when the user gave an explicit time (e.g. "at 9am"); omit to use the default of 00:01. Never include for minutes-from-now/hours-from-now — those already resolve to an exact instant.',
+        'Required for at-clock-time. For days-from-now/weeks-from-now/months-from-now/next-week-start/next-month-start/next-weekday, only include when the user gave an explicit time (e.g. "at 9am"); omit to use the default of 00:01. Never include for minutes-from-now/hours-from-now — those already resolve to an exact instant.',
       properties: {
         hour: { type: "integer", description: "0-23" },
         minute: { type: "integer", description: "0-59" },
@@ -156,6 +181,29 @@ export const RELATIVE_TIME_SPEC_JSON_SCHEMA = {
     },
   },
   required: ["kind"],
+} as const;
+
+// Shared field/JSON-schema pair for an OPTIONAL explicit-timezone override,
+// used as a sibling to scheduleAt/when across every scheduling tool
+// (call_contact, message_contact, call_me, create_reminder, snooze_reminder)
+// so they all give the model identical guidance. When present and a valid
+// IANA identifier, callers must use it for BOTH resolving the spec/instant
+// AND formatting the confirmation — never one without the other, or the
+// approval card and the executed time can disagree (see MEMORY.md's
+// elaine-scheduled-time-display-timezone note). When absent (the common
+// case), callers fall back to the user's own profile timezone
+// (getUserTimezone) — never the server's local timezone.
+export const explicitTimezoneField = z
+  .string()
+  .optional()
+  .describe(
+    "IANA timezone (e.g. 'Asia/Tokyo', 'America/Los_Angeles') — ONLY set this when the user explicitly names a timezone, city, or region DIFFERENT from their own for this specific request (e.g. 'call me at 9am Tokyo time', 'remind me at 3pm Pacific time'). Omit entirely to use the user's own account timezone by default — never guess or invent a timezone the user didn't name.",
+  );
+
+export const EXPLICIT_TIMEZONE_JSON_SCHEMA = {
+  type: "string",
+  description:
+    "Optional IANA timezone (e.g. 'Asia/Tokyo', 'America/Los_Angeles', 'America/New_York', 'Europe/London') to use for resolving AND confirming this specific time. ONLY include when the user explicitly names a timezone, city, or region different from their own — e.g. 'call me at 9am Tokyo time', 'remind me at 3pm Pacific time'. Omit entirely otherwise so the user's own account timezone is used; never guess one.",
 } as const;
 
 // Thrown when a spec is malformed (e.g. count <= 0, invalid dayOfWeek, or an
@@ -193,9 +241,13 @@ function assertPositiveCount(count: number, kind: string): void {
   }
 }
 
-// Returns the given timezone's local Y/M/D/H/M as plain numbers, using the
-// same Intl.DateTimeFormat approach as comm-check-scheduler.ts so date math
-// below operates on the *local calendar date* rather than the UTC date.
+function assertNonNegativeCount(count: number, kind: string): void {
+  if (!Number.isInteger(count) || count < 0) {
+    throw new RelativeTimeResolutionError(
+      `Invalid count for ${kind}: ${count} (must be a non-negative integer)`,
+    );
+  }
+}
 function getLocalDateParts(
   tz: string,
   now: Date,
@@ -338,13 +390,7 @@ function addLocalMonths(
   return localDateTimeToUtc(tz, year, month + 1, clampedDay, hour, minute);
 }
 
-/**
- * Pure, deterministic resolution of a structured relative-time spec into an
- * exact UTC Date, interpreted in `timezone`. No model/AI call happens here —
- * see the module doc comment. Throws RelativeTimeResolutionError for any
- * malformed spec; callers must surface that as "please clarify the time",
- * never silently fall back to a guessed datetime.
- */
+const UTC_OFFSET_RE = /(?:Z|[+-]\d{2}:?\d{2})$/i;
 export function resolveRelativeTime(
   spec: RelativeTimeSpec,
   timezone: string,
@@ -366,7 +412,18 @@ export function resolveRelativeTime(
       return new Date(now.getTime() + spec.count * 3_600_000);
     }
     case "days-from-now": {
-      assertPositiveCount(spec.count, "days-from-now");
+      // count 0 = "today at clockTime" — models naturally emit this for
+      // "call me at 4:45 PM today" (#1110), so it's valid here (only here:
+      // a 0-count for the other kinds means "now" and makes no sense as a
+      // schedule request). clockTime is mandatory with count 0: the 00:01
+      // default would resolve to a time already in the past, which the
+      // scheduler dispatches immediately.
+      assertNonNegativeCount(spec.count, "days-from-now");
+      if (spec.count === 0 && !spec.clockTime) {
+        throw new RelativeTimeResolutionError(
+          'days-from-now count 0 ("today") requires an explicit clockTime',
+        );
+      }
       return addLocalDays(tz, now, spec.count, spec.clockTime);
     }
     case "weeks-from-now": {
@@ -408,6 +465,15 @@ export function resolveRelativeTime(
       if (daysAhead === 0) daysAhead = 7;
       return addLocalDays(tz, now, daysAhead, spec.clockTime);
     }
+    case "at-clock-time": {
+      // Today at that clock time if it's still ahead of `now`, otherwise
+      // roll to tomorrow — mirrors next-weekday's "always in the future"
+      // convention, but for a bare time of day with no named weekday.
+      const todayAt = addLocalDays(tz, now, 0, spec.clockTime);
+      return todayAt.getTime() > now.getTime()
+        ? todayAt
+        : addLocalDays(tz, now, 1, spec.clockTime);
+    }
     default: {
       const _exhaustive: never = spec;
       throw new RelativeTimeResolutionError(
@@ -431,4 +497,28 @@ export async function getUserTimezone(userId: number): Promise<string> {
   return user?.timezone && isValidIanaTimeZone(user.timezone)
     ? user.timezone
     : DEFAULT_TIMEZONE;
+}
+
+export function resolveNaiveIsoInTimeZone(iso: string, tz: string): Date {
+  const m =
+    /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/.exec(
+      iso.trim(),
+    );
+  if (!m) {
+    throw new RelativeTimeResolutionError(
+      `Not a valid offset-less ISO datetime: ${iso}`,
+    );
+  }
+  return localDateTimeToUtc(
+    tz,
+    Number(m[1]),
+    Number(m[2]),
+    Number(m[3]),
+    Number(m[4]),
+    Number(m[5]),
+  );
+}
+
+export function hasUtcOffset(iso: string): boolean {
+  return UTC_OFFSET_RE.test(iso.trim());
 }

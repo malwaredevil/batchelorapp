@@ -11,6 +11,11 @@
  * already handled.
  */
 
+import { and, eq, inArray, isNull } from "drizzle-orm";
+import type { AnyPgColumn, PgTable } from "drizzle-orm/pg-core";
+import { db } from "@workspace/db";
+import { pathCacheBuster } from "./path-cache-buster";
+
 export interface CategoryResult {
   id: number;
   name: string;
@@ -23,6 +28,77 @@ export interface ImageResult {
   url: string;
   label: string | null;
   position: number;
+}
+
+/** A drizzle table exposing (at least) the named columns. */
+type TableWith<K extends string> = PgTable & Record<K, AnyPgColumn>;
+
+/**
+ * Shared `fetchRawCategories` implementation: join items → categories through
+ * the domain's pivot table. Pottery and Ornaments differ only in which tables
+ * they pass in.
+ */
+export function makeFetchRawCategories(
+  itemCategories: TableWith<"itemId" | "categoryId">,
+  categories: TableWith<"id" | "name" | "bgColor" | "textColor">,
+): (itemIds: number[]) => Promise<Array<CategoryResult & { itemId: number }>> {
+  return async (itemIds) =>
+    itemIds.length === 0
+      ? []
+      : ((await db
+          .select({
+            itemId: itemCategories.itemId,
+            id: categories.id,
+            name: categories.name,
+            bgColor: categories.bgColor,
+            textColor: categories.textColor,
+          })
+          .from(itemCategories)
+          .innerJoin(categories, eq(itemCategories.categoryId, categories.id))
+          .where(inArray(itemCategories.itemId, itemIds))) as unknown as Array<
+          CategoryResult & { itemId: number }
+        >);
+}
+
+/**
+ * Shared `fetchRawImages` implementation: non-deleted image rows mapped to the
+ * standard `/api/<domain>/items/:itemId/images/:id` URL shape. Pottery and
+ * Ornaments differ only in the images table and the domain path segment.
+ */
+export function makeFetchRawImages(
+  images: TableWith<
+    "id" | "itemId" | "label" | "position" | "storagePath" | "deletedAt"
+  >,
+  domain: string,
+): (itemIds: number[]) => Promise<Array<ImageResult & { itemId: number }>> {
+  return async (itemIds) => {
+    if (itemIds.length === 0) return [];
+    const rows = (await db
+      .select({
+        itemId: images.itemId,
+        id: images.id,
+        label: images.label,
+        position: images.position,
+        storagePath: images.storagePath,
+      })
+      .from(images)
+      .where(
+        and(inArray(images.itemId, itemIds), isNull(images.deletedAt)),
+      )) as unknown as Array<{
+      itemId: number;
+      id: number;
+      label: string | null;
+      position: number;
+      storagePath: string;
+    }>;
+    return rows.map((r) => ({
+      itemId: r.itemId,
+      id: r.id,
+      url: `/api/${domain}/items/${r.itemId}/images/${r.id}?v=${pathCacheBuster(r.storagePath)}`,
+      label: r.label,
+      position: r.position,
+    }));
+  };
 }
 
 interface SerializerConfig<TRow extends { id: number }, TItem> {

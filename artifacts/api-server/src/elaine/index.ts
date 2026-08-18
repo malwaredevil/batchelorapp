@@ -51,6 +51,7 @@ import {
   phoneVerificationCodes,
   elaineCrossChannelContext,
 } from "@workspace/db";
+import { getUserTimezone } from "../lib/relative-time-resolver";
 import { requireAuth } from "../middleware/auth";
 import {
   registerElaineTurn,
@@ -67,6 +68,7 @@ import {
   callModel,
   callModelWithSubagent,
   HIDDEN_REASONING,
+  is5xxError,
 } from "../lib/ai-client";
 import {
   embedText,
@@ -300,7 +302,12 @@ import {
   type ElaineRuntimeTrace,
   type ElaineTraceEvaluationInput,
 } from "./runtime";
+import { runWithSubagentFallback } from "./runtime/subagent-fallback";
 import { ELAINE_TOOL_POLICIES } from "./capability-registry";
+import {
+  executeScaffoldedReadTool,
+  isScaffoldedReadTool,
+} from "./scaffolded-read-registry";
 import {
   ACTION_CONFIRMATION_MODES,
   ACTION_TOOL_NAMES,
@@ -385,6 +392,7 @@ import {
   buildOwnerSettingsElaineSection,
   buildOwnerSettingsAppConfigSection,
 } from "./owner-settings-report";
+import { parseToolCallArgs } from "./tool-call-args";
 
 const router: IRouter = Router();
 router.use(requireAuth);
@@ -532,12 +540,14 @@ const SettingsBody = z
     enabled: z.boolean().optional(),
     actionConfirmationMode: z.enum(ACTION_CONFIRMATION_MODES).optional(),
     chatWindowSize: z.enum(CHAT_WINDOW_SIZES).optional(),
+    widgetHidden: z.boolean().optional(),
   })
   .refine(
     (v) =>
       v.enabled !== undefined ||
       v.actionConfirmationMode !== undefined ||
-      v.chatWindowSize !== undefined,
+      v.chatWindowSize !== undefined ||
+      v.widgetHidden !== undefined,
     {
       message: "At least one setting must be provided",
     },
@@ -1162,7 +1172,6 @@ const POTTERY_ACTION_TYPES = new Set<string>([
   "merge_pottery_categories",
   "bulk_reanalyze_pottery",
   "add_photo_to_pottery",
-  "estimate_pottery_market_value",
 ]);
 const QUILTING_ACTION_TYPES = new Set<string>([
   "update_fabric",
@@ -1202,7 +1211,10 @@ const ORNAMENT_ACTION_TYPES = new Set<string>([
   "suggest_and_create_ornament_categories",
 ]);
 
-async function buildActionLabel(action: PendingAction): Promise<string> {
+async function buildActionLabel(
+  action: PendingAction,
+  userId: number,
+): Promise<string> {
   switch (action.type) {
     case "create_trip":
       return `Create a trip to ${action.payload.destination}${
@@ -1466,6 +1478,7 @@ async function buildActionLabel(action: PendingAction): Promise<string> {
       ) {
         return buildCommunicationActionLabel(
           action as { type: CommunicationActionType; payload: unknown },
+          userId,
         );
       }
       if (
@@ -3289,34 +3302,85 @@ const ADD_PHOTO_TO_COLLECTION_TOOL_NAMES = new Set([
   "add_photo_to_ornaments",
 ]);
 
+// Truncate a tool-call args buffer for diagnostic logging — long enough to
+// see the real payload shape, short enough not to blow up a log line.
+function actionArgsPreview(argsBuffer: string): string {
+  return argsBuffer.length > 600
+    ? `${argsBuffer.slice(0, 600)}…(+${argsBuffer.length - 600} chars)`
+    : argsBuffer;
+}
+
 async function tryBuildAction(
   name: string,
   argsBuffer: string,
+  userId: number,
   currentImageUrls?: Set<string>,
 ): Promise<ProposedAction | null> {
   if (!ACTION_TOOL_NAMES.has(name)) return null;
-  try {
-    const parsedPayload: unknown = JSON.parse(argsBuffer);
-    const parsedAction = ActionBody.safeParse({
-      type: name,
-      payload: parsedPayload,
-    });
-    if (!parsedAction.success) return null;
+  // Every `return null` below logs WHY, including the (truncated) raw args
+  // string — a bare `catch { return null }` here previously made a provider
+  // producing malformed tool-call JSON (seen on the OpenAI Responses →
+  // OpenRouter mid-turn fallback path, #1110) indistinguishable in logs from
+  // a genuinely invalid model payload.
+  const parsed = parseToolCallArgs(argsBuffer);
+  if (!parsed.ok) {
+    logger.warn(
+      {
+        tool: name,
+        argsPreview: actionArgsPreview(argsBuffer),
+        jsonError: parsed.error,
+      },
+      "elaine: action tool-call args are not valid JSON",
+    );
+    return null;
+  }
+  if (parsed.salvaged) {
+    logger.warn(
+      { tool: name, argsPreview: actionArgsPreview(argsBuffer) },
+      "elaine: action tool-call args buffer was malformed — salvaged first balanced JSON value (duplicated/concatenated provider args)",
+    );
+  }
+  const parsedAction = ActionBody.safeParse({
+    type: name,
+    payload: parsed.value,
+  });
+  if (!parsedAction.success) {
+    logger.warn(
+      {
+        tool: name,
+        argsPreview: actionArgsPreview(argsBuffer),
+        issues: parsedAction.error.issues.slice(0, 5),
+      },
+      "elaine: action tool-call payload failed schema validation",
+    );
+    return null;
+  }
 
-    // For photo-to-collection actions validate the model-supplied URL is one of
-    // the images actually attached to this message — provenance check.
-    if (ADD_PHOTO_TO_COLLECTION_TOOL_NAMES.has(name)) {
-      const url = (parsedAction.data.payload as { attachmentUrl?: string })
-        .attachmentUrl;
-      if (!url || !currentImageUrls?.has(url)) return null;
+  // For photo-to-collection actions validate the model-supplied URL is one of
+  // the images actually attached to this message — provenance check.
+  if (ADD_PHOTO_TO_COLLECTION_TOOL_NAMES.has(name)) {
+    const url = (parsedAction.data.payload as { attachmentUrl?: string })
+      .attachmentUrl;
+    if (!url || !currentImageUrls?.has(url)) {
+      logger.warn(
+        { tool: name },
+        "elaine: photo action rejected — attachmentUrl is missing or not attached to the current message",
+      );
+      return null;
     }
+  }
 
+  try {
     return {
       type: parsedAction.data.type,
-      label: await buildActionLabel(parsedAction.data),
+      label: await buildActionLabel(parsedAction.data, userId),
       payload: parsedAction.data.payload,
     };
-  } catch {
+  } catch (err) {
+    logger.warn(
+      { tool: name, err },
+      "elaine: action label build failed after payload validated",
+    );
     return null;
   }
 }
@@ -3990,6 +4054,14 @@ export function buildElaineCoreSystemPrompt(params: {
   memorySummary?: string | null;
   actionConfirmationMode: string;
   isTravelsApp: boolean;
+  /**
+   * The requesting user's own profile default timezone (IANA name, e.g.
+   * "Europe/Berlin"), resolved via getUserTimezone. Always pass this so the
+   * model has a fixed, correct anchor for "today", scheduling, and reminder
+   * confirmations without guessing or asking — see the JST/UTC/Stuttgart
+   * timezone-confusion bug this fixes.
+   */
+  userTimezone: string;
   userLocation?: { lat: number; lng: number } | null;
   /**
    * Travel-companion mode context (Task 853), web chat only — never passed
@@ -4026,6 +4098,7 @@ export function buildElaineCoreSystemPrompt(params: {
     memorySummary,
     actionConfirmationMode,
     isTravelsApp,
+    userTimezone,
     userLocation,
     travelCompanionContext,
     formattingNote,
@@ -4060,6 +4133,7 @@ NEVER CLAIM A CONFIRMATION CARD WITHOUT EVIDENCE: You cannot see whether the con
 PERSONALITY: You're conversational, upbeat, and genuinely helpful — like a knowledgeable friend, not a generic corporate assistant. You can be a little playful. You still give concrete, accurate, step-by-step help when asked.
 
 TODAY'S DATE: ${new Date().toISOString().slice(0, 10)} — always use this when calculating countdowns, "days until", ages, or anything else that depends on knowing what today is. Never guess or rely on training data for the current date.
+USER'S TIMEZONE: ${userTimezone} — this is ${userName}'s own saved default timezone from their profile. Always use it as the default for scheduling, reminders, "what time is it", and confirming any date/time back to them — never guess a different timezone (e.g. from a phone area code, IP, or assumption) and never ask them what timezone they're in unless they explicitly say they mean a different one for a specific request. You have no mechanism to save a per-conversation timezone override — if the user asks you to always display times in a specific zone going forward, tell them to set it in their account/profile settings instead of claiming you've saved a preference. If — and ONLY if — the user explicitly names a different timezone, city, or region for ONE SPECIFIC scheduling request (e.g. "call me at 9am Tokyo time", "remind me at 3pm Pacific time"), pass that as the timezone field on the scheduling tool call so it's used for both computing and confirming that request; every other request (including later ones in the same conversation) still defaults to ${userTimezone} unless named again. Never write an exact ISO datetime with your own guessed UTC offset for a plain clock-time request like "at 3:45pm" — use the relative-time spec's at-clock-time kind instead so the server computes the correct offset.
 ${userLocation ? `\nUSER'S CURRENT LOCATION: ${userLocation.lat.toFixed(4)}°, ${userLocation.lng.toFixed(4)}° (from the user's device GPS). Use these coordinates automatically as the default for any location-aware query — nearby places, weather, driving time, local store searches — without asking the user where they are. Only request a more specific address if the task genuinely requires street-level precision beyond what coordinates provide.\n` : ""}
 APP MAP (every page in every app, so you can always explain what a page is for or point the user to the right one, even if they're not currently on it or in a different app):
 
@@ -4586,6 +4660,7 @@ router.post("/chat", async (req, res) => {
       | undefined) ?? "one_by_one";
 
   const appLabel = CURRENT_APP_LABEL[appId];
+  const userTimezone = await getUserTimezone(userId);
   const systemPrompt = buildElaineCoreSystemPrompt({
     userName,
     channelLabel: appLabel,
@@ -4597,6 +4672,7 @@ router.post("/chat", async (req, res) => {
     pastLessonsBlock,
     actionConfirmationMode,
     isTravelsApp: appId === "travels",
+    userTimezone,
     userLocation:
       userLat != null && userLng != null
         ? { lat: userLat, lng: userLng }
@@ -5103,6 +5179,14 @@ router.post("/chat", async (req, res) => {
       });
   }
   let suppressToolsNextRound = false;
+  // Per-turn count of action tool-calls that failed to build (parse/validate)
+  // per tool name. When the same action fails to build twice in one turn the
+  // model is clearly unable to produce a valid payload right now (seen after
+  // the OpenAI Responses → OpenRouter mid-turn fallback, #1110) — further
+  // replans just repeat the identical failure until maxReplans is exhausted,
+  // so we fail fast instead and let the honest "I wasn't able to prepare
+  // that…" note stand as the user-visible outcome.
+  const actionBuildFailureCounts = new Map<string, number>();
 
   for (let round = 0; round < MAX_ROUNDS; round++) {
     if (abortController.signal.aborted) {
@@ -5145,7 +5229,7 @@ router.post("/chat", async (req, res) => {
     const suppressTools = suppressToolsNextRound;
     suppressToolsNextRound = false;
 
-    const runOpenRouterRound = async () =>
+    const runOpenRouterRound = async (opts: { skipSubagent?: boolean } = {}) =>
       callModelWithSubagent(
         elaineConfig.chatModel,
         ASSISTANT_SUBAGENT_INSTRUCTIONS,
@@ -5200,7 +5284,10 @@ router.post("/chat", async (req, res) => {
             }
           }
         },
-        { subagentModel: elaineConfig.subagentModel },
+        {
+          subagentModel: elaineConfig.subagentModel,
+          forceDisableSubagent: opts.skipSubagent,
+        },
       );
 
     try {
@@ -5305,7 +5392,35 @@ router.post("/chat", async (req, res) => {
           finalReasoningSummary = directResult.reasoningSummary;
         }
       } else {
-        await runOpenRouterRound();
+        // Run the main OpenRouter round. If it fails with a 5xx and the
+        // subagent server tool was active, the failure may come from the
+        // subagent model rather than the primary chat model — we can't tell
+        // from the status code alone. Either way, stripping the subagent tool
+        // is the one lever that changes the request, so attempt one degraded
+        // retry without it. Full SSE/accumulator state is reset first so the
+        // client sees a clean replacement response, not appended fragments.
+        await runWithSubagentFallback({
+          primary: () => runOpenRouterRound(),
+          shouldDegrade: (err) =>
+            !abortController.signal.aborted &&
+            is5xxError(err) &&
+            elaineConfig.features.enableSubagent,
+          onDegraded: (err) =>
+            req.log.warn(
+              {
+                err,
+                subagentModel: elaineConfig.subagentModel,
+                chatModel: elaineConfig.chatModel,
+              },
+              "elaine: OpenRouter 5xx during subagent-enabled round — retrying without openrouter:subagent tool",
+            ),
+          onReset: () => {
+            if (rawContent) sendEvent("response_reset", {});
+            rawContent = "";
+            toolCallAcc.clear();
+          },
+          fallback: () => runOpenRouterRound({ skipSubagent: true }),
+        });
       }
     } catch (err) {
       if (abortController.signal.aborted) {
@@ -5340,7 +5455,36 @@ router.post("/chat", async (req, res) => {
         openAIPreviousResponseId = null;
         finalOpenAIResponseId = null;
         try {
-          await runOpenRouterRound();
+          // Apply the same subagent-degraded retry to the fallback path:
+          // if OpenRouter returns a 5xx here too, stripping the subagent tool
+          // is worth one attempt before handing the error to the outer
+          // turn-budget recovery loop. onReset is a no-op because the OpenAI
+          // Responses fallback already cleared rawContent/toolCallAcc above.
+          await runWithSubagentFallback({
+            primary: () => runOpenRouterRound(),
+            shouldDegrade: (err) =>
+              !abortController.signal.aborted &&
+              is5xxError(err) &&
+              elaineConfig.features.enableSubagent,
+            onDegraded: (err) =>
+              req.log.warn(
+                {
+                  err,
+                  subagentModel: elaineConfig.subagentModel,
+                  chatModel: elaineConfig.chatModel,
+                  traceId,
+                },
+                "elaine: OpenRouter fallback 5xx during subagent-enabled round — retrying without openrouter:subagent tool",
+              ),
+            onReset: () => {
+              // State already cleared by the OpenAI Responses fallback above.
+              // Clear again defensively in case any partial content streamed.
+              if (rawContent) sendEvent("response_reset", {});
+              rawContent = "";
+              toolCallAcc.clear();
+            },
+            fallback: () => runOpenRouterRound({ skipSubagent: true }),
+          });
           unresolvedModelError = null;
         } catch (fallbackErr) {
           req.log.warn(
@@ -5572,12 +5716,17 @@ router.post("/chat", async (req, res) => {
         const finalAction = await tryBuildAction(
           name,
           args,
+          userId,
           new Set(attachmentUrls ?? []),
         );
         if (!finalAction) {
           req.log.warn(
             { traceId, tool: name },
             "elaine: auto_run action call failed to parse/validate",
+          );
+          actionBuildFailureCounts.set(
+            name,
+            (actionBuildFailureCounts.get(name) ?? 0) + 1,
           );
           runtime.recordObservation({
             callId: schedule.id,
@@ -5625,6 +5774,7 @@ router.post("/chat", async (req, res) => {
       const finalAction = await tryBuildAction(
         name,
         args,
+        userId,
         new Set(attachmentUrls ?? []),
       );
       if (finalAction) {
@@ -5642,6 +5792,10 @@ router.post("/chat", async (req, res) => {
         req.log.warn(
           { traceId, tool: name },
           "elaine: action call failed to parse/validate — no confirmation card was sent",
+        );
+        actionBuildFailureCounts.set(
+          name,
+          (actionBuildFailureCounts.get(name) ?? 0) + 1,
         );
         runtime.recordObservation({
           callId: schedule.id,
@@ -5765,9 +5919,30 @@ router.post("/chat", async (req, res) => {
           "elaine: turn blocked by runtime (mid-loop verification)",
         );
       }
+      // Fail fast on repeated action-build failures: once the same action
+      // tool has failed to parse/validate twice in this turn, another replan
+      // will not make the model suddenly produce a valid payload (observed
+      // with the OpenAI Responses → OpenRouter mid-turn fallback, #1110 —
+      // the turn used to retry until maxReplans=10 was exhausted and end
+      // `blocked` with no scheduled action and no clear message). The
+      // droppedActionAttempts note above has already told the user nothing
+      // was scheduled and to try again.
+      const repeatedActionBuildFailure = droppedActionAttempts.some(
+        (toolName) => (actionBuildFailureCounts.get(toolName) ?? 0) >= 2,
+      );
+      if (decision.shouldReplan && repeatedActionBuildFailure) {
+        req.log.warn(
+          {
+            traceId,
+            failures: Object.fromEntries(actionBuildFailureCounts),
+          },
+          "elaine: ending turn early — same action failed to build twice, not replaying until budget exhaustion",
+        );
+      }
       if (
         decision.shouldReplan &&
         decision.instruction &&
+        !repeatedActionBuildFailure &&
         round < MAX_ROUNDS - 1
       ) {
         const selectedTool = selectElaineReplanTool(
@@ -7295,6 +7470,12 @@ router.post("/chat", async (req, res) => {
                 });
               }
             }
+          } else if (isScaffoldedReadTool(call.name)) {
+            resultText = await executeScaffoldedReadTool(
+              call.name,
+              call.args,
+              userId,
+            );
           } else {
             resultText = "Unsupported tool.";
           }
@@ -7893,6 +8074,7 @@ router.get("/settings", async (req, res) => {
       "one_by_one",
     chatWindowSize:
       (row?.chatWindowSize as ChatWindowSize | undefined) ?? "compact",
+    widgetHidden: row?.widgetHidden ?? false,
   });
 });
 
@@ -7912,19 +8094,27 @@ router.put("/settings", async (req, res) => {
     patch.chatWindowSize ??
     (existing?.chatWindowSize as ChatWindowSize | undefined) ??
     "compact";
+  const widgetHidden = patch.widgetHidden ?? existing?.widgetHidden ?? false;
   await db
     .insert(elaineSettings)
-    .values({ userId, enabled, actionConfirmationMode, chatWindowSize })
+    .values({
+      userId,
+      enabled,
+      actionConfirmationMode,
+      chatWindowSize,
+      widgetHidden,
+    })
     .onConflictDoUpdate({
       target: elaineSettings.userId,
       set: {
         enabled,
         actionConfirmationMode,
         chatWindowSize,
+        widgetHidden,
         updatedAt: new Date(),
       },
     });
-  res.json({ enabled, actionConfirmationMode, chatWindowSize });
+  res.json({ enabled, actionConfirmationMode, chatWindowSize, widgetHidden });
 });
 
 // ── Admin (app-owner-only) global config for Elaine's AI behaviour ────────
@@ -9899,7 +10089,7 @@ async function executeRestrictedToolCall(
     channelAllowedExtras?.has(name)
   ) {
     try {
-      const finalAction = await tryBuildAction(name, argsJson);
+      const finalAction = await tryBuildAction(name, argsJson, userId);
       if (finalAction) {
         const executor = ACTION_EXECUTORS[finalAction.type as ActionType];
         const { status, body } = await executor(
@@ -10169,6 +10359,7 @@ async function runRestrictedElaineTurn(params: {
     }
   }
 
+  const userTimezone = await getUserTimezone(userId);
   const systemPrompt = buildElaineCoreSystemPrompt({
     userName,
     channelLabel,
@@ -10179,6 +10370,7 @@ async function runRestrictedElaineTurn(params: {
     crossChannelContext,
     actionConfirmationMode: "auto_run",
     isTravelsApp: false,
+    userTimezone,
     formattingNote,
     channelAddendum,
   });

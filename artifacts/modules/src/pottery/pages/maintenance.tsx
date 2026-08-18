@@ -20,8 +20,6 @@ import {
   AlertTriangle,
   Wand2,
   StopCircle,
-  FileDown,
-  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,61 +29,7 @@ import { toast } from "sonner";
 import { usePageAssistantContext } from "@/pottery/lib/assistant-context";
 import { useAppConfigSummary } from "@workspace/elaine-ui";
 import { generateInsurancePdf } from "@/pottery/lib/pdf-export";
-
-// ---------------------------------------------------------------------------
-// Insurance export
-// ---------------------------------------------------------------------------
-function InsuranceExportCard({ items }: { items: PotteryItem[] | undefined }) {
-  const [progress, setProgress] = useState<string | null>(null);
-  const generating = progress !== null;
-
-  const handleExport = async () => {
-    if (!items || items.length === 0) {
-      toast.error("No items to export");
-      return;
-    }
-    setProgress("Starting…");
-    try {
-      await generateInsurancePdf(items, setProgress);
-      toast.success(`PDF downloaded — ${items.length} pieces`);
-    } catch (err) {
-      console.error("PDF export failed", err);
-      toast.error("PDF generation failed. Try again.");
-    } finally {
-      setProgress(null);
-    }
-  };
-
-  return (
-    <section className="rounded-2xl border border-card-border bg-card p-5 shadow-sm">
-      <div className="flex items-start gap-3">
-        <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-          <FileDown className="h-5 w-5" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <h2 className="font-semibold">Export for insurance</h2>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            Download a PDF with photos and details of every piece in the
-            collection.
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          onClick={handleExport}
-          disabled={generating || !items}
-          className="shrink-0"
-        >
-          {generating ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <FileDown className="h-4 w-4" />
-          )}
-          {generating ? progress : "Export PDF"}
-        </Button>
-      </div>
-    </section>
-  );
-}
+import { InsuranceExportCard } from "@/components/insurance-export-card";
 
 type RefreshStatus = "queued" | "processing" | "done" | "error";
 type RunSource = "bulk" | "stragglers";
@@ -454,7 +398,13 @@ export default function Maintenance() {
       {/* ------------------------------------------------------------------ */}
       {/* Insurance export                                                    */}
       {/* ------------------------------------------------------------------ */}
-      <InsuranceExportCard items={data} />
+      <InsuranceExportCard
+        items={data}
+        generatePdf={generateInsurancePdf}
+        itemNounPlural="pieces"
+        description="Download a PDF with photos and details of every piece in the collection."
+        variant="section"
+      />
 
       {/* ------------------------------------------------------------------ */}
       {/* AI re-analyse stragglers section                                    */}

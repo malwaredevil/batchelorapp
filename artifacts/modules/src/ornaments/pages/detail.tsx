@@ -62,12 +62,17 @@ import {
   CollectionDetailSkeleton,
   CollectionDetailField,
   CollectionDetailSection,
+  InfoTooltip,
   trackAsyncAction,
   isAsyncActionBusy,
   useAsyncActionStatus,
 } from "@workspace/collection-ui";
 import { OrnamentEbayPriceSection } from "@/ornaments/components/OrnamentEbayPriceSection";
 import { ornamentReanalyzeKey } from "@/ornaments/lib/reanalyze-status";
+import {
+  parseAiAppraisalRange,
+  computeConsensusValue,
+} from "@workspace/ornaments-shared";
 
 function formatCurrency(amount: number | string | null | undefined): string {
   if (amount == null) return "—";
@@ -408,13 +413,9 @@ export default function OrnamentDetail() {
     : null;
 
   // Parse dollar range from AI appraisal prose (e.g. "appraises for $10–$18")
-  const aiRangeMatch = ornament.aiAppraisal
-    ? ornament.aiAppraisal.match(
-        /\$(\d+(?:\.\d+)?)\s*[-\u2013\u2014]\s*\$(\d+(?:\.\d+)?)/,
-      )
-    : null;
-  const aiAppraisalLow = aiRangeMatch ? parseFloat(aiRangeMatch[1]) : null;
-  const aiAppraisalHigh = aiRangeMatch ? parseFloat(aiRangeMatch[2]) : null;
+  const { low: aiAppraisalLow, high: aiAppraisalHigh } = parseAiAppraisalRange(
+    ornament.aiAppraisal,
+  );
   const aiMid =
     aiAppraisalLow != null && aiAppraisalHigh != null
       ? (aiAppraisalLow + aiAppraisalHigh) / 2
@@ -429,15 +430,18 @@ export default function OrnamentDetail() {
       ? (vsBook / Number(ornament.bookValue)) * 100
       : null;
 
-  const consensusSources: number[] = [
-    ...(ebayMid != null ? [ebayMid] : []),
-    ...(aiMid != null ? [aiMid] : []),
-    ...(ornament.bookValue != null ? [Number(ornament.bookValue)] : []),
-  ];
-  const consensus =
-    consensusSources.length >= 2
-      ? consensusSources.reduce((a, b) => a + b, 0) / consensusSources.length
-      : null;
+  const consensus = computeConsensusValue({
+    bookValue: ornament.bookValue != null ? Number(ornament.bookValue) : null,
+    ebayPriceMinUsd:
+      ornament.ebayPriceMinUsd != null
+        ? Number(ornament.ebayPriceMinUsd)
+        : null,
+    ebayPriceMaxUsd:
+      ornament.ebayPriceMaxUsd != null
+        ? Number(ornament.ebayPriceMaxUsd)
+        : null,
+    aiAppraisal: ornament.aiAppraisal,
+  });
 
   const hasValuationData =
     ornament.bookValue != null || hasEbayData || !!ornament.aiAppraisal;
@@ -992,6 +996,7 @@ export default function OrnamentDetail() {
             {!isEditing && ornament.bookValue != null && (
               <CollectionDetailField
                 label="Book Value"
+                tooltip="Looked up from Hallmark collector price-guide sites. When more than one site has a price, the higher one is used."
                 value={
                   <span>
                     {formatCurrency(ornament.bookValue)}
@@ -1011,6 +1016,7 @@ export default function OrnamentDetail() {
             {!isEditing && ornament.retailValueUsd != null && (
               <CollectionDetailField
                 label="Retail Value"
+                tooltip="The original retail price when the ornament was new, found via a web search for this ornament's official product listing."
                 value={
                   <span>
                     {formatCurrency(ornament.retailValueUsd)}
@@ -1063,6 +1069,7 @@ export default function OrnamentDetail() {
             {!isEditing && !!ornament.aiAppraisal && (
               <CollectionDetailField
                 label="AI Collector Appraisal"
+                tooltip="An AI-estimated value range based on the ornament's photos and description, not tied to a specific marketplace or listing."
                 value={
                   aiAppraisalLow != null && aiAppraisalHigh != null ? (
                     <span>
@@ -1101,6 +1108,7 @@ export default function OrnamentDetail() {
                     <span className="text-[9px] uppercase tracking-wider text-muted-foreground/40 border border-border/50 rounded px-1 leading-tight">
                       calc
                     </span>
+                    <InfoTooltip text="The midpoint of the eBay for-sale range: (low + high) ÷ 2." />
                   </div>
                   <p className="text-sm">{formatCurrency(ebayMid)}</p>
                   <p className="text-[10px] text-muted-foreground mt-0.5">
@@ -1121,6 +1129,7 @@ export default function OrnamentDetail() {
                     <span className="text-[9px] uppercase tracking-wider text-muted-foreground/40 border border-border/50 rounded px-1 leading-tight">
                       calc
                     </span>
+                    <InfoTooltip text="How the eBay midpoint compares to book value: eBay midpoint − book value." />
                   </div>
                   <p className="text-sm flex items-center gap-1.5">
                     {vsBook < -0.5 && (
@@ -1170,6 +1179,7 @@ export default function OrnamentDetail() {
                     <span className="text-[9px] uppercase tracking-wider text-muted-foreground/40 border border-border/50 rounded px-1 leading-tight">
                       calc
                     </span>
+                    <InfoTooltip text="The average of every available value signal — eBay midpoint, AI appraisal midpoint, and book value — using whichever of those are available (at least two required)." />
                   </div>
                   <p className="text-sm font-medium">
                     {formatCurrency(consensus)}

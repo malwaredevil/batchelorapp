@@ -7,12 +7,24 @@ import {
   type ReactNode,
 } from "react";
 import { X, ZoomIn, ZoomOut, Sliders, RotateCcw } from "lucide-react";
+import { clampPanToBounds } from "./pan-bounds";
 
 interface PreviewZoomModalProps {
   open: boolean;
   onClose: () => void;
   title?: string;
   children: ReactNode;
+}
+
+function touchDistance(a: Touch, b: Touch) {
+  return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+}
+
+function touchMidpoint(a: Touch, b: Touch) {
+  return {
+    x: (a.clientX + b.clientX) / 2,
+    y: (a.clientY + b.clientY) / 2,
+  };
 }
 
 export function PreviewZoomModal({
@@ -39,8 +51,30 @@ export function PreviewZoomModal({
     py: number;
   } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const [wheeling, setWheeling] = useState(false);
   const wheelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (wheelTimerRef.current) clearTimeout(wheelTimerRef.current);
+    };
+  }, []);
+
+  // Touch gesture state (single-finger pan, two-finger pinch-zoom).
+  const touchRef = useRef<{
+    mode: "pan" | "pinch";
+    startX: number;
+    startY: number;
+    px: number;
+    py: number;
+    startDist: number;
+    startZoom: number;
+  } | null>(null);
+  const [touching, setTouching] = useState(false);
+  // Live copies so native (non-React) touch listeners see current values.
+  const stateRef = useRef({ zoom: 1, panX: 0, panY: 0 });
+  stateRef.current = { zoom, panX, panY };
 
   const imageFilter = useMemo(() => {
     const { brightness, contrast, saturation } = viewFilter;
@@ -58,6 +92,19 @@ export function PreviewZoomModal({
     }
   }, [open]);
 
+  // Block native page scroll / pull-to-refresh while the zoom view is open.
+  useEffect(() => {
+    if (!open) return;
+    const prevOverflow = document.body.style.overflow;
+    const prevOverscroll = document.body.style.overscrollBehavior;
+    document.body.style.overflow = "hidden";
+    document.body.style.overscrollBehavior = "none";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      document.body.style.overscrollBehavior = prevOverscroll;
+    };
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     const handle = (e: KeyboardEvent) => {
@@ -67,24 +114,57 @@ export function PreviewZoomModal({
     return () => window.removeEventListener("keydown", handle);
   }, [open, onClose]);
 
-  const handleWheel = useCallback((e: WheelEvent) => {
-    e.preventDefault();
+  // Keep the content from being dragged entirely off-screen: clamp against
+  // the actual rendered content size, applied on EVERY pan/zoom path.
+  const clampPan = useCallback((value: number, axis: "x" | "y", z: number) => {
     const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const curX = e.clientX - rect.left - rect.width / 2;
-    const curY = e.clientY - rect.top - rect.height / 2;
-    const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
-    setWheeling(true);
-    if (wheelTimerRef.current) clearTimeout(wheelTimerRef.current);
-    wheelTimerRef.current = setTimeout(() => setWheeling(false), 150);
-    setZoom((prev) => {
-      const next = Math.min(20, Math.max(0.05, prev * factor));
-      const ratio = next / prev;
-      setPanX((px) => curX * (1 - ratio) + px * ratio);
-      setPanY((py) => curY * (1 - ratio) + py * ratio);
-      return next;
-    });
+    if (!rect) return value;
+    const viewport = axis === "x" ? rect.width : rect.height;
+    const content = contentRef.current;
+    const contentExtent = content
+      ? axis === "x"
+        ? content.offsetWidth
+        : content.offsetHeight
+      : viewport;
+    return clampPanToBounds(value, viewport, contentExtent || viewport, z);
   }, []);
+
+  // Single entry point for scale changes (toolbar buttons + wheel): always
+  // reclamps the existing pan against the new zoom level so zooming out
+  // after panning can't leave the content stranded off-screen.
+  const applyZoom = useCallback(
+    (compute: (prev: number) => number) => {
+      setZoom((prev) => {
+        const next = Math.min(20, Math.max(0.05, compute(prev)));
+        setPanX((px) => clampPan(px, "x", next));
+        setPanY((py) => clampPan(py, "y", next));
+        return next;
+      });
+    },
+    [clampPan],
+  );
+
+  const handleWheel = useCallback(
+    (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const curX = e.clientX - rect.left - rect.width / 2;
+      const curY = e.clientY - rect.top - rect.height / 2;
+      const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+      setWheeling(true);
+      if (wheelTimerRef.current) clearTimeout(wheelTimerRef.current);
+      wheelTimerRef.current = setTimeout(() => setWheeling(false), 150);
+      setZoom((prev) => {
+        const next = Math.min(20, Math.max(0.05, prev * factor));
+        const ratio = next / prev;
+        setPanX((px) => clampPan(curX * (1 - ratio) + px * ratio, "x", next));
+        setPanY((py) => clampPan(curY * (1 - ratio) + py * ratio, "y", next));
+        return next;
+      });
+    },
+    [clampPan],
+  );
 
   useEffect(() => {
     const el = containerRef.current;
@@ -92,6 +172,107 @@ export function PreviewZoomModal({
     el.addEventListener("wheel", handleWheel, { passive: false });
     return () => el.removeEventListener("wheel", handleWheel);
   }, [open, handleWheel]);
+
+  // Native touch listeners (passive: false so preventDefault suppresses
+  // browser scroll/zoom/pull-to-refresh).
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || !open) return;
+
+    const onTouchStart = (e: TouchEvent) => {
+      e.preventDefault();
+      const { zoom: z, panX: px, panY: py } = stateRef.current;
+      if (e.touches.length >= 2) {
+        const [a, b] = [e.touches[0]!, e.touches[1]!];
+        const mid = touchMidpoint(a, b);
+        touchRef.current = {
+          mode: "pinch",
+          startX: mid.x,
+          startY: mid.y,
+          px,
+          py,
+          startDist: touchDistance(a, b),
+          startZoom: z,
+        };
+      } else if (e.touches.length === 1) {
+        const t = e.touches[0]!;
+        touchRef.current = {
+          mode: "pan",
+          startX: t.clientX,
+          startY: t.clientY,
+          px,
+          py,
+          startDist: 0,
+          startZoom: z,
+        };
+      }
+      setTouching(true);
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
+      const state = touchRef.current;
+      const rect = el.getBoundingClientRect();
+      if (!state) return;
+
+      if (state.mode === "pinch" && e.touches.length >= 2) {
+        const [a, b] = [e.touches[0]!, e.touches[1]!];
+        const mid = touchMidpoint(a, b);
+        const dist = touchDistance(a, b);
+        const nextZoom = Math.min(
+          20,
+          Math.max(0.05, state.startZoom * (dist / state.startDist)),
+        );
+        const ratio = nextZoom / state.startZoom;
+        // Zoom about the initial pinch midpoint, then follow midpoint drift.
+        const curX = state.startX - rect.left - rect.width / 2;
+        const curY = state.startY - rect.top - rect.height / 2;
+        const nextPanX =
+          curX * (1 - ratio) + state.px * ratio + (mid.x - state.startX);
+        const nextPanY =
+          curY * (1 - ratio) + state.py * ratio + (mid.y - state.startY);
+        setZoom(nextZoom);
+        setPanX(clampPan(nextPanX, "x", nextZoom));
+        setPanY(clampPan(nextPanY, "y", nextZoom));
+      } else if (state.mode === "pan" && e.touches.length === 1) {
+        const t = e.touches[0]!;
+        const z = stateRef.current.zoom;
+        setPanX(clampPan(state.px + (t.clientX - state.startX), "x", z));
+        setPanY(clampPan(state.py + (t.clientY - state.startY), "y", z));
+      }
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length === 0) {
+        touchRef.current = null;
+        setTouching(false);
+      } else if (e.touches.length === 1) {
+        // Pinch ended with one finger still down — continue as pan.
+        const t = e.touches[0]!;
+        const { zoom: z, panX: px, panY: py } = stateRef.current;
+        touchRef.current = {
+          mode: "pan",
+          startX: t.clientX,
+          startY: t.clientY,
+          px,
+          py,
+          startDist: 0,
+          startZoom: z,
+        };
+      }
+    };
+
+    el.addEventListener("touchstart", onTouchStart, { passive: false });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", onTouchEnd);
+    el.addEventListener("touchcancel", onTouchEnd);
+    return () => {
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", onTouchEnd);
+      el.removeEventListener("touchcancel", onTouchEnd);
+    };
+  }, [open, clampPan]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return;
@@ -107,8 +288,10 @@ export function PreviewZoomModal({
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!dragRef.current) return;
-    setPanX(dragRef.current.px + (e.clientX - dragRef.current.startX));
-    setPanY(dragRef.current.py + (e.clientY - dragRef.current.startY));
+    const nextX = dragRef.current.px + (e.clientX - dragRef.current.startX);
+    const nextY = dragRef.current.py + (e.clientY - dragRef.current.startY);
+    setPanX(clampPan(nextX, "x", zoom));
+    setPanY(clampPan(nextY, "y", zoom));
   };
 
   const handleMouseUp = () => {
@@ -139,6 +322,7 @@ export function PreviewZoomModal({
           <div className="flex-1" />
         )}
 
+        {/* View adjustments */}
         <div className="relative">
           <button
             onClick={() => setViewOpen((v) => !v)}
@@ -214,10 +398,11 @@ export function PreviewZoomModal({
 
         <div className="h-4 w-px bg-border" />
 
+        {/* Zoom controls */}
         <div className="flex items-center gap-0.5">
           <button
             title="Zoom out"
-            onClick={() => setZoom((v) => Math.max(0.05, v / 1.3))}
+            onClick={() => applyZoom((v) => v / 1.3)}
             className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-muted"
           >
             <ZoomOut className="h-3.5 w-3.5" />
@@ -227,7 +412,7 @@ export function PreviewZoomModal({
           </span>
           <button
             title="Zoom in"
-            onClick={() => setZoom((v) => Math.min(20, v * 1.3))}
+            onClick={() => applyZoom((v) => v * 1.3)}
             className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-muted"
           >
             <ZoomIn className="h-3.5 w-3.5" />
@@ -256,7 +441,11 @@ export function PreviewZoomModal({
       <div
         ref={containerRef}
         className="relative flex-1 overflow-hidden bg-[#1c1c1e]"
-        style={{ cursor: dragging ? "grabbing" : "grab" }}
+        style={{
+          cursor: dragging ? "grabbing" : "grab",
+          touchAction: "none",
+          overscrollBehavior: "none",
+        }}
         onClick={(e) => e.stopPropagation()}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
@@ -264,6 +453,7 @@ export function PreviewZoomModal({
         onMouseLeave={handleMouseUp}
       >
         <div
+          ref={contentRef}
           style={{
             position: "absolute",
             left: "50%",
@@ -271,7 +461,9 @@ export function PreviewZoomModal({
             transform: `translate(calc(-50% + ${panX}px), calc(-50% + ${panY}px)) scale(${zoom})`,
             transformOrigin: "center center",
             transition:
-              wheeling || dragging ? "none" : "transform 0.15s ease-out",
+              wheeling || dragging || touching
+                ? "none"
+                : "transform 0.15s ease-out",
             filter: imageFilter ?? undefined,
             userSelect: "none",
           }}

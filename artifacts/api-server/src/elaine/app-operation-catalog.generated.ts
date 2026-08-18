@@ -989,37 +989,6 @@ export const ELAINE_APP_OPERATION_CATALOG = [
     requestBody: null,
   },
   {
-    operationId: "estimatePotteryMarketValue",
-    method: "POST",
-    path: "/pottery/items/{id}/estimate-market-value",
-    domain: "pottery",
-    summary: "Look up eBay sold-listing prices and cache them on the item",
-    access: "action",
-    parameters: [
-      {
-        name: "id",
-        in: "path",
-        required: true,
-        schema: {
-          type: "integer",
-        },
-      },
-    ],
-    requestBody: {
-      required: false,
-      schema: {
-        type: "object",
-        properties: {
-          force: {
-            type: "boolean",
-            description:
-              "When true, skip the 7-day staleness cache and fire a fresh Apify sold-listings run regardless of the last fetch date.\n",
-          },
-        },
-      },
-    },
-  },
-  {
     operationId: "exportOperationEvents",
     method: "GET",
     path: "/operations/export",

@@ -743,6 +743,7 @@ CREATE TABLE IF NOT EXISTS elaine_settings (
   enabled                   BOOLEAN NOT NULL DEFAULT TRUE,
   action_confirmation_mode  TEXT NOT NULL DEFAULT 'one_by_one',
   chat_window_size          TEXT NOT NULL DEFAULT 'compact',
+  widget_hidden             BOOLEAN NOT NULL DEFAULT FALSE,
   updated_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -1104,6 +1105,7 @@ CREATE TABLE IF NOT EXISTS travels_diary_entries (
 );
 
 ALTER TABLE elaine_settings ADD COLUMN IF NOT EXISTS chat_window_size TEXT NOT NULL DEFAULT 'compact';
+ALTER TABLE elaine_settings ADD COLUMN IF NOT EXISTS widget_hidden BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS extra_models JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS timeouts JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS features JSONB NOT NULL DEFAULT '{}'::jsonb;
@@ -2842,6 +2844,7 @@ async function main() {
       "enabled",
       "action_confirmation_mode",
       "chat_window_size",
+      "widget_hidden",
       "updated_at",
     ],
     orderBy: "user_id",

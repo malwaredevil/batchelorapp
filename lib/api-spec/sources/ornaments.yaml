@@ -1105,7 +1105,18 @@ components:
             type: string
     OrnamentListStats:
       type: object
-      required: [categoryCount, brandCount]
+      required:
+        [
+          categoryCount,
+          brandCount,
+          aiAppraisalLowTotal,
+          aiAppraisalHighTotal,
+          itemsWithAiAppraisal,
+          consensusValueTotal,
+          itemsWithConsensusValue,
+          retailValueTotal,
+          itemsWithRetailValue,
+        ]
       properties:
         categoryCount:
           type: integer
@@ -1115,6 +1126,27 @@ components:
           type: [integer, "null"]
         maxYear:
           type: [integer, "null"]
+        aiAppraisalLowTotal:
+          type: number
+          description: Sum of each matching item's parsed AI-appraisal low estimate × quantity.
+        aiAppraisalHighTotal:
+          type: number
+          description: Sum of each matching item's parsed AI-appraisal high estimate × quantity.
+        itemsWithAiAppraisal:
+          type: integer
+          description: How many matching items contributed a parseable AI appraisal range.
+        consensusValueTotal:
+          type: number
+          description: Sum of each matching item's consensus value (average of available signals) × quantity.
+        itemsWithConsensusValue:
+          type: integer
+          description: How many matching items had at least two value signals to average.
+        retailValueTotal:
+          type: number
+          description: Sum of each matching item's retail value on file × quantity.
+        itemsWithRetailValue:
+          type: integer
+          description: How many matching items had a retail value on file.
     OrnamentItem:
       type: object
       required:

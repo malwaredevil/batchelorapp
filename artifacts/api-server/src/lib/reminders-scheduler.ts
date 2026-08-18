@@ -1146,7 +1146,22 @@ export async function syncCalendarLinkedReminders(): Promise<{
   return { checked: linked.length, updated, cancelled };
 }
 
-const IN_PROCESS_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
+// Was 15 minutes. A reminder's `reminder_deliveries` row is only created by
+// scheduleDueDeliveries() (Phase A) when this ticks, and only fired once
+// claimAndSendDueDeliveries() (Phase B) sees `scheduled_for <= NOW()` on a
+// LATER tick — so the true worst-case delivery latency is bounded by this
+// interval, not by how precisely `dueAt`/`scheduledFor` was computed. A
+// reminder created moments before its due time (e.g. "call me in 5 minutes")
+// could previously miss the current 15-minute window entirely and wait a
+// full cycle, which is exactly what produced a real report of a 15:45
+// scheduled call firing at 16:00. Tightened to 1 minute so worst-case
+// latency is ~1 minute instead. Safe to run this often: every operation
+// here is idempotent (INSERT ... ON CONFLICT DO NOTHING, FOR UPDATE SKIP
+// LOCKED claims), and the only external API call in the cycle
+// (syncCalendarLinkedReminders' Google Calendar lookups) is cheap enough
+// even at 1-per-minute-per-linked-reminder to stay far under quota for a
+// household-scale number of calendar-linked reminders.
+const IN_PROCESS_INTERVAL_MS = 60 * 1000; // 1 minute
 
 /**
  * One tick of the in-process scheduler. Extracted so tests can call it
@@ -1166,9 +1181,7 @@ export async function runSchedulerTick(): Promise<void> {
       IN_PROCESS_INTERVAL_MS,
     ))
   ) {
-    logger.info(
-      "reminders-scheduler: skipped (ran within the last 15 minutes)",
-    );
+    logger.info("reminders-scheduler: skipped (ran within the last minute)");
     // Guard skipped the full batch. Still recover any deliveries left in
     // `sending` by a crashed process — best-effort so a transient DB error
     // here never becomes an unhandled rejection.
@@ -1200,15 +1213,18 @@ export async function runSchedulerTick(): Promise<void> {
   }
 }
 /**
- * Best-effort, in-process fallback: runs on startup and every 15 minutes
- * while this server instance happens to be warm. This alone is NOT
- * sufficient to guarantee delivery — on `autoscale` deployments the
- * instance can be fully asleep for long stretches. Reliable delivery is
- * provided by a separate Replit Scheduled Deployment invoking
- * `pnpm run send-reminder-alerts` (see
+ * Best-effort, in-process fallback: runs on startup and every minute while
+ * this server instance happens to be warm. This alone is NOT sufficient to
+ * guarantee delivery — on `autoscale` deployments the instance can be fully
+ * asleep for long stretches. Reliable delivery is provided by a separate
+ * Replit Scheduled Deployment invoking `pnpm run send-reminder-alerts` (see
  * artifacts/api-server/src/scripts/send-reminder-alerts.ts), which runs
- * independently of whether the web server instance is awake. The
- * reminder_deliveries dedup index makes both paths safely idempotent.
+ * independently of whether the web server instance is awake — that
+ * deployment's own cron cadence (configured in the Publishing UI, not this
+ * file) is a separate latency bound and should be at least as tight as
+ * IN_PROCESS_INTERVAL_MS for a consistent worst-case delay across both
+ * paths. The reminder_deliveries dedup index makes both paths safely
+ * idempotent.
  */
 export function startRemindersScheduler(): () => void {
   void runSchedulerTick();
@@ -1220,7 +1236,7 @@ export function startRemindersScheduler(): () => void {
   interval.unref();
 
   logger.info(
-    "reminders-scheduler: started (in-process fallback, runs every 15 minutes)",
+    "reminders-scheduler: started (in-process fallback, runs every minute)",
   );
   return () => clearInterval(interval);
 }

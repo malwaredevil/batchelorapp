@@ -245,6 +245,9 @@ importers:
       '@workspace/db':
         specifier: workspace:*
         version: link:../../lib/db
+      '@workspace/ornaments-shared':
+        specifier: workspace:*
+        version: link:../../lib/ornaments-shared
       '@workspace/upload-policy':
         specifier: workspace:*
         version: link:../../lib/upload-policy
@@ -1012,6 +1015,9 @@ importers:
       '@workspace/messenger-ui':
         specifier: workspace:*
         version: link:../../lib/messenger-ui
+      '@workspace/ornaments-shared':
+        specifier: workspace:*
+        version: link:../../lib/ornaments-shared
       '@workspace/travels-settings-ui':
         specifier: workspace:*
         version: link:../../lib/travels-settings-ui
@@ -1655,6 +1661,12 @@ importers:
         specifier: ^2.0.7
         version: 2.0.7(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
 
+  lib/ornaments-shared:
+    devDependencies:
+      vitest:
+        specifier: ^3.2.6
+        version: 3.2.6(@types/node@25.6.2)(jiti@2.7.0)(jsdom@29.1.1(@noble/hashes@1.8.0))(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.21.0)(yaml@2.9.0)
+
   lib/travels-settings-ui:
     dependencies:
       '@radix-ui/react-select':
@@ -1965,6 +1977,9 @@ importers:
       '@types/pg':
         specifier: ^8.11.0
         version: 8.20.0
+      jsonc-parser:
+        specifier: ^3.3.1
+        version: 3.3.1
       prettier:
         specifier: ^3.8.3
         version: 3.8.3
@@ -6246,6 +6261,9 @@ packages:
     resolution: {integrity: sha512-XmOWe7eyHYH14cLdVPoyg+GOH3rYX++KpzrylJwSW98t3Nk+U8XOl8FWKOgwtzdb8lXGf6zYwDUzeHMWfxasyg==}
     engines: {node: '>=6'}
     hasBin: true
+
+  jsonc-parser@3.3.1:
+    resolution: {integrity: sha512-HUgH65KyejrUFPvHFPbqOY0rsFip3Bo5wb4ngvdi1EpCYWUQDC5V+Y7mZws+DLkr4M//zQJoanu1SP+87Dv1oQ==}
 
   jsonfile@6.2.1:
     resolution: {integrity: sha512-zwOTdL3rFQ/lRdBnntKVOX6k5cKJwEc1HdilT71BWEu7J41gXIB2MRp+vxduPSwZJPWBxEzv4yH1wYLJGUHX4Q==}
@@ -12800,6 +12818,8 @@ snapshots:
   json-stable-stringify-without-jsonify@1.0.1: {}
 
   json5@2.2.3: {}
+
+  jsonc-parser@3.3.1: {}
 
   jsonfile@6.2.1:
     dependencies:

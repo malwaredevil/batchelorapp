@@ -14,6 +14,7 @@ import { getValidAccessToken } from "../../lib/google-calendar-tokens";
 import { getCalendarEvent } from "../../lib/google-calendar";
 import { logger } from "../../lib/logger";
 import { filterVerifiedPhoneUserIds } from "../../lib/reminder-recipients";
+import { getUserTimezone } from "../../lib/relative-time-resolver";
 import {
   findDuplicateTripReminder,
   tripReminderDuplicateWarningClause,
@@ -378,9 +379,10 @@ router.post("/trips/:id/reminders", async (req, res) => {
 
   const wireRow = toWireShape(row);
   if (duplicate) {
+    const tz = await getUserTimezone(userId);
     res.status(201).json({
       ...wireRow,
-      duplicateWarning: tripReminderDuplicateWarningClause(duplicate),
+      duplicateWarning: tripReminderDuplicateWarningClause(duplicate, tz),
     });
   } else {
     res.status(201).json(wireRow);

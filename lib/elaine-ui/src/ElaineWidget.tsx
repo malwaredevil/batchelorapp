@@ -8,9 +8,12 @@ import {
   History,
   GripVertical,
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetElaineNudgesUnseenCount,
   getGetElaineNudgesUnseenCountQueryKey,
+  useUpdateElaineSettings,
+  getGetElaineSettingsQueryKey,
   type ConversationMessage,
   type ElaineAppId,
 } from "@workspace/api-client-react";
@@ -30,6 +33,24 @@ const CHAT_WINDOW_DEFAULT_SIZES: Record<string, { w: number; h: number }> = {
 const MIN_W = 280;
 const MIN_H = 340;
 
+// sessionStorage key for the "hide for this session" choice. Session-scoped
+// storage is naturally shared across every module on the same origin for the
+// rest of the browser session and clears on the next visit.
+const SESSION_HIDE_KEY = "elaineWidgetSessionHidden";
+
+function readSessionHidden(): boolean {
+  try {
+    return sessionStorage.getItem(SESSION_HIDE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+// Fired by the settings card's "Show bubble" action so an already-mounted
+// widget (e.g. on the same Account page) reappears immediately without a
+// reload. Exported for ElaineSettingsCard and tests.
+export const ELAINE_WIDGET_UNHIDE_EVENT = "elaine-widget-unhide";
+
 export function ElaineWidget({
   appId,
   fullScreenPath,
@@ -41,6 +62,11 @@ export function ElaineWidget({
 }) {
   const [open, setOpen] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  // Hide state — read synchronously so a session-hidden bubble never flashes.
+  const [sessionHidden, setSessionHidden] = useState(readSessionHidden);
+  const [showClosePrompt, setShowClosePrompt] = useState(false);
+  const qc = useQueryClient();
+  const updateSettings = useUpdateElaineSettings();
   const [isDesktop, setIsDesktop] = useState(
     () =>
       typeof window !== "undefined" &&
@@ -253,7 +279,54 @@ export function ElaineWidget({
   const onFullScreenChat =
     fullScreenPath !== undefined && currentPath === fullScreenPath;
 
-  if (!settings?.enabled || onFullScreenChat) {
+  const hideForSession = useCallback(() => {
+    try {
+      sessionStorage.setItem(SESSION_HIDE_KEY, "1");
+    } catch {
+      // sessionStorage unavailable — state still hides it for this page.
+    }
+    setSessionHidden(true);
+    setShowClosePrompt(false);
+  }, []);
+
+  const hideForever = useCallback(() => {
+    // Hide immediately via an optimistic settings-cache update (the widget
+    // renders from the shared settings query, so this takes effect at once
+    // and is naturally cleared by the settings card's "Show bubble" action),
+    // then persist to the account.
+    setShowClosePrompt(false);
+    const key = getGetElaineSettingsQueryKey();
+    qc.setQueryData(
+      key,
+      (prev: { widgetHidden?: boolean } | undefined) =>
+        prev && { ...prev, widgetHidden: true },
+    );
+    updateSettings.mutate(
+      { widgetHidden: true },
+      {
+        onSuccess: (result) => {
+          qc.setQueryData(key, result);
+        },
+      },
+    );
+  }, [updateSettings, qc]);
+
+  // Reappear immediately when the settings card re-enables the bubble in the
+  // same page/session ("Show bubble" clears the session flag and dispatches
+  // this event; the widgetHidden=false half arrives via the settings cache).
+  useEffect(() => {
+    const onUnhide = () => setSessionHidden(readSessionHidden());
+    window.addEventListener(ELAINE_WIDGET_UNHIDE_EVENT, onUnhide);
+    return () =>
+      window.removeEventListener(ELAINE_WIDGET_UNHIDE_EVENT, onUnhide);
+  }, []);
+
+  if (
+    !settings?.enabled ||
+    settings.widgetHidden ||
+    sessionHidden ||
+    onFullScreenChat
+  ) {
     return null;
   }
 
@@ -447,38 +520,72 @@ export function ElaineWidget({
           </div>
         )}
 
-        {!open && (
-          <button
-            onClick={() => {
-              if (justDraggedRef.current) {
-                justDraggedRef.current = false;
-                return;
+        {!open && showClosePrompt && (
+          <div className="flex w-56 flex-col gap-2 rounded-2xl border border-card-border bg-card p-3 shadow-lg">
+            <p className="text-sm font-medium text-foreground">
+              Hide the Elaine bubble?
+            </p>
+            <Button variant="outline" size="sm" onClick={hideForSession}>
+              Hide for this session
+            </Button>
+            <Button variant="outline" size="sm" onClick={hideForever}>
+              Hide forever
+            </Button>
+            <p className="text-[11px] text-muted-foreground">
+              &ldquo;Forever&rdquo; can be undone anytime from Elaine&rsquo;s
+              settings.
+            </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowClosePrompt(false)}
+            >
+              Cancel
+            </Button>
+          </div>
+        )}
+        {!open && !showClosePrompt && (
+          <div className="relative">
+            <button
+              onClick={() => setShowClosePrompt(true)}
+              className="absolute -left-2 -top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-card-border bg-card text-muted-foreground shadow hover:text-foreground"
+              aria-label="Hide Elaine assistant bubble"
+              title="Hide Elaine"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => {
+                if (justDraggedRef.current) {
+                  justDraggedRef.current = false;
+                  return;
+                }
+                setOpen(true);
+              }}
+              onPointerDown={onMovePointerDown}
+              onPointerMove={onMovePointerMove}
+              onPointerUp={onMovePointerUp}
+              onPointerCancel={onMovePointerUp}
+              style={{ touchAction: "none" }}
+              className="relative flex items-center gap-2 rounded-full border border-card-border bg-card py-2 pl-2 pr-4 shadow-lg transition-transform hover:scale-105"
+              aria-label={
+                unseenNudges && unseenNudges.count > 0
+                  ? `Open Elaine assistant (${unseenNudges.count} new)`
+                  : "Open Elaine assistant"
               }
-              setOpen(true);
-            }}
-            onPointerDown={onMovePointerDown}
-            onPointerMove={onMovePointerMove}
-            onPointerUp={onMovePointerUp}
-            onPointerCancel={onMovePointerUp}
-            style={{ touchAction: "none" }}
-            className="relative flex items-center gap-2 rounded-full border border-card-border bg-card py-2 pl-2 pr-4 shadow-lg transition-transform hover:scale-105"
-            aria-label={
-              unseenNudges && unseenNudges.count > 0
-                ? `Open Elaine assistant (${unseenNudges.count} new)`
-                : "Open Elaine assistant"
-            }
-          >
-            {unseenNudges && unseenNudges.count > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[11px] font-semibold leading-none text-destructive-foreground">
-                {unseenNudges.count > 9 ? "9+" : unseenNudges.count}
+            >
+              {unseenNudges && unseenNudges.count > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[11px] font-semibold leading-none text-destructive-foreground">
+                  {unseenNudges.count > 9 ? "9+" : unseenNudges.count}
+                </span>
+              )}
+              <ElaineAvatar size={36} />
+              <span className="flex items-center gap-1 text-sm font-medium">
+                <ElaineWordmark />
               </span>
-            )}
-            <ElaineAvatar size={36} />
-            <span className="flex items-center gap-1 text-sm font-medium">
-              <ElaineWordmark />
-            </span>
-            <MessageCircle className="h-3.5 w-3.5 text-muted-foreground" />
-          </button>
+              <MessageCircle className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
+          </div>
         )}
       </div>
     </div>,

@@ -1041,6 +1041,7 @@ async function main() {
       "enabled",
       "action_confirmation_mode",
       "chat_window_size",
+      "widget_hidden",
       "updated_at",
     ],
     orderBy: "user_id",

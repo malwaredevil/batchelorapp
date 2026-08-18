@@ -879,6 +879,7 @@ export const STATEMENTS: string[] = [
   )`,
   `ALTER TABLE elaine_settings ENABLE ROW LEVEL SECURITY`,
   `ALTER TABLE elaine_settings ADD COLUMN IF NOT EXISTS chat_window_size TEXT NOT NULL DEFAULT 'compact'`,
+  `ALTER TABLE elaine_settings ADD COLUMN IF NOT EXISTS widget_hidden BOOLEAN NOT NULL DEFAULT false`,
 
   `CREATE TABLE IF NOT EXISTS elaine_memory (
     id                  SERIAL PRIMARY KEY,
@@ -3350,4 +3351,6 @@ END $$`,
      last_checked_at          TIMESTAMPTZ
   )`,
   `ALTER TABLE reminder_calendar_sync_state ENABLE ROW LEVEL SECURITY`,
+
+  // scaffold:anchor:collection-ddl — scaffold-collection-module inserts DDL below; do not remove
 ];

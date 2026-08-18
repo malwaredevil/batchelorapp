@@ -9,9 +9,29 @@ import {
   RelativeTimeResolutionError,
   RelativeTimeSpecZod,
   RELATIVE_TIME_SPEC_JSON_SCHEMA,
+  explicitTimezoneField,
+  EXPLICIT_TIMEZONE_JSON_SCHEMA,
   type RelativeTimeSpec,
 } from "../lib/relative-time-resolver";
+import { isValidIanaTimeZone } from "../lib/timezone";
 import { formatScheduledTime } from "./communication-actions";
+
+// Picks the timezone to use for BOTH resolving `when`/`scheduleAt` AND
+// formatting the confirmation for a single request: the user's explicit
+// override when they named one and it's a valid IANA identifier, otherwise
+// their own profile timezone. Duplicated (rather than imported) from
+// communication-actions.ts's identical helper because that module is
+// entirely replaced (not partially spread) by this file's own test mocks —
+// see reminder-actions.test.ts's `vi.mock("./communication-actions", ...)`.
+async function resolveEffectiveTimezone(
+  userId: number,
+  explicitTimezone?: string,
+): Promise<string> {
+  if (explicitTimezone && isValidIanaTimeZone(explicitTimezone)) {
+    return explicitTimezone;
+  }
+  return getUserTimezone(userId);
+}
 import {
   listManageableReminders,
   snoozeReminder,
@@ -76,8 +96,9 @@ async function findDuplicatePersonalReminder(params: {
  * for communication-action duplicates so the two surfaces are consistent. */
 function personalReminderDuplicateWarningClause(
   duplicate: DuplicatePersonalReminderMatch,
+  timezone: string,
 ): string {
-  return ` Heads up — you already had a near-identical reminder scheduled for ${formatScheduledTime(duplicate.dueAt.toISOString())} (reminder #${duplicate.id}). I've left both in place; let me know if you'd like me to cancel one.`;
+  return ` Heads up — you already had a near-identical reminder scheduled for ${formatScheduledTime(duplicate.dueAt.toISOString(), timezone)} (reminder #${duplicate.id}). I've left both in place; let me know if you'd like me to cancel one.`;
 }
 
 // ---------------------------------------------------------------------------
@@ -154,10 +175,11 @@ export async function findDuplicateTripReminder(params: {
  * near-duplicate trip-scoped reminder already exists. */
 export function tripReminderDuplicateWarningClause(
   duplicate: DuplicateTripReminderMatch,
+  timezone: string,
 ): string {
   const timeStr =
     duplicate.dueAt !== null
-      ? ` scheduled for ${formatScheduledTime(duplicate.dueAt.toISOString())}`
+      ? ` scheduled for ${formatScheduledTime(duplicate.dueAt.toISOString(), timezone)}`
       : "";
   return `Heads up — you already had a near-identical reminder${timeStr} for this trip (reminder #${duplicate.id}). I've left both in place; let me know if you'd like me to cancel one.`;
 }
@@ -195,6 +217,7 @@ const CreateReminderPayload = z.object({
   description: z.string().max(2000).optional(),
   when: RelativeTimeSpecZod,
   channels: z.array(ReminderChannel).max(4).optional(),
+  timezone: explicitTimezoneField,
 });
 
 // ---------------------------------------------------------------------------
@@ -220,6 +243,7 @@ const SnoozeReminderPayload = z.object({
   reminderId: z.number().int().positive(),
   when: RelativeTimeSpecZod.optional(),
   skipNext: z.literal(true).optional(),
+  timezone: explicitTimezoneField,
 });
 
 export const reminderActionSchemas = [
@@ -252,7 +276,7 @@ export const reminderActionExecutors: Record<
     payload: z.infer<typeof CreateReminderPayload>,
     userId: number,
   ) => {
-    const tz = await getUserTimezone(userId);
+    const tz = await resolveEffectiveTimezone(userId, payload.timezone);
     let dueAt: Date;
     try {
       dueAt = resolveRelativeTime(payload.when as RelativeTimeSpec, tz);
@@ -318,7 +342,7 @@ export const reminderActionExecutors: Record<
         : "elaine: created natural-language reminder",
     );
 
-    const formattedTime = formatScheduledTime(dueAt.toISOString());
+    const formattedTime = formatScheduledTime(dueAt.toISOString(), tz);
     const channelLabel = channels.join(", ");
     return {
       status: 201,
@@ -329,7 +353,7 @@ export const reminderActionExecutors: Record<
           dueAt: dueAt.toISOString(),
           channels,
           ...(duplicate ? { duplicateOfReminderId: duplicate.id } : {}),
-          confirmationMessage: `Got it — I'll remind you "${payload.title}" at ${formattedTime} via ${channelLabel}.${duplicate ? personalReminderDuplicateWarningClause(duplicate) : ""}`,
+          confirmationMessage: `Got it — I'll remind you "${payload.title}" at ${formattedTime} via ${channelLabel}.${duplicate ? personalReminderDuplicateWarningClause(duplicate, tz) : ""}`,
         },
       },
     };
@@ -339,13 +363,13 @@ export const reminderActionExecutors: Record<
     payload: z.infer<typeof SnoozeReminderPayload>,
     userId: number,
   ) => {
+    const tz = await resolveEffectiveTimezone(userId, payload.timezone);
     let result;
     if (payload.skipNext) {
       result = await snoozeReminder(payload.reminderId, userId, {
         skipNext: true,
       });
     } else if (payload.when) {
-      const tz = await getUserTimezone(userId);
       let dueAt: Date;
       try {
         dueAt = resolveRelativeTime(payload.when as RelativeTimeSpec, tz);
@@ -380,7 +404,7 @@ export const reminderActionExecutors: Record<
     );
 
     const newDueAt = result.reminder.dueAt
-      ? formatScheduledTime(result.reminder.dueAt.toISOString())
+      ? formatScheduledTime(result.reminder.dueAt.toISOString(), tz)
       : "no due date";
     return {
       status: 200,
@@ -435,6 +459,8 @@ export const reminderActionTools: OpenAI.Chat.Completions.ChatCompletionTool[] =
           "Resolve the time into the `when` structured spec — never write an ISO datetime yourself. " +
           "If the user's phrasing doesn't map cleanly onto one of the `when.kind` variants (e.g. a genuinely ambiguous date), ask them to clarify instead of guessing. " +
           "`channels` lists every delivery channel the user asked for in ONE request (e.g. email+sms+slack all in the same sentence creates ONE reminder with all three, not three reminders); omit it to default to the in-app messenger channel only. " +
+          "Use `when.kind: \"at-clock-time\"` for a bare time of day with no explicit day (e.g. 'remind me at 3:45pm'); never hand-compute a datetime yourself. " +
+          "Only include `timezone` when the user explicitly names a different timezone/city for this reminder than their own (see that field's description) — omit it otherwise. " +
           "Confirm the exact resolved date/time and channel(s) back to the user in your visible reply.",
         parameters: {
           type: "object",
@@ -457,6 +483,7 @@ export const reminderActionTools: OpenAI.Chat.Completions.ChatCompletionTool[] =
               description:
                 "Delivery channel(s) for this reminder, all resolved to the requesting user's own account. Omit for the default (messenger only).",
             },
+            timezone: EXPLICIT_TIMEZONE_JSON_SCHEMA,
           },
           required: ["title", "when"],
         },
@@ -471,7 +498,8 @@ export const reminderActionTools: OpenAI.Chat.Completions.ChatCompletionTool[] =
           "Never guess a reminderId; get it from list_reminders, on-screen context, or a prior tool result first. " +
           "Provide `when` to move it to a new specific time (resolve relative phrasing into the structured spec yourself, same as create_reminder). " +
           "Provide `skipNext: true` instead to advance a RECURRING reminder past just its next occurrence without changing the recurrence rule (if it has no more occurrences left, it's marked done). " +
-          "Provide exactly one of `when` or `skipNext`, never both.",
+          "Provide exactly one of `when` or `skipNext`, never both. " +
+          "Only include `timezone` when the user explicitly names a different timezone/city for the new time than their own (see that field's description) — omit it otherwise.",
         parameters: {
           type: "object",
           properties: {
@@ -485,6 +513,7 @@ export const reminderActionTools: OpenAI.Chat.Completions.ChatCompletionTool[] =
               description:
                 "Set true to skip just the next occurrence of a recurring reminder. Omit when providing `when` instead.",
             },
+            timezone: EXPLICIT_TIMEZONE_JSON_SCHEMA,
           },
           required: ["reminderId"],
         },
@@ -523,6 +552,7 @@ export async function executeAddReminderAction(
     .where(eq(travelsTrips.id, payload.tripId));
   if (!trip) return { status: 404, body: { error: "Trip not found" } };
 
+  const tz = await getUserTimezone(userId);
   const dueAt = payload.dueDate
     ? new Date(`${payload.dueDate}T00:01:00.000Z`)
     : null;
@@ -573,7 +603,10 @@ export async function executeAddReminderAction(
         ...(duplicate
           ? {
               duplicateOfReminderId: duplicate.id,
-              duplicateWarning: tripReminderDuplicateWarningClause(duplicate),
+              duplicateWarning: tripReminderDuplicateWarningClause(
+                duplicate,
+                tz,
+              ),
             }
           : {}),
       },

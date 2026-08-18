@@ -864,6 +864,36 @@ export function GlobalConfigCard() {
               setThresholds({ ...thresholds, broadcastHourlyLimit: v })
             }
           />
+          <NumberField
+            label="Pottery: AI supplemental photos per analysis"
+            hint="How many supplemental photos (beyond the primary) are sent to the AI in a single pottery analysis call. Higher values improve accuracy but increase token cost."
+            min={1}
+            max={20}
+            value={thresholds.potteryMaxAiSupplemental}
+            onChange={(v) =>
+              setThresholds({ ...thresholds, potteryMaxAiSupplemental: v })
+            }
+          />
+          <NumberField
+            label="Pottery: bulk re-analyze batch limit"
+            hint="Max number of pottery pieces that can be re-analyzed in a single bulk operation."
+            min={1}
+            max={100}
+            value={thresholds.potteryBulkReanalyzeLimit}
+            onChange={(v) =>
+              setThresholds({ ...thresholds, potteryBulkReanalyzeLimit: v })
+            }
+          />
+          <NumberField
+            label="Ornaments: bulk re-analyze batch limit"
+            hint="Max number of ornaments that can be re-analyzed in a single bulk operation."
+            min={1}
+            max={100}
+            value={thresholds.ornamentsBulkReanalyzeLimit}
+            onChange={(v) =>
+              setThresholds({ ...thresholds, ornamentsBulkReanalyzeLimit: v })
+            }
+          />
         </div>
       </Section>
 

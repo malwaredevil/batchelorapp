@@ -134,6 +134,7 @@ import {
   encodeXline,
   applyDiagClip,
   floodFillSolid,
+  fmtInch,
   toggleQuarterLine,
   quarterDirForClick,
   type ParsedCell,
@@ -2296,29 +2297,6 @@ function ColorPicker({
 // ---------------------------------------------------------------------------
 // Main designer page
 // ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Inch formatting helper
-// ---------------------------------------------------------------------------
-
-function fmtInch(val: number): string {
-  if (val === 0) return `0"`;
-  const eighths = Math.round(val * 8) / 8;
-  const whole = Math.floor(eighths);
-  const frac = Math.round((eighths - whole) * 8);
-  const fracMap: Record<number, string> = {
-    1: "⅛",
-    2: "¼",
-    3: "⅜",
-    4: "½",
-    5: "⅝",
-    6: "¾",
-    7: "⅞",
-  };
-  if (frac === 0) return `${whole}"`;
-  const fracStr = fracMap[frac] ?? `${frac}/8`;
-  return whole > 0 ? `${whole}${fracStr}"` : `${fracStr}"`;
-}
 
 // ---------------------------------------------------------------------------
 // Ruler strip (overlaid above and to the left of BlockGrid)

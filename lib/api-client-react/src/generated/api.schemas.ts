@@ -120,31 +120,6 @@ export interface ChangePasswordInput {
   newPassword: string;
 }
 
-export interface PotteryEbayListing {
-  title: string;
-  soldPrice: number;
-  currency: string;
-  /** @nullable */
-  soldDate?: string | null;
-  /** @nullable */
-  condition?: string | null;
-  /** @nullable */
-  imageUrl?: string | null;
-  /** @nullable */
-  itemUrl?: string | null;
-}
-
-export interface PotteryEbayPriceResult {
-  priceMinUsd: number;
-  priceMaxUsd: number;
-  priceMedianUsd: number;
-  listingCount: number;
-  listings: PotteryEbayListing[];
-  /** @nullable */
-  cachedAt?: string | null;
-  searchQuery?: string;
-}
-
 export interface PotteryWatchlistItem {
   id: number;
   /** @nullable */
@@ -2367,6 +2342,20 @@ export interface OrnamentsOrnamentListStats {
   minYear?: number | null;
   /** @nullable */
   maxYear?: number | null;
+  /** Sum of each matching item's parsed AI-appraisal low estimate × quantity. */
+  aiAppraisalLowTotal: number;
+  /** Sum of each matching item's parsed AI-appraisal high estimate × quantity. */
+  aiAppraisalHighTotal: number;
+  /** How many matching items contributed a parseable AI appraisal range. */
+  itemsWithAiAppraisal: number;
+  /** Sum of each matching item's consensus value (average of available signals) × quantity. */
+  consensusValueTotal: number;
+  /** How many matching items had at least two value signals to average. */
+  itemsWithConsensusValue: number;
+  /** Sum of each matching item's retail value on file × quantity. */
+  retailValueTotal: number;
+  /** How many matching items had a retail value on file. */
+  itemsWithRetailValue: number;
 }
 
 export interface OrnamentsOrnamentListResponse {
@@ -3017,12 +3006,6 @@ page?: number;
  * @maximum 200
  */
 pageSize?: number;
-};
-
-export type EstimatePotteryMarketValueBody = {
-  /** When true, skip the 7-day staleness cache and fire a fresh Apify sold-listings run regardless of the last fetch date.
-   */
-  force?: boolean;
 };
 
 export type DismissWatchlistAlert200 = {

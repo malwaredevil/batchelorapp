@@ -225,8 +225,17 @@ function applyInsertion(ins: Insertion, pluralId: string): void {
 
 function removeMarkedBlock(file: string, pluralId: string): boolean {
   const abs = path.join(ROOT, file);
-  if (!fs.existsSync(abs)) return false;
-  const lines = fs.readFileSync(abs, "utf8").split("\n");
+  // Read directly and treat ENOENT as "nothing to remove" instead of a
+  // separate existsSync pre-check, so there's no window between checking
+  // and reading for the file to be created/deleted out from under us.
+  let raw: string;
+  try {
+    raw = fs.readFileSync(abs, "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw err;
+  }
+  const lines = raw.split("\n");
   const begin = lines.findIndex((l) =>
     l.includes(`scaffold:begin:${pluralId}`),
   );
@@ -2403,9 +2412,20 @@ function provenanceHeader(rel: string, plural: string): string {
 
 function writeGenerated(rel: string, content: string, plural: string): void {
   const abs = path.join(ROOT, rel);
-  if (fs.existsSync(abs)) fail(`${rel} already exists — run --undo first`);
   fs.mkdirSync(path.dirname(abs), { recursive: true });
-  fs.writeFileSync(abs, provenanceHeader(rel, plural) + content);
+  // Exclusive create ("wx") makes the existence check and the write a single
+  // atomic operation — no separate existsSync-then-writeFileSync window for
+  // the file to be created/replaced between the two calls.
+  try {
+    fs.writeFileSync(abs, provenanceHeader(rel, plural) + content, {
+      flag: "wx",
+    });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "EEXIST") {
+      fail(`${rel} already exists — run --undo first`);
+    }
+    throw err;
+  }
   console.log(`  + ${rel}`);
 }
 

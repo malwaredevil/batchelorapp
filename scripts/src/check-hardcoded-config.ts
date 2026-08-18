@@ -35,7 +35,6 @@
  *   pnpm --filter @workspace/scripts run check-hardcoded-config -- --audit
  */
 import path from "node:path";
-import fs from "node:fs";
 import {
   getChangedFiles,
   readFileOrNull,
@@ -253,10 +252,10 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   // category/item name fields — input-validation caps mirroring the existing
   // modules' specs, part of code-generation template strings, never
   // owner-facing runtime config.
-  "scripts/src/scaffold-collection-module.ts:791",
-  "scripts/src/scaffold-collection-module.ts:792",
-  "scripts/src/scaffold-collection-module.ts:1012",
-  "scripts/src/scaffold-collection-module.ts:1023",
+  "scripts/src/scaffold-collection-module.ts:800",
+  "scripts/src/scaffold-collection-module.ts:801",
+  "scripts/src/scaffold-collection-module.ts:1021",
+  "scripts/src/scaffold-collection-module.ts:1032",
 
   // ---- scripts/check-duplicate-code.ts ----
   // MIN_TOKENS: fixed algorithm parameter of the duplicate-code detector

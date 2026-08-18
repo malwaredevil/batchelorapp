@@ -13,6 +13,7 @@
  */
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -491,9 +492,12 @@ if (process.env.SCAFFOLD_INTEGRATION === "1") {
       encoding: "utf8",
     }).trim();
   const statusBefore = gitStatus();
+  // Random (not just time-based) suffix + exclusive-create ("wx") so a
+  // pre-existing file/symlink at a guessed path can never be followed —
+  // this write always creates a brand-new, unpredictable path or fails.
   const specPath = path.join(
     os.tmpdir(),
-    `scaffold-int-spec-${Date.now()}.json`,
+    `scaffold-int-spec-${crypto.randomUUID()}.json`,
   );
   // Unique per-run name so the fixture can never collide with a committed
   // module (or a leftover from an interrupted earlier run) in the real repo.
@@ -504,7 +508,7 @@ if (process.env.SCAFFOLD_INTEGRATION === "1") {
     plural: intPlural,
     title: "Integration Test",
   };
-  fs.writeFileSync(specPath, JSON.stringify(intSpec));
+  fs.writeFileSync(specPath, JSON.stringify(intSpec), { flag: "wx" });
   let scaffolded = false;
   try {
     // Scaffold with codegen so the generated Zod schemas + React Query hooks

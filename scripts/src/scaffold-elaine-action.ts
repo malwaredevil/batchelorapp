@@ -37,7 +37,7 @@
  * duplicates or corrupts existing entries.
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync, execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -496,6 +496,10 @@ export const toCamel = (s: string) => {
   return p.charAt(0).toLowerCase() + p.slice(1);
 };
 export const toKebab = (s: string) => s.replace(/_/g, "-");
+// Escapes regex metacharacters so a CLI-arg-derived string can be embedded
+// in a `new RegExp(...)` and matched literally instead of as a pattern.
+export const escapeRegExp = (s: string) =>
+  s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // ─── Zod / JSON-schema codegen ───────────────────────────────────────────────
 
@@ -944,7 +948,6 @@ export function buildTravelsFileEdits(spec: ToolSpec): Edit[] {
   ];
 }
 export function buildReadToolCatalogEdits(spec: ToolSpec): Edit[] {
-  const pascal = toPascal(spec.name);
   const camel = toCamel(spec.name);
   const kebab = toKebab(spec.name);
   return [
@@ -1115,7 +1118,14 @@ function buildDirectMappingEdits(spec: ToolSpec): Edit[] {
         const anchor = "const DIRECT_TOOL_MAP: Record<string, string[]> = {";
         const idx = content.indexOf(anchor);
         if (idx < 0) throw new Error("DIRECT_TOOL_MAP anchor not found");
-        if (new RegExp(`\\b${opId}:`).test(content.slice(idx, idx + 8000)))
+        // opId comes from a CLI flag; escape it before building a RegExp so
+        // it's matched as a literal operationId, not interpreted as a
+        // regex pattern.
+        if (
+          new RegExp(`\\b${escapeRegExp(opId)}:`).test(
+            content.slice(idx, idx + 8000),
+          )
+        )
           return null;
         return insertAfterAnchor(
           content,
@@ -1184,13 +1194,25 @@ export function main(argv: string[]): void {
     [stubPath, () => buildStubFile(spec)],
     [testPath, () => buildTestFile(spec)],
   ] as const) {
-    if (fs.existsSync(p)) {
-      console.log(`  ⏭  skip (exists): ${path.relative(REPO_ROOT, p)}`);
-    } else if (spec.dryRun) {
-      console.log(`  📝 would create: ${path.relative(REPO_ROOT, p)}`);
-    } else {
-      fs.writeFileSync(p, builder());
+    if (spec.dryRun) {
+      if (fs.existsSync(p)) {
+        console.log(`  ⏭  skip (exists): ${path.relative(REPO_ROOT, p)}`);
+      } else {
+        console.log(`  📝 would create: ${path.relative(REPO_ROOT, p)}`);
+      }
+      continue;
+    }
+    // Exclusive create ("wx") folds the existence check and the write into
+    // one atomic operation instead of a separate existsSync-then-write.
+    try {
+      fs.writeFileSync(p, builder(), { flag: "wx" });
       console.log(`  ✅ created ${path.relative(REPO_ROOT, p)}`);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "EEXIST") {
+        console.log(`  ⏭  skip (exists): ${path.relative(REPO_ROOT, p)}`);
+      } else {
+        throw err;
+      }
     }
   }
 
@@ -1223,12 +1245,19 @@ export function main(argv: string[]): void {
     return;
   }
 
-  // 3. Format touched files so anchored insertions match repo style.
+  // 3. Format touched files so anchored insertions match repo style. Passed
+  // as an argv array via execFileSync (not interpolated into a shell
+  // string) so a touched path can never be reinterpreted by the shell.
   const formatTargets = [...new Set([...touched, stubPath, testPath])]
     .filter((f) => f.endsWith(".ts"))
-    .map((f) => path.relative(REPO_ROOT, f))
-    .join(" ");
-  if (formatTargets) run(`pnpm exec prettier --write ${formatTargets}`);
+    .map((f) => path.relative(REPO_ROOT, f));
+  if (formatTargets.length > 0) {
+    console.log(`\n$ pnpm exec prettier --write ${formatTargets.join(" ")}`);
+    execFileSync("pnpm", ["exec", "prettier", "--write", ...formatTargets], {
+      cwd: REPO_ROOT,
+      stdio: "inherit",
+    });
+  }
 
   // 4. Regenerate the operation catalog and check capability parity.
   run("pnpm --filter @workspace/scripts run elaine:operation-catalog-write", {

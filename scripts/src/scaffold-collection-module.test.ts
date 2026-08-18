@@ -13,7 +13,6 @@
  */
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -492,13 +491,12 @@ if (process.env.SCAFFOLD_INTEGRATION === "1") {
       encoding: "utf8",
     }).trim();
   const statusBefore = gitStatus();
-  // Random (not just time-based) suffix + exclusive-create ("wx") so a
-  // pre-existing file/symlink at a guessed path can never be followed —
-  // this write always creates a brand-new, unpredictable path or fails.
-  const specPath = path.join(
-    os.tmpdir(),
-    `scaffold-int-spec-${crypto.randomUUID()}.json`,
-  );
+  // mkdtempSync creates a fresh, exclusively-owned directory (mode 0700,
+  // random suffix) instead of writing straight into the shared os.tmpdir()
+  // — no other process/user on the machine can have pre-created a file or
+  // symlink at this path.
+  const specDir = fs.mkdtempSync(path.join(os.tmpdir(), "scaffold-int-"));
+  const specPath = path.join(specDir, "spec.json");
   // Unique per-run name so the fixture can never collide with a committed
   // module (or a leftover from an interrupted earlier run) in the real repo.
   const intPlural = `itest${Date.now().toString(36)}x`;
@@ -544,7 +542,7 @@ if (process.env.SCAFFOLD_INTEGRATION === "1") {
         `integration undo failed — repo may be dirty:\n${undoRes.output}`,
       );
     }
-    fs.rmSync(specPath, { force: true });
+    fs.rmSync(specDir, { recursive: true, force: true });
   }
   assert.equal(
     gitStatus(),

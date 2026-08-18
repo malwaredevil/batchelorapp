@@ -107,3 +107,10 @@ export type { AsyncActionStatus } from "./async-action-status";
 
 export { useBulkReanalyzeRun } from "./use-bulk-reanalyze-run";
 export type { BulkReanalyzeRunDeps } from "./use-bulk-reanalyze-run";
+
+export {
+  toggleLockedField,
+  useToggleLockedField,
+  mergeSelectedCategoryNames,
+} from "./use-toggle-locked-field";
+export type { ToggleLockedFieldMessages } from "./use-toggle-locked-field";

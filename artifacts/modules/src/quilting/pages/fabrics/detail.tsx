@@ -57,6 +57,8 @@ import {
   CollectionDetailSkeleton,
   CollectionErrorState,
   ReminderBellButton,
+  useToggleLockedField,
+  mergeSelectedCategoryNames,
 } from "@workspace/collection-ui";
 
 type Fabric = {
@@ -380,20 +382,13 @@ export default function FabricDetail() {
     });
   }
 
-  function toggleLock(field: string) {
-    if (!fabric) return;
-    const f = fabric as unknown as Fabric;
-    const current = f.lockedFields ?? [];
-    const next = current.includes(field)
-      ? current.filter((x) => x !== field)
-      : [...current, field];
-    updateFabric.mutate({ id: fabricId, data: { lockedFields: next } });
-    toast.success(
-      next.includes(field)
-        ? `"${field}" locked — AI won't change this`
-        : `"${field}" unlocked`,
-    );
-  }
+  const toggleLock = useToggleLockedField(
+    fabric as unknown as Fabric | undefined,
+    (f) => f.lockedFields,
+    (next) =>
+      updateFabric.mutate({ id: fabricId, data: { lockedFields: next } }),
+    { locked: (field) => `"${field}" locked — AI won't change this` },
+  );
 
   function handleRefreshAI() {
     reanalyzeFabric.mutate({ id: fabricId });
@@ -416,15 +411,11 @@ export default function FabricDetail() {
   }
 
   function handleSaveCategories() {
-    const merged = [
-      ...(allCategories ?? []),
-      ...localNewCats.filter(
-        (nc) => !(allCategories ?? []).some((a) => a.id === nc.id),
-      ),
-    ];
-    const categoryNames = merged
-      .filter((c) => selectedCategoryIds.includes(c.id))
-      .map((c) => c.name);
+    const categoryNames = mergeSelectedCategoryNames(
+      allCategories,
+      localNewCats,
+      selectedCategoryIds,
+    );
     updateFabric.mutate(
       { id: fabricId, data: { categories: categoryNames } },
       {

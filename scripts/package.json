@@ -43,6 +43,7 @@
     "check-public-file-secrets": "tsx ./src/check-public-file-secrets.ts",
     "check-secrets-registry": "tsx ./src/check-secrets-registry.ts",
     "print-agent-screenshot-token": "tsx ./src/print-agent-screenshot-token.ts",
+    "check-agent-screenshot-access": "tsx ./src/check-agent-screenshot-access.ts",
     "pre-publish": "bash ./src/pre-publish.sh",
     "verify-github-secrets": "tsx --env-file=.env ./src/verify-github-secrets.ts",
     "verify-supabase-prerequisites": "tsx --env-file=.env ./src/verify-supabase-prerequisites.ts",

@@ -35,6 +35,9 @@ export default [
       // Excluded from its package tsconfig (intentional CI sentinel); ESLint
       // cannot type-check it without a project reference.
       "artifacts/api-server/src/_ci_sentinel_scheduler_names_.ts",
+      // pii-scan.test.ts briefly writes this temp fixture into lib/ during
+      // integration tests; exclude so a concurrent lint+test run never trips.
+      "lib/_temp_pii_scan_test_fixture_delete_me.ts",
     ],
   },
   {

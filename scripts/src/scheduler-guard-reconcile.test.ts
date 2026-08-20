@@ -31,6 +31,7 @@ import { writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
 
 // ---------------------------------------------------------------------------
 // Paths
@@ -249,8 +250,12 @@ try {
 }
 `;
 
+  // Written under the OS temp dir (not REPO_ROOT): if this process is ever
+  // killed before the finally block below can rmSync it (workflow restart,
+  // OOM, etc.), a leftover file here can't be swept up by an automated
+  // `git add -A` commit the way a repo-root leftover once was.
   const tmp = join(
-    REPO_ROOT,
+    tmpdir(),
     `_scheduler_guard_reconcile_test_${Date.now()}.mts`,
   );
   writeFileSync(tmp, script, "utf8");

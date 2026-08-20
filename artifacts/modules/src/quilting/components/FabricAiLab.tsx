@@ -31,6 +31,7 @@ import {
   getListFabricsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { ImageLightbox } from "@workspace/collection-ui";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -138,16 +139,6 @@ export function FabricAiLab({ fabricId, imageUrl }: Props) {
       ro.disconnect();
     };
   }, [open]);
-
-  // Escape closes lightbox
-  useEffect(() => {
-    if (!lightbox) return;
-    const h = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setLightbox(null);
-    };
-    window.addEventListener("keydown", h);
-    return () => window.removeEventListener("keydown", h);
-  }, [lightbox]);
 
   // ---------------------------------------------------------------------------
   // Coordinate mapping: screen px → canvas logical px
@@ -426,9 +417,11 @@ export function FabricAiLab({ fabricId, imageUrl }: Props) {
   return (
     <>
       {lightbox && (
-        <ZoomPanLightbox
+        <ImageLightbox
           src={lightbox.src}
+          alt={lightbox.title}
           title={lightbox.title}
+          open
           onClose={() => setLightbox(null)}
         />
       )}
@@ -726,106 +719,6 @@ export function FabricAiLab({ fabricId, imageUrl }: Props) {
         )}
       </div>
     </>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Zoom/Pan Lightbox (for reviewing results)
-// ---------------------------------------------------------------------------
-
-function ZoomPanLightbox({
-  src,
-  title,
-  onClose,
-}: {
-  src: string;
-  title: string;
-  onClose: () => void;
-}) {
-  const [scale, setScale] = useState(1);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const dragging = useRef(false);
-  const lastPos = useRef({ x: 0, y: 0 });
-
-  function handleWheel(e: WheelEvent<HTMLDivElement>) {
-    e.preventDefault();
-    setScale((s) => Math.min(8, Math.max(0.5, s - e.deltaY * 0.001)));
-  }
-
-  function handlePointerDown(e: ReactPointerEvent<HTMLDivElement>) {
-    dragging.current = true;
-    lastPos.current = { x: e.clientX, y: e.clientY };
-    e.currentTarget.setPointerCapture(e.pointerId);
-  }
-
-  function handlePointerMove(e: ReactPointerEvent<HTMLDivElement>) {
-    if (!dragging.current) return;
-    setOffset((o) => ({
-      x: o.x + e.clientX - lastPos.current.x,
-      y: o.y + e.clientY - lastPos.current.y,
-    }));
-    lastPos.current = { x: e.clientX, y: e.clientY };
-  }
-
-  function handlePointerUp() {
-    dragging.current = false;
-  }
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex flex-col bg-black/90"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div className="flex items-center justify-between px-4 py-3 text-white shrink-0">
-        <span className="text-sm font-medium">{title}</span>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-white/50">
-            Scroll to zoom · Drag to pan
-          </span>
-          <button
-            onClick={() => {
-              setScale(1);
-              setOffset({ x: 0, y: 0 });
-            }}
-            className="rounded-lg border border-white/20 px-2 py-1 text-xs text-white/70 hover:bg-white/10 transition-colors"
-          >
-            Reset
-          </button>
-          <button
-            onClick={onClose}
-            className="rounded-lg p-1.5 text-white/70 hover:bg-white/10 transition-colors"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-      </div>
-      <div
-        className="flex-1 overflow-hidden cursor-grab active:cursor-grabbing"
-        onWheel={handleWheel}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerLeave={handlePointerUp}
-        style={{ touchAction: "none" }}
-      >
-        <div
-          className="h-full w-full flex items-center justify-center"
-          style={{
-            transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
-            transformOrigin: "center center",
-          }}
-        >
-          <img
-            src={src}
-            alt={title}
-            className="max-h-[90vh] max-w-[90vw] object-contain select-none"
-            draggable={false}
-          />
-        </div>
-      </div>
-    </div>
   );
 }
 

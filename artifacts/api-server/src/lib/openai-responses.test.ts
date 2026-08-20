@@ -79,6 +79,7 @@ const config: ElaineGlobalConfig = {
     potteryMaxAiSupplemental: 5,
     potteryBulkReanalyzeLimit: 20,
     ornamentsBulkReanalyzeLimit: 20,
+    quiltingBulkReanalyzeLimit: 20,
   },
   runtimeBudget: {
     maxModelRounds: 8,
@@ -204,6 +205,14 @@ describe("OpenAI Responses provider helpers", () => {
         Object.assign(new Error("previous_response_id was not found"), {
           status: 404,
         }),
+      ),
+    ).toBe(true);
+    expect(
+      isRecoverableOpenAIStateError(
+        Object.assign(
+          new Error("400 No tool output found for function call call_AbC123."),
+          { status: 400 },
+        ),
       ),
     ).toBe(true);
     expect(

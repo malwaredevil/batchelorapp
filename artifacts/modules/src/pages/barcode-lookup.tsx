@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import {
   Loader2,
@@ -20,34 +20,12 @@ import {
   useExtractOrnamentBarcodePhoto,
 } from "@workspace/api-client-react";
 import {
-  BrowserMultiFormatReader,
-  NotFoundException,
-  BarcodeFormat,
-  DecodeHintType,
-} from "@zxing/library";
+  DEFAULT_CONFIRMATION_FRAMES,
+  useBarcodeCamera,
+} from "@workspace/barcode-scanner";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-
-/// <reference path="../ornaments/types/barcode-detector.d.ts" />
-
-const BARCODE_FORMATS_ZXING = [
-  BarcodeFormat.UPC_A,
-  BarcodeFormat.UPC_E,
-  BarcodeFormat.EAN_13,
-  BarcodeFormat.EAN_8,
-  BarcodeFormat.CODE_128,
-  BarcodeFormat.CODE_39,
-];
-
-const BARCODE_FORMATS_NATIVE: NativeBarcodeFormat[] = [
-  "upc_a",
-  "upc_e",
-  "ean_13",
-  "ean_8",
-  "code_128",
-  "code_39",
-];
 
 type BarcodeResult = Awaited<
   ReturnType<ReturnType<typeof useLookupBarcode>["mutateAsync"]>
@@ -58,144 +36,23 @@ export default function BarcodeLookupPage() {
   const lookupBarcode = useLookupBarcode();
   const extractBarcodePhoto = useExtractOrnamentBarcodePhoto();
 
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const codeReaderRef = useRef<BrowserMultiFormatReader | null>(null);
-  const detectorRef = useRef<BarcodeDetector | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const isScanningRef = useRef(false);
-  const animFrameRef = useRef<number | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const handleScannedCodeRef = useRef<(code: string) => void>(() => {});
 
-  const [isScanning, setIsScanning] = useState(false);
-  const [hasCamera, setHasCamera] = useState(true);
   const [manualCode, setManualCode] = useState("");
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [isPhotoExtracting, setIsPhotoExtracting] = useState(false);
   const [scannedCode, setScannedCode] = useState("");
   const [scanResult, setScanResult] = useState<BarcodeResult | null>(null);
 
-  useEffect(() => {
-    let useBarcodeDetector = false;
-
-    if ("BarcodeDetector" in window) {
-      try {
-        detectorRef.current = new BarcodeDetector({
-          formats: BARCODE_FORMATS_NATIVE,
-        });
-        useBarcodeDetector = true;
-      } catch {
-        // fall through
-      }
-    }
-
-    if (!useBarcodeDetector) {
-      const hints = new Map<DecodeHintType, unknown>();
-      hints.set(DecodeHintType.POSSIBLE_FORMATS, BARCODE_FORMATS_ZXING);
-      codeReaderRef.current = new BrowserMultiFormatReader(hints, 150);
-    }
-
-    navigator.mediaDevices
-      .enumerateDevices()
-      .then((devices) => {
-        const videoDevices = devices.filter((d) => d.kind === "videoinput");
-        setHasCamera(videoDevices.length > 0);
-        if (videoDevices.length > 0) startScanning();
-      })
-      .catch(() => setHasCamera(false));
-
-    return () => stopScanning();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const barcodeDetectorLoop = useCallback(async () => {
-    if (!isScanningRef.current || !detectorRef.current || !videoRef.current)
-      return;
-    if (videoRef.current.readyState < 2) {
-      animFrameRef.current = requestAnimationFrame(barcodeDetectorLoop);
-      return;
-    }
-    try {
-      const barcodes = await detectorRef.current.detect(videoRef.current);
-      if (!isScanningRef.current) return;
-      if (barcodes.length > 0) {
-        void handleScannedCode(barcodes[0].rawValue);
-        return;
-      }
-    } catch {
-      // frame not ready
-    }
-    if (isScanningRef.current) {
-      animFrameRef.current = requestAnimationFrame(barcodeDetectorLoop);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const startScanning = async () => {
-    if (!videoRef.current) return;
-    isScanningRef.current = true;
-    setIsScanning(true);
-
-    if (detectorRef.current) {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: "environment",
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
-        });
-        streamRef.current = stream;
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-        requestAnimationFrame(barcodeDetectorLoop);
-      } catch {
-        isScanningRef.current = false;
-        setIsScanning(false);
-        setHasCamera(false);
-      }
-    } else if (codeReaderRef.current) {
-      try {
-        await codeReaderRef.current.decodeFromConstraints(
-          {
-            video: {
-              facingMode: "environment",
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-            },
-          },
-          videoRef.current,
-          (result, err) => {
-            if (result) void handleScannedCode(result.getText());
-            if (err && !(err instanceof NotFoundException)) console.error(err);
-          },
-        );
-      } catch {
-        isScanningRef.current = false;
-        setIsScanning(false);
-        setHasCamera(false);
-      }
-    }
-  };
-
-  const stopScanning = () => {
-    isScanningRef.current = false;
-    if (animFrameRef.current !== null) {
-      cancelAnimationFrame(animFrameRef.current);
-      animFrameRef.current = null;
-    }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    }
-    if (codeReaderRef.current) {
-      codeReaderRef.current.reset();
-    }
-    setIsScanning(false);
-  };
+  const camera = useBarcodeCamera({
+    enabled: true,
+    onDetected: (code) => handleScannedCodeRef.current(code),
+  });
 
   const handleScannedCode = async (code: string) => {
     if (isLookingUp) return;
-    stopScanning();
+    camera.stopScanning();
     setIsLookingUp(true);
     setScannedCode(code);
     setManualCode(code);
@@ -216,6 +73,12 @@ export default function BarcodeLookupPage() {
     }
   };
 
+  useEffect(() => {
+    handleScannedCodeRef.current = (code) => {
+      void handleScannedCode(code);
+    };
+  });
+
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!manualCode.trim()) return;
@@ -227,7 +90,7 @@ export default function BarcodeLookupPage() {
     e.target.value = "";
     if (!file || isLookingUp || isPhotoExtracting) return;
 
-    stopScanning();
+    camera.stopScanning();
     setIsPhotoExtracting(true);
     toast.loading("Reading barcode from photo…", { id: "photo-lookup" });
 
@@ -257,7 +120,7 @@ export default function BarcodeLookupPage() {
     setScanResult(null);
     setScannedCode("");
     setManualCode("");
-    void startScanning();
+    void camera.startScanning();
   };
 
   const isAnyLoading = isLookingUp || isPhotoExtracting;
@@ -501,10 +364,10 @@ export default function BarcodeLookupPage() {
       ) : (
         <>
           {/* Camera viewfinder */}
-          {hasCamera ? (
+          {camera.hasCamera ? (
             <div className="relative rounded-2xl overflow-hidden bg-black aspect-[3/4] sm:aspect-square shadow-xl shadow-black/10 border border-border">
               <video
-                ref={videoRef}
+                ref={camera.videoRef}
                 className="w-full h-full object-cover"
                 playsInline
                 muted
@@ -518,16 +381,16 @@ export default function BarcodeLookupPage() {
                   <div className="absolute top-[-2px] right-[-2px] w-6 h-6 border-t-4 border-r-4 border-primary rounded-tr-xl" />
                   <div className="absolute bottom-[-2px] left-[-2px] w-6 h-6 border-b-4 border-l-4 border-primary rounded-bl-xl" />
                   <div className="absolute bottom-[-2px] right-[-2px] w-6 h-6 border-b-4 border-r-4 border-primary rounded-br-xl" />
-                  {isScanning && (
+                  {camera.isScanning && (
                     <div className="absolute top-0 left-0 right-0 h-0.5 bg-primary shadow-[0_0_8px_2px_rgba(99,102,241,0.5)] animate-[scan_2s_ease-in-out_infinite]" />
                   )}
                 </div>
               </div>
 
-              {!isScanning && !isAnyLoading && (
+              {!camera.isScanning && !isAnyLoading && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm">
                   <Button
-                    onClick={() => void startScanning()}
+                    onClick={() => void camera.startScanning()}
                     size="lg"
                     className="rounded-full shadow-lg"
                   >
@@ -544,6 +407,16 @@ export default function BarcodeLookupPage() {
                       ? "Reading barcode from photo…"
                       : "Looking up product…"}
                   </p>
+                </div>
+              )}
+              {camera.confirmationProgress > 0 && !isAnyLoading && (
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-black/70 px-3 py-1 text-xs font-medium text-white">
+                  Hold steady — confirming{" "}
+                  {Array.from({ length: DEFAULT_CONFIRMATION_FRAMES })
+                    .map((_, index) =>
+                      index < camera.confirmationProgress ? "●" : "○",
+                    )
+                    .join(" ")}
                 </div>
               )}
             </div>
@@ -573,7 +446,7 @@ export default function BarcodeLookupPage() {
             aria-label="Take a photo to read barcode"
           />
 
-          {(isScanning || !hasCamera) && (
+          {(camera.isScanning || !camera.hasCamera) && (
             <div className="text-center">
               <Button
                 variant="outline"
@@ -583,7 +456,7 @@ export default function BarcodeLookupPage() {
                 onClick={() => photoInputRef.current?.click()}
               >
                 <ImageUp className="mr-2 h-4 w-4" />
-                {isScanning
+                {camera.isScanning
                   ? "Can't scan? Take a photo"
                   : "Take a photo instead"}
               </Button>

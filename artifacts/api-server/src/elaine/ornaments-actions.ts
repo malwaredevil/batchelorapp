@@ -121,7 +121,7 @@ export const MergeOrnamentCategoriesActionPayload = z.object({
 });
 
 export const BulkReanalyzeOrnamentsActionPayload = z.object({
-  itemIds: z.array(z.number().int().positive()).max(20).optional(),
+  itemIds: z.array(z.number().int().positive()).max(100).optional(),
 });
 
 export const AddPhotoToOrnamentsPayload = z.object({

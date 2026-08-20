@@ -60,6 +60,10 @@ const {
   mockRecordObservation,
   mockCallModelWithSubagent,
   mockCallModel,
+  mockGetElaineGlobalConfig,
+  mockIsOpenAIResponsesConfigured,
+  mockStreamOpenAIResponseRound,
+  mockHardToolNames,
   mockDetectClaimedCheckWithoutToolCall,
   mockRecordElaineLesson,
   mockBuildSelfHealLessonInput,
@@ -113,6 +117,10 @@ const {
     mockRecordObservation: vi.fn(),
     mockCallModelWithSubagent: vi.fn(),
     mockCallModel: vi.fn().mockResolvedValue(""),
+    mockGetElaineGlobalConfig: vi.fn(),
+    mockIsOpenAIResponsesConfigured: vi.fn().mockReturnValue(false),
+    mockStreamOpenAIResponseRound: vi.fn(),
+    mockHardToolNames: new Set<string>(),
     mockDetectClaimedCheckWithoutToolCall: vi.fn().mockReturnValue(
       null as null | {
         kind:
@@ -179,41 +187,20 @@ vi.mock("../lib/openai", () => ({
 }));
 
 vi.mock("../lib/elaine-config", () => ({
-  getElaineGlobalConfig: vi.fn().mockResolvedValue({
-    enabled: true,
-    chatModel: "mock-model",
-    subagentModel: "mock-subagent-model",
-    maxResponseTokens: 1000,
-    requestTimeoutMs: 30_000,
-    features: {
-      showReasoningSummary: false,
-      enableOpenAIResponsesFallback: false,
-      enableBuiltinWebSearch: false,
-    },
-    timeouts: { openAIResponsesMs: 60_000 },
-    runtimeBudget: {
-      maxModelRounds: 8,
-      maxToolCalls: 24,
-      maxReplans: 10,
-      maxElapsedMs: 240_000,
-    },
-    thresholds: { openAIStateMaxAgeDays: 7 },
-    chatWindowSize: "comfortable",
-    actionConfirmationMode: "one_by_one",
-  }),
+  getElaineGlobalConfig: mockGetElaineGlobalConfig,
   invalidateElaineGlobalConfigCache: vi.fn(),
 }));
 
 vi.mock("../lib/openai-responses", () => ({
   generateOpenAIResponseText: vi.fn(),
   getOpenAIResponsesMetrics: vi.fn().mockResolvedValue({}),
-  isOpenAIResponsesConfigured: vi.fn().mockReturnValue(false),
+  isOpenAIResponsesConfigured: mockIsOpenAIResponsesConfigured,
   isRecoverableOpenAIStateError: vi.fn().mockReturnValue(false),
   messagesToResponseInput: vi.fn().mockReturnValue([]),
   OpenAIResponsesUnavailableError: class extends Error {},
   recordOpenAIResponsesFallback: vi.fn(),
   resolveOpenAIResponsesModel: vi.fn().mockReturnValue("gpt-4o"),
-  streamOpenAIResponseRound: vi.fn(),
+  streamOpenAIResponseRound: mockStreamOpenAIResponseRound,
   createOpenAIStableIdentifier: vi.fn().mockReturnValue("mock-id"),
   isReusableElaineResponseState: vi.fn().mockReturnValue(false),
 }));
@@ -351,7 +338,7 @@ vi.mock("./app-operation-tools", () => ({
   appOperationActionSchemas: [],
   buildAppOperationActionLabel: vi.fn().mockResolvedValue(""),
   DISCOVER_APP_OPERATIONS_TOOL_NAME: "discover_app_operations",
-  discoverAppOperations: vi.fn().mockResolvedValue([]),
+  discoverAppOperations: vi.fn().mockReturnValue("Available operations: none."),
   executeAppOperation: vi.fn().mockResolvedValue({ status: 200, body: {} }),
   executeAppOperationAction: vi
     .fn()
@@ -444,6 +431,7 @@ vi.mock("./office-actions", () => ({
 
 vi.mock("./runtime", () =>
   buildRuntimeMock({
+    MODEL_VISIBLE_HARD_TOOL_NAMES: mockHardToolNames,
     // Self-heal detector — controlled per-test via mockDetectClaimedCheckWithoutToolCall.
     detectClaimedCheckWithoutToolCall: mockDetectClaimedCheckWithoutToolCall,
     buildSelfHealLessonInput: mockBuildSelfHealLessonInput,
@@ -917,6 +905,30 @@ function assertSelectQueueDrained() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockHardToolNames.clear();
+  mockIsOpenAIResponsesConfigured.mockReturnValue(false);
+  mockGetElaineGlobalConfig.mockResolvedValue({
+    enabled: true,
+    chatModel: "mock-model",
+    subagentModel: "mock-subagent-model",
+    maxResponseTokens: 1000,
+    requestTimeoutMs: 30_000,
+    features: {
+      showReasoningSummary: false,
+      enableOpenAIResponsesFallback: false,
+      enableBuiltinWebSearch: false,
+    },
+    timeouts: { openAIResponsesMs: 60_000 },
+    runtimeBudget: {
+      maxModelRounds: 8,
+      maxToolCalls: 24,
+      maxReplans: 10,
+      maxElapsedMs: 240_000,
+    },
+    thresholds: { openAIStateMaxAgeDays: 7 },
+    chatWindowSize: "comfortable",
+    actionConfirmationMode: "one_by_one",
+  });
   // Restore defaults cleared by clearAllMocks
   mockRecordModelRound.mockReturnValue(true);
   mockVerify.mockReturnValue({
@@ -957,6 +969,7 @@ beforeEach(() => {
   mockSnapshot.mockReturnValue(MOCK_TRACE);
   mockComplete.mockReturnValue({ ...MOCK_TRACE, status: "completed" as const });
   mockCallModel.mockResolvedValue("");
+  mockStreamOpenAIResponseRound.mockReset();
   // Default: self-heal detector is a no-op and lesson mock returns a safe value
   mockDetectClaimedCheckWithoutToolCall.mockReturnValue(null);
   mockRecordElaineLesson.mockResolvedValue({ id: 1, occurrenceCount: 0 });
@@ -1197,6 +1210,137 @@ describe("POST /api/elaine/chat — dropped-action corrective text", () => {
     expect(allDeltaText).not.toContain(
       "I wasn't actually able to prepare that as a confirmable action just now",
     );
+  }, 15_000);
+});
+
+describe("POST /api/elaine/chat — Responses-to-OpenRouter tool fallback", () => {
+  it("replays every action call and output before the fallback model completes the reply", async () => {
+    primeDbForFreshChat();
+    mockIsOpenAIResponsesConfigured.mockReturnValue(true);
+    mockHardToolNames.add("discover_app_operations");
+    mockGetElaineGlobalConfig.mockResolvedValue({
+      enabled: true,
+      chatModel: "mock-model",
+      subagentModel: "mock-subagent-model",
+      maxResponseTokens: 1000,
+      requestTimeoutMs: 30_000,
+      features: {
+        showReasoningSummary: false,
+        enableOpenAIResponsesFallback: true,
+        enableBuiltinWebSearch: false,
+      },
+      timeouts: { openAIResponsesMs: 60_000 },
+      runtimeBudget: {
+        maxModelRounds: 8,
+        maxToolCalls: 24,
+        maxReplans: 10,
+        maxElapsedMs: 240_000,
+      },
+      thresholds: { openAIStateMaxAgeDays: 7 },
+      chatWindowSize: "comfortable",
+      actionConfirmationMode: "one_by_one",
+    });
+    mockRegisterToolCalls.mockReturnValue([
+      {
+        id: "call_mode",
+        name: "set_mode",
+        allowed: true,
+        stepId: "step-mode",
+        consequential: false,
+        confirmationRequired: false,
+      },
+      {
+        id: "call_discover",
+        name: "discover_app_operations",
+        allowed: true,
+        stepId: "step-discover",
+        consequential: false,
+        confirmationRequired: false,
+      },
+    ]);
+    mockStreamOpenAIResponseRound
+      .mockResolvedValueOnce({
+        responseId: "resp_tool_calls",
+        model: "gpt-5.6-sol",
+        text: "",
+        functionCalls: [
+          {
+            callId: "call_mode",
+            name: "set_mode",
+            arguments: JSON.stringify({ mode: "auto_run" }),
+          },
+          {
+            callId: "call_discover",
+            name: "discover_app_operations",
+            arguments: "{}",
+          },
+        ],
+        webSearchCitations: [],
+        usage: null,
+      })
+      .mockRejectedValueOnce(new Error("Responses provider unavailable"));
+
+    mockCallModelWithSubagent.mockImplementation(
+      async (
+        _model: string,
+        _instructions: string,
+        callback: (
+          client: unknown,
+          model: string,
+          serverTools: unknown[],
+        ) => Promise<void>,
+      ) => {
+        const create = vi.fn().mockImplementation((params: unknown) => {
+          const messages = (
+            params as {
+              messages: Array<{
+                role: string;
+                tool_call_id?: string;
+                tool_calls?: Array<{
+                  id: string;
+                  function: { name: string; arguments: string };
+                }>;
+                content?: unknown;
+              }>;
+            }
+          ).messages;
+          expect(messages).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({
+                role: "assistant",
+                tool_calls: expect.arrayContaining([
+                  expect.objectContaining({
+                    id: "call_mode",
+                    function: expect.objectContaining({ name: "set_mode" }),
+                  }),
+                ]),
+              }),
+              expect.objectContaining({
+                role: "tool",
+                tool_call_id: "call_mode",
+                content: expect.stringContaining(
+                  "server handled this UI/action tool",
+                ),
+              }),
+            ]),
+          );
+          return makeContentStream("The mode change is saved.");
+        });
+        await callback({ chat: { completions: { create } } }, "mock-model", []);
+      },
+    );
+
+    const res = await request(buildApp())
+      .post("/api/elaine/chat")
+      .send({ message: "Automatically run actions from now on", appId: "hub" })
+      .buffer(true);
+
+    expect(res.status).toBe(200);
+    expect(parseSseResponse(res.text).allDeltaText).toContain(
+      "The mode change is saved.",
+    );
+    expect(mockStreamOpenAIResponseRound).toHaveBeenCalledTimes(2);
+    expect(mockCallModelWithSubagent).toHaveBeenCalledTimes(1);
   }, 15_000);
 });
 

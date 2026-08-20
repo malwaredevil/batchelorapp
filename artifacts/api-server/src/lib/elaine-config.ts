@@ -137,6 +137,8 @@ export interface ThresholdsConfig {
   potteryBulkReanalyzeLimit: number;
   // Max ornament items per bulk-reanalyze request.
   ornamentsBulkReanalyzeLimit: number;
+  // Max quilting items (fabrics/patterns/quilts) per bulk-reanalyze request.
+  quiltingBulkReanalyzeLimit: number;
 }
 
 /**
@@ -234,6 +236,7 @@ export const DEFAULT_THRESHOLDS: ThresholdsConfig = {
   potteryMaxAiSupplemental: 5,
   potteryBulkReanalyzeLimit: 20,
   ornamentsBulkReanalyzeLimit: 20,
+  quiltingBulkReanalyzeLimit: 20,
 };
 
 export const DEFAULT_RUNTIME_BUDGET: RuntimeBudgetConfig = {

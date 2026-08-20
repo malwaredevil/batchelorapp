@@ -191,8 +191,10 @@ new scheduler and remove it when retiring one.
 Take a screenshot of every page or component that was added or changed. Use Method 1:
 
 ```bash
-# Step 1: get token and domain (run in parallel)
-TOKEN=$(printenv DEV_SCREENSHOT_TOKEN)   # plain env var — NOT a secret
+# Step 1: prove the bypass is healthy, then get an agent-safe derived token.
+# DEV_SCREENSHOT_TOKEN is a Replit Secret. Never print or try to read its raw value.
+pnpm --filter @workspace/scripts run check-agent-screenshot-access
+TOKEN=$(pnpm --filter @workspace/scripts run print-agent-screenshot-token --silent | tail -1)
 DOMAIN=$REPLIT_DEV_DOMAIN
 ```
 
@@ -207,18 +209,52 @@ Screenshot({
 ```
 
 Page paths: `/` (hub), `/modules/pottery`, `/modules/quilting`, `/modules/travels`,
-`/modules/ornaments`, `/modules/office`, `/elaine`, `/owner`.
+`/modules/ornaments`, `/modules/office`, `/elaine/`, `/owner-panel`.
 
 Full reference: `.agents/memory/screenshot-tool-cookie-bypass.md`
+
+### 3b. Authenticated browser interaction
+
+For a known-good, read-only browser capability check, run:
+
+```bash
+pnpm --filter @workspace/e2e run agent:browser-smoke
+```
+
+It launches the workspace's installed Chromium through the existing Playwright E2E
+package, derives the development screenshot token internally, makes a harmless
+authenticated search interaction after the collection has loaded, and saves
+a uniquely named `/tmp/agent-browser-smoke-<timestamp>.png` file. View the exact path
+reported by the command after it passes. This is the preferred fallback when the
+built-in browser testing runner has an infrastructure outage.
+
+For an authenticated visual check on any direct route, run:
+
+```bash
+AGENT_BROWSER_PATH=/elaine/ pnpm --filter @workspace/e2e run agent:browser-page
+```
+
+Change the path for the page under review; the command prints a fresh screenshot path.
+For a feature-specific or multi-step flow, create a temporary Playwright script that
+imports `artifacts/e2e/agent-browser-helpers.mjs`. Use its
+`launchAgentBrowser()`, `openAuthenticatedPage()`, `collectConsoleErrors()`, and
+`uniqueScreenshotPath()` helpers rather than copying token derivation or Chromium launch
+code. Do not use the optional `browser-use` CLI as the sole interaction path. For flows
+that must exercise the real login form, tell the testing runner to use
+`AGENT_LOGIN_EMAIL` and `AGENT_LOGIN_PASSWORD` by name; never read, print, or paste
+either secret into a command or report.
 
 **Broken image rule:** scan every screenshot for `<img>` elements showing alt text or
 broken-image icons. Any broken image is a real bug — fix it before declaring done.
 Confirm with `curl -I "https://$REPLIT_DEV_DOMAIN/api/..."` that the endpoint returns
 200 + valid bytes. Never assume it is a screenshot-tool artifact.
 
-**If a page cannot be reached by direct URL** (e.g. only accessible through a multi-step
-flow or modal): verify via `curl` against the API endpoint + document why a screenshot
-wasn't taken.
+**Multi-step, modal, and stateful UI flows must still receive real browser coverage.**
+Start on the route with `agent:browser-page` or a temporary script importing the shared
+helpers, perform the needed clicks and form input, then capture a unique screenshot of the
+result. Curl/API checks complement this work but never replace physical UI verification
+when the application can be exercised in Chromium. Only an unavoidable external or
+hardware-only constraint may block it, and that constraint must be recorded explicitly.
 
 ### 3b. Tests pass
 
@@ -412,7 +448,10 @@ Everywhere." Batchelor App is one application: implement a shared mechanism once
 then let domains and SPA bundles configure or extend it through typed props,
 callbacks, adapters, slots, and small wrappers. This rule is **hardwired** and
 applies to every feature, repair, refactor, PR review, GitHub sync, and
-pre-publishing task.
+pre-publishing task. It applies equally to the main agent, future sessions,
+background task agents, and code reviewers. A task that introduces a
+preventable second source of truth is incomplete until the behavior is
+consolidated or the duplication is explicitly justified.
 
 This design rule is built from seven concrete techniques. Apply the one that
 fits, in this rough order of preference:

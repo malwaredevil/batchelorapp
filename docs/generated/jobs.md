@@ -8,10 +8,7 @@ Do not edit by hand.
 | ------------------------------ |
 | elaine.research                |
 | slack.turn                     |
-| scheduler.trip-reminder-alerts |
-| travels.gmail-scan             |
 | ai.bulk-reanalysis             |
-| provider.apify-placeholder     |
 | embedding.generate             |
 | operations.aggregate-retention |
 | travels.monitoring-check       |

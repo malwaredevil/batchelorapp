@@ -1324,7 +1324,7 @@ components:
           type: array
           items:
             type: integer
-          maxItems: 20
+          maxItems: 100
     PotteryBulkReanalyzeResult:
       type: object
       required: [total, succeeded, failed, errors]

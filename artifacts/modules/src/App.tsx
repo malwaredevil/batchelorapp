@@ -34,6 +34,7 @@ import "@/ornaments/features";
 import "@/travels/features";
 import "@/office/features";
 // scaffold:anchor:feature-imports — scaffold-collection-module inserts feature imports below; do not remove
+
 import { MessengerNotification } from "@workspace/messenger-ui";
 import { BulkAddProvider } from "@/quilting/contexts/bulk-add-context";
 import { Layout as TravelsLayout } from "@/travels/components/Layout";
@@ -424,6 +425,7 @@ function Routes() {
                   component={OrnamentsDetail}
                 />
                 {/* scaffold:anchor:module-routes — scaffold-collection-module inserts routes below; do not remove */}
+
                 <Route path="/office">
                   <Redirect to="/office/gmail" />
                 </Route>

@@ -4948,6 +4948,15 @@ router.post("/chat", async (req, res) => {
     ? storedOpenAIState!.responseId
     : null;
   let finalOpenAIResponseId: string | null = null;
+  // True while the most recent completed OpenAI Responses round emitted
+  // function calls whose function_call_output items have NOT yet been
+  // submitted back in a subsequent successful round. If the turn ends in this
+  // state (Stop/abort, model-round budget exhaustion, or a mid-round failure),
+  // the response id must NOT be persisted as conversation state: reusing it
+  // as previous_response_id next turn makes OpenAI 400 with "No tool output
+  // found for function call call_..." (Sentry NODE-EXPRESS-28), which then
+  // cascades into the OpenRouter fallback losing tool-call state mid-turn.
+  let openAIPendingToolOutputs = false;
   /** Reasoning summary from the last Responses API round that produced one. */
   let finalReasoningSummary: string | null = null;
 
@@ -5374,6 +5383,11 @@ router.post("/chat", async (req, res) => {
         openAIPreviousResponseId = directResult.responseId;
         finalOpenAIResponseId = directResult.responseId;
         nextOpenAIInput = [];
+        // A successful round implicitly settles the previous round's pending
+        // function calls (their outputs were part of this round's input). If
+        // THIS round emitted function calls, their outputs are pending until
+        // the next successful round submits them.
+        openAIPendingToolOutputs = directResult.functionCalls.length > 0;
         directResult.functionCalls.forEach((toolCall, index) => {
           toolCallAcc.set(index, {
             id: toolCall.callId,
@@ -5517,7 +5531,18 @@ router.post("/chat", async (req, res) => {
           }
           rawContent = "";
           messages.push({ role: "system", content: recovery.instruction });
+          // Preserve any pending function_call_output items from the previous
+          // round. `openAIPreviousResponseId` still points at the response
+          // that emitted those function calls, so dropping the outputs here
+          // would make the retried Responses call 400 with "No tool output
+          // found for function call call_..." (Sentry NODE-EXPRESS-28).
           nextOpenAIInput = [
+            ...nextOpenAIInput.filter(
+              (item) =>
+                typeof item === "object" &&
+                "type" in item &&
+                item.type === "function_call_output",
+            ),
             {
               type: "message",
               role: "developer",
@@ -5808,12 +5833,16 @@ router.post("/chat", async (req, res) => {
       }
     }
 
-    const immediateOpenAIToolOutputs: ResponseInput = [...toolCallAcc.values()]
+    const immediateOpenAIToolOutputs: Array<{
+      type: "function_call_output";
+      call_id: string;
+      output: string;
+    }> = [...toolCallAcc.values()]
       .filter(
         (call) => call.id && !MODEL_VISIBLE_HARD_TOOL_NAMES.has(call.name),
       )
       .map((call) => ({
-        type: "function_call_output" as const,
+        type: "function_call_output",
         call_id: call.id,
         output:
           "The Batchelor app server handled this UI/action tool according to its validated plan, confirmation policy, and deterministic executor. Use the server-provided turn events as authoritative.",
@@ -6013,14 +6042,21 @@ router.post("/chat", async (req, res) => {
     // round. Reset rawContent first — models essentially never emit text
     // alongside a tool call, but if one did, it'd otherwise be duplicated
     // ahead of the actual answer in the final saved/sent content.
+    // Keep a provider-neutral transcript of every function call, not only
+    // server-executed read tools. OpenAI Responses receives immediate
+    // UI/action outputs through `nextOpenAIInput`; if a later Responses round
+    // fails and this turn switches to OpenRouter, the Chat Completions fallback
+    // needs the matching call/output pairs in `messages` too.
     messages.push({
       role: "assistant",
       content: rawContent || null,
-      tool_calls: hardToolCalls.map((c) => ({
-        id: c.id,
-        type: "function",
-        function: { name: c.name, arguments: c.args },
-      })),
+      tool_calls: [...toolCallAcc.values()]
+        .filter((call) => call.id)
+        .map((call) => ({
+          id: call.id,
+          type: "function" as const,
+          function: { name: call.name, arguments: call.args },
+        })),
     });
     if (rawContent) sendEvent("response_reset", {});
     rawContent = "";
@@ -7538,6 +7574,13 @@ router.post("/chat", async (req, res) => {
         content: result.resultText,
       });
     }
+    for (const output of immediateOpenAIToolOutputs) {
+      messages.push({
+        role: "tool",
+        tool_call_id: output.call_id,
+        content: output.output,
+      });
+    }
     nextOpenAIInput = [
       ...immediateOpenAIToolOutputs,
       ...hardToolResults.map((result) => ({
@@ -7652,7 +7695,7 @@ router.post("/chat", async (req, res) => {
 
     const stateUpdatedAt = new Date();
     const responseStateUpdate =
-      useOpenAIResponses && finalOpenAIResponseId
+      useOpenAIResponses && finalOpenAIResponseId && !openAIPendingToolOutputs
         ? {
             openaiLastResponseId: finalOpenAIResponseId,
             openaiStateModel: openAIResponsesModel,

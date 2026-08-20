@@ -17,7 +17,7 @@
 //       { "name": "year", "type": "number", "label": "Year" }
 //     ],
 //     "categories": true,            // category CRUD via category-router-factory
-//     "photos": true,                // images table + serializer wiring (upload endpoints are TODO)
+//     "photos": true,                // images table + serializer wiring + upload/gallery on detail page
 //     "aiAnalysis": false,           // emits TODO markers only
 //     "valueTracking": false         // adds estimatedValueUsd column/field
 //   }
@@ -445,10 +445,14 @@ function yamlTemplate(spec: ResourceSpec, n: Names): string {
           type:
             - string
             - "null"
+        primaryImageId:
+          type:
+            - integer
+            - "null"
 `
     : "";
   const photoRequired = spec.photos
-    ? `        - images\n        - imageUrl\n`
+    ? `        - images\n        - imageUrl\n        - primaryImageId\n`
     : "";
   const catItemProps = spec.categories
     ? `        categories:
@@ -519,6 +523,41 @@ function yamlTemplate(spec: ResourceSpec, n: Names): string {
               schema:
                 $ref: "#/components/schemas/Error"
   /items/{id}/images/{imageId}:
+    patch:
+      operationId: update${n.PascalS}Image
+      tags:
+        - ${n.plural}
+      summary: Update a supplemental image's label
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: imageId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/${n.PascalS}ImageUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/${n.PascalS}Image"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
     delete:
       operationId: delete${n.PascalS}Image
       tags:
@@ -846,6 +885,13 @@ function yamlTemplate(spec: ResourceSpec, n: Names): string {
             - "null"
         position:
           type: integer
+    ${n.PascalS}ImageUpdate:
+      type: object
+      properties:
+        label:
+          type:
+            - string
+            - "null"
 `
     : "";
 
@@ -1260,23 +1306,12 @@ function serializeTemplate(spec: ResourceSpec, n: Names): string {
   const fieldSer = spec.fields
     .map((f) => `      ${f.name}: ${serializeExpr(f)},`)
     .join("\n");
-
-  // Compose the shared serializer factories — never re-emit their DB logic.
-  const categoriesFetch = spec.categories
-    ? `  fetchRawCategories: makeFetchRawCategories(itemCategories, categories),`
-    : `  async fetchRawCategories() {
-    return [];
-  },`;
-
-  const imagesFetch = spec.photos
-    ? `  fetchRawImages: makeFetchRawImages(${n.plural}Images, "${n.plural}"),`
-    : `  async fetchRawImages() {
-    return [];
-  },`;
-
-  const importLines: string[] = [];
-  if (spec.photos)
-    importLines.push(`import { pathCacheBuster } from "../path-cache-buster";`);
+  const valueSer = spec.valueTracking
+    ? `      estimatedValueUsd:\n        row.estimatedValueUsd != null\n          ? parseFloat(row.estimatedValueUsd)\n          : null,\n`
+    : "";
+  const valueType = spec.valueTracking
+    ? `  estimatedValueUsd: number | null;\n`
+    : "";
 
   const dbImportNames = [
     ...(spec.categories
@@ -1292,23 +1327,191 @@ function serializeTemplate(spec: ResourceSpec, n: Names): string {
       ? `import {\n  ${dbImportNames.join(",\n  ")},\n} from "@workspace/db";\n`
       : "";
 
-  const photoTypes = spec.photos
-    ? `  images: ImageResult[];\n  imageUrl: string | null;\n`
-    : "";
-  const photoSer = spec.photos
-    ? `      images: imgs,
-      imageUrl:
-        row.imagePath != null
-          ? \`/api/${n.plural}/items/\${row.id}/image?v=\${pathCacheBuster(row.imagePath)}\`
-          : null,
-`
-    : "";
+  // When photos are enabled we write a standalone serializer that does NOT use
+  // createCollectionSerializer, because its internal buildImgsMap strips all
+  // extra fields before calling toItem.  Preserving storagePath all the way
+  // through to toItem is required to compute primaryImageId correctly.
+  if (spec.photos) {
+    const catImports = spec.categories
+      ? `  makeFetchRawCategories,\n  type CategoryResult,\n  type ImageResult,`
+      : `  type CategoryResult,\n  type ImageResult,`;
+
+    const catsFetchImpl = spec.categories
+      ? `const fetchRawCategories = makeFetchRawCategories(itemCategories, categories);`
+      : `async function fetchRawCategories(
+  _itemIds: number[],
+): Promise<Array<CategoryResult & { itemId: number }>> {
+  return [];
+}`;
+
+    const buildCatsMapFn = spec.categories
+      ? `
+function buildCatsMap(
+  rows: Array<CategoryResult & { itemId: number }>,
+): Map<number, CategoryResult[]> {
+  const map = new Map<number, CategoryResult[]>();
+  for (const row of rows) {
+    if (!map.has(row.itemId)) map.set(row.itemId, []);
+    map.get(row.itemId)!.push({
+      id: row.id,
+      name: row.name,
+      bgColor: row.bgColor,
+      textColor: row.textColor,
+    });
+  }
+  return map;
+}`
+      : "";
+
+    const serializeItemCats = spec.categories
+      ? `  const catsMap = buildCatsMap(rawCats);\n  const cats = catsMap.get(row.id) ?? [];`
+      : `  const cats: CategoryResult[] = [];`;
+
+    const serializeItemsCats = spec.categories
+      ? `  const catsMap = buildCatsMap(rawCats);`
+      : "";
+
+    const getCats = spec.categories ? `catsMap.get(row.id) ?? []` : `[]`;
+
+    return `// Generated by scaffold-collection-module for the "${n.plural}" collection.
+// Standalone serializer (photos=true) — does NOT use createCollectionSerializer
+// because its buildImgsMap strips extra fields before toItem is called.
+// storagePath must survive to toItem so primaryImageId can be computed correctly.
+import { and, inArray, isNull } from "drizzle-orm";
+import { db } from "@workspace/db";
+import { pathCacheBuster } from "../path-cache-buster";
+import type { ${n.PascalS}ItemRow } from "@workspace/db";
+${dbValueImport}import {
+${catImports}
+} from "../collection-item-serializer";
+
+export type { CategoryResult };
+
+/** Extended image shape that carries storagePath for primaryImageId lookup. */
+type ImageWithPath = ImageResult & { storagePath: string };
+
+export interface SerializedItem {
+  id: number;
+  name: string;
+  notes: string | null;
+${fieldTypes ? fieldTypes + "\n" : ""}${valueType}  lockedFields: string[];
+  categories: CategoryResult[];
+  images: ImageResult[];
+  imageUrl: string | null;
+  /** ID of the images-table row that is the current gallery cover, or null. */
+  primaryImageId: number | null;
+  createdAt: string;
+}
+
+${catsFetchImpl}
+
+async function fetchExtendedImages(
+  itemIds: number[],
+): Promise<Array<ImageWithPath & { itemId: number }>> {
+  if (itemIds.length === 0) return [];
+  const rows = await db
+    .select({
+      itemId: ${n.plural}Images.itemId,
+      id: ${n.plural}Images.id,
+      label: ${n.plural}Images.label,
+      position: ${n.plural}Images.position,
+      storagePath: ${n.plural}Images.storagePath,
+    })
+    .from(${n.plural}Images)
+    .where(and(inArray(${n.plural}Images.itemId, itemIds), isNull(${n.plural}Images.deletedAt)));
+  return rows.map((r) => ({
+    itemId: r.itemId,
+    id: r.id,
+    url: \`/api/${n.plural}/items/\${r.itemId}/images/\${r.id}?v=\${pathCacheBuster(r.storagePath)}\`,
+    label: r.label,
+    position: r.position,
+    storagePath: r.storagePath,
+  }));
+}
+
+function buildImagesMap(
+  rows: Array<ImageWithPath & { itemId: number }>,
+): Map<number, ImageWithPath[]> {
+  const map = new Map<number, ImageWithPath[]>();
+  for (const row of rows) {
+    if (!map.has(row.itemId)) map.set(row.itemId, []);
+    map.get(row.itemId)!.push({
+      id: row.id,
+      url: row.url,
+      label: row.label,
+      position: row.position,
+      storagePath: row.storagePath,
+    });
+  }
+  for (const imgs of map.values()) {
+    imgs.sort((a, b) => a.position - b.position || a.id - b.id);
+  }
+  return map;
+}
+${buildCatsMapFn}
+function toItem(
+  row: ${n.PascalS}ItemRow,
+  cats: CategoryResult[],
+  imgs: ImageWithPath[],
+): SerializedItem {
+  const primaryImageId =
+    row.imagePath != null
+      ? (imgs.find((img) => img.storagePath === row.imagePath)?.id ?? null)
+      : null;
+  return {
+    id: row.id,
+    name: row.name,
+    notes: row.notes,
+${fieldSer ? fieldSer + "\n" : ""}${valueSer}    lockedFields: row.lockedFields ?? [],
+    categories: cats,
+    images: imgs,
+    imageUrl:
+      row.imagePath != null
+        ? \`/api/${n.plural}/items/\${row.id}/image?v=\${pathCacheBuster(row.imagePath)}\`
+        : null,
+    primaryImageId,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+export async function serializeItem(row: ${n.PascalS}ItemRow): Promise<SerializedItem> {
+  const [rawCats, rawImgs] = await Promise.all([
+    fetchRawCategories([row.id]),
+    fetchExtendedImages([row.id]),
+  ]);
+${serializeItemCats}
+  const imgsMap = buildImagesMap(rawImgs);
+  return toItem(row, cats, imgsMap.get(row.id) ?? []);
+}
+
+export async function serializeItems(rows: ${n.PascalS}ItemRow[]): Promise<SerializedItem[]> {
+  if (rows.length === 0) return [];
+  const itemIds = rows.map((r) => r.id);
+  const [rawCats, rawImgs] = await Promise.all([
+    fetchRawCategories(itemIds),
+    fetchExtendedImages(itemIds),
+  ]);
+${serializeItemsCats}
+  const imgsMap = buildImagesMap(rawImgs);
+  return rows.map((row) => toItem(row, ${getCats}, imgsMap.get(row.id) ?? []));
+}
+`;
+  }
+
+  // ---------------------------------------------------------------------------
+  // NO-PHOTOS PATH — use the shared createCollectionSerializer utility.
+  // ---------------------------------------------------------------------------
+  const categoriesFetch = spec.categories
+    ? `  fetchRawCategories: makeFetchRawCategories(itemCategories, categories),`
+    : `  async fetchRawCategories() {
+    return [];
+  },`;
 
   return `// Generated by scaffold-collection-module for the "${n.plural}" collection.
-${importLines.join("\n")}${importLines.length > 0 ? "\n" : ""}import type { ${n.PascalS}ItemRow } from "@workspace/db";
+import type { ${n.PascalS}ItemRow } from "@workspace/db";
 ${dbValueImport}import {
-  createCollectionSerializer,${spec.categories ? "\n  makeFetchRawCategories," : ""}${spec.photos ? "\n  makeFetchRawImages," : ""}
-  type CategoryResult,${spec.photos ? "\n  type ImageResult," : ""}
+  createCollectionSerializer,${spec.categories ? "\n  makeFetchRawCategories," : ""}
+  type CategoryResult,
 } from "../collection-item-serializer";
 
 export type { CategoryResult };
@@ -1317,9 +1520,9 @@ export interface SerializedItem {
   id: number;
   name: string;
   notes: string | null;
-${fieldTypes ? fieldTypes + "\n" : ""}${spec.valueTracking ? "  estimatedValueUsd: number | null;\n" : ""}  lockedFields: string[];
+${fieldTypes ? fieldTypes + "\n" : ""}${valueType}  lockedFields: string[];
   categories: CategoryResult[];
-${photoTypes}  createdAt: string;
+  createdAt: string;
 }
 
 const { serializeItem, serializeItems } = createCollectionSerializer<
@@ -1328,16 +1531,18 @@ const { serializeItem, serializeItems } = createCollectionSerializer<
 >({
 ${categoriesFetch}
 
-${imagesFetch}
+  async fetchRawImages() {
+    return [];
+  },
 
-  toItem(row, cats${spec.photos ? ", imgs" : ""}) {
+  toItem(row, cats) {
     return {
       id: row.id,
       name: row.name,
       notes: row.notes,
-${fieldSer ? fieldSer + "\n" : ""}${spec.valueTracking ? "      estimatedValueUsd:\n        row.estimatedValueUsd != null\n          ? parseFloat(row.estimatedValueUsd)\n          : null,\n" : ""}      lockedFields: row.lockedFields ?? [],
+${fieldSer ? fieldSer + "\n" : ""}${valueSer}      lockedFields: row.lockedFields ?? [],
       categories: cats,
-${photoSer}      createdAt: row.createdAt.toISOString(),
+      createdAt: row.createdAt.toISOString(),
     };
   },
 });
@@ -1861,40 +2066,135 @@ function detailPageTemplate(spec: ResourceSpec, n: Names): string {
         default:
           expr = `item.${f.name} ?? "—"`;
       }
-      return `          {
-            label: "${f.label}",
-            value: ${expr},
-          },`;
+      return `            {
+              label: "${f.label}",
+              value: ${expr},
+            },`;
     })
     .join("\n");
 
+  // EDIT_FIELDS constant — one entry per custom field.
+  const editFieldDefs = spec.fields
+    .map(
+      (f) =>
+        `  { key: "${f.name}", label: "${f.label}", type: "${f.type}" as const },`,
+    )
+    .join("\n");
+
+  const valueEditFieldDef = spec.valueTracking
+    ? `  { key: "estimatedValueUsd", label: "Estimated value (USD)", type: "decimal" as const },\n`
+    : "";
+
+  // initialFieldValues object literal lines.
+  // Orval makes optional-but-nullable schema fields `T | null | undefined`.
+  // Coerce them to the non-undefined variant that the edit sheet expects.
+  const editInitialValues = spec.fields
+    .map((f) => {
+      switch (f.type) {
+        case "string[]":
+          return `        ${f.name}: item.${f.name} ?? [],`;
+        case "boolean":
+          return `        ${f.name}: item.${f.name} ?? false,`;
+        default:
+          return `        ${f.name}: item.${f.name} ?? null,`;
+      }
+    })
+    .join("\n");
+
+  const valueInitialValue = spec.valueTracking
+    ? `        estimatedValueUsd: item.estimatedValueUsd ?? null,\n`
+    : "";
+
+  // onSave payload → update body field lines.
+  const onSaveFieldLines = spec.fields
+    .map((f) => {
+      switch (f.type) {
+        case "string[]":
+          return `                  ${f.name}: payload.fields["${f.name}"] as string[] ?? [],`;
+        case "boolean":
+          return `                  ${f.name}: payload.fields["${f.name}"] as boolean ?? false,`;
+        case "number":
+        case "decimal":
+          return `                  ${f.name}: payload.fields["${f.name}"] as number | null,`;
+        case "date":
+        case "string":
+        default:
+          return `                  ${f.name}: payload.fields["${f.name}"] as string | null,`;
+      }
+    })
+    .join("\n");
+
+  const valueSaveLine = spec.valueTracking
+    ? `                  estimatedValueUsd: payload.fields["estimatedValueUsd"] as number | null,\n`
+    : "";
+
+  const catImport = spec.categories ? `  useList${n.PascalS}Categories,\n` : "";
+  const catHook = spec.categories
+    ? `  const { data: categories = [] } = useList${n.PascalS}Categories();\n`
+    : "";
+  const catEditSheetProps = spec.categories
+    ? `          categories={categories}\n          initialCategoryIds={item.categories.map((c) => c.id)}\n`
+    : "";
+  const catSaveLine = spec.categories
+    ? `                  categoryIds: payload.categoryIds,\n`
+    : "";
+
+  const photoHookImports = spec.photos
+    ? `  useDelete${n.PascalS}Image,\n  useSet${n.PascalS}PrimaryImage,\n  useUpdate${n.PascalS}Image,\n  getUploadErrorMessage,\n`
+    : "";
+  const photoImageCaptureImport = spec.photos
+    ? `import { ItemImageGallery } from "@workspace/image-capture";\n`
+    : "";
+  const photoState = spec.photos
+    ? `  const [isUploading, setIsUploading] = useState(false);\n`
+    : "";
+  const photoMutations = spec.photos
+    ? `  const deleteImageMutation = useDelete${n.PascalS}Image();\n  const setPrimaryMutation = useSet${n.PascalS}PrimaryImage();\n  const relabelImageMutation = useUpdate${n.PascalS}Image();\n`
+    : "";
+
+  const listQueryKey = `getList${n.PascalP}QueryKey`;
+
   return `// Generated by scaffold-collection-module for the "${n.plural}" collection.
 // Built from @workspace/collection-ui detail primitives.
+import { useState } from "react";
 import { useLocation, useRoute } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { Pencil } from "lucide-react";
 import {
   useGet${n.PascalS},
   useDelete${n.PascalS},
-  getGet${n.PascalS}QueryKey,
+  useUpdate${n.PascalS},
+${catImport}${photoHookImports}  getGet${n.PascalS}QueryKey,
+  ${listQueryKey},
 } from "@workspace/api-client-react";
-import {
+${photoImageCaptureImport}import {
   CollectionDetailField,
   CollectionDetailLayout,
   CollectionDetailSkeleton,
   CollectionErrorState,
+  CollectionItemEditSheet,
+  type CollectionEditField,
 } from "@workspace/collection-ui";
+
+const EDIT_FIELDS: CollectionEditField[] = [
+${editFieldDefs ? editFieldDefs + "\n" : ""}${valueEditFieldDef}];
 
 export default function ${n.PascalS}DetailPage() {
   const [, params] = useRoute("/${n.plural}/item/:id");
   const id = Number(params?.id ?? 0);
   const [, navigate] = useLocation();
-
+  const queryClient = useQueryClient();
+  const [editOpen, setEditOpen] = useState(false);
+${photoState}${photoMutations}
   const { data: item, isLoading, isError, refetch } = useGet${n.PascalS}(id, {
     query: { enabled: !!id, queryKey: getGet${n.PascalS}QueryKey(id) },
   });
   const deleteMutation = useDelete${n.PascalS}({
     mutation: { onSuccess: () => navigate("/${n.plural}") },
   });
-
+  const updateMutation = useUpdate${n.PascalS}();
+${catHook}
   if (isLoading) return <CollectionDetailSkeleton />;
   if (isError || !item) {
     return (
@@ -1905,68 +2205,207 @@ export default function ${n.PascalS}DetailPage() {
   }
 
   return (
-    <CollectionDetailLayout
-      onBack={() => navigate("/${n.plural}")}
-      gallery={
+    <>
+      <CollectionDetailLayout
+        onBack={() => navigate("/${n.plural}")}
+        gallery={
 ${
   spec.photos
-    ? `        item.imageUrl ? (
-          <img
-            src={item.imageUrl}
-            alt={item.name}
-            className="w-full rounded-xl object-cover"
-          />
-        ) : (
-          <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-muted text-muted-foreground">
-            {/* TODO(scaffold): photo upload + gallery (see ornaments) */}
-            No photo
-          </div>
-        )
-`
-    : `        <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-muted text-muted-foreground">
-          {item.name.charAt(0).toUpperCase()}
-        </div>
-`
-}      }
-      titleSlot={<h1 className="text-2xl font-bold">{item.name}</h1>}
-      actions={
-        <button
-          type="button"
-          className="text-sm text-destructive hover:underline"
-          onClick={() => {
-            if (window.confirm("Delete this ${n.singular}?")) {
-              deleteMutation.mutate({ id });
+    ? `          <ItemImageGallery
+            images={
+              (item.images ?? [])
+                .slice()
+                // Primary image first so ItemImageGallery renders it as the
+                // cover (the component shows images[0] as the main image).
+                // Remaining images keep their relative position order.
+                .sort((a, b) => {
+                  if (a.id === item.primaryImageId) return -1;
+                  if (b.id === item.primaryImageId) return 1;
+                  return a.position - b.position;
+                })
+                .map((img) => ({
+                  id: img.id,
+                  url: img.url,
+                  label: img.label ?? null,
+                  isPrimary: img.id === item.primaryImageId,
+                }))
             }
-          }}
-        >
-          Delete
-        </button>
-      }
-      fields={[
-          {
-            label: "Notes",
-            value: item.notes ?? "—",
-          },
+            isUploading={isUploading}
+            isMutating={
+              deleteImageMutation.isPending ||
+              setPrimaryMutation.isPending ||
+              relabelImageMutation.isPending
+            }
+            onAddImage={async (file) => {
+              setIsUploading(true);
+              try {
+                const formData = new FormData();
+                formData.append("image", file);
+                const resp = await fetch(
+                  \`/api/${n.plural}/items/\${id}/images\`,
+                  { method: "POST", body: formData, credentials: "include" },
+                );
+                if (!resp.ok) {
+                  const body = await resp.json().catch(() => ({}));
+                  const err = Object.assign(new Error(body.error ?? "Upload failed"), {
+                    status: resp.status,
+                    data: body,
+                  });
+                  throw err;
+                }
+                await queryClient.invalidateQueries({
+                  queryKey: getGet${n.PascalS}QueryKey(id),
+                });
+                await queryClient.invalidateQueries({
+                  queryKey: ${listQueryKey}(),
+                });
+                toast.success("Photo added");
+              } catch (err) {
+                toast.error(getUploadErrorMessage(err, "Failed to upload photo"));
+                throw err;
+              } finally {
+                setIsUploading(false);
+              }
+            }}
+            onDeleteImage={(imageId, isPrimary) => {
+              if (isPrimary) {
+                toast.error(
+                  "Set another photo as primary first, then delete this one.",
+                );
+                return;
+              }
+              deleteImageMutation.mutate(
+                { id, imageId },
+                {
+                  onSuccess: () => {
+                    void queryClient.invalidateQueries({
+                      queryKey: getGet${n.PascalS}QueryKey(id),
+                    });
+                    toast.success("Photo removed");
+                  },
+                  onError: () => toast.error("Failed to delete photo"),
+                },
+              );
+            }}
+            onSetPrimary={(imageId) => {
+              setPrimaryMutation.mutate(
+                { id, imageId },
+                {
+                  onSuccess: () => {
+                    void queryClient.invalidateQueries({
+                      queryKey: getGet${n.PascalS}QueryKey(id),
+                    });
+                    void queryClient.invalidateQueries({
+                      queryKey: ${listQueryKey}(),
+                    });
+                    toast.success("Primary photo updated");
+                  },
+                  onError: () => toast.error("Failed to update primary photo"),
+                },
+              );
+            }}
+            onRelabel={async (imageId, label) => {
+              await relabelImageMutation.mutateAsync({
+                id,
+                imageId,
+                data: { label },
+              });
+              await queryClient.invalidateQueries({
+                queryKey: getGet${n.PascalS}QueryKey(id),
+              });
+              toast.success("Label saved");
+            }}
+          />
+`
+    : `          <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-muted text-muted-foreground">
+            {item.name.charAt(0).toUpperCase()}
+          </div>
+`
+}        }
+        titleSlot={<h1 className="text-2xl font-bold">{item.name}</h1>}
+        actions={
+          <>
+            <button
+              type="button"
+              title="Edit"
+              onClick={() => setEditOpen(true)}
+              className="grid h-8 w-8 place-items-center rounded-full bg-muted text-muted-foreground hover:bg-card-border"
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              className="text-sm text-destructive hover:underline"
+              onClick={() => {
+                if (window.confirm("Delete this ${n.singular}?")) {
+                  deleteMutation.mutate({ id });
+                }
+              }}
+            >
+              Delete
+            </button>
+          </>
+        }
+        fields={[
+            {
+              label: "Notes",
+              value: item.notes ?? "—",
+            },
 ${fieldRows ? fieldRows + "\n" : ""}${
     spec.valueTracking
-      ? `          {
-            label: "Estimated value",
-            value:
-              item.estimatedValueUsd != null
-                ? \`$\${item.estimatedValueUsd.toFixed(2)}\`
-                : "—",
-          },
+      ? `            {
+              label: "Estimated value",
+              value:
+                item.estimatedValueUsd != null
+                  ? \`$\${item.estimatedValueUsd.toFixed(2)}\`
+                  : "—",
+            },
 `
       : ""
-  }        ].map((f) => (
-          <CollectionDetailField
-            key={f.label}
-            label={f.label}
-            value={f.value}
-            empty={f.value === "—"}
-          />
-        ))}
-    />
+  }          ].map((f) => (
+            <CollectionDetailField
+              key={f.label}
+              label={f.label}
+              value={f.value}
+              empty={f.value === "—"}
+            />
+          ))}
+      />
+
+      {editOpen && (
+        <CollectionItemEditSheet
+          title={item.name}
+${spec.photos ? "          thumbnailUrl={item.imageUrl}\n" : ""}          initialName={item.name}
+          initialNotes={item.notes ?? null}
+          fields={EDIT_FIELDS}
+          initialFieldValues={{
+${editInitialValues ? editInitialValues + "\n" : ""}${valueInitialValue}          }}
+${catEditSheetProps}          isSaving={updateMutation.isPending}
+          onClose={() => setEditOpen(false)}
+          onSave={async (payload) => {
+            try {
+              await updateMutation.mutateAsync({
+                id,
+                data: {
+                  name: payload.name,
+                  notes: payload.notes,
+${onSaveFieldLines ? onSaveFieldLines + "\n" : ""}${valueSaveLine}${catSaveLine}                },
+              });
+              await queryClient.invalidateQueries({
+                queryKey: getGet${n.PascalS}QueryKey(id),
+              });
+              await queryClient.invalidateQueries({
+                queryKey: ${listQueryKey}(),
+              });
+              setEditOpen(false);
+              toast.success("${n.PascalS} updated.");
+            } catch {
+              toast.error("Failed to save. Please try again.");
+            }
+          }}
+        />
+      )}
+    </>
   );
 }
 `;
@@ -1991,8 +2430,6 @@ ${
 }- [ ] **Elaine parity**: every user-facing feature needs matching Elaine
       actions/tools/pageContext (see the elaine action-tool checklist) and an
       operation-catalog rebuild — CI's capability-parity job will flag gaps.
-- [ ] **Inline editing**: the detail page is read-only; add a QuickEditSheetFrame
-      for field editing as needed (see pottery/quilting for reference).
 - [ ] **Hub widget**: apps.tsx hub card is stubbed; add a real image and a
       dashboard widget in WIDGETS if wanted.
 - [ ] **Module chrome**: optional GROUP_ORDER / GROUP_META / MODULE_FAVICONS /
@@ -2727,6 +3164,9 @@ const ImageParams = z.object({
   id: z.coerce.number().int().positive(),
   imageId: z.coerce.number().int().positive(),
 });
+const UpdateImageBody = z.object({
+  label: z.string().trim().nullable().optional(),
+});
 
 // ---------------------------------------------------------------------------
 // GET /items/:id/image — serve the primary image (imagePath on the item row)
@@ -2846,6 +3286,47 @@ router.post("/items/:id/images", upload.single("image"), async (req, res) => {
     url: \`/api/${n.plural}/items/\${id}/images/\${imgRow.id}?v=\${pathCacheBuster(storagePath)}\`,
     label: imgRow.label,
     position: imgRow.position,
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PATCH /items/:id/images/:imageId — update a supplemental photo's label
+// ---------------------------------------------------------------------------
+router.patch("/items/:id/images/:imageId", async (req, res) => {
+  const { id, imageId } = ImageParams.parse(req.params);
+  const body = UpdateImageBody.parse(req.body);
+  const userId = req.session.userId!;
+  const [item] = await db
+    .select({ id: items.id })
+    .from(items)
+    .where(and(eq(items.id, id), eq(items.userId, userId)));
+  if (!item) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  const [img] = await db
+    .select()
+    .from(images)
+    .where(
+      and(eq(images.id, imageId), eq(images.itemId, id), isNull(images.deletedAt)),
+    );
+  if (!img) {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  const [updated] =
+    body.label === undefined
+      ? [img]
+      : await db
+          .update(images)
+          .set({ label: body.label || null })
+          .where(eq(images.id, imageId))
+          .returning();
+  res.json({
+    id: updated.id,
+    url: \`/api/${n.plural}/items/\${id}/images/\${updated.id}?v=\${pathCacheBuster(updated.storagePath)}\`,
+    label: updated.label,
+    position: updated.position,
   });
 });
 

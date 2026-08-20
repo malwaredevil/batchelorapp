@@ -252,10 +252,10 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   // category/item name fields — input-validation caps mirroring the existing
   // modules' specs, part of code-generation template strings, never
   // owner-facing runtime config.
-  "scripts/src/scaffold-collection-module.ts:800",
-  "scripts/src/scaffold-collection-module.ts:801",
-  "scripts/src/scaffold-collection-module.ts:1021",
-  "scripts/src/scaffold-collection-module.ts:1032",
+  "scripts/src/scaffold-collection-module.ts:839",
+  "scripts/src/scaffold-collection-module.ts:840",
+  "scripts/src/scaffold-collection-module.ts:1025",
+  "scripts/src/scaffold-collection-module.ts:1036",
 
   // ---- scripts/check-duplicate-code.ts ----
   // MIN_TOKENS: fixed algorithm parameter of the duplicate-code detector
@@ -263,14 +263,19 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   // guardrail-internal tuning constant, never owner-facing product config.
   "scripts/src/check-duplicate-code.ts:62",
 
+  // ---- scripts/check-agent-screenshot-access.ts ----
+  // CHECK_TIMEOUT_MS: fixed network budget for the development-only liveness
+  // probe. This is a diagnostic implementation safeguard, not product config.
+  "scripts/src/check-agent-screenshot-access.ts:10",
+
   // ---- elaine/index.ts — pre-existing internal constants surfaced when the
   // file entered a diff (scaffolded-read-registry dispatch hook). All three are
   // fixed algorithm/abuse-guard parameters, not owner-facing product config:
   // MAX_PHONE_CODE_ATTEMPTS: brute-force guard on phone verification codes.
   "artifacts/api-server/src/elaine/index.ts:914",
   // MAX_ROUNDS: bounded tool-loop iteration caps in two internal helpers.
-  "artifacts/api-server/src/elaine/index.ts:10156",
-  "artifacts/api-server/src/elaine/index.ts:10418",
+  "artifacts/api-server/src/elaine/index.ts:10199",
+  "artifacts/api-server/src/elaine/index.ts:10461",
 
   // ---- observability / request-logging threshold ----
   // Fixed monitoring constant; changing it has no product-visible effect.
@@ -294,8 +299,8 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   // budget; these inner loops are implementation guards for the restricted
   // channel path that are too tightly coupled to the response-parsing logic
   // to be safely raised by the owner.
-  "artifacts/api-server/src/elaine/index.ts:10146", // MAX_ROUNDS (restricted-channel OpenAI-Responses attempt loop)
-  "artifacts/api-server/src/elaine/index.ts:10408", // MAX_ROUNDS (restricted-channel reply loop, SMS/email/Slack)
+  "artifacts/api-server/src/elaine/index.ts:10199", // MAX_ROUNDS (restricted-channel OpenAI-Responses attempt loop)
+  "artifacts/api-server/src/elaine/index.ts:10461", // MAX_ROUNDS (restricted-channel reply loop, SMS/email/Slack)
 
   // ---- routes/ornaments/ornaments.ts ----
   // Pre-existing input-validation caps (notes length, supplemental-image
@@ -321,11 +326,20 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   "artifacts/api-server/src/routes/quilting/patterns.ts:60", // MAX_NOTES
   "artifacts/api-server/src/routes/quilting/patterns.ts:61", // MAX_LABEL
   "artifacts/api-server/src/routes/quilting/patterns.ts:309", // MAX_REANALYZE_IMAGES
-  "artifacts/api-server/src/routes/quilting/patterns.ts:310", // MAX_BULK_REANALYZE
   "artifacts/api-server/src/routes/quilting/quilts.ts:62", // MAX_NOTES
   "artifacts/api-server/src/routes/quilting/quilts.ts:63", // MAX_LABEL
   "artifacts/api-server/src/routes/quilting/quilts.ts:376", // MAX_REANALYZE_IMAGES
-  "artifacts/api-server/src/routes/quilting/quilts.ts:377", // MAX_BULK_REANALYZE
+  // quilting MAX_BULK_REANALYZE (fabrics/patterns/quilts) is now
+  // owner-configurable via thresholds.quiltingBulkReanalyzeLimit in the
+  // Elaine config store.
+
+  // ---- lib/sentry-error-nudges.ts ----
+  // MAX_DETAILED_ISSUES: cosmetic cap on how many individual issue lines
+  // appear in a single consolidated Elaine nudge message before the rest
+  // collapse into a "+N more" count. Pure message-formatting choice, not a
+  // limit/threshold/budget the owner would ever need to tune. Flagged only
+  // because an unrelated retry-wrapper edit in this file entered the diff.
+  "artifacts/api-server/src/lib/sentry-error-nudges.ts:54",
 
   // ---- lib/collection-ui/src/async-action-status.ts ----
   // Pure UI-polish timings for how long a "success"/"error" badge lingers on
@@ -561,14 +575,13 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
 
   // ---- routes/quilting/fabrics.ts ----
   // DB field-length validation limits.
-  "artifacts/api-server/src/routes/quilting/fabrics.ts:102",
   "artifacts/api-server/src/routes/quilting/fabrics.ts:103",
   "artifacts/api-server/src/routes/quilting/fabrics.ts:104",
   "artifacts/api-server/src/routes/quilting/fabrics.ts:105",
-  // Image count and AI reanalysis cost guards.
-  "artifacts/api-server/src/routes/quilting/fabrics.ts:107",
+  "artifacts/api-server/src/routes/quilting/fabrics.ts:106",
+  // Image count guards.
   "artifacts/api-server/src/routes/quilting/fabrics.ts:108",
-  "artifacts/api-server/src/routes/quilting/fabrics.ts:1111",
+  "artifacts/api-server/src/routes/quilting/fabrics.ts:109",
 
   // ---- routes/quilting/layouts.ts ----
   // DB field-length validation limit.
@@ -576,22 +589,20 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
 
   // ---- routes/quilting/patterns.ts ----
   // DB field-length validation limits.
-  "artifacts/api-server/src/routes/quilting/patterns.ts:56",
-  "artifacts/api-server/src/routes/quilting/patterns.ts:57",
-  "artifacts/api-server/src/routes/quilting/patterns.ts:58",
   "artifacts/api-server/src/routes/quilting/patterns.ts:59",
-  // AI reanalysis cost guards.
-  "artifacts/api-server/src/routes/quilting/patterns.ts:307",
-  "artifacts/api-server/src/routes/quilting/patterns.ts:308",
+  "artifacts/api-server/src/routes/quilting/patterns.ts:60",
+  "artifacts/api-server/src/routes/quilting/patterns.ts:61",
+  "artifacts/api-server/src/routes/quilting/patterns.ts:62",
+  // AI reanalysis image-count guard.
+  "artifacts/api-server/src/routes/quilting/patterns.ts:310",
 
   // ---- routes/quilting/quilts.ts ----
   // DB field-length validation limits.
-  "artifacts/api-server/src/routes/quilting/quilts.ts:59",
-  "artifacts/api-server/src/routes/quilting/quilts.ts:60",
-  "artifacts/api-server/src/routes/quilting/quilts.ts:61",
-  // AI reanalysis cost guards.
-  "artifacts/api-server/src/routes/quilting/quilts.ts:374",
-  "artifacts/api-server/src/routes/quilting/quilts.ts:375",
+  "artifacts/api-server/src/routes/quilting/quilts.ts:62",
+  "artifacts/api-server/src/routes/quilting/quilts.ts:63",
+  "artifacts/api-server/src/routes/quilting/quilts.ts:64",
+  // AI reanalysis image-count guard.
+  "artifacts/api-server/src/routes/quilting/quilts.ts:377",
 
   // ---- routes/quilting/stats.ts ----
   // Top-N labels returned by aggregate stats — presentation/query detail.
@@ -628,7 +639,7 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
 
   // ---- modules/quilting ----
   // Canvas zoom max-scale — UI layout constraint.
-  "artifacts/modules/src/quilting/components/FabricAiLab.tsx:67",
+  "artifacts/modules/src/quilting/components/FabricAiLab.tsx:68",
   "artifacts/modules/src/quilting/components/FabricCreaseRemoverModal.tsx:65",
   // Client-side crease-removal processing throttle.
   "artifacts/modules/src/quilting/pages/fabrics/index.tsx:536",
@@ -683,6 +694,12 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   // timing constants, not owner-configurable behaviour limits.
   "lib/collection-ui/src/async-action-status.ts:6",
   "lib/collection-ui/src/async-action-status.ts:7",
+
+  // ---- artifacts/api-server/src/lib/ornaments/dimensions.ts ----
+  // Defensive maximum for a stored display string from an AI/web-research
+  // response. This is input sanitization, not a collection behavior or
+  // owner-facing budget.
+  "artifacts/api-server/src/lib/ornaments/dimensions.ts:14",
 
   // ---- scripts/src/github-sync.ts ----
   // Safety cap on bulk deletions per sync run — prevents runaway exclusion-list bugs.

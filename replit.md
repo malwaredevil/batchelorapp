@@ -46,7 +46,7 @@ Combined pnpm monorepo serving both the Pottery and Quilting collection apps und
 
 ## Architecture decisions
 
-- **Composition and configuration is the highest-priority design rule after safety and data integrity.** "Write Once, Use Everywhere." Every feature, repair, refactor, PR review, GitHub sync, and pre-publishing task begins with a monorepo-wide search for existing shared behavior. This rule is hardwired and takes precedence from here on. It is built from seven techniques, applied as they fit: **DRY**, **reusable modules/components**, **generic programming** (parameterize by type/config instead of copy-pasting one near-identical function per entity), **composition** (assemble small focused pieces), **shared layouts/page shells** (`@workspace/app-shell`, `@workspace/collection-ui` own page structure), **adapter/strategy pattern** (inject differing behavior behind a shared interface instead of branching inside a shared implementation), and **scaffolding/code generation** (start new Elaine action tools, collection modules, and shared `lib/*` packages from `pnpm --filter @workspace/scripts run scaffold:*` rather than hand-copying an existing example). See `AGENTS.md` §4.10 for the full detail on each.
+- **Composition and configuration is the highest-priority design rule after safety and data integrity.** "Write Once, Use Everywhere." Every feature, repair, refactor, PR review, GitHub sync, and pre-publishing task begins with a monorepo-wide search for existing shared behavior. This rule is hardwired and takes precedence from here on. It applies equally to the main agent, future sessions, background task agents, and code reviewers. A task that introduces a preventable second source of truth is incomplete until the behavior is consolidated or the duplication is explicitly justified. It is built from seven techniques, applied as they fit: **DRY**, **reusable modules/components**, **generic programming** (parameterize by type/config instead of copy-pasting one near-identical function per entity), **composition** (assemble small focused pieces), **shared layouts/page shells** (`@workspace/app-shell`, `@workspace/collection-ui` own page structure), **adapter/strategy pattern** (inject differing behavior behind a shared interface instead of branching inside a shared implementation), and **scaffolding/code generation** (start new Elaine action tools, collection modules, and shared `lib/*` packages from `pnpm --filter @workspace/scripts run scaffold:*` rather than hand-copying an existing example). See `AGENTS.md` §4.10 for the full detail on each.
 
   **Mandatory search-first workflow — do this before writing any code:**
   1. `grep -r "the thing you are about to implement" artifacts/ lib/` — find any existing implementation.
@@ -122,18 +122,37 @@ Combined pnpm monorepo serving both the Pottery and Quilting collection apps und
   2. UI browsing / screenshots — **canonical Method 1** (works regardless of artifact registration state):
 
      ```
-     # a) Get token and domain (parallel)
-     TOKEN=$(viewEnvVars DEV_SCREENSHOT_TOKEN, environment: "development")
-     DOMAIN=$(echo $REPLIT_DEV_DOMAIN)
+      # a) Validate the bypass, then derive an agent-safe token.
+      # DEV_SCREENSHOT_TOKEN is a development Secret. Never read or print its raw value.
+      pnpm --filter @workspace/scripts run check-agent-screenshot-access
+      TOKEN=$(pnpm --filter @workspace/scripts run print-agent-screenshot-token --silent | tail -1)
+      DOMAIN=$REPLIT_DEV_DOMAIN
 
      # b) Screenshot any page:
      Screenshot({ source: { type: "externalUrl",
        url: `https://${DOMAIN}/<path>?screenshotToken=${TOKEN}` } })
      ```
 
-     Pages: `/` (hub), `/modules/pottery`, `/modules/quilting`, `/modules/travels`, `/modules/ornaments`, `/modules/office`, `/elaine`, `/owner`.
-     `DEV_SCREENSHOT_TOKEN` **must stay a plain env var** (development environment) — never a Replit secret. See `.agents/memory/screenshot-tool-cookie-bypass.md` for full reference and the secondary `app_preview` method.
-     Fallback for interactive flows only: `runTest()` or curl with `AGENT_LOGIN_EMAIL`/`AGENT_LOGIN_PASSWORD` against `https://$REPLIT_DEV_DOMAIN`.
+     Pages: `/` (hub), `/modules/pottery`, `/modules/quilting`, `/modules/travels`,
+     `/modules/ornaments`, `/modules/office`, `/elaine/`, `/owner-panel`.
+     `DEV_SCREENSHOT_TOKEN` **must remain a Replit Secret**. The agent uses only the
+     HMAC-derived output from `print-agent-screenshot-token`; it must never read or print
+     the raw Secret. See `.agents/memory/screenshot-tool-cookie-bypass.md` for the full
+     reference.
+
+     For actual page interaction (clicks, input, dialogs), first run
+     `pnpm --filter @workspace/e2e run agent:browser-smoke`. It launches the installed
+     system Chromium through the existing E2E Playwright package, derives the bypass token
+     without printing it, performs an authenticated read-only search, and writes
+     a uniquely named `/tmp/agent-browser-smoke-<timestamp>.png` file for visual
+     inspection. It is the dependable fallback if the built-in browser testing runner has
+     an infrastructure outage. For a
+     To check any direct route, run
+     `AGENT_BROWSER_PATH=/elaine/ pnpm --filter @workspace/e2e run agent:browser-page`
+     with the route you need. For a feature-specific or multi-step flow, create a temporary
+     script that imports `artifacts/e2e/agent-browser-helpers.mjs` rather than copying
+     token or Chromium setup. Use `AGENT_LOGIN_EMAIL` / `AGENT_LOGIN_PASSWORD` by name
+     only when testing the real login form; never reveal them.
 
   3. Deep end-to-end code review of everything added/changed (verify it works as intended, not just that it typechecks). Diff Replit vs GitHub if unsure what changed.
      - **Composition review (mandatory):** for every changed component, provider integration, page-context formatter, query policy, API wrapper, upload flow, and domain page structure, search for sibling implementations. Replace duplication with a shared mechanism plus typed domain configuration. A passing UI test does not excuse architectural duplication.
@@ -141,7 +160,7 @@ Combined pnpm monorepo serving both the Pottery and Quilting collection apps und
      - Screenshot every page/component that was added or changed using Method 1 above. Batch independent pages into one response.
      - **BROKEN IMAGE RULE (mandatory):** Explicitly scan every screenshot for `<img>` elements showing alt text or broken-image icons. If ANY broken image is visible, it is a real bug — investigate and fix before declaring done. Confirm with `curl -I "https://$REPLIT_DEV_DOMAIN/api/..."` that the endpoint returns 200 + valid image bytes. Never assume a broken image is a screenshot-tool artifact.
      - Verify layout, live data, and interactions match the intent of the change.
-     - **This step applies during development (before each "done") AND during pre-publish.** It is not optional and cannot be deferred to the pre-publish pass. If a feature cannot be screenshotted (e.g. modal only reachable after a multi-step flow), document why and verify via curl/API test instead.
+     - **This step applies during development (before each "done") AND during pre-publish.** It is not optional and cannot be deferred to the pre-publish pass. Multi-step, modal, and stateful flows must be exercised in Chromium with the shared agent-browser helpers, then captured. Curl/API tests complement UI evidence but never replace it while a Chromium interaction is possible; only an unavoidable external or hardware-only constraint may block it, and must be recorded explicitly.
   5. Services page review: if any new external API service was added or removed this session, update `artifacts/web/src/pages/services-catalog.tsx` (service name, purpose, modules, env vars, implementation paths). This is the canonical owner-visible record of all integrations.
   6. Run the automated pre-publish gate: `pnpm --filter @workspace/scripts run pre-publish`. The local guards include the composition-and-configuration boundary check; GitHub CI supplies the full repository checks. Typecheck is excluded locally because GitHub CI already runs it and the gate verifies CI is green. Do not skip this step or substitute individual manual checks. Fix every failure before proceeding to Stage 2.
   7. **Replit-file leak check (mandatory):** confirm `.replit`, `.replitignore`, and `replit.nix` are NOT present in the public GitHub repo. Run: `curl -s -H "Authorization: Bearer $GH_PAT" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/malwaredevil/batchelorapp/git/trees/main?recursive=1" | jq '[.tree[] | select(.path | test("^\\.replit$|\\.replitignore$|replit\\.nix$|\\.upm/")) | .path]'` — the result must be `[]`. If any Replit-specific file appears, delete it immediately via the Git Data API (create a tree with `sha: null` for each offending path) before proceeding. These files have historically contained plaintext webhook secrets and personal email addresses and must never be in a public repo. The `github-sync.ts` script already excludes them, but they can re-appear if pushed by other means.

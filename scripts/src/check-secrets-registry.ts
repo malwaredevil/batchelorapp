@@ -64,6 +64,13 @@ export const INTENTIONALLY_EXCLUDED = new Set<string>([
   "DEV_SUPABASE_SERVICE_ROLE_KEY",
   // Non-secret public config values (not credentials)
   "PUBLIC_APP_URL",
+  // Optional runtime-only integrations. GitHub Actions does not call the
+  // Sentry server API or GIPHY, while production reads these from Replit
+  // Secrets when the corresponding feature is enabled.
+  "SENTRY_AUTH_TOKEN",
+  "SENTRY_ORG_SLUG",
+  "SENTRY_PROJECT_SLUG",
+  "GIPHY_API_KEY",
   // Replit built-in pooler env vars (auto-provisioned per workspace)
   "PGHOST",
   "PGPORT",

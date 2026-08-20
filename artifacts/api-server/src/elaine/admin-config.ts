@@ -116,6 +116,7 @@ export const AdminConfigBody = z.object({
       potteryMaxAiSupplemental: z.number().int().min(1).max(20).optional(),
       potteryBulkReanalyzeLimit: z.number().int().min(1).max(100).optional(),
       ornamentsBulkReanalyzeLimit: z.number().int().min(1).max(100).optional(),
+      quiltingBulkReanalyzeLimit: z.number().int().min(1).max(100).optional(),
     })
     .partial()
     .optional(),

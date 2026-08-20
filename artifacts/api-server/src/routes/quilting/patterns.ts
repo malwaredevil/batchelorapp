@@ -41,6 +41,7 @@ import {
 } from "@workspace/upload-validation";
 import { parseStringArray } from "../../lib/collection-parsing";
 import { resolveOrCreateQuiltingCategories as resolveOrCreateCategories } from "../../lib/quilting/resolve-categories";
+import { getElaineGlobalConfig } from "../../lib/elaine-config";
 import {
   uploadImage,
   deleteImage,
@@ -307,7 +308,6 @@ router.delete("/patterns/:id", async (req, res) => {
 // ---------------------------------------------------------------------------
 
 const MAX_REANALYZE_IMAGES = 5;
-const MAX_BULK_REANALYZE = 20;
 
 router.post("/patterns/:id/reanalyze", aiLimiter, async (req, res) => {
   const { id } = ReanalyzePatternParams.parse(req.params);
@@ -396,7 +396,11 @@ router.post("/patterns/:id/reanalyze", aiLimiter, async (req, res) => {
 export async function bulkReanalyzePatterns(
   ids: number[],
 ): Promise<{ succeeded: number[]; failed: number[] }> {
-  const capped = [...new Set(ids)].slice(0, MAX_BULK_REANALYZE);
+  const elaineConfig = await getElaineGlobalConfig();
+  const capped = [...new Set(ids)].slice(
+    0,
+    elaineConfig.thresholds.quiltingBulkReanalyzeLimit,
+  );
   const succeeded: number[] = [];
   const failed: number[] = [];
 

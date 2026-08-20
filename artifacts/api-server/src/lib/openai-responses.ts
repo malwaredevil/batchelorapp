@@ -286,7 +286,14 @@ export function isRecoverableOpenAIStateError(err: unknown): boolean {
     message.includes("previous_response_id") ||
     message.includes("previous response") ||
     message.includes("response id") ||
-    message.includes("not found")
+    message.includes("not found") ||
+    // "400 No tool output found for function call call_..." — the stored
+    // previous_response_id points at a response whose function calls never
+    // received their function_call_output items (e.g. the prior turn ended
+    // mid-loop via Stop/budget/failure before outputs were submitted). The
+    // pointer is unusable; rebuilding from durable local history recovers
+    // cleanly. (Sentry NODE-EXPRESS-28)
+    message.includes("no tool output found")
   );
 }
 

@@ -52,6 +52,7 @@ import {
   CalendarSyncCard,
 } from "@workspace/travels-settings-ui";
 import { ApplicationHeader } from "@workspace/app-shell";
+import { ImageLightbox } from "@workspace/collection-ui";
 import { useAuth } from "@/lib/auth";
 import { usePageAssistantContext } from "@/lib/assistant-context";
 import { COMMON_TIMEZONES } from "@/lib/timezones";
@@ -2013,16 +2014,10 @@ function AiLabContent() {
   // ── Zoom lightbox ───────────────────────────────────────────────────────
   const [zoomSrc, setZoomSrc] = useState<string | null>(null);
   const [zoomLabel, setZoomLabel] = useState("");
-  const [zoomScale, setZoomScale] = useState(1);
-  const [zoomPan, setZoomPan] = useState({ x: 0, y: 0 });
-  const zoomPanning = useRef(false);
-  const zoomPanStart = useRef({ x: 0, y: 0 });
 
   const openZoom = (src: string, label: string) => {
     setZoomSrc(src);
     setZoomLabel(label);
-    setZoomScale(1);
-    setZoomPan({ x: 0, y: 0 });
   };
   const closeZoom = () => setZoomSrc(null);
 
@@ -2307,67 +2302,13 @@ function AiLabContent() {
 
   return (
     <div className="space-y-6">
-      {/* Zoom lightbox */}
-      {zoomSrc && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
-          onClick={closeZoom}
-          onWheel={(e) => {
-            e.preventDefault();
-            const factor = e.deltaY < 0 ? 1.12 : 0.89;
-            setZoomScale((s) => Math.min(Math.max(s * factor, 0.5), 10));
-          }}
-          onMouseDown={(e) => {
-            if (zoomScale <= 1) return;
-            e.preventDefault();
-            zoomPanning.current = true;
-            zoomPanStart.current = {
-              x: e.clientX - zoomPan.x,
-              y: e.clientY - zoomPan.y,
-            };
-          }}
-          onMouseMove={(e) => {
-            if (!zoomPanning.current) return;
-            setZoomPan({
-              x: e.clientX - zoomPanStart.current.x,
-              y: e.clientY - zoomPanStart.current.y,
-            });
-          }}
-          onMouseUp={() => {
-            zoomPanning.current = false;
-          }}
-          style={{ cursor: zoomScale > 1 ? "grab" : "default" }}
-        >
-          <button
-            type="button"
-            onClick={closeZoom}
-            className="absolute right-4 top-4 z-10 rounded-full bg-white/10 p-2 text-white hover:bg-white/20"
-            aria-label="Close zoom"
-          >
-            ✕
-          </button>
-          <p className="absolute top-4 left-1/2 -translate-x-1/2 z-10 text-xs font-medium text-white/70 uppercase tracking-wide select-none">
-            {zoomLabel} {zoomScale !== 1 && `· ${Math.round(zoomScale * 100)}%`}
-          </p>
-          <p className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 text-xs text-white/40 select-none">
-            Scroll to zoom · drag to pan · click outside to close
-          </p>
-          <img
-            src={zoomSrc}
-            alt={zoomLabel}
-            className="rounded-lg shadow-2xl select-none"
-            style={{
-              maxHeight: "85vh",
-              maxWidth: "85vw",
-              transform: `scale(${zoomScale}) translate(${zoomPan.x / zoomScale}px, ${zoomPan.y / zoomScale}px)`,
-              transformOrigin: "center center",
-              transition: zoomPanning.current ? "none" : "transform 0.1s ease",
-            }}
-            onClick={(e) => e.stopPropagation()}
-            draggable={false}
-          />
-        </div>
-      )}
+      <ImageLightbox
+        src={zoomSrc ?? ""}
+        alt={zoomLabel}
+        title={zoomLabel}
+        open={zoomSrc !== null}
+        onClose={closeZoom}
+      />
 
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>

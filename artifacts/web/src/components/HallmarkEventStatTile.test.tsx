@@ -1,11 +1,11 @@
 /**
  * Render tests for HallmarkEventStatTile.
  *
- * WHY: The tile is the Hub's primary Hallmark countdown.  Two regressions
+ * WHY: The tile is the Hub's primary Hallmark countdown. Three regressions
  * would be invisible without tests:
  *   1. The isLive branch never fires → "Live Now" never appears.
- *   2. When useUpcomingHallmarkEvents returns [] the fallback to
- *      HALLMARK_OPEN_HOUSE silently disappears.
+ *   2. An expired placeholder reappears when the calendar returns no events.
+ *   3. The card receives a shorter event range than the Ornaments collection.
  *
  * We render the real component with a mocked useUpcomingHallmarkEvents hook
  * so the test catches regressions in the component's own rendering logic.
@@ -26,10 +26,7 @@ vi.mock("@workspace/api-client-react", () => ({
 }));
 
 // Import AFTER mocking so the component picks up the mock.
-import {
-  HallmarkEventStatTile,
-  HALLMARK_OPEN_HOUSE,
-} from "./HallmarkEventStatTile";
+import { HallmarkEventStatTile } from "./HallmarkEventStatTile";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -55,68 +52,15 @@ afterEach(() => {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe("HallmarkEventStatTile — fallback to HALLMARK_OPEN_HOUSE", () => {
-  it("renders when hook returns empty events (uses HALLMARK_OPEN_HOUSE)", () => {
+describe("HallmarkEventStatTile — empty calendar", () => {
+  it("renders nothing when the calendar has no future or live events", () => {
     mockUseUpcomingHallmarkEvents.mockReturnValue({
       events: [],
       hallmarkCal: null,
     });
-
-    // Set time well before the Open House so we get the countdown branch.
-    vi.setSystemTime(new Date("2026-05-01T12:00:00"));
-
-    render(<HallmarkEventStatTile />);
-
-    // The tile must exist (not null)
-    expect(screen.getByTestId("hallmark-event-tile")).toBeDefined();
-    // It should show a numeric day count — the number itself depends on test date
-    // but should not be "Live Now"
-    expect(screen.queryByText("Live Now")).toBeNull();
-  });
-
-  it("renders Open House title when hook returns empty events", () => {
-    mockUseUpcomingHallmarkEvents.mockReturnValue({
-      events: [],
-      hallmarkCal: null,
-    });
-    vi.setSystemTime(new Date("2026-05-01T12:00:00"));
-
-    render(<HallmarkEventStatTile />);
-
-    // HALLMARK_OPEN_HOUSE.title stripped of "Hallmark" → "Open House"
-    // The tile shows shortTitle = title.replace(/hallmark'?s?\s*/i, "").trim()
-    // "Hallmark Open House" → "Open House"
-    expect(screen.getByText("Open House")).toBeDefined();
-  });
-
-  it("shows Live Now when Open House fallback is currently live", () => {
-    mockUseUpcomingHallmarkEvents.mockReturnValue({
-      events: [],
-      hallmarkCal: null,
-    });
-
-    // Set time inside the HALLMARK_OPEN_HOUSE window.
-    vi.setSystemTime(new Date("2026-07-15T12:00:00"));
-
-    render(<HallmarkEventStatTile />);
-
-    expect(screen.getByText("Live Now")).toBeDefined();
-  });
-
-  it("falls back to ?view=month href when using the Open House placeholder (no gcalId)", () => {
-    mockUseUpcomingHallmarkEvents.mockReturnValue({
-      events: [],
-      hallmarkCal: null,
-    });
-    vi.setSystemTime(new Date("2026-05-01T12:00:00"));
 
     const { container } = render(<HallmarkEventStatTile />);
-    const tile = container.querySelector("[data-testid='hallmark-event-tile']");
-    expect(tile).toBeDefined();
-    // The tile's onClick sets window.location.href; we verify the computed href
-    // is the fallback by confirming no deep-link params exist in the tile title.
-    // The tile's `title` attr is set to current.title ("Hallmark Open House")
-    expect(tile?.getAttribute("title")).toBe("Hallmark Open House");
+    expect(container.firstChild).toBeNull();
   });
 });
 
@@ -178,7 +122,7 @@ describe("HallmarkEventStatTile — real events from hook", () => {
     expect(tile?.getAttribute("title")).toBe("Hallmark evt-abc");
   });
 
-  it("passes lookaheadDays: 90 to the hook (90-day window)", () => {
+  it("uses the full-year range shared with the Ornaments collection card", () => {
     mockUseUpcomingHallmarkEvents.mockReturnValue({
       events: [],
       hallmarkCal: null,
@@ -187,9 +131,7 @@ describe("HallmarkEventStatTile — real events from hook", () => {
 
     render(<HallmarkEventStatTile />);
 
-    expect(mockUseUpcomingHallmarkEvents).toHaveBeenCalledWith({
-      lookaheadDays: 90,
-    });
+    expect(mockUseUpcomingHallmarkEvents).toHaveBeenCalledWith();
   });
 });
 
@@ -268,21 +210,6 @@ describe("HallmarkEventStatTile — index resets when list shrinks", () => {
     // surfaces if the list grows back or the interval fires again.
     // The important invariant: index must be 0 after the length change.
     expect(screen.getByText("second")).toBeDefined();
-  });
-});
-
-describe("HallmarkEventStatTile — HALLMARK_OPEN_HOUSE constant", () => {
-  it("constant start is before constant end", () => {
-    expect(HALLMARK_OPEN_HOUSE.start.getTime()).toBeLessThan(
-      HALLMARK_OPEN_HOUSE.end.getTime(),
-    );
-  });
-
-  it("constant end time is 23:59:59 (end of day)", () => {
-    const end = HALLMARK_OPEN_HOUSE.end;
-    expect(end.getHours()).toBe(23);
-    expect(end.getMinutes()).toBe(59);
-    expect(end.getSeconds()).toBe(59);
   });
 });
 
@@ -432,32 +359,6 @@ describe("HallmarkEventStatTile — deep-link href round-trip (cross-SPA)", () =
     expect(initialCursor?.getFullYear()).toBe(2026);
     expect(initialCursor?.getMonth()).toBe(11); // December = month index 11
     expect(deepLinkEventId).toBe(gcalId);
-  });
-
-  it("fallback href uses ?view=month (no gcalId event — placeholder only)", () => {
-    // When the hook returns no events, the tile uses the hardcoded HALLMARK_OPEN_HOUSE
-    // placeholder which has no gcalId — the href must fall back to ?view=month,
-    // not attempt a broken deep-link with undefined params.
-    mockUseUpcomingHallmarkEvents.mockReturnValue({
-      events: [],
-      hallmarkCal: null,
-    });
-    vi.setSystemTime(new Date("2026-05-01T12:00:00"));
-
-    const { container } = render(<HallmarkEventStatTile />);
-    const tile = container.querySelector(
-      "[data-testid='hallmark-event-tile']",
-    ) as HTMLElement;
-
-    fireEvent.click(tile);
-
-    expect(capturedHref).not.toBeNull();
-    expect(capturedHref).toContain("/modules/ornaments/hallmark-events");
-    const url = new URL(capturedHref!, "http://localhost");
-    expect(url.searchParams.get("view")).toBe("month");
-    // Must NOT have a stale/undefined event param.
-    expect(url.searchParams.get("event")).toBeNull();
-    expect(url.searchParams.get("month")).toBeNull();
   });
 
   it("keyboard Enter key triggers the same deep-link href as a click", () => {

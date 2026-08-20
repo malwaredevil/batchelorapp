@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link } from "wouter";
 import {
   Loader2,
@@ -7,12 +7,14 @@ import {
   RefreshCw,
   CheckCircle2,
   ChevronRight,
+  StopCircle,
 } from "lucide-react";
 import {
   useGetOrnamentStragglers,
   useBulkReanalyzeOrnaments,
   getGetOrnamentStragglersQueryKey,
   useListOrnaments,
+  getListOrnamentsQueryKey,
 } from "@workspace/api-client-react";
 import type { OrnamentsOrnamentItem as OrnamentItem } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -33,7 +35,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
+import {
+  isAsyncActionBusy,
+  useBulkReanalyzeRun,
+} from "@workspace/collection-ui";
+import { ornamentReanalyzeKey } from "@/ornaments/lib/reanalyze-status";
 
 export default function Maintenance() {
   const { data: stragglers, isLoading } = useGetOrnamentStragglers();
@@ -42,9 +48,28 @@ export default function Maintenance() {
   const queryClient = useQueryClient();
 
   const [isProcessing, setIsProcessing] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
+  const [summary, setSummary] = useState<string | null>(null);
+  const processingRef = useRef(false);
+  const stopRequestedRef = useRef(false);
 
   const items = stragglers?.items || [];
+
+  const bulkRun = useBulkReanalyzeRun({
+    mutateAsync: bulkReanalyze.mutateAsync,
+    keyFor: ornamentReanalyzeKey,
+    invalidate: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: getGetOrnamentStragglersQueryKey(),
+        }),
+        queryClient.invalidateQueries({ queryKey: getListOrnamentsQueryKey() }),
+      ]);
+    },
+    // This page presents one cumulative status for its sequential batches.
+    onSettled: () => undefined,
+    onFailed: () => undefined,
+  });
 
   const configSummary = useAppConfigSummary();
 
@@ -67,30 +92,67 @@ export default function Maintenance() {
     }${configSummary ? ` ${configSummary}` : ""}`,
   );
 
-  const handleBulkReanalyze = async () => {
-    if (items.length === 0) return;
+  async function handleBulkReanalyze() {
+    if (processingRef.current || items.length === 0) return;
 
-    setIsProcessing(true);
-    setProgress(0);
-
-    try {
-      const ids = items.map((i) => i.id);
-
-      // Since it could be a lot of items, let's chunk them conceptually or just show a spinner
-      // For now, we'll just send them all to the bulk endpoint which handles its own logic
-      await bulkReanalyze.mutateAsync({ data: { ids } });
-
-      toast.success(`Started reanalysis for ${ids.length} items`);
-      queryClient.invalidateQueries({
-        queryKey: getGetOrnamentStragglersQueryKey(),
-      });
-    } catch (err) {
-      toast.error("Failed to start bulk reanalysis");
-    } finally {
-      setIsProcessing(false);
-      setProgress(100);
+    const requestedIds = [...new Set(items.map((item) => item.id))];
+    const ids = requestedIds.filter(
+      (id) => !isAsyncActionBusy(ornamentReanalyzeKey(id)),
+    );
+    const skippedBusy = requestedIds.length - ids.length;
+    if (ids.length === 0) {
+      toast.message("Those ornaments are already being refreshed.");
+      return;
     }
-  };
+
+    processingRef.current = true;
+    stopRequestedRef.current = false;
+    setIsProcessing(true);
+    setSummary(null);
+    setProgress({ done: 0, total: ids.length });
+
+    const BATCH_SIZE = 2;
+    let done = 0;
+    let succeeded = 0;
+    let failed = 0;
+    try {
+      for (let index = 0; index < ids.length; index += BATCH_SIZE) {
+        if (stopRequestedRef.current) {
+          break;
+        }
+
+        const batch = ids.slice(index, index + BATCH_SIZE);
+        const result = await bulkRun.run(batch);
+        if (result) {
+          succeeded += result.succeeded.length;
+          failed += result.failed.length;
+        } else {
+          // A network failure is already represented as per-item error states
+          // by the shared lifecycle; retain it in the cumulative summary too.
+          failed += batch.length;
+        }
+        done += batch.length;
+        setProgress({ done, total: ids.length });
+      }
+    } finally {
+      processingRef.current = false;
+      setIsProcessing(false);
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: getGetOrnamentStragglersQueryKey(),
+        }),
+        queryClient.invalidateQueries({ queryKey: getListOrnamentsQueryKey() }),
+      ]);
+      const skipped = ids.length - done;
+      const pieces = succeeded === 1 ? "item" : "items";
+      const stopped = stopRequestedRef.current;
+      setSummary(
+        stopped
+          ? `Stopped — ${succeeded} ${pieces} refreshed, ${skipped} skipped${failed ? `, ${failed} failed` : ""}.`
+          : `${succeeded} ${pieces} refreshed${failed ? `, ${failed} failed` : ""}${skippedBusy ? `, ${skippedBusy} already in progress` : ""}.`,
+      );
+    }
+  }
 
   if (isLoading) {
     return (
@@ -156,10 +218,10 @@ export default function Maintenance() {
 
               <Button
                 onClick={handleBulkReanalyze}
-                disabled={isProcessing || bulkReanalyze.isPending}
+                disabled={isProcessing || bulkRun.isPending}
                 className="gap-2"
               >
-                {isProcessing || bulkReanalyze.isPending ? (
+                {isProcessing || bulkRun.isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <RefreshCw className="h-4 w-4" />
@@ -167,12 +229,35 @@ export default function Maintenance() {
                 Analyze {items.length} items
               </Button>
 
-              {(isProcessing || progress === 100) && (
+              {(isProcessing || summary) && (
                 <div className="space-y-2 mt-4">
-                  <Progress value={progress} className="h-2" />
-                  <p className="text-xs text-muted-foreground text-right">
-                    {progress < 100 ? "Processing on server..." : "Finished"}
-                  </p>
+                  <div className="h-2 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-primary transition-all duration-300"
+                      style={{
+                        width: `${progress.total ? Math.round((progress.done / progress.total) * 100) : 0}%`,
+                      }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>
+                      {isProcessing
+                        ? `Refreshing ${progress.done} of ${progress.total}…`
+                        : summary}
+                    </span>
+                    {isProcessing && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          stopRequestedRef.current = true;
+                        }}
+                        className="flex items-center gap-1 rounded px-2 py-1 font-medium hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        <StopCircle className="h-3.5 w-3.5" />
+                        Stop
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

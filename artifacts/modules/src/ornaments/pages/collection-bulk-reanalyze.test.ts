@@ -19,6 +19,7 @@ import { renderHook, act } from "@testing-library/react";
 import {
   useMultiSelectMode,
   useBulkReanalyzeRun,
+  trackAsyncAction,
   clearSettledAsyncActionStatuses,
   getAsyncActionStatus,
 } from "@workspace/collection-ui";
@@ -219,6 +220,31 @@ describe("Ornaments bulk-reanalyze — bulk-run lifecycle", () => {
     expect(mutateAsync).not.toHaveBeenCalled();
     // Mode stays active — user is in Select mode, just hasn't picked anything
     expect(result.current.bulkMode.active).toBe(true);
+  });
+
+  it("does not duplicate an item already refreshing from another surface", async () => {
+    let resolveExternal!: () => void;
+    const externalRefresh = new Promise<void>((resolve) => {
+      resolveExternal = resolve;
+    });
+    const mutateAsync = vi.fn();
+    const { result } = makeHook(mutateAsync);
+
+    act(() => {
+      result.current.bulkMode.enter();
+      result.current.bulkMode.toggle(42);
+      trackAsyncAction(ornamentReanalyzeKey(42), externalRefresh);
+    });
+
+    await act(() => result.current.runBulkReanalyze());
+    expect(mutateAsync).not.toHaveBeenCalled();
+    expect(result.current.bulkMode.active).toBe(true);
+
+    await act(async () => {
+      resolveExternal();
+      await externalRefresh;
+    });
+    act(() => result.current.finishBulk());
   });
 
   it("Done pressed mid-flight: a late success must not resurrect icons", async () => {

@@ -191,7 +191,11 @@ export const DeleteLayoutActionPayload = z.object({
 
 export const BulkReanalyzeQuiltingActionPayload = z.object({
   entityType: z.enum(["fabric", "pattern", "quilt"]),
-  ids: z.array(z.number().int().positive()).max(20).optional(),
+  // Matches the REST bulk-reanalyze ids ceiling (see quilting.yaml
+  // BulkReanalyzeInput.maxItems) so an owner-raised
+  // thresholds.quiltingBulkReanalyzeLimit is never rejected here before it
+  // reaches the worker's own configured slice.
+  ids: z.array(z.number().int().positive()).max(100).optional(),
 });
 
 export const RemoveFabricCreasesPayload = z.object({

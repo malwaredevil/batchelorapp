@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import {
+  isAsyncActionBusy,
   markAsyncActionProcessing,
   markAsyncActionSettled,
   clearAsyncActionStatuses,
@@ -37,6 +38,11 @@ export interface BulkReanalyzeRunDeps {
   onFailed: () => void;
 }
 
+export interface BulkReanalyzeRunResult {
+  succeeded: number[];
+  failed: number[];
+}
+
 export function useBulkReanalyzeRun({
   mutateAsync,
   keyFor,
@@ -45,6 +51,7 @@ export function useBulkReanalyzeRun({
   onFailed,
 }: BulkReanalyzeRunDeps) {
   const [isPending, setIsPending] = useState(false);
+  const pendingRef = useRef(false);
   const genRef = useRef(0);
 
   // Never let a rejected invalidate() escape as an unhandled rejection —
@@ -62,23 +69,31 @@ export function useBulkReanalyzeRun({
    * Run the bulk action. Refuses to start while another run is pending, so
    * two runs' per-card statuses can never interleave.
    */
-  async function run(ids: number[]) {
-    if (ids.length === 0 || isPending) return;
+  async function run(ids: number[]): Promise<BulkReanalyzeRunResult | null> {
+    const uniqueIds = [...new Set(ids)];
+    const keys = uniqueIds.map(keyFor);
+    if (
+      uniqueIds.length === 0 ||
+      pendingRef.current ||
+      keys.some(isAsyncActionBusy)
+    ) {
+      return null;
+    }
     const gen = genRef.current;
-    const keys = ids.map(keyFor);
     keys.forEach(markAsyncActionProcessing);
+    pendingRef.current = true;
     setIsPending(true);
     try {
-      const result = await mutateAsync({ data: { ids } });
+      const result = await mutateAsync({ data: { ids: uniqueIds } });
       if (gen !== genRef.current) {
         // Run was dismissed while in flight — drop its statuses entirely
         // (list data may still have changed server-side, so refresh it).
         clearAsyncActionStatuses(keys);
         await safeInvalidate();
-        return;
+        return null;
       }
       const succeededIds = new Set(result.succeeded);
-      for (const id of ids) {
+      for (const id of uniqueIds) {
         markAsyncActionSettled(
           keyFor(id),
           succeededIds.has(id) ? "success" : "error",
@@ -92,19 +107,22 @@ export function useBulkReanalyzeRun({
         // already written above, but the user has left Select mode, so
         // onSettled (which would clear selection / show the status message)
         // must not fire after the fact.
-        return;
+        return null;
       }
       onSettled(result);
+      return result;
     } catch {
       if (gen !== genRef.current) {
         clearAsyncActionStatuses(keys);
-        return;
+        return null;
       }
       for (const key of keys) {
         markAsyncActionSettled(key, "error", { sticky: true });
       }
       onFailed();
+      return null;
     } finally {
+      pendingRef.current = false;
       setIsPending(false);
     }
   }

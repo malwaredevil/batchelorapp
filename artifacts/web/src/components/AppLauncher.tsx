@@ -495,10 +495,9 @@ function AppHeroCard({
 // ── Ornaments card extra: next Hallmark event countdown ─────────────────────
 // Reads from the designated Hallmark Google Calendar (GCal is now the sole
 // source of truth — the ornaments_hallmark_events DB table has been removed).
-// Falls back to the hardcoded HALLMARK_OPEN_HOUSE constant only when no
-// calendar is connected or no upcoming events are found within 90 days.
-// Compact stat-square–sized tile. Yellow while counting down, red when live.
-// Rotates through multiple upcoming events every 4 seconds.
+// It stays hidden when no future or live calendar event is available. Compact
+// stat-square–sized tile. Yellow while counting down, red when live. Rotates
+// through multiple upcoming events every 4 seconds.
 
 /**
  * Generic silent error boundary — renders null if a child throws.

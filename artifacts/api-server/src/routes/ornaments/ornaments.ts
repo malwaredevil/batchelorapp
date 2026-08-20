@@ -552,6 +552,7 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
 
   const manualCategoryIds = parsePositiveIntegerArray(req.body?.categoryIds);
 
+  const userDimensions = clampField(req.body?.dimensions, MAX_TEXT);
   const dataUrl = toDataUrl(cleanBuffer, contentType);
   const { result: analysis, runId: analysisRunId } =
     await runAnalysisWithEvidenceTrace(
@@ -562,14 +563,16 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
         userId,
         model: (await getModels()).fastVision,
       },
-      () => analyzeOrnamentImage([dataUrl]),
+      () =>
+        analyzeOrnamentImage([dataUrl], {
+          resolveDimensions: userDimensions === null,
+        }),
     );
   const embedding = await embedText(buildEmbeddingText(analysis));
 
   const nameField = clampField(req.body?.name, MAX_NAME);
   const notesField = clampField(req.body?.notes, MAX_NOTES);
   const descriptionField = clampField(req.body?.description, MAX_NOTES);
-  const userDimensions = clampField(req.body?.dimensions, MAX_TEXT);
   const brandField = clampField(req.body?.brand, MAX_TEXT);
   const conditionField = clampField(req.body?.condition, MAX_TEXT);
   const originField = clampField(req.body?.origin, MAX_TEXT);
@@ -1472,6 +1475,7 @@ export async function runItemAnalysis(id: number): Promise<unknown> {
     ),
   ];
 
+  const locked = new Set(item.lockedFields ?? []);
   const analysis = await runAnalysisWithEvidence(
     {
       module: "ornaments",
@@ -1481,11 +1485,13 @@ export async function runItemAnalysis(id: number): Promise<unknown> {
       userId: item.userId ?? undefined,
       model: (await getModels()).fastVision,
     },
-    () => analyzeOrnamentImage(dataUrls),
+    () =>
+      analyzeOrnamentImage(dataUrls, {
+        resolveDimensions: !locked.has("dimensions"),
+      }),
   );
   const embedding = await embedText(buildEmbeddingText(analysis));
 
-  const locked = new Set(item.lockedFields ?? []);
   const keep = <T>(field: string, aiVal: T, existing: T): T =>
     locked.has(field) ? existing : (aiVal ?? existing);
 

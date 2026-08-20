@@ -55,6 +55,7 @@
     "@vitejs/plugin-react": "catalog:",
     "@workspace/app-shell": "workspace:*",
     "@workspace/api-client-react": "workspace:*",
+    "@workspace/collection-ui": "workspace:*",
     "@workspace/elaine-ui": "workspace:*",
     "@workspace/gmail-ui": "workspace:*",
     "@workspace/messenger-ui": "workspace:*",

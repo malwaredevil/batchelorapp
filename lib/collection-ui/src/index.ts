@@ -54,6 +54,16 @@ export type {
 export { QuickEditSheetFrame } from "./quick-edit-sheet";
 export type { QuickEditSheetFrameProps } from "./quick-edit-sheet";
 
+export { CollectionItemEditSheet } from "./collection-item-edit-sheet";
+export type {
+  CollectionItemEditSheetProps,
+  CollectionItemEditSheetSavePayload,
+  CollectionEditField,
+  CollectionEditFieldType,
+  CollectionEditFieldValue,
+  CollectionEditCategory,
+} from "./collection-item-edit-sheet";
+
 export { CollectionErrorState } from "./collection-error-state";
 export type { CollectionErrorStateProps } from "./collection-error-state";
 

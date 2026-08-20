@@ -1215,6 +1215,9 @@ async function buildActionLabel(
   action: PendingAction,
   userId: number,
 ): Promise<string> {
+  // Action families that are intentionally delegated in the default case below
+  // are validated by their runtime schemas before labels are built.
+  // eslint-disable-next-line @typescript-eslint/switch-exhaustiveness-check
   switch (action.type) {
     case "create_trip":
       return `Create a trip to ${action.payload.destination}${

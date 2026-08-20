@@ -17,6 +17,7 @@ import {
   type SQL,
 } from "drizzle-orm";
 import { logActivity } from "../../lib/soft-delete";
+import { createPrimaryImagePromoter } from "../../lib/primary-image-promotion";
 import {
   db,
   ornamentsItems,
@@ -2029,41 +2030,40 @@ router.post("/items/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
 // Set primary image: swap a supplemental image to primary, then re-analyse
 // ---------------------------------------------------------------------------
 
-export async function promoteOrnamentImageToPrimary(
-  id: number,
-  imageId: number,
-): Promise<unknown> {
-  const [item] = await db
-    .select(itemColumns)
-    .from(ornamentsItems)
-    .where(eq(ornamentsItems.id, id))
-    .limit(1);
-  if (!item)
-    throw Object.assign(new Error("Ornament not found."), { status: 404 });
-
-  const [suppImage] = await db
-    .select()
-    .from(ornamentsImages)
-    .where(eq(ornamentsImages.id, imageId))
-    .limit(1);
-  if (!suppImage || suppImage.itemId !== id)
-    throw Object.assign(new Error("Image not found."), { status: 404 });
-
-  const oldPrimaryPath = item.imagePath;
-  const newPrimaryPath = suppImage.storagePath;
-
-  await db
-    .update(ornamentsImages)
-    .set({ storagePath: oldPrimaryPath })
-    .where(eq(ornamentsImages.id, imageId));
-
-  await db
-    .update(ornamentsItems)
-    .set({ imagePath: newPrimaryPath })
-    .where(eq(ornamentsItems.id, id));
-
-  return runItemAnalysis(id);
-}
+export const promoteOrnamentImageToPrimary = createPrimaryImagePromoter({
+  itemNotFoundMessage: "Ornament not found.",
+  async getItem(itemId) {
+    const [item] = await db
+      .select(itemColumns)
+      .from(ornamentsItems)
+      .where(eq(ornamentsItems.id, itemId))
+      .limit(1);
+    return item ? { imagePath: item.imagePath } : undefined;
+  },
+  async getImage(imageId) {
+    const [image] = await db
+      .select()
+      .from(ornamentsImages)
+      .where(eq(ornamentsImages.id, imageId))
+      .limit(1);
+    return image
+      ? { itemId: image.itemId, storagePath: image.storagePath }
+      : undefined;
+  },
+  async updateImagePath(imageId, path) {
+    await db
+      .update(ornamentsImages)
+      .set({ storagePath: path })
+      .where(eq(ornamentsImages.id, imageId));
+  },
+  async updateItemPath(itemId, path) {
+    await db
+      .update(ornamentsItems)
+      .set({ imagePath: path })
+      .where(eq(ornamentsItems.id, itemId));
+  },
+  rerunAnalysis: runItemAnalysis,
+});
 
 router.post("/items/:id/set-primary-image", aiLimiter, async (req, res) => {
   const { id } = GetOrnamentParams.parse(req.params);

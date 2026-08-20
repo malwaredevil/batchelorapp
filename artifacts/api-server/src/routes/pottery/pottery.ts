@@ -17,6 +17,7 @@ import {
   type SQL,
 } from "drizzle-orm";
 import { logActivity } from "../../lib/soft-delete";
+import { createPrimaryImagePromoter } from "../../lib/primary-image-promotion";
 import {
   db,
   potteryItems,
@@ -1277,47 +1278,40 @@ router.post("/items/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
  * re-run AI analysis with the new primary in place. Shared by the
  * set-primary-image route and Elaine's promote_pottery_photo action.
  */
-export async function promotePotteryImageToPrimary(
-  id: number,
-  imageId: number,
-): Promise<unknown> {
-  // Fetch item to get the current primary path
-  const [item] = await db
-    .select(itemColumns)
-    .from(potteryItems)
-    .where(eq(potteryItems.id, id))
-    .limit(1);
-  if (!item)
-    throw Object.assign(new Error("Pottery piece not found."), {
-      status: 404,
-    });
-
-  // Fetch the supplemental image to be promoted
-  const [suppImage] = await db
-    .select()
-    .from(potteryImages)
-    .where(eq(potteryImages.id, imageId))
-    .limit(1);
-  if (!suppImage || suppImage.itemId !== id)
-    throw Object.assign(new Error("Image not found."), { status: 404 });
-
-  // Swap: supplemental row takes the old primary path, item gets the supplemental path
-  const oldPrimaryPath = item.imagePath;
-  const newPrimaryPath = suppImage.storagePath;
-
-  await db
-    .update(potteryImages)
-    .set({ storagePath: oldPrimaryPath })
-    .where(eq(potteryImages.id, imageId));
-
-  await db
-    .update(potteryItems)
-    .set({ imagePath: newPrimaryPath })
-    .where(eq(potteryItems.id, id));
-
-  // Re-analyse with the new primary image in place
-  return runItemAnalysis(id);
-}
+export const promotePotteryImageToPrimary = createPrimaryImagePromoter({
+  itemNotFoundMessage: "Pottery piece not found.",
+  async getItem(itemId) {
+    const [item] = await db
+      .select(itemColumns)
+      .from(potteryItems)
+      .where(eq(potteryItems.id, itemId))
+      .limit(1);
+    return item ? { imagePath: item.imagePath } : undefined;
+  },
+  async getImage(imageId) {
+    const [image] = await db
+      .select()
+      .from(potteryImages)
+      .where(eq(potteryImages.id, imageId))
+      .limit(1);
+    return image
+      ? { itemId: image.itemId, storagePath: image.storagePath }
+      : undefined;
+  },
+  async updateImagePath(imageId, path) {
+    await db
+      .update(potteryImages)
+      .set({ storagePath: path })
+      .where(eq(potteryImages.id, imageId));
+  },
+  async updateItemPath(itemId, path) {
+    await db
+      .update(potteryItems)
+      .set({ imagePath: path })
+      .where(eq(potteryItems.id, itemId));
+  },
+  rerunAnalysis: runItemAnalysis,
+});
 
 router.post("/items/:id/set-primary-image", aiLimiter, async (req, res) => {
   const { id } = GetPotteryParams.parse(req.params);

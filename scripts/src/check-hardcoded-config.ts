@@ -274,8 +274,8 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   // MAX_PHONE_CODE_ATTEMPTS: brute-force guard on phone verification codes.
   "artifacts/api-server/src/elaine/index.ts:914",
   // MAX_ROUNDS: bounded tool-loop iteration caps in two internal helpers.
-  "artifacts/api-server/src/elaine/index.ts:10199",
-  "artifacts/api-server/src/elaine/index.ts:10461",
+  "artifacts/api-server/src/elaine/index.ts:10202",
+  "artifacts/api-server/src/elaine/index.ts:10464",
 
   // ---- observability / request-logging threshold ----
   // Fixed monitoring constant; changing it has no product-visible effect.
@@ -299,16 +299,17 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   // budget; these inner loops are implementation guards for the restricted
   // channel path that are too tightly coupled to the response-parsing logic
   // to be safely raised by the owner.
-  "artifacts/api-server/src/elaine/index.ts:10199", // MAX_ROUNDS (restricted-channel OpenAI-Responses attempt loop)
-  "artifacts/api-server/src/elaine/index.ts:10461", // MAX_ROUNDS (restricted-channel reply loop, SMS/email/Slack)
+  "artifacts/api-server/src/elaine/index.ts:10202", // MAX_ROUNDS (restricted-channel OpenAI-Responses attempt loop)
+  "artifacts/api-server/src/elaine/index.ts:10464", // MAX_ROUNDS (restricted-channel reply loop, SMS/email/Slack)
 
   // ---- routes/ornaments/ornaments.ts ----
   // Pre-existing input-validation caps (notes length, supplemental-image
   // counts) — not owner-facing: these are DB column-length guards and
   // a fixed storage cap tied to the upload pipeline.
-  "artifacts/api-server/src/routes/ornaments/ornaments.ts:119", // MAX_NOTES (covers blank/non-const line harmlessly)
-  "artifacts/api-server/src/routes/ornaments/ornaments.ts:125", // MAX_SUPPLEMENTAL_IMAGES
-  "artifacts/api-server/src/routes/ornaments/ornaments.ts:126", // MAX_AI_SUPPLEMENTAL
+  "artifacts/api-server/src/routes/ornaments/ornaments.ts:122", // MAX_NOTES
+  "artifacts/api-server/src/routes/ornaments/ornaments.ts:124", // MAX_LABEL
+  "artifacts/api-server/src/routes/ornaments/ornaments.ts:126", // MAX_SUPPLEMENTAL_IMAGES
+  "artifacts/api-server/src/routes/ornaments/ornaments.ts:127", // MAX_AI_SUPPLEMENTAL
   // ornaments MAX_BULK_REANALYZE is now owner-configurable via
   // thresholds.ornamentsBulkReanalyzeLimit in the Elaine config store.
 
@@ -567,9 +568,10 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   "artifacts/api-server/src/routes/pottery/pottery.ts:109",
   "artifacts/api-server/src/routes/pottery/pottery.ts:110",
   "artifacts/api-server/src/routes/pottery/pottery.ts:111",
+  "artifacts/api-server/src/routes/pottery/pottery.ts:112",
   // MAX_SUPPLEMENTAL_IMAGES: hard storage cap per item (tied to the upload
   // pipeline's slot count), not an AI cost control — not owner-adjustable.
-  "artifacts/api-server/src/routes/pottery/pottery.ts:114",
+  "artifacts/api-server/src/routes/pottery/pottery.ts:115",
   // potteryMaxAiSupplemental and potteryBulkReanalyzeLimit are now
   // owner-configurable via the Elaine config store — no allowlist needed.
 

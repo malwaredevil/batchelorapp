@@ -57,25 +57,25 @@ const { selectQueue, insertReturning, deleteReturning, dbMock } = vi.hoisted(
 
       const afterOrderBy = {
         limit: (_n: number) => promise,
-        ...thenable,
+        then: thenable.then,
       };
 
       const afterWhere = {
         orderBy: (..._args: unknown[]) => afterOrderBy,
         limit: (_n: number) => promise,
-        ...thenable,
+        then: thenable.then,
       };
 
       const afterInnerJoin = {
         where: (_cond: unknown) => afterWhere,
-        ...thenable,
+        then: thenable.then,
       };
 
       const afterFrom = {
         where: (_cond: unknown) => afterWhere,
         orderBy: (..._args: unknown[]) => afterOrderBy,
         innerJoin: (_t: unknown, _on: unknown) => afterInnerJoin,
-        ...thenable,
+        then: thenable.then,
       };
 
       return { from: (_table: unknown) => afterFrom };

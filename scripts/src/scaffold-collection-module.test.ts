@@ -119,6 +119,17 @@ const SPEC = {
       .includes("scaffold:begin:gizmos"),
     "shared file missing scaffold block",
   );
+  const apiSource = fs.readFileSync(genFile, "utf8");
+  assert.match(
+    apiSource,
+    /\/items\/\{id\}\/images\/\{imageId\}:\s+patch:\s+operationId: updateGizmoImage/s,
+    "generated OpenAPI source must declare the PATCH image-label operation",
+  );
+  assert.match(
+    apiSource,
+    /GizmoImageUpdate:\s+type: object\s+properties:\s+label:/s,
+    "generated OpenAPI source must declare the nullable image-label payload",
+  );
 
   // Ownership scoping: every generated item query/mutation must carry the
   // authenticated-user predicate, and category ops must be owner-scoped.
@@ -246,6 +257,16 @@ const SPEC = {
     /router\.delete\("\/items\/:id\/images\/:imageId"/,
     "images.ts must have a DELETE endpoint",
   );
+  assert.match(
+    imagesRoute,
+    /router\.patch\("\/items\/:id\/images\/:imageId"/,
+    "images.ts must have a PATCH image-label endpoint",
+  );
+  assert.match(
+    imagesRoute,
+    /UpdateImageBody\.parse\(req\.body\)/,
+    "images.ts PATCH endpoint must validate its label payload",
+  );
   assert.match(imagesRoute, /stripMetadata/, "images.ts must strip metadata");
   // Authenticated private photos must never be cached by shared proxies/CDNs.
   assert.ok(
@@ -262,6 +283,91 @@ const SPEC = {
   assert.ok(
     ownerChecksInImages && ownerChecksInImages.length >= 3,
     `images.ts must scope upload/serve/delete to the owner (found ${ownerChecksInImages?.length ?? 0})`,
+  );
+
+  // Detail page: gallery and primary-image wiring (new in this task).
+  const detailPage = fs.readFileSync(
+    path.join(root, "artifacts/modules/src/gizmos/pages/detail.tsx"),
+    "utf8",
+  );
+  assert.match(
+    detailPage,
+    /ItemImageGallery/,
+    "detail.tsx must render ItemImageGallery when photos=true",
+  );
+  assert.match(
+    detailPage,
+    /item\.primaryImageId/,
+    "detail.tsx must reference primaryImageId to mark the cover image",
+  );
+  // Primary image must be sorted first so ItemImageGallery (which renders
+  // images[0] as the main/cover image) shows the correct cover on every load
+  // and after a set-primary mutation, even when the primary is not at position 0.
+  assert.ok(
+    detailPage.includes("primaryImageId") &&
+      detailPage.includes("return -1") &&
+      detailPage.includes("return 1"),
+    "detail.tsx gallery sort must hoist the primary image to index 0 (primary-first sort)",
+  );
+  assert.match(
+    detailPage,
+    /useDeleteGizmoImage/,
+    "detail.tsx must import the delete-image hook",
+  );
+  assert.match(
+    detailPage,
+    /useSetGizmoPrimaryImage/,
+    "detail.tsx must import the set-primary hook",
+  );
+  assert.match(
+    detailPage,
+    /useUpdateGizmoImage/,
+    "detail.tsx must import and create the relabel-image hook",
+  );
+  assert.match(
+    detailPage,
+    /onRelabel=\{async \(imageId, label\) =>/,
+    "detail.tsx must pass an onRelabel handler to ItemImageGallery",
+  );
+  assert.match(
+    detailPage,
+    /data: \{ label \}/,
+    "detail.tsx relabel handler must send the updated label",
+  );
+  assert.match(
+    detailPage,
+    /relabelImageMutation\.mutateAsync/,
+    "detail.tsx relabel handler must run the generated PATCH mutation",
+  );
+  // initialNotes and custom-field values must be coerced to null (not left as
+  // undefined) so CollectionItemEditSheet props type-check cleanly.
+  assert.match(
+    detailPage,
+    /initialNotes=\{item\.notes \?\? null\}/,
+    "detail.tsx must pass initialNotes={item.notes ?? null} to avoid undefined→null mismatch",
+  );
+  assert.ok(
+    !detailPage.match(/initialFieldValues=\{[\s\S]*?: item\.\w+,/m) ||
+      detailPage.includes("?? null") ||
+      detailPage.includes("?? []") ||
+      detailPage.includes("?? false"),
+    "detail.tsx initialFieldValues must coerce Orval-optional fields to null/[]/false",
+  );
+
+  // Serializer: standalone photos serializer includes primaryImageId.
+  const serializerFile = fs.readFileSync(
+    path.join(root, "artifacts/api-server/src/lib/gizmos/serialize.ts"),
+    "utf8",
+  );
+  assert.match(
+    serializerFile,
+    /primaryImageId/,
+    "serialize-gizmo.ts must compute primaryImageId",
+  );
+  assert.match(
+    serializerFile,
+    /fetchExtendedImages/,
+    "serialize-gizmo.ts must use fetchExtendedImages (standalone serializer, not createCollectionSerializer)",
   );
 
   // Add page generated.

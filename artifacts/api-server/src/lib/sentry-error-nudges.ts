@@ -39,6 +39,7 @@ import {
   type SentryIssue,
 } from "./sentry-issues";
 import { callModel, getModels } from "./ai-client";
+import { withRetry } from "./retry";
 
 export const SENTRY_NUDGE_TASK_NAME = "sentry-error-nudges";
 const INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
@@ -326,7 +327,23 @@ export function startSentryErrorNudgeScheduler(): () => void {
     }
     const t0 = Date.now();
     try {
-      await computeAndStoreSentryErrorNudges();
+      // Retry the whole pass once on a transient DB/network blip (e.g. the
+      // Supabase pooler's occasional "timeout exceeded when trying to
+      // connect"/"Connection terminated unexpectedly"). Every write inside
+      // computeAndStoreSentryErrorNudges is idempotent (ON CONFLICT ...
+      // DO NOTHING / DO UPDATE), so re-running the full pass is safe. This
+      // task only fires every 30 minutes, so without a retry a single blip
+      // meant a full missed cycle — the SENTRY_NUDGE_TASK_NAME row's
+      // last_success_at then fell far enough behind that the shared
+      // scheduled-tasks-heartbeat monitor reported it "gone silent" and
+      // tripped a Sentry Cron Monitoring alert email, even once the next
+      // scheduled attempt would have succeeded on its own. Every other
+      // in-process scheduler already retries its own DB claim/health-check
+      // for exactly this reason (see scheduler-guard.ts); this one didn't.
+      await withRetry(computeAndStoreSentryErrorNudges, {
+        maxAttempts: 2,
+        label: "sentry-error-nudges",
+      });
       logger.info(
         { durationMs: Date.now() - t0 },
         "sentry-error-nudges: run finished",

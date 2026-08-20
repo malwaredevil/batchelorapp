@@ -34,6 +34,9 @@
       "path": "../../lib/app-shell"
     },
     {
+      "path": "../../lib/barcode-scanner"
+    },
+    {
       "path": "../../lib/api-client-react"
     },
     {

@@ -894,6 +894,16 @@ export function GlobalConfigCard() {
               setThresholds({ ...thresholds, ornamentsBulkReanalyzeLimit: v })
             }
           />
+          <NumberField
+            label="Quilting: bulk re-analyze batch limit"
+            hint="Max number of quilting items (fabrics, patterns, or quilts) that can be re-analyzed in a single bulk operation."
+            min={1}
+            max={100}
+            value={thresholds.quiltingBulkReanalyzeLimit}
+            onChange={(v) =>
+              setThresholds({ ...thresholds, quiltingBulkReanalyzeLimit: v })
+            }
+          />
         </div>
       </Section>
 

@@ -950,6 +950,7 @@ export function buildTravelsFileEdits(spec: ToolSpec): Edit[] {
 export function buildReadToolCatalogEdits(spec: ToolSpec): Edit[] {
   const camel = toCamel(spec.name);
   const kebab = toKebab(spec.name);
+  const cfg = DOMAINS[spec.domain];
   return [
     {
       file: FILES.plannerCatalog,
@@ -985,7 +986,7 @@ export function buildReadToolCatalogEdits(spec: ToolSpec): Edit[] {
         next = insertAfterAnchor(
           next,
           "export const MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS",
-          `\n  // TODO(scaffold): replace with a human-written status label for ${spec.name}.\n  ${spec.name}: "checking ${spec.domain} data",`,
+          `\n  // TODO(scaffold): replace with a human-written status label for ${spec.name}.\n  ${spec.name}: "checking ${cfg.capabilityDomain} data",`,
           /=\s*\{/,
         );
         return next;

@@ -121,6 +121,17 @@ export const DUPLICATE_CODE_ALLOWLIST: ReadonlySet<string> = new Set([
   // introduced (2026-08-18) has since been paid down. Add new entries only
   // with a `//` comment explaining why — do not use this to silence a
   // genuine miss.
+  //
+  // Fabric AI Lab and the Crease Remover modal have distinct result, save, and
+  // reset lifecycles, but still share these legacy canvas-editing primitives.
+  // The current viewer-only change only removes their duplicate result
+  // lightbox; extracting the canvas editor is tracked separately to avoid
+  // changing image-editing behavior as part of a viewer-layout task.
+  "artifacts/modules/src/quilting/components/FabricAiLab.tsx:112",
+  "artifacts/modules/src/quilting/components/FabricAiLab.tsx:149",
+  "artifacts/modules/src/quilting/components/FabricAiLab.tsx:164",
+  "artifacts/modules/src/quilting/components/FabricAiLab.tsx:192",
+  "artifacts/modules/src/quilting/components/FabricAiLab.tsx:284",
 ]);
 
 // ---------------------------------------------------------------------------

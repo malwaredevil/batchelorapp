@@ -1,5 +1,6 @@
 import { callModel, getModels } from "../ai-client";
 import { asString, asStringArray, parseJson } from "../ai-parse";
+import { resolveOrnamentDimensions } from "./dimensions";
 
 export const EMBEDDING_DIMENSIONS = 1536;
 
@@ -27,7 +28,7 @@ Respond with STRICT JSON only, using exactly these keys:
 - "name": the ornament's official printed name whenever it is visible. Hallmark boxes almost always print the ornament's name on the FRONT of the box, usually directly below the picture of the ornament (it may also appear on a tag or the box back). If you can read a printed name anywhere in the photos, use that printed name EXACTLY as written (title casing is fine; drop trademark symbols like ™/®) — do not invent your own descriptive name, do not paraphrase it, and do not add extra words. Only if no printed name is legible in any photo, fall back to a concise descriptive name you write yourself (e.g. "Snoopy and Woodstock Skating"). Under 12 words either way.
 - "seriesOrCollection": the name of the Hallmark series or collection this ornament belongs to if visible on the box/tag or identifiable (e.g. "Fabulous Decade", "Star Trek", "Frosty Friends"), or null if not part of a numbered series.
 - "year": the release/copyright year printed on the ornament, tag, or box (a 4-digit number), or null if not visible/determinable.
-- "dimensions": approximate size if a ruler/reference is visible, otherwise null.
+- "dimensions": only an explicitly stated physical-ornament measurement visible in the photos (for example printed directly on an ornament tag, or a measured ruler shot whose measurement clearly belongs to the ornament). Format it compactly, such as "3.5 in H × 2 in W × 1.25 in D". Never return a box, package, shipping, display, or unscaled visual estimate. Return null unless the evidence is explicit and reliable.
 - "dominantColors": an array of 2-5 colour names describing the ornament, chosen from common colour names (e.g. red, gold, green, silver, white, blue).
 - "motifs": an array of key recurring decorative elements or characters depicted (e.g. "Snoopy", "snowman", "holly").
 - "aiDescription": 2-4 sentences describing the ornament as if writing a collector's catalogue entry.
@@ -41,6 +42,7 @@ Do not include any commentary outside the JSON.`;
 
 export async function analyzeOrnamentImage(
   dataUrls: string[],
+  options: { resolveDimensions?: boolean } = {},
 ): Promise<OrnamentAnalysis> {
   const imageContent = dataUrls.map((url) => ({
     type: "image_url" as const,
@@ -89,11 +91,22 @@ export async function analyzeOrnamentImage(
       ? upcDigits
       : null;
 
+  const name = asString(parsed?.["name"]) ?? "Untitled ornament";
+  const seriesOrCollection = asString(parsed?.["seriesOrCollection"]);
+  const visualDimensions = asString(parsed?.["dimensions"]);
+  const dimensions =
+    options.resolveDimensions === false
+      ? null
+      : await resolveOrnamentDimensions({
+          visualDimensions,
+          identity: { name, seriesOrCollection, year },
+        });
+
   return {
-    name: asString(parsed?.["name"]) ?? "Untitled ornament",
-    seriesOrCollection: asString(parsed?.["seriesOrCollection"]),
+    name,
+    seriesOrCollection,
     year,
-    dimensions: asString(parsed?.["dimensions"]),
+    dimensions,
     dominantColors: asStringArray(parsed?.["dominantColors"]),
     motifs: asStringArray(parsed?.["motifs"]),
     aiDescription: asString(parsed?.["aiDescription"]),

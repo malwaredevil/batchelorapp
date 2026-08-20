@@ -1429,7 +1429,7 @@ components:
           type: array
           items:
             type: integer
-          maxItems: 20
+          maxItems: 100
     BulkReanalyzeResult:
       type: object
       required:

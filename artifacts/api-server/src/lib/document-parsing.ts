@@ -82,6 +82,10 @@ export async function extractDocumentText(
         return truncate(await extractDocxText(buffer)) || undefined;
       case "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
         return truncate(await extractXlsxText(buffer)) || undefined;
+      case "image/gif":
+      case "image/jpeg":
+      case "image/png":
+      case "image/webp":
       default:
         return undefined;
     }

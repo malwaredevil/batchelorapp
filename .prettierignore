@@ -15,3 +15,7 @@ lib/api-client-react/src/
 # (see eslint.config.mjs); Prettier needs the same exclusion or a `lint`
 # run that overlaps a `test` run can transiently fail on it.
 artifacts/api-server/src/_ci_sentinel_scheduler_names_.ts
+# Same pattern: pii-scan.test.ts briefly writes a PII-injection fixture into
+# lib/ to verify the scanner catches real emails.  Exclude it from Prettier so
+# a concurrent lint+test run never trips on a transiently-present temp file.
+lib/_temp_pii_scan_test_fixture_delete_me.ts

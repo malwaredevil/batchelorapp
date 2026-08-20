@@ -11,8 +11,9 @@ import {
   screen,
   cleanup,
   act,
+  waitFor,
 } from "@testing-library/react";
-import { PreviewZoomModal } from "@workspace/collection-ui";
+import { ImageLightbox, PreviewZoomModal } from "@workspace/collection-ui";
 import { computePanLimit, clampPanOffset } from "@workspace/collection-ui";
 
 const VIEWPORT_W = 1000;
@@ -189,6 +190,96 @@ describe("PreviewZoomModal pan/zoom bounding (integration)", () => {
     // Fully zoomed out, the offset must be back within the small-scale bound.
     const final = getTransform();
     expect(Math.abs(final.x)).toBeLessThanOrEqual(limitX(final.scale) + 0.01);
+  });
+});
+
+describe("shared image viewer presentation and controls", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("keeps the image lightbox opaque while retaining title, navigation, and keyboard dismissal", () => {
+    const onClose = vi.fn();
+    const onNavigate = vi.fn();
+    render(
+      <ImageLightbox
+        open
+        src="/first.jpg"
+        alt="First result"
+        title="AI Lab result"
+        images={["/first.jpg", "/second.jpg"]}
+        currentIndex={0}
+        labels={["Original", "Result"]}
+        onNavigate={onNavigate}
+        onClose={onClose}
+      />,
+    );
+
+    const viewer = screen.getByRole("dialog", { name: "AI Lab result" });
+    expect(viewer).toHaveClass("bg-[#08090b]");
+    expect(screen.getByText("AI Lab result")).toBeVisible();
+    expect(screen.getByText("1 / 2")).toBeVisible();
+    expect(screen.getByText("Original")).toBeVisible();
+
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+    expect(onNavigate).toHaveBeenCalledWith(1);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("uses an opaque, wrapping toolbar for arbitrary preview content", () => {
+    render(
+      <PreviewZoomModal open onClose={() => {}} title="Block preview">
+        <div>Preview content</div>
+      </PreviewZoomModal>,
+    );
+
+    const viewer = screen.getByRole("dialog", { name: "Block preview" });
+    expect(viewer).toHaveClass("bg-[#08090b]");
+    expect(screen.getByTestId("preview-zoom-toolbar")).toHaveClass(
+      "flex-wrap",
+      "bg-[#111214]",
+    );
+    expect(screen.getByTitle("Zoom in")).toBeVisible();
+    expect(screen.getByLabelText("Close preview")).toBeVisible();
+  });
+
+  it("keeps ImageLightbox keyboard focus inside the viewer and restores it on close", async () => {
+    const opener = document.createElement("button");
+    document.body.appendChild(opener);
+    opener.focus();
+    const { unmount } = render(
+      <ImageLightbox open src="/result.jpg" onClose={() => {}} />,
+    );
+
+    const close = screen.getByLabelText("Close image viewer");
+    await waitFor(() => expect(close).toHaveFocus());
+    fireEvent.keyDown(window, { key: "Tab", shiftKey: true });
+    expect(screen.getByTitle("Zoom in")).toHaveFocus();
+
+    unmount();
+    expect(opener).toHaveFocus();
+    opener.remove();
+  });
+
+  it("keeps PreviewZoomModal keyboard focus inside the viewer and restores it on close", async () => {
+    const opener = document.createElement("button");
+    document.body.appendChild(opener);
+    opener.focus();
+    const { unmount } = render(
+      <PreviewZoomModal open onClose={() => {}} title="Block preview">
+        <div>Preview content</div>
+      </PreviewZoomModal>,
+    );
+
+    const close = screen.getByLabelText("Close preview");
+    await waitFor(() => expect(close).toHaveFocus());
+    fireEvent.keyDown(window, { key: "Tab" });
+    expect(screen.getByRole("button", { name: "View" })).toHaveFocus();
+
+    unmount();
+    expect(opener).toHaveFocus();
+    opener.remove();
   });
 });
 

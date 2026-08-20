@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { X, ZoomIn, ZoomOut, Sliders, RotateCcw } from "lucide-react";
-import { clampPanToBounds } from "./pan-bounds";
+import { clampPanToBounds, useModalFocus } from "./pan-bounds";
 
 interface PreviewZoomModalProps {
   open: boolean;
@@ -52,6 +52,8 @@ export function PreviewZoomModal({
   } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
   const [wheeling, setWheeling] = useState(false);
   const wheelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -113,6 +115,8 @@ export function PreviewZoomModal({
     window.addEventListener("keydown", handle);
     return () => window.removeEventListener("keydown", handle);
   }, [open, onClose]);
+
+  useModalFocus(open, modalRef, closeButtonRef);
 
   // Keep the content from being dragged entirely off-screen: clamp against
   // the actual rendered content size, applied on EVERY pan/zoom path.
@@ -308,29 +312,40 @@ export function PreviewZoomModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col" onClick={onClose}>
+    <div
+      ref={modalRef}
+      className="fixed inset-0 z-50 flex flex-col bg-[#08090b] text-white"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={title ?? "Preview viewer"}
+      data-testid="preview-zoom-modal"
+      tabIndex={-1}
+    >
       {/* Toolbar */}
       <div
-        className="flex shrink-0 items-center gap-2 border-b bg-background px-3 py-1.5 shadow"
+        className="flex shrink-0 flex-wrap items-center gap-2 border-b border-white/10 bg-[#111214] px-3 py-2 shadow-lg sm:px-4"
         onClick={(e) => e.stopPropagation()}
+        data-testid="preview-zoom-toolbar"
       >
         {title ? (
-          <span className="mr-auto max-w-xs truncate text-sm font-medium text-foreground">
+          <span className="min-w-0 max-w-full flex-1 basis-32 truncate text-sm font-medium text-white/90">
             {title}
           </span>
         ) : (
-          <div className="flex-1" />
+          <div className="min-w-0 flex-1 basis-8" />
         )}
 
         {/* View adjustments */}
-        <div className="relative">
+        <div className="relative shrink-0">
           <button
             onClick={() => setViewOpen((v) => !v)}
             className={`flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors ${
               viewOpen || imageFilter
-                ? "bg-secondary text-secondary-foreground"
-                : "text-muted-foreground hover:bg-muted"
+                ? "bg-white/15 text-white"
+                : "text-white/65 hover:bg-white/10 hover:text-white"
             }`}
+            aria-expanded={viewOpen}
           >
             <Sliders className="h-3.5 w-3.5" />
             View
@@ -339,12 +354,12 @@ export function PreviewZoomModal({
             )}
           </button>
           {viewOpen && (
-            <div className="absolute right-0 top-full z-10 mt-1.5 w-64 rounded-xl border border-border bg-popover p-4 shadow-lg">
+            <div className="absolute right-0 top-full z-10 mt-2 w-[min(16rem,calc(100vw-1.5rem))] rounded-xl border border-white/10 bg-[#1b1d20] p-4 text-white shadow-2xl">
               <div className="mb-3 flex items-center justify-between">
                 <p className="text-xs font-semibold">View adjustments</p>
                 {imageFilter && (
                   <button
-                    className="text-[10px] text-muted-foreground hover:text-foreground"
+                    className="text-[10px] text-white/60 hover:text-white"
                     onClick={() =>
                       setViewFilter({
                         brightness: 100,
@@ -366,10 +381,8 @@ export function PreviewZoomModal({
               ).map(({ key, label, min, max }) => (
                 <div key={key} className="mb-3 last:mb-0">
                   <div className="mb-1 flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">
-                      {label}
-                    </span>
-                    <span className="text-xs tabular-nums text-muted-foreground">
+                    <span className="text-xs text-white/65">{label}</span>
+                    <span className="text-xs tabular-nums text-white/65">
                       {viewFilter[key]}%
                     </span>
                   </div>
@@ -385,53 +398,55 @@ export function PreviewZoomModal({
                         [key]: Number(e.target.value),
                       }))
                     }
-                    className="h-1.5 w-full cursor-pointer accent-primary"
+                    className="h-1.5 w-full cursor-pointer accent-white"
                   />
                 </div>
               ))}
-              <p className="mt-1 text-[10px] text-muted-foreground/60">
+              <p className="mt-1 text-[10px] text-white/40">
                 Preview only — doesn't affect saved data
               </p>
             </div>
           )}
         </div>
 
-        <div className="h-4 w-px bg-border" />
+        <div className="hidden h-4 w-px bg-white/15 sm:block" />
 
         {/* Zoom controls */}
-        <div className="flex items-center gap-0.5">
+        <div className="flex shrink-0 items-center gap-0.5 rounded-md bg-white/5 p-0.5">
           <button
             title="Zoom out"
             onClick={() => applyZoom((v) => v / 1.3)}
-            className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-muted"
+            className="flex h-8 w-8 items-center justify-center rounded text-white/70 hover:bg-white/10 hover:text-white"
           >
             <ZoomOut className="h-3.5 w-3.5" />
           </button>
-          <span className="w-12 text-center text-xs tabular-nums text-muted-foreground">
+          <span className="w-12 text-center text-xs tabular-nums text-white/65">
             {Math.round(zoom * 100)}%
           </span>
           <button
             title="Zoom in"
             onClick={() => applyZoom((v) => v * 1.3)}
-            className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-muted"
+            className="flex h-8 w-8 items-center justify-center rounded text-white/70 hover:bg-white/10 hover:text-white"
           >
             <ZoomIn className="h-3.5 w-3.5" />
           </button>
           <button
             title="Reset view"
             onClick={resetView}
-            className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-muted"
+            className="flex h-8 w-8 items-center justify-center rounded text-white/70 hover:bg-white/10 hover:text-white"
           >
             <RotateCcw className="h-3.5 w-3.5" />
           </button>
         </div>
 
-        <div className="h-4 w-px bg-border" />
+        <div className="hidden h-4 w-px bg-white/15 sm:block" />
 
         <button
+          ref={closeButtonRef}
           title="Close (Esc)"
           onClick={onClose}
-          className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-muted"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded text-white/75 hover:bg-white/10 hover:text-white"
+          aria-label="Close preview"
         >
           <X className="h-4 w-4" />
         </button>
@@ -440,7 +455,7 @@ export function PreviewZoomModal({
       {/* Canvas */}
       <div
         ref={containerRef}
-        className="relative flex-1 overflow-hidden bg-[#1c1c1e]"
+        className="relative flex-1 overflow-hidden bg-[#08090b]"
         style={{
           cursor: dragging ? "grabbing" : "grab",
           touchAction: "none",

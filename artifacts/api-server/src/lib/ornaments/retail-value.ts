@@ -17,14 +17,13 @@
  */
 
 import { callModel, getModels } from "../ai-client";
-import { logger } from "../logger";
-import { extractCitationDomains, webSearch } from "../web-search";
+import {
+  researchOrnament,
+  sourceDomainFromUrl,
+  type OrnamentResearchIdentity,
+} from "./research";
 
-export interface RetailValueLookupInput {
-  name: string;
-  seriesOrCollection: string | null;
-  year: number | null;
-}
+export interface RetailValueLookupInput extends OrnamentResearchIdentity {}
 
 export interface RetailValueResult {
   valueUsd: number;
@@ -32,13 +31,6 @@ export interface RetailValueResult {
   /** Source domain the value was attributed to (e.g. "hallmark.com"), or
    * "web search" when no single citation could be pinned down. */
   source: string;
-}
-
-function buildQuery(input: RetailValueLookupInput): string {
-  const parts = ["hallmark ornament", input.name];
-  if (input.seriesOrCollection) parts.push(input.seriesOrCollection);
-  if (input.year) parts.push(String(input.year));
-  return `what is the retail value of ${parts.join(" ")}? Include a link to the official product page if one exists.`;
 }
 
 const EXTRACTION_PROMPT = `You are extracting a Hallmark Keepsake ornament's ORIGINAL RETAIL VALUE (the MSRP it sold for when new — not a current collector/resale value) from a web-search answer and its source citations.
@@ -106,14 +98,11 @@ async function extractResult(
 export async function lookupRetailValue(
   input: RetailValueLookupInput,
 ): Promise<RetailValueResult | null> {
-  const query = buildQuery(input);
-  let searchResult: Awaited<ReturnType<typeof webSearch>>;
-  try {
-    searchResult = await webSearch(query);
-  } catch (err) {
-    logger.warn({ err, query }, "retail-value: web search failed");
-    return null;
-  }
+  const searchResult = await researchOrnament(
+    input,
+    "Find the original US-dollar retail/list price (MSRP) and the official product page if one exists.",
+  );
+  if (!searchResult) return null;
 
   const { valueUsd, productUrl } = await extractResult(
     input,
@@ -124,8 +113,7 @@ export async function lookupRetailValue(
 
   let source = "web search";
   if (productUrl) {
-    const domains = extractCitationDomains([productUrl]);
-    const domain = [...domains][0];
+    const domain = sourceDomainFromUrl(productUrl);
     if (domain) source = domain;
   }
 

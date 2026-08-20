@@ -403,7 +403,7 @@ export interface PotteryCompareResult {
 }
 
 export interface PotteryPotteryBulkReanalyzeInput {
-  /** @maxItems 20 */
+  /** @maxItems 100 */
   ids: number[];
 }
 
@@ -716,7 +716,7 @@ export interface QuiltingUpdateQuiltInput {
 }
 
 export interface QuiltingBulkReanalyzeInput {
-  /** @maxItems 50 */
+  /** @maxItems 100 */
   ids: number[];
 }
 
@@ -2429,7 +2429,7 @@ export interface OrnamentsStragglers {
 }
 
 export interface OrnamentsBulkReanalyzeInput {
-  /** @maxItems 20 */
+  /** @maxItems 100 */
   ids: number[];
 }
 

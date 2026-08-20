@@ -441,7 +441,7 @@ export const ReanalyzePotteryResponse = zod.object({
 /**
  * @summary Re-run AI analysis on multiple pottery pieces
  */
-export const bulkReanalyzePotteryBodyIdsMax = 20;
+export const bulkReanalyzePotteryBodyIdsMax = 100;
 
 
 
@@ -1151,7 +1151,7 @@ export const GetUsedFabricIdsResponse = zod.array(GetUsedFabricIdsResponseItem)
 /**
  * @summary Re-run AI analysis on multiple fabrics
  */
-export const bulkReanalyzeFabricsBodyIdsMax = 50;
+export const bulkReanalyzeFabricsBodyIdsMax = 100;
 
 
 
@@ -1538,7 +1538,7 @@ export const ExtractPatternBlocksResponse = zod.object({
 /**
  * @summary Re-run AI analysis on multiple patterns
  */
-export const bulkReanalyzePatternsBodyIdsMax = 50;
+export const bulkReanalyzePatternsBodyIdsMax = 100;
 
 
 
@@ -1925,7 +1925,7 @@ export const ReanalyzeQuiltResponse = zod.object({
 /**
  * @summary Re-run AI analysis on multiple quilts
  */
-export const bulkReanalyzeQuiltsBodyIdsMax = 50;
+export const bulkReanalyzeQuiltsBodyIdsMax = 100;
 
 
 
@@ -4898,7 +4898,7 @@ export const GetOrnamentStragglersResponse = zod.object({
 /**
  * @summary Re-run AI analysis on multiple ornaments
  */
-export const bulkReanalyzeOrnamentsBodyIdsMax = 20;
+export const bulkReanalyzeOrnamentsBodyIdsMax = 100;
 
 
 

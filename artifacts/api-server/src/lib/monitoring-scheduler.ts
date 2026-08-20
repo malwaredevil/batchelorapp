@@ -259,6 +259,7 @@ async function processReservation(
   reservation: ReservationRow,
   tripMap: Map<number, TripRow>,
   now: Date,
+  opts: { force?: boolean } = {},
 ): Promise<void> {
   const trip = tripMap.get(reservation.tripId);
   if (!trip) return;
@@ -266,22 +267,19 @@ async function processReservation(
   // Skip past trips
   if (trip.endDate && new Date(trip.endDate) < now) return;
 
-  // Throttle based on policy and time-to-trip
-  const daysToStart = daysFromNow(trip.startDate);
-  const checkIntervalHours = getCheckIntervalHours(
-    reservation.monitoringPolicy,
-    daysToStart,
-  );
-  if (reservation.lastCheckedAt) {
-    const hoursSinceCheck =
-      (now.getTime() - reservation.lastCheckedAt.getTime()) / 3_600_000;
-    if (hoursSinceCheck < checkIntervalHours) return;
+  if (!opts.force) {
+    // Throttle based on policy and time-to-trip
+    const daysToStart = daysFromNow(trip.startDate);
+    const checkIntervalHours = getCheckIntervalHours(
+      reservation.monitoringPolicy,
+      daysToStart,
+    );
+    if (reservation.lastCheckedAt) {
+      const hoursSinceCheck =
+        (now.getTime() - reservation.lastCheckedAt.getTime()) / 3_600_000;
+      if (hoursSinceCheck < checkIntervalHours) return;
+    }
   }
-
-  await db
-    .update(travelsReservations)
-    .set({ lastCheckedAt: now, updatedAt: now })
-    .where(eq(travelsReservations.id, reservation.id));
 
   // 1. Weather check
   if (trip.lat && trip.lng && trip.startDate) {
@@ -298,6 +296,15 @@ async function processReservation(
 
   // 2. Check-in window reminder
   await checkCheckInWindow(reservation, trip);
+
+  // Only record the check as having happened once both checks above have
+  // completed without throwing. If either throws, lastCheckedAt is left
+  // untouched so a manual "check now" (or the next scheduler pass) sees a
+  // genuine "not yet checked" state instead of a misleading timestamp.
+  await db
+    .update(travelsReservations)
+    .set({ lastCheckedAt: now, updatedAt: now })
+    .where(eq(travelsReservations.id, reservation.id));
 }
 
 function getCheckIntervalHours(
@@ -493,6 +500,80 @@ async function checkCheckInWindow(
   logger.info(
     { reservationId: reservation.id, windowDescription, dedupKey },
     "monitoring: check-in window reminder created",
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Manual single-reservation check (used by the "Check now" job handler)
+// ---------------------------------------------------------------------------
+
+/**
+ * Runs the real monitoring check for a single reservation immediately,
+ * bypassing the interval throttle used by the hourly cycle. Throws if the
+ * reservation or its trip cannot be found so the caller (job worker) can
+ * surface/retry the failure instead of silently no-oping.
+ */
+export async function runMonitoringCheckForReservation(
+  reservationId: number,
+): Promise<void> {
+  const [reservation] = await db
+    .select({
+      id: travelsReservations.id,
+      tripId: travelsReservations.tripId,
+      reservationType: travelsReservations.reservationType,
+      monitoringEnabled: travelsReservations.monitoringEnabled,
+      monitoringPolicy: travelsReservations.monitoringPolicy,
+      checkInDate: travelsReservations.checkInDate,
+      checkOutDate: travelsReservations.checkOutDate,
+      status: travelsReservations.status,
+      createdByUserId: travelsReservations.createdByUserId,
+      lastCheckedAt: travelsReservations.lastCheckedAt,
+    })
+    .from(travelsReservations)
+    .where(eq(travelsReservations.id, reservationId));
+  if (!reservation) {
+    throw new Error(`monitoring-check: reservation ${reservationId} not found`);
+  }
+
+  // Re-validate eligibility at execution time.  A job can be queued while the
+  // reservation is still eligible and then fire after the user disables
+  // monitoring or changes/cancels the reservation.  Treat those as no-ops
+  // rather than sending stale notifications — mirrors the hourly scheduler's
+  // own filter (monitoringEnabled + confirmed).
+  if (!reservation.monitoringEnabled || reservation.status !== "confirmed") {
+    logger.info(
+      {
+        reservationId,
+        monitoringEnabled: reservation.monitoringEnabled,
+        status: reservation.status,
+      },
+      "monitoring-check: reservation no longer eligible — skipping",
+    );
+    return;
+  }
+
+  const [trip] = await db
+    .select({
+      id: travelsTrips.id,
+      lat: travelsTrips.lat,
+      lng: travelsTrips.lng,
+      startDate: travelsTrips.startDate,
+      endDate: travelsTrips.endDate,
+    })
+    .from(travelsTrips)
+    .where(eq(travelsTrips.id, reservation.tripId));
+  if (!trip) {
+    throw new Error(
+      `monitoring-check: trip ${reservation.tripId} for reservation ${reservationId} not found`,
+    );
+  }
+
+  const tripMap = new Map<number, TripRow>([[trip.id, trip]]);
+  await processReservation(reservation, tripMap, new Date(), { force: true });
+
+  logger.info(
+    { reservationId },
+    "monitoring-check: manual check-now completed",
   );
 }
 

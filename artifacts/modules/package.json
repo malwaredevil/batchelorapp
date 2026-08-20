@@ -54,6 +54,7 @@
     "@vitejs/plugin-react": "catalog:",
     "@workspace/api-client-react": "workspace:*",
     "@workspace/app-shell": "workspace:*",
+    "@workspace/barcode-scanner": "workspace:*",
     "@workspace/collection-ui": "workspace:*",
     "@workspace/elaine-ui": "workspace:*",
     "@workspace/gmail-ui": "workspace:*",
@@ -107,7 +108,6 @@
     "@tiptap/react": "^2.27.2",
     "@tiptap/starter-kit": "^2.27.2",
     "@types/google.maps": "^3.65.2",
-    "@zxing/library": "^0.21.3",
     "dompurify": "^3.4.13",
     "jsdom": "^29.1.1",
     "vitest": "^3.2.6"

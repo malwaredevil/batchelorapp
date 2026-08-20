@@ -37,6 +37,7 @@ import {
 } from "@workspace/api-zod";
 import { requireAuth } from "../../middleware/auth";
 import { aiLimiter, bulkAiLimiter } from "../../middleware/rateLimit";
+import { getElaineGlobalConfig } from "../../lib/elaine-config";
 import {
   createImageFileFilter,
   sniffAndValidateMime,
@@ -374,7 +375,6 @@ router.patch("/quilts/:id", async (req, res) => {
 // ---------------------------------------------------------------------------
 
 const MAX_REANALYZE_IMAGES = 5;
-const MAX_BULK_REANALYZE = 20;
 
 router.post("/quilts/:id/reanalyze", aiLimiter, async (req, res) => {
   const { id } = ReanalyzeQuiltParams.parse(req.params);
@@ -441,7 +441,11 @@ router.post("/quilts/:id/reanalyze", aiLimiter, async (req, res) => {
 export async function bulkReanalyzeQuilts(
   ids: number[],
 ): Promise<{ succeeded: number[]; failed: number[] }> {
-  const capped = [...new Set(ids)].slice(0, MAX_BULK_REANALYZE);
+  const elaineConfig = await getElaineGlobalConfig();
+  const capped = [...new Set(ids)].slice(
+    0,
+    elaineConfig.thresholds.quiltingBulkReanalyzeLimit,
+  );
   const succeeded: number[] = [];
   const failed: number[] = [];
 

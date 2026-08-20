@@ -9,6 +9,8 @@
     "test:modules": "playwright test --config=playwright.modules.config.ts",
     "test:elaine": "playwright test --config=playwright.elaine.config.ts",
     "test:ui": "playwright test --ui",
+    "agent:browser-page": "node ./agent-browser-page.mjs",
+    "agent:browser-smoke": "node ./agent-browser-smoke.mjs",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

@@ -96,6 +96,7 @@ async function initializeRuntime(): Promise<void> {
   startJobWorker("slack");
   startJobWorker("maintenance");
   startJobWorker("ai");
+  startJobWorker("provider.default");
   logger.info("startup: runtime ready; schedulers and workers started");
 }
 

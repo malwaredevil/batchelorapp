@@ -252,7 +252,7 @@ export const ELAINE_APP_OPERATION_CATALOG = [
             items: {
               type: "integer",
             },
-            maxItems: 50,
+            maxItems: 100,
           },
         },
       },
@@ -277,7 +277,7 @@ export const ELAINE_APP_OPERATION_CATALOG = [
             items: {
               type: "integer",
             },
-            maxItems: 50,
+            maxItems: 100,
           },
         },
       },

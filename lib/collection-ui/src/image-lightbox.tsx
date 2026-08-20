@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from "react";
-import { clampPanToBounds } from "./pan-bounds";
+import { clampPanToBounds, useModalFocus } from "./pan-bounds";
 import {
   X,
   ZoomIn,
@@ -12,6 +12,8 @@ import {
 export interface ImageLightboxProps {
   src: string;
   alt?: string;
+  /** Optional contextual label shown in the viewer's top control strip. */
+  title?: string;
   open: boolean;
   onClose: () => void;
   images?: string[];
@@ -25,6 +27,7 @@ export interface ImageLightboxProps {
 export function ImageLightbox({
   src,
   alt = "",
+  title,
   open,
   onClose,
   images,
@@ -42,6 +45,8 @@ export function ImageLightbox({
     oy: number;
   } | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
   const touchRef = useRef<{
     mode: "pan" | "pinch";
     sx: number;
@@ -241,32 +246,58 @@ export function ImageLightbox({
     };
   }, [open]);
 
+  useModalFocus(open, modalRef, closeButtonRef);
+
   if (!open) return null;
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/88"
+      ref={modalRef}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[#08090b] text-white"
       onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={title ?? "Image viewer"}
+      data-testid="image-lightbox"
+      tabIndex={-1}
     >
-      <button
-        className="absolute right-4 top-4 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-white backdrop-blur-sm hover:bg-white/25 transition-colors"
-        onClick={onClose}
-        title="Close (Esc)"
+      <div
+        className="absolute inset-x-3 top-3 z-10 flex items-start gap-3 sm:inset-x-5 sm:top-5"
+        onClick={(e) => e.stopPropagation()}
       >
-        <X className="h-5 w-5" />
-      </button>
-
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-1.5 pointer-events-none select-none">
-        <p className="text-xs text-white/50">
-          {isMulti
-            ? `${(currentIndex ?? 0) + 1} / ${images!.length} · scroll to zoom · drag to pan`
-            : "Scroll to zoom · drag to pan · click outside to close"}
-        </p>
-        {labels && labels[currentIndex ?? 0] && (
-          <span className="rounded-full bg-white/15 px-2.5 py-0.5 text-[11px] font-medium text-white/80 backdrop-blur-sm">
-            {labels[currentIndex ?? 0]}
-          </span>
-        )}
+        <div className="min-w-0 flex-1 space-y-1 pr-12">
+          {title && (
+            <p className="truncate text-sm font-medium text-white/90">
+              {title}
+            </p>
+          )}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-white/50">
+            <span>
+              {isMulti
+                ? `${(currentIndex ?? 0) + 1} / ${images!.length}`
+                : "Image viewer"}
+            </span>
+            <span aria-hidden="true">·</span>
+            <span>Scroll to zoom · drag to pan</span>
+            {labels && labels[currentIndex ?? 0] && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span className="rounded-full bg-white/15 px-2 py-0.5 font-medium text-white/80">
+                  {labels[currentIndex ?? 0]}
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+        <button
+          ref={closeButtonRef}
+          className="absolute right-0 top-0 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/12 text-white backdrop-blur-sm transition-colors hover:bg-white/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
+          onClick={onClose}
+          title="Close (Esc)"
+          aria-label="Close image viewer"
+        >
+          <X className="h-5 w-5" />
+        </button>
       </div>
 
       {isMulti && onNavigate && currentIndex !== undefined && (
@@ -309,7 +340,10 @@ export function ImageLightbox({
         </div>
       )}
 
-      <div className="absolute bottom-5 left-1/2 z-10 -translate-x-1/2 flex items-center gap-1 rounded-full bg-white/12 px-2 py-1.5 backdrop-blur-sm">
+      <div
+        className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-full bg-white/12 px-2 py-1.5 backdrop-blur-sm sm:bottom-5"
+        onClick={(e) => e.stopPropagation()}
+      >
         <button
           className="flex h-7 w-7 items-center justify-center rounded-full text-white hover:bg-white/20 transition-colors"
           onClick={(e) => {

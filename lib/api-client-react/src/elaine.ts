@@ -1448,6 +1448,7 @@ export interface ElaineThresholdsConfig {
   potteryMaxAiSupplemental: number;
   potteryBulkReanalyzeLimit: number;
   ornamentsBulkReanalyzeLimit: number;
+  quiltingBulkReanalyzeLimit: number;
 }
 
 export interface ElaineRuntimeBudgetConfig {

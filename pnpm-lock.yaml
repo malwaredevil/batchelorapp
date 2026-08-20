@@ -858,9 +858,6 @@ importers:
       '@types/google.maps':
         specifier: ^3.65.2
         version: 3.65.2
-      '@zxing/library':
-        specifier: ^0.21.3
-        version: 0.21.3
       dompurify:
         specifier: '>=3.4.12 <4'
         version: 3.4.13
@@ -1000,6 +997,9 @@ importers:
       '@workspace/app-shell':
         specifier: workspace:*
         version: link:../../lib/app-shell
+      '@workspace/barcode-scanner':
+        specifier: workspace:*
+        version: link:../../lib/barcode-scanner
       '@workspace/collection-ui':
         specifier: workspace:*
         version: link:../../lib/collection-ui
@@ -1246,6 +1246,9 @@ importers:
       '@workspace/app-shell':
         specifier: workspace:*
         version: link:../../lib/app-shell
+      '@workspace/collection-ui':
+        specifier: workspace:*
+        version: link:../../lib/collection-ui
       '@workspace/elaine-ui':
         specifier: workspace:*
         version: link:../../lib/elaine-ui
@@ -1445,6 +1448,22 @@ importers:
         specifier: ^3.2.6
         version: 3.2.6(@types/node@25.6.2)(jiti@2.7.0)(jsdom@29.1.1(@noble/hashes@1.8.0))(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.21.0)(yaml@2.9.0)
 
+  lib/barcode-scanner:
+    dependencies:
+      '@zxing/library':
+        specifier: ^0.21.3
+        version: 0.21.3
+    devDependencies:
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.2.14
+      react:
+        specifier: 'catalog:'
+        version: 19.1.0
+      vitest:
+        specifier: ^3.2.6
+        version: 3.2.6(@types/node@25.6.2)(jiti@2.7.0)(jsdom@29.1.1(@noble/hashes@1.8.0))(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.21.0)(yaml@2.9.0)
+
   lib/collection-ui:
     dependencies:
       '@workspace/ui':
@@ -1521,6 +1540,9 @@ importers:
       '@workspace/api-client-react':
         specifier: workspace:*
         version: link:../api-client-react
+      '@workspace/barcode-scanner':
+        specifier: workspace:*
+        version: link:../barcode-scanner
       '@workspace/ui':
         specifier: workspace:*
         version: link:../ui
@@ -1530,9 +1552,6 @@ importers:
       '@workspace/web-core':
         specifier: workspace:*
         version: link:../web-core
-      '@zxing/library':
-        specifier: ^0.21.3
-        version: 0.21.3
       class-variance-authority:
         specifier: 'catalog:'
         version: 0.7.1

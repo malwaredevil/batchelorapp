@@ -1,0 +1,25 @@
+{
+  "name": "@workspace/barcode-scanner",
+  "version": "0.0.0",
+  "description": "Shared browser barcode-scanning behavior",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@zxing/library": "^0.21.3"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:",
+    "react": "catalog:",
+    "vitest": "^3.2.6"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}

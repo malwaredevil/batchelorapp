@@ -352,6 +352,222 @@ test("read scaffold wires hard-tool name, status label, and contract-test expect
   assert.equal(testEdit!.apply(testOut!), null);
 });
 
+// ── travels domain + kind=read coverage ──────────────────────────────────────
+//
+// Task 1141 extended the scaffold generator to cover travels *action* tools.
+// These tests confirm that --domain travels --kind read produces the same
+// complete wiring as collection read tools (same files touched, same registry
+// dispatch, correct domain label) and does not accidentally receive any
+// action-tool wiring.
+
+test("travels read scaffold produces the same wiring-point count and target files as collection read tools", () => {
+  const travelsEdits = buildReadToolCatalogEdits({
+    ...SPEC,
+    name: "probe_travels_read",
+    domain: "travels",
+    kind: "read",
+  });
+  const potteryEdits = buildReadToolCatalogEdits({
+    ...SPEC,
+    name: "probe_pottery_read",
+    domain: "pottery",
+    kind: "read",
+  });
+  assert.equal(
+    travelsEdits.length,
+    potteryEdits.length,
+    "travels read must produce the same number of wiring edits as collection read",
+  );
+  // Both domains should touch exactly the same set of files — only the
+  // generated content (tool name, domain label) differs, not which files.
+  const sortedFiles = (edits: typeof travelsEdits) =>
+    edits.map((e) => e.file).sort();
+  assert.deepEqual(
+    sortedFiles(travelsEdits),
+    sortedFiles(potteryEdits),
+    "travels read edits must touch the same files as collection read edits",
+  );
+});
+
+test("travels read scaffold wires into SCAFFOLDED_READ_TOOL_EXECUTORS (same as collection read)", () => {
+  const edits = buildReadToolCatalogEdits({
+    ...SPEC,
+    name: "probe_travels_read",
+    domain: "travels",
+    kind: "read",
+  });
+  const registryEdit = edits.find((e) =>
+    e.description.includes("scaffolded-read-registry"),
+  );
+  assert.ok(
+    registryEdit,
+    "travels read must include a scaffolded-read-registry.ts dispatch edit",
+  );
+  const out = registryEdit!.apply(READ_REGISTRY_FIXTURE);
+  assert.ok(out, "registry edit unexpectedly skipped");
+  assert.match(
+    out!,
+    /"probe_travels_read": async \(args, userId\) => \{/,
+    "dispatcher entry not inserted into SCAFFOLDED_READ_TOOL_EXECUTORS",
+  );
+  assert.match(
+    out!,
+    /executeProbeTravelsReadAction\(parsed\.data, userId\)/,
+    "registry entry must call the stub executor",
+  );
+  // idempotent: a second application is a no-op skip
+  assert.equal(
+    registryEdit!.apply(out!),
+    null,
+    "registry edit must be idempotent",
+  );
+});
+
+test("travels read scaffold status label references the travels domain", () => {
+  const edits = buildReadToolCatalogEdits({
+    ...SPEC,
+    name: "probe_travels_read",
+    domain: "travels",
+    kind: "read",
+  });
+  const policyEdit = edits.find((e) =>
+    e.description.includes("MODEL_VISIBLE_HARD_TOOL_NAMES"),
+  );
+  assert.ok(policyEdit, "travels read must include a model-tool-policy edit");
+  const out = policyEdit!.apply(MODEL_TOOL_POLICY_FIXTURE);
+  assert.ok(out, "policy edit unexpectedly skipped");
+  assert.match(
+    out!,
+    /probe_travels_read: "checking travels data",/,
+    "status label must reference the travels domain name, not pottery",
+  );
+  // idempotent
+  assert.equal(policyEdit!.apply(out!), null, "policy edit must be idempotent");
+});
+
+// ── universal domain + kind=read coverage ────────────────────────────────────
+//
+// The universal domain uses buildUniversalFileEdits for *action* wiring but
+// shares the same buildReadToolCatalogEdits path as all collection domains for
+// *read* wiring.  These tests confirm that --domain universal --kind read
+// produces the same complete wiring as collection read tools (same files
+// touched, same registry dispatch, correct capability-domain label "office")
+// and does not accidentally omit any wiring point.
+
+test("universal read scaffold produces the same wiring-point count and target files as collection read tools", () => {
+  const universalEdits = buildReadToolCatalogEdits({
+    ...SPEC,
+    name: "probe_universal_read",
+    domain: "universal",
+    kind: "read",
+  });
+  const potteryEdits = buildReadToolCatalogEdits({
+    ...SPEC,
+    name: "probe_pottery_read",
+    domain: "pottery",
+    kind: "read",
+  });
+  assert.equal(
+    universalEdits.length,
+    potteryEdits.length,
+    "universal read must produce the same number of wiring edits as collection read",
+  );
+  // Both domains should touch exactly the same set of files — only the
+  // generated content (tool name, domain label) differs, not which files.
+  const sortedFiles = (edits: typeof universalEdits) =>
+    edits.map((e) => e.file).sort();
+  assert.deepEqual(
+    sortedFiles(universalEdits),
+    sortedFiles(potteryEdits),
+    "universal read edits must touch the same files as collection read edits",
+  );
+});
+
+test("universal read scaffold wires into SCAFFOLDED_READ_TOOL_EXECUTORS (same as collection read)", () => {
+  const edits = buildReadToolCatalogEdits({
+    ...SPEC,
+    name: "probe_universal_read",
+    domain: "universal",
+    kind: "read",
+  });
+  const registryEdit = edits.find((e) =>
+    e.description.includes("scaffolded-read-registry"),
+  );
+  assert.ok(
+    registryEdit,
+    "universal read must include a scaffolded-read-registry.ts dispatch edit",
+  );
+  const out = registryEdit!.apply(READ_REGISTRY_FIXTURE);
+  assert.ok(out, "registry edit unexpectedly skipped");
+  assert.match(
+    out!,
+    /"probe_universal_read": async \(args, userId\) => \{/,
+    "dispatcher entry not inserted into SCAFFOLDED_READ_TOOL_EXECUTORS",
+  );
+  assert.match(
+    out!,
+    /executeProbeUniversalReadAction\(parsed\.data, userId\)/,
+    "registry entry must call the stub executor",
+  );
+  // idempotent: a second application is a no-op skip
+  assert.equal(
+    registryEdit!.apply(out!),
+    null,
+    "registry edit must be idempotent",
+  );
+});
+
+test("universal read scaffold status label references 'office' (capabilityDomain), not 'universal'", () => {
+  const edits = buildReadToolCatalogEdits({
+    ...SPEC,
+    name: "probe_universal_read",
+    domain: "universal",
+    kind: "read",
+  });
+  const policyEdit = edits.find((e) =>
+    e.description.includes("MODEL_VISIBLE_HARD_TOOL_NAMES"),
+  );
+  assert.ok(policyEdit, "universal read must include a model-tool-policy edit");
+  const out = policyEdit!.apply(MODEL_TOOL_POLICY_FIXTURE);
+  assert.ok(out, "policy edit unexpectedly skipped");
+  assert.match(
+    out!,
+    /probe_universal_read: "checking office data",/,
+    "status label must reference the capabilityDomain 'office', not the scaffold domain 'universal'",
+  );
+  assert.doesNotMatch(
+    out!,
+    /probe_universal_read: "checking universal data",/,
+    "status label must not use the raw scaffold domain name 'universal'",
+  );
+  // idempotent
+  assert.equal(policyEdit!.apply(out!), null, "policy edit must be idempotent");
+});
+
+// ── ornaments domain + kind=read status label ─────────────────────────────────
+
+test("ornaments read scaffold status label references 'ornaments' (capabilityDomain)", () => {
+  const edits = buildReadToolCatalogEdits({
+    ...SPEC,
+    name: "probe_ornaments_read",
+    domain: "ornaments",
+    kind: "read",
+  });
+  const policyEdit = edits.find((e) =>
+    e.description.includes("MODEL_VISIBLE_HARD_TOOL_NAMES"),
+  );
+  assert.ok(policyEdit, "ornaments read must include a model-tool-policy edit");
+  const out = policyEdit!.apply(MODEL_TOOL_POLICY_FIXTURE);
+  assert.ok(out, "policy edit unexpectedly skipped");
+  assert.match(
+    out!,
+    /probe_ornaments_read: "checking ornaments data",/,
+    "status label must reference the capabilityDomain 'ornaments'",
+  );
+  // idempotent
+  assert.equal(policyEdit!.apply(out!), null, "policy edit must be idempotent");
+});
+
 // ── restricted-channel classification (Scan J completeness) ─────────────────
 const RESTRICTED_CONFIG_FIXTURE = `export const RESTRICTED_EXCLUDED_ACTION_TYPES_SOURCE: readonly string[] = [
   "existing_excluded_tool",

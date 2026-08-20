@@ -118,7 +118,7 @@ export const MergePotteryCategoriesActionPayload = z.object({
 });
 
 export const BulkReanalyzePotteryActionPayload = z.object({
-  itemIds: z.array(z.number().int().positive()).max(20).optional(),
+  itemIds: z.array(z.number().int().positive()).max(100).optional(),
 });
 
 export const AddPhotoToPotteryPayload = z.object({

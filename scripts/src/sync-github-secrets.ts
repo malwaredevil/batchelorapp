@@ -32,6 +32,9 @@ const REPO = "batchelorapp";
 //   AGENT_LOGIN_EMAIL     — dev-only test credential
 //   AGENT_LOGIN_PASSWORD  — dev-only test credential
 //   PGHOST/PGPORT/PGUSER/PGPASSWORD/PGDATABASE — Replit built-in DB, auto-provisioned per workspace
+//   SENTRY_AUTH_TOKEN/SENTRY_ORG_SLUG/SENTRY_PROJECT_SLUG — optional runtime-only
+//     owner-panel and proactive-nudge integration; GitHub Actions does not call it
+//   GIPHY_API_KEY — optional runtime-only messenger GIF picker integration
 
 const SECRETS: Array<{ name: string; purpose: string; required: boolean }> = [
   // ── Database ────────────────────────────────────────────────────────────────

@@ -92,6 +92,7 @@ import {
 } from "../../lib/ai-provenance";
 import { parseStringArray } from "../../lib/collection-parsing";
 import { resolveOrCreateQuiltingCategories as resolveOrCreateCategories } from "../../lib/quilting/resolve-categories";
+import { getElaineGlobalConfig } from "../../lib/elaine-config";
 
 const {
   embedding: _e,
@@ -1108,14 +1109,16 @@ router.post("/fabrics/:id/reanalyze", aiLimiter, async (req, res) => {
 // Bulk re-analyze with AI
 // ---------------------------------------------------------------------------
 
-const MAX_BULK_REANALYZE = 20;
-
 /** Re-run AI analysis on a batch of fabrics. Shared by the REST route and
  * Elaine's bulk_reanalyze_quilting action. */
 export async function bulkReanalyzeFabrics(
   ids: number[],
 ): Promise<{ succeeded: number[]; failed: number[] }> {
-  const capped = [...new Set(ids)].slice(0, MAX_BULK_REANALYZE);
+  const elaineConfig = await getElaineGlobalConfig();
+  const capped = [...new Set(ids)].slice(
+    0,
+    elaineConfig.thresholds.quiltingBulkReanalyzeLimit,
+  );
   const succeeded: number[] = [];
   const failed: number[] = [];
 

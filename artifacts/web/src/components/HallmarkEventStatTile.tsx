@@ -1,48 +1,20 @@
 /**
  * HallmarkEventStatTile — compact stat-square–sized countdown tile for the Hub.
  *
- * Yellow while counting down, red when live.  Rotates through multiple
- * upcoming events every 4 seconds.  Falls back to the hardcoded
- * HALLMARK_OPEN_HOUSE constant when no calendar is connected or no events
- * are found within the 90-day look-ahead window.
+ * Yellow while counting down, red when live. Rotates through multiple upcoming
+ * events every 4 seconds, and stays hidden when the designated calendar has
+ * no future or live events.
  */
 import { useEffect, useState } from "react";
 import { useUpcomingHallmarkEvents } from "@workspace/api-client-react";
 
-/**
- * Hallmark's annual Keepsake Ornament Premiere ("Open House") event.
- * Used as a placeholder until real event data loads from the Hallmark GCal.
- */
-export const HALLMARK_OPEN_HOUSE = {
-  start: new Date("2026-07-11T00:00:00"),
-  end: new Date("2026-07-19T23:59:59"),
-};
-
 export function HallmarkEventStatTile() {
   const now = Date.now();
   const [index, setIndex] = useState(0);
-
-  // 90-day window matches the original tile behavior.
-  const { events: upcoming } = useUpcomingHallmarkEvents({ lookaheadDays: 90 });
-
-  // Falls back to the hardcoded HALLMARK_OPEN_HOUSE constant only when no
-  // calendar is connected or no upcoming events are found within 90 days.
-  const list: Array<{
-    gcalId?: string;
-    title: string;
-    startDate?: string;
-    startMs: number;
-    endMs: number;
-  }> =
-    upcoming.length > 0
-      ? upcoming
-      : [
-          {
-            title: "Hallmark Open House",
-            startMs: HALLMARK_OPEN_HOUSE.start.getTime(),
-            endMs: HALLMARK_OPEN_HOUSE.end.getTime(),
-          },
-        ];
+  // Match the Ornaments collection card's full-year range so both surfaces
+  // select from the same real Hallmark calendar events.
+  const { events: upcoming } = useUpcomingHallmarkEvents();
+  const list = upcoming;
 
   // Reset the carousel to event 0 whenever the list length changes.
   // Without this, a stale index combined with a shorter list silently shows the
@@ -58,6 +30,10 @@ export function HallmarkEventStatTile() {
     return () => clearInterval(id);
   }, [list.length]);
 
+  // Keep this after the effects: the calendar query can transition from empty
+  // to populated, and returning before hooks would violate React's hook order.
+  if (list.length === 0) return null;
+
   const current = list[index % list.length];
   const isLive = now >= current.startMs && now <= current.endMs;
   const daysAway = isLive
@@ -65,13 +41,8 @@ export function HallmarkEventStatTile() {
     : Math.max(0, Math.ceil((current.startMs - now) / 86_400_000));
 
   const shortTitle = current.title.replace(/hallmark'?s?\s*/i, "").trim();
-  // Deep-link to the currently displayed event's month with its detail view
-  // auto-opened.  Falls back to a plain calendar link when there's no real
-  // gcalId/startDate (the hardcoded HALLMARK_OPEN_HOUSE placeholder).
-  const href =
-    current.gcalId && current.startDate
-      ? `/modules/ornaments/hallmark-events?month=${current.startDate.slice(0, 7)}&event=${encodeURIComponent(current.gcalId)}`
-      : `/modules/ornaments/hallmark-events?view=month`;
+  // Deep-link to the currently displayed calendar event's month and detail.
+  const href = `/modules/ornaments/hallmark-events?month=${current.startDate.slice(0, 7)}&event=${encodeURIComponent(current.gcalId)}`;
 
   const dateRange =
     new Date(current.startMs).toLocaleDateString("en-US", {

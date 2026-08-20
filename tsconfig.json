@@ -10,6 +10,9 @@
       "path": "./lib/api-client-react"
     },
     {
+      "path": "./lib/barcode-scanner"
+    },
+    {
       "path": "./lib/web-core"
     },
     {

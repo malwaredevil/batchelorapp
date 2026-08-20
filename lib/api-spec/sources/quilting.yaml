@@ -3383,7 +3383,11 @@ components:
           maximum: 100
           nullable: true
 
-    # Bulk reanalyze
+    # Bulk reanalyze. maxItems matches AdminConfigBody's
+    # thresholds.quiltingBulkReanalyzeLimit ceiling (see
+    # artifacts/api-server/src/elaine/admin-config.ts) so an owner-raised
+    # limit is never rejected by request validation before it reaches the
+    # worker's own configured slice.
     BulkReanalyzeInput:
       type: object
       required: [ids]
@@ -3392,7 +3396,7 @@ components:
           type: array
           items:
             type: integer
-          maxItems: 50
+          maxItems: 100
 
     BulkReanalyzeResult:
       type: object

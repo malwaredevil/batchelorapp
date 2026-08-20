@@ -299,6 +299,9 @@ router.post("/reservations/:id/check-now", async (req, res) => {
   }
 
   try {
+    // lastCheckedAt is updated by the job handler once the check actually
+    // runs (see runMonitoringCheckForReservation) — not optimistically here,
+    // so the UI never shows a check that never happened.
     const jobId = await enqueueJob({
       type: "travels.monitoring-check",
       payload: { reservationId: id },
@@ -307,12 +310,7 @@ router.post("/reservations/:id/check-now", async (req, res) => {
       domain: "travels",
     });
 
-    await db
-      .update(travelsReservations)
-      .set({ lastCheckedAt: new Date(), updatedAt: new Date() })
-      .where(eq(travelsReservations.id, id));
-
-    res.json({ jobId, message: "Monitoring check enqueued" });
+    res.json({ jobId, message: "Monitoring check queued" });
   } catch (err) {
     logger.warn(
       { err, reservationId: id },

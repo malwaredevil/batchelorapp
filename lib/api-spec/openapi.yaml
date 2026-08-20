@@ -7064,7 +7064,7 @@ components:
           type: array
           items:
             type: integer
-          maxItems: 20
+          maxItems: 100
     PotteryPotteryBulkReanalyzeResult:
       type: object
       required:
@@ -7810,7 +7810,7 @@ components:
           type: array
           items:
             type: integer
-          maxItems: 50
+          maxItems: 100
     QuiltingBulkReanalyzeResult:
       type: object
       required:
@@ -10702,7 +10702,7 @@ components:
           type: array
           items:
             type: integer
-          maxItems: 20
+          maxItems: 100
     OrnamentsBulkReanalyzeResult:
       type: object
       required:

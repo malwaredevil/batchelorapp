@@ -27,10 +27,10 @@
  */
 
 import assert from "node:assert/strict";
-import { writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
 
 // ---------------------------------------------------------------------------
 // Paths
@@ -249,10 +249,12 @@ try {
 }
 `;
 
-  const tmp = join(
-    REPO_ROOT,
-    `_scheduler_guard_reconcile_test_${Date.now()}.mts`,
-  );
+  // Written under the OS temp dir (not REPO_ROOT): if this process is ever
+  // killed before the finally block below can rmSync it (workflow restart,
+  // OOM, etc.), a leftover file here can't be swept up by an automated
+  // `git add -A` commit the way a repo-root leftover once was.
+  const tmpDir = mkdtempSync(join(tmpdir(), "scheduler-guard-reconcile-test-"));
+  const tmp = join(tmpDir, "reconcile.mts");
   writeFileSync(tmp, script, "utf8");
   try {
     const res = spawnSync(TSX_BIN, [tmp], {
@@ -271,7 +273,7 @@ try {
     }
     return { ok, stdout: res.stdout, stderr: res.stderr, result };
   } finally {
-    rmSync(tmp, { force: true });
+    rmSync(tmpDir, { recursive: true, force: true });
   }
 }
 

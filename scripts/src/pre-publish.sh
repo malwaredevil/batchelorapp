@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # pre-publish.sh — automated pre-publish gate
 # Usage: pnpm --filter @workspace/scripts run pre-publish
+# [test-probe] bot reviewer login discovery — safe to delete
 #
 # Deliberately excludes checks that GitHub CI already covers (typecheck, lint,
 # codegen drift, PII scan) — step (e) verifies CI is green before publishing,

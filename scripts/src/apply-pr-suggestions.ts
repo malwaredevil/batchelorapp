@@ -79,6 +79,20 @@ export function isOnCurrentHead(
   return comment.commit_id === headSha;
 }
 
+/**
+ * True when a review comment was created at or after the given millisecond
+ * timestamp. Used in Stage 3d.6 (post-promotion) to exclude draft-stage
+ * suggestion comments that share the same head SHA.
+ *
+ * Exported for unit-testability — the filter in main() delegates here.
+ */
+export function isAfterTimestamp(
+  comment: ReviewComment,
+  afterMs: number,
+): boolean {
+  return Date.parse(comment.created_at) >= afterMs;
+}
+
 export interface SuggestionEdit {
   path: string;
   startLine: number; // 1-indexed, inclusive
@@ -286,6 +300,17 @@ async function main(): Promise<void> {
 
   const currentHeadSha = pr.head.sha;
   const afterIdx = args.indexOf("--after");
+  // Reject --after present without a following value (undefined or another flag)
+  // so the safety gate cannot be silently disabled by a truncated command.
+  if (
+    afterIdx !== -1 &&
+    (args[afterIdx + 1] === undefined || args[afterIdx + 1]?.startsWith("--"))
+  ) {
+    console.error(
+      "--after requires an ISO timestamp argument, e.g. --after 2026-08-21T17:30:00Z",
+    );
+    process.exit(1);
+  }
   const afterTimestamp = afterIdx !== -1 ? args[afterIdx + 1] : undefined;
 
   const comments = await fetchAllReviewComments(pr.number);
@@ -300,10 +325,12 @@ async function main(): Promise<void> {
   if (afterTimestamp) {
     const afterMs = Date.parse(afterTimestamp);
     if (isNaN(afterMs)) {
-      console.error(`--after value is not a valid ISO timestamp: ${afterTimestamp}`);
+      console.error(
+        `--after value is not a valid ISO timestamp: ${afterTimestamp}`,
+      );
       process.exit(1);
     }
-    headComments = headComments.filter((c) => Date.parse(c.created_at) >= afterMs);
+    headComments = headComments.filter((c) => isAfterTimestamp(c, afterMs));
     console.log(`Filtering to comments created at or after ${afterTimestamp}.`);
   }
   const botSuggestionComments = headComments.filter(isBotComment);

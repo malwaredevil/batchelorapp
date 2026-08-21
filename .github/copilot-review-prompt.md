@@ -5,8 +5,13 @@
 > protocol, prohibited commands, and branch names, see `AGENTS.md` and issue #260.
 
 Use this document as your full context before beginning any code review of this repository.
-Paste it at the start of a Copilot chat session, then ask Copilot to review specific files
-or areas. Each finding should be formatted as a GitHub Issue (template at the bottom).
+
+**When performing a PR review** (primary use case): post findings as inline review comments
+directly on the relevant diff lines — do not open GitHub Issues for PR review findings.
+
+**When used in a manual Copilot chat session**: paste this document, then ask Copilot to
+review specific files or areas. Each finding should be formatted as a GitHub Issue
+(template at the bottom).
 
 ---
 

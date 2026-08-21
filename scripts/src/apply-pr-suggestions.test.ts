@@ -12,6 +12,7 @@ import {
   commentToEdit,
   extractSuggestionLines,
   hasResolvablePosition,
+  isAfterTimestamp,
   isAlreadyApplied,
   isBotComment,
   isOnCurrentHead,
@@ -119,7 +120,42 @@ function makeEdit(overrides: Partial<SuggestionEdit> = {}): SuggestionEdit {
     "predicate is symmetric: any SHA matches itself",
   );
 
-  console.log("✓ isOnCurrentHead retains current-head comments and rejects stale ones");
+  console.log(
+    "✓ isOnCurrentHead retains current-head comments and rejects stale ones",
+  );
+}
+
+// ── isAfterTimestamp ──────────────────────────────────────────────────────
+
+{
+  const CUTOFF = "2026-08-21T17:30:00Z";
+  const CUTOFF_MS = Date.parse(CUTOFF);
+
+  assert.equal(
+    isAfterTimestamp(
+      makeComment({ created_at: "2026-08-21T17:00:00Z" }),
+      CUTOFF_MS,
+    ),
+    false,
+    "comment before cutoff is rejected",
+  );
+  assert.equal(
+    isAfterTimestamp(makeComment({ created_at: CUTOFF }), CUTOFF_MS),
+    true,
+    "comment exactly at cutoff is retained (inclusive boundary)",
+  );
+  assert.equal(
+    isAfterTimestamp(
+      makeComment({ created_at: "2026-08-21T18:00:00Z" }),
+      CUTOFF_MS,
+    ),
+    true,
+    "comment after cutoff is retained",
+  );
+
+  console.log(
+    "✓ isAfterTimestamp enforces promotion-time boundary — before rejected, equal/after retained",
+  );
 }
 
 // ── commentToEdit ────────────────────────────────────────────────────────

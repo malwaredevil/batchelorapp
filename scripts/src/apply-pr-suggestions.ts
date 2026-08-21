@@ -57,6 +57,7 @@ const TOKEN = process.env["GH_PAT"];
 export interface ReviewComment {
   id: number;
   commit_id: string;
+  created_at: string;
   path: string;
   body: string;
   line: number | null;
@@ -64,6 +65,18 @@ export interface ReviewComment {
   side: "LEFT" | "RIGHT" | null;
   user: { login: string; type: string };
   html_url: string;
+}
+
+/**
+ * True when a review comment is anchored to the given PR head SHA.
+ * Extracted for unit-testability: the filter in main() delegates to this
+ * predicate so a later refactor cannot silently break the stale-suggestion guard.
+ */
+export function isOnCurrentHead(
+  comment: ReviewComment,
+  headSha: string,
+): boolean {
+  return comment.commit_id === headSha;
 }
 
 export interface SuggestionEdit {
@@ -272,15 +285,30 @@ async function main(): Promise<void> {
   );
 
   const currentHeadSha = pr.head.sha;
+  const afterIdx = args.indexOf("--after");
+  const afterTimestamp = afterIdx !== -1 ? args[afterIdx + 1] : undefined;
+
   const comments = await fetchAllReviewComments(pr.number);
   // Only consider comments anchored to the current PR head commit — stale
   // suggestion blocks from earlier commits can still have resolvable positions
   // if nothing later touched those lines, but applying them risks reintroducing
   // a superseded suggestion that a subsequent push was meant to replace.
-  const headComments = comments.filter((c) => c.commit_id === currentHeadSha);
+  // In Stage 3d.6 (post-promotion), pass --after <promotion ISO timestamp> so
+  // only reviews posted after promotion are applied, preventing draft-stage
+  // [SKIP]ed suggestions from being silently applied on the same head SHA.
+  let headComments = comments.filter((c) => isOnCurrentHead(c, currentHeadSha));
+  if (afterTimestamp) {
+    const afterMs = Date.parse(afterTimestamp);
+    if (isNaN(afterMs)) {
+      console.error(`--after value is not a valid ISO timestamp: ${afterTimestamp}`);
+      process.exit(1);
+    }
+    headComments = headComments.filter((c) => Date.parse(c.created_at) >= afterMs);
+    console.log(`Filtering to comments created at or after ${afterTimestamp}.`);
+  }
   const botSuggestionComments = headComments.filter(isBotComment);
   console.log(
-    `${comments.length} review comment(s) total, ${headComments.length} on current head (${currentHeadSha.slice(0, 8)}), ${botSuggestionComments.length} from bot accounts.`,
+    `${comments.length} review comment(s) total, ${headComments.length} on current head (${currentHeadSha.slice(0, 8)})${afterTimestamp ? " after promotion timestamp" : ""}, ${botSuggestionComments.length} from bot accounts.`,
   );
 
   const edits: SuggestionEdit[] = [];

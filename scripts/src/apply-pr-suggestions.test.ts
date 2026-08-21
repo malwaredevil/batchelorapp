@@ -14,6 +14,7 @@ import {
   hasResolvablePosition,
   isAlreadyApplied,
   isBotComment,
+  isOnCurrentHead,
   planEdits,
 } from "./apply-pr-suggestions.js";
 import type { ReviewComment, SuggestionEdit } from "./apply-pr-suggestions.js";
@@ -22,6 +23,7 @@ function makeComment(overrides: Partial<ReviewComment> = {}): ReviewComment {
   return {
     id: 1,
     commit_id: "abc1234def5678901234567890123456789012ab",
+    created_at: "2026-01-01T00:00:00Z",
     path: "src/foo.ts",
     body: "```suggestion\nconst x = 1;\n```",
     line: 10,
@@ -93,6 +95,31 @@ function makeEdit(overrides: Partial<SuggestionEdit> = {}): SuggestionEdit {
   );
 
   console.log("✓ isBotComment / hasResolvablePosition gate correctly");
+}
+
+// ── isOnCurrentHead ──────────────────────────────────────────────────────
+
+{
+  const HEAD = "abc1234def5678901234567890123456789012ab";
+  const OTHER = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+
+  assert.equal(
+    isOnCurrentHead(makeComment(), HEAD),
+    true,
+    "comment with matching head SHA is retained",
+  );
+  assert.equal(
+    isOnCurrentHead(makeComment({ commit_id: OTHER }), HEAD),
+    false,
+    "comment from an earlier commit SHA is rejected",
+  );
+  assert.equal(
+    isOnCurrentHead(makeComment({ commit_id: OTHER }), OTHER),
+    true,
+    "predicate is symmetric: any SHA matches itself",
+  );
+
+  console.log("✓ isOnCurrentHead retains current-head comments and rejects stale ones");
 }
 
 // ── commentToEdit ────────────────────────────────────────────────────────

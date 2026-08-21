@@ -16,7 +16,7 @@ The full engineering audit checklist is in `.github/copilot-review-prompt.md`.
 |---|---|
 | No `requireAuth` on `/api/agentphone/webhook` or `/api/elaine/email-webhook` | HMAC-SHA256 auth — flagging is a false positive |
 | No per-user ownership filters on pottery/quilting/ornaments/travels | Household-shared by design; `user_id` is attribution only |
-| `OPENAI_API_KEY` present but unused | Kept for future use; all LLM calls go through OpenRouter |
+| `OPENAI_API_KEY` actively used for Elaine's primary reasoning path via OpenAI Responses API | OpenRouter is the fallback for other paths — do not suggest removing the key or consolidating to one gateway |
 | `installScreenshotImageAutoAuth` patching `HTMLImageElement.prototype.src` | Dev-only, gated by `NODE_ENV` |
 | Email webhook router mounted before the session-auth `/elaine` router | Security control — must remain first |
 | `RESTRICTED_EXCLUDED_ACTION_TYPES` limits tools on SMS/email/voice | Intentional security boundary |
@@ -44,7 +44,8 @@ Every user-facing feature must ship with a matching Elaine update in the **same 
 - Destructive actions must appear in `RESTRICTED_EXCLUDED_ACTION_TYPES` or the restricted allowlist
 
 ### Security Boundaries
-- `requireAuth` is mandatory on all session routes (pottery, quilting, ornaments, travels, hub, elaine, auth, config, users)
+- `requireAuth` is mandatory on all session routes: pottery, quilting, ornaments, travels, hub, elaine, config, users
+- Within `/api/auth`, login, registration, forgot-password, reset-password, and OAuth callbacks are **intentionally public** — only state-changing authenticated routes (e.g. change-password, logout) need `requireAuth`
 - Every webhook endpoint must check the dedup table **before** any side effects
 - User-supplied URLs must pass through `ssrf-safe-fetch.ts`
 - Zod validation before every DB write

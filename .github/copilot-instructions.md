@@ -48,7 +48,7 @@ When performing a code review, apply the full review checklist in `.github/copil
 
 - Missing `requireAuth` on `/api/agentphone/webhook` and `/api/elaine/email-webhook` — uses HMAC auth instead
 - Missing per-user ownership filters on pottery/quilting/ornaments/travels routes — household-shared by design
-- `OPENAI_API_KEY` present but unused — kept for future use, all calls go through OpenRouter
+- `OPENAI_API_KEY` actively used for Elaine's primary reasoning path (OpenAI Responses API); OpenRouter handles fallbacks and other AI paths — never suggest removing the key or consolidating to one gateway
 - Dev-only `installScreenshotImageAutoAuth` patching `HTMLImageElement.prototype.src` — gated by `NODE_ENV`
 - Email webhook router mounted before the `/elaine` session-auth router — this is a security control
 

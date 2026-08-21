@@ -54,11 +54,13 @@ ownership checks on these tables.**
 - **Dev-only route** (`/api/dev/screenshot-login`) only exists in development and is
   guarded by `NODE_ENV`. Do not flag this.
 
-### 2c. OpenRouter is the Only AI Gateway
+### 2c. Mixed AI Gateway: OpenAI Responses API + OpenRouter
 
-All LLM calls (chat completions, vision, some embeddings) route through OpenRouter.
-`OPENAI_API_KEY` is present but unused — it is kept for potential future use. Do not
-suggest adding direct OpenAI API calls or suggest the key is dead.
+Elaine's primary chat and reasoning path uses the **OpenAI Responses API** directly
+(`artifacts/api-server/src/lib/openai-responses.ts`) via `OPENAI_API_KEY`. OpenRouter
+handles fallbacks, vision tasks, and other AI paths. Do not suggest removing
+`OPENAI_API_KEY` (it is actively used), consolidating to a single gateway, or adding
+`new OpenAI(...)` calls outside the centralized clients.
 
 ### 2d. Elaine Restricted Channels
 

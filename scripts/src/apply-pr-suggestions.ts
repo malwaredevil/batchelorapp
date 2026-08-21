@@ -68,6 +68,25 @@ export interface ReviewComment {
 }
 
 /**
+ * Parses the optional `--after <ISO timestamp>` CLI argument.
+ * Returns the timestamp string when present, or undefined when the flag is absent.
+ * Throws a descriptive Error (rather than calling process.exit) when `--after`
+ * is present but its value is missing or is another flag — keeping this logic
+ * unit-testable without spawning a subprocess.
+ */
+export function parseAfterArg(args: string[]): string | undefined {
+  const idx = args.indexOf("--after");
+  if (idx === -1) return undefined;
+  const value = args[idx + 1];
+  if (value === undefined || value.startsWith("--")) {
+    throw new Error(
+      "--after requires an ISO timestamp argument, e.g. --after 2026-08-21T17:30:00Z",
+    );
+  }
+  return value;
+}
+
+/**
  * True when a review comment is anchored to the given PR head SHA.
  * Extracted for unit-testability: the filter in main() delegates to this
  * predicate so a later refactor cannot silently break the stale-suggestion guard.
@@ -299,19 +318,13 @@ async function main(): Promise<void> {
   );
 
   const currentHeadSha = pr.head.sha;
-  const afterIdx = args.indexOf("--after");
-  // Reject --after present without a following value (undefined or another flag)
-  // so the safety gate cannot be silently disabled by a truncated command.
-  if (
-    afterIdx !== -1 &&
-    (args[afterIdx + 1] === undefined || args[afterIdx + 1]?.startsWith("--"))
-  ) {
-    console.error(
-      "--after requires an ISO timestamp argument, e.g. --after 2026-08-21T17:30:00Z",
-    );
+  let afterTimestamp: string | undefined;
+  try {
+    afterTimestamp = parseAfterArg(args);
+  } catch (err) {
+    console.error((err as Error).message);
     process.exit(1);
   }
-  const afterTimestamp = afterIdx !== -1 ? args[afterIdx + 1] : undefined;
 
   const comments = await fetchAllReviewComments(pr.number);
   // Only consider comments anchored to the current PR head commit — stale

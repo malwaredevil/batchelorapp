@@ -16,6 +16,7 @@ import {
   isAlreadyApplied,
   isBotComment,
   isOnCurrentHead,
+  parseAfterArg,
   planEdits,
 } from "./apply-pr-suggestions.js";
 import type { ReviewComment, SuggestionEdit } from "./apply-pr-suggestions.js";
@@ -155,6 +156,42 @@ function makeEdit(overrides: Partial<SuggestionEdit> = {}): SuggestionEdit {
 
   console.log(
     "✓ isAfterTimestamp enforces promotion-time boundary — before rejected, equal/after retained",
+  );
+}
+
+// ── parseAfterArg ─────────────────────────────────────────────────────────
+
+{
+  // Absent flag → undefined (no filtering).
+  assert.equal(
+    parseAfterArg(["--dry-run"]),
+    undefined,
+    "--after absent returns undefined",
+  );
+
+  // Present with a valid value → returns the value.
+  assert.equal(
+    parseAfterArg(["--after", "2026-08-21T17:30:00Z"]),
+    "2026-08-21T17:30:00Z",
+    "--after with value returns that value",
+  );
+
+  // Present without a following value → throws.
+  assert.throws(
+    () => parseAfterArg(["--after"]),
+    /--after requires an ISO timestamp/,
+    "--after as last arg throws a descriptive error",
+  );
+
+  // Present followed by another flag → throws (not silently disabled).
+  assert.throws(
+    () => parseAfterArg(["--after", "--dry-run"]),
+    /--after requires an ISO timestamp/,
+    "--after followed by another flag throws",
+  );
+
+  console.log(
+    "✓ parseAfterArg returns undefined when absent, value when present, throws when missing",
   );
 }
 

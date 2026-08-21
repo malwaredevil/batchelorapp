@@ -63,6 +63,12 @@ that list IS a bug — flag it.
     `POST /auth/change-password`, `POST /auth/phone/verify`, etc.) are **protected**.
 - **Webhook routes** (`/api/agentphone/webhook`, `/api/elaine/email-webhook`) —
   HMAC-SHA256 signature verification; must NOT have `requireAuth`.
+- **Slack receivers** (`POST /api/slack/webhook`, `POST /api/slack/slash`) —
+  Slack HMAC signature verification; must NOT have `requireAuth`.
+- **Apify callback** (`POST /api/ornaments/webhook/apify`) — token/signature-gated;
+  must NOT have `requireAuth`.
+- **Health probes** (`GET /api/health/live`, `GET /api/health/ready`, `GET /api/healthz`) —
+  platform liveness/readiness checks; intentionally public.
 - **Share-token route** (`GET /api/travels/trips/:id/share?token=...`) — bearer token only.
 - **Dev-only route** (`GET /api/dev/screenshot-login`) — `NODE_ENV` guard, dev only.
 

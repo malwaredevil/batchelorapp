@@ -57,8 +57,9 @@ ownership checks on these tables.**
 ### 2c. Mixed AI Gateway: OpenAI Responses API + OpenRouter
 
 Elaine's primary chat and reasoning path uses the **OpenAI Responses API** directly
-(`artifacts/api-server/src/lib/openai-responses.ts`) via `OPENAI_API_KEY`. OpenRouter
-handles fallbacks, vision tasks, and other AI paths. Do not suggest removing
+(`artifacts/api-server/src/lib/openai-responses.ts`) via `OPENAI_API_KEY`. Vision workflows
+(e.g. quilting analyses, fabric identity) also route through `openai-responses.ts`. OpenRouter
+handles fallbacks and the remaining AI paths not yet explicitly migrated. Do not suggest removing
 `OPENAI_API_KEY` (it is actively used), consolidating to a single gateway, or adding
 `new OpenAI(...)` calls outside the centralized clients.
 

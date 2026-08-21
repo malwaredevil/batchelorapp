@@ -49,6 +49,9 @@ Dedicated tools are preferred; for reviewed JSON operations the OpenAPI-generate
 Flag only when Elaine **cannot do what the UI can do at all** — i.e., neither exists:
 
 - No entry in `capability-registry.ts` **and** no matching `website-operation-inventory.json` row
+  with a disposition that Elaine's tool routing actively supports. A row alone is not sufficient —
+  some dispositions (e.g. `attachment_or_camera`) have no mapped tools and provide no real
+  Elaine capability; verify the disposition is handled, not just that a row is present.
 - Destructive actions must appear in `RESTRICTED_EXCLUDED_ACTION_TYPES` or the restricted allowlist
 
 ### Security Boundaries

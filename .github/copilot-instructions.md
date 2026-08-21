@@ -42,7 +42,7 @@ When an issue body contains a "STOP GATE" section:
 
 ## Code review
 
-When performing a code review, apply the full review checklist in `.github/copilot-review-prompt.md`.
+When performing a code review, read `AGENTS.md` as authoritative, then apply the full review checklist in `.github/copilot-review-prompt.md`; never suppress a finding that `AGENTS.md` requires, including restricted-path additions.
 
 ## Intentional patterns — do not flag these
 

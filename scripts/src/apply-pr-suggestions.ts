@@ -56,6 +56,7 @@ const TOKEN = process.env["GH_PAT"];
 
 export interface ReviewComment {
   id: number;
+  commit_id: string;
   path: string;
   body: string;
   line: number | null;
@@ -270,10 +271,16 @@ async function main(): Promise<void> {
     `Checking PR #${pr.number} (${pr.head.ref}) for bot suggestions...`,
   );
 
+  const currentHeadSha = pr.head.sha;
   const comments = await fetchAllReviewComments(pr.number);
-  const botSuggestionComments = comments.filter(isBotComment);
+  // Only consider comments anchored to the current PR head commit — stale
+  // suggestion blocks from earlier commits can still have resolvable positions
+  // if nothing later touched those lines, but applying them risks reintroducing
+  // a superseded suggestion that a subsequent push was meant to replace.
+  const headComments = comments.filter((c) => c.commit_id === currentHeadSha);
+  const botSuggestionComments = headComments.filter(isBotComment);
   console.log(
-    `${comments.length} review comment(s) total, ${botSuggestionComments.length} from bot accounts.`,
+    `${comments.length} review comment(s) total, ${headComments.length} on current head (${currentHeadSha.slice(0, 8)}), ${botSuggestionComments.length} from bot accounts.`,
   );
 
   const edits: SuggestionEdit[] = [];

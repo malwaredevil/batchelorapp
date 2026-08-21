@@ -21,6 +21,7 @@ import type { ReviewComment, SuggestionEdit } from "./apply-pr-suggestions.js";
 function makeComment(overrides: Partial<ReviewComment> = {}): ReviewComment {
   return {
     id: 1,
+    commit_id: "abc1234def5678901234567890123456789012ab",
     path: "src/foo.ts",
     body: "```suggestion\nconst x = 1;\n```",
     line: 10,

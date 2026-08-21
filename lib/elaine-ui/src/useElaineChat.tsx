@@ -528,7 +528,17 @@ export function useElaineChat({
             // Fire last so its state resets (messages → [], conversationId →
             // null) always win the React batch over any earlier setConversationId
             // / setMessages calls above.
-            if (res.newChatRequested) handleNewConversation();
+            if (res.newChatRequested) {
+              // Clear any queued messages before rotating.  handleNewConversation
+              // fires newConversation.mutate asynchronously — the new conversation
+              // ID is only available in its onSuccess callback.  If we let the
+              // queue drain normally the finally block would call runSend with
+              // the OLD conversationId still captured in its closure, routing the
+              // queued message to the wrong thread.  Discarding is correct: the
+              // messages were composed in the context of the ending conversation.
+              queueRef.current = [];
+              handleNewConversation();
+            }
           },
         });
       } catch {
@@ -1003,7 +1013,12 @@ export function useElaineChat({
             // Fire last so its state resets (messages → [], conversationId →
             // null) always win the React batch over any earlier setConversationId
             // / setMessages calls above.
-            if (res.newChatRequested) handleNewConversation();
+            if (res.newChatRequested) {
+              // Clear any queued messages before rotating — see the same guard
+              // in the handoff path above for the full rationale.
+              queueRef.current = [];
+              handleNewConversation();
+            }
           },
         },
         abortController.signal,

@@ -843,7 +843,10 @@ describe("start_new_chat tool → SSE done payload", () => {
       usage: { modelRounds: 0, toolCalls: 0, replans: 0, elapsedMs: 0 },
     };
     mockSnapshot.mockReturnValue(MOCK_TRACE);
-    mockComplete.mockReturnValue({ ...MOCK_TRACE, status: "completed" as const });
+    mockComplete.mockReturnValue({
+      ...MOCK_TRACE,
+      status: "completed" as const,
+    });
     mockCallModel.mockResolvedValue("");
     mockStreamOpenAIResponseRound.mockReset();
     mockDetectClaimedCheckWithoutToolCall.mockReturnValue(null);
@@ -857,46 +860,38 @@ describe("start_new_chat tool → SSE done payload", () => {
     });
   });
 
-  it(
-    "Scenario A — emits newChatRequested:true in the done event when the model calls start_new_chat",
-    async () => {
-      primeDbForFreshChat();
-      setUpStreamingToolCall("start_new_chat", "{}");
+  it("Scenario A — emits newChatRequested:true in the done event when the model calls start_new_chat", async () => {
+    primeDbForFreshChat();
+    setUpStreamingToolCall("start_new_chat", "{}");
 
-      const app = buildApp();
-      const res = await request(app)
-        .post("/api/elaine/chat")
-        .send({ message: "Start a new chat please", appId: "hub" })
-        .set("Content-Type", "application/json")
-        .buffer(true);
+    const app = buildApp();
+    const res = await request(app)
+      .post("/api/elaine/chat")
+      .send({ message: "Start a new chat please", appId: "hub" })
+      .set("Content-Type", "application/json")
+      .buffer(true);
 
-      expect(res.status).toBe(200);
-      const done = parseDoneEvent(res.text);
-      expect(done, "no done SSE event found").not.toBeNull();
-      expect(done!.newChatRequested).toBe(true);
-    },
-    15_000,
-  );
+    expect(res.status).toBe(200);
+    const done = parseDoneEvent(res.text);
+    expect(done, "no done SSE event found").not.toBeNull();
+    expect(done!.newChatRequested).toBe(true);
+  }, 15_000);
 
-  it(
-    "Scenario B — newChatRequested is absent from the done event when start_new_chat is not called",
-    async () => {
-      primeDbForFreshChat();
-      setUpEmptyStream();
+  it("Scenario B — newChatRequested is absent from the done event when start_new_chat is not called", async () => {
+    primeDbForFreshChat();
+    setUpEmptyStream();
 
-      const app = buildApp();
-      const res = await request(app)
-        .post("/api/elaine/chat")
-        .send({ message: "Hello", appId: "hub" })
-        .set("Content-Type", "application/json")
-        .buffer(true);
+    const app = buildApp();
+    const res = await request(app)
+      .post("/api/elaine/chat")
+      .send({ message: "Hello", appId: "hub" })
+      .set("Content-Type", "application/json")
+      .buffer(true);
 
-      expect(res.status).toBe(200);
-      const done = parseDoneEvent(res.text);
-      expect(done, "no done SSE event found").not.toBeNull();
-      // Field must be absent (not false) — the server omits falsy values.
-      expect(done!.newChatRequested).toBeUndefined();
-    },
-    15_000,
-  );
+    expect(res.status).toBe(200);
+    const done = parseDoneEvent(res.text);
+    expect(done, "no done SSE event found").not.toBeNull();
+    // Field must be absent (not false) — the server omits falsy values.
+    expect(done!.newChatRequested).toBeUndefined();
+  }, 15_000);
 });

@@ -49,8 +49,8 @@ ownership checks on these tables.**
 ### 2b. Two Completely Different Authentication Mechanisms
 
 - **Session routes** (`/api/pottery`, `/api/quilting`, `/api/ornaments`, `/api/travels`,
-  `/api/hub`, `/api/elaine`, `/api/config`) use the `requireAuth` middleware
-  (Express session cookie). Missing `requireAuth` here IS a bug.
+  `/api/hub`, `/api/elaine`, `/api/config`, `/api/gmail`, `/api/office`) use the
+  `requireAuth` middleware (Express session cookie). Missing `requireAuth` here IS a bug.
 - **`/api/auth` routes** follow the same `requireAuth` rule as all other session routes —
   missing middleware IS a bug — **except** for the following explicitly public sub-routes
   (verified against `artifacts/api-server/src/routes/auth.ts`):

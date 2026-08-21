@@ -48,26 +48,23 @@ ownership checks on these tables.**
 
 ### 2b. Two Completely Different Authentication Mechanisms
 
-- **Session routes** (`/api/pottery`, `/api/quilting`, `/api/ornaments`, `/api/travels`,
-  `/api/hub`, `/api/elaine`, `/api/config`, `/api/gmail`, `/api/office`) use the
-  `requireAuth` middleware (Express session cookie). Missing `requireAuth` here IS a bug.
-- **`/api/auth` routes** follow the same `requireAuth` rule as all other session routes —
-  missing middleware IS a bug — **except** for the following explicitly public sub-routes
-  (verified against `artifacts/api-server/src/routes/auth.ts`):
+**Default rule: every API route requires `requireAuth` (Express session middleware) unless
+it appears in the explicit exceptions below.** Missing `requireAuth` on any route not in
+that list IS a bug — flag it.
+
+**Explicit public exceptions** (no `requireAuth` — intentional):
+
+- **`/api/auth` public sub-routes** (verified against `artifacts/api-server/src/routes/auth.ts`):
   - `POST /auth/login`, `POST /auth/logout`
   - `POST /auth/forgot-password`, `POST /auth/reset-password`
   - `GET /auth/providers` (called by the unauthenticated login page)
   - `GET /auth/google`, `GET /auth/google/callback` (OAuth redirect/callback)
-    All other `/api/auth` routes (including read-only ones such as `GET /auth/me`,
-    `PATCH /auth/me`, `POST /auth/phone/verify`, `POST /auth/change-password`) are
-    protected. Do not flag the absence of `requireAuth` on the listed public sub-routes.
-- **Webhook routes** (`/api/agentphone/webhook`, `/api/elaine/email-webhook`) use
-  **HMAC-SHA256 signature verification**, NOT a session cookie. They must NOT have
-  `requireAuth`. Do not flag the absence of `requireAuth` on these routes.
-- **Share-token route** (`GET /api/travels/trips/:id/share?token=...`) is intentionally
-  public — a bearer token is the only gate. Do not flag this as missing auth.
-- **Dev-only route** (`/api/dev/screenshot-login`) only exists in development and is
-  guarded by `NODE_ENV`. Do not flag this.
+  - All other `/api/auth` routes (`GET /auth/me`, `PATCH /auth/me`,
+    `POST /auth/change-password`, `POST /auth/phone/verify`, etc.) are **protected**.
+- **Webhook routes** (`/api/agentphone/webhook`, `/api/elaine/email-webhook`) —
+  HMAC-SHA256 signature verification; must NOT have `requireAuth`.
+- **Share-token route** (`GET /api/travels/trips/:id/share?token=...`) — bearer token only.
+- **Dev-only route** (`GET /api/dev/screenshot-login`) — `NODE_ENV` guard, dev only.
 
 ### 2c. Mixed AI Gateway: OpenAI Responses API + OpenRouter
 

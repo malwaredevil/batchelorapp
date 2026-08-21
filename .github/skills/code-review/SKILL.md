@@ -58,7 +58,7 @@ Flag only when Elaine **cannot do what the UI can do at all** — i.e., neither 
 
 - `requireAuth` is mandatory on **every** API route except the explicit public exceptions: the `/api/auth` public sub-routes (login, logout, forgot/reset-password, providers, OAuth callbacks), public health probes, HMAC-signed webhooks (/api/agentphone/webhook, /api/elaine/email-webhook, /api/slack/webhook, /api/slack/slash), the token-gated Apify callback (/api/ornaments/webhook/apify), the share-token travel route, and the dev-only screenshot-login route — flag missing auth on anything else
 - Within `/api/auth`, all routes require `requireAuth` **except** these explicitly public ones: `POST /auth/login`, `POST /auth/logout`, `POST /auth/forgot-password`, `POST /auth/reset-password`, `GET /auth/providers`, `GET /auth/google`, `GET /auth/google/callback`; read-only routes like `GET /auth/me` are protected
-- Every webhook endpoint must check the dedup table **before** any side effects
+- Every webhook endpoint must enforce replay safety **before** side effects, using the appropriate mechanism: a delivery/dedup table, transactional idempotency key, signature validation, or an idempotent upsert contract
 - User-supplied URLs must pass through `ssrf-safe-fetch.ts`
 - Zod validation before every DB write
 

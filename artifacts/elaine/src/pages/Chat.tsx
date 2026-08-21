@@ -41,7 +41,10 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useFullChat } from "@/lib/useFullChat";
-import { type ElaineHandoffState } from "@workspace/elaine-ui";
+import {
+  type ElaineHandoffState,
+  formatConversationDate,
+} from "@workspace/elaine-ui";
 import { FullChatPanel } from "@/components/FullChatPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -121,19 +124,6 @@ function consumeMaximizeHandoff(): ElaineHandoffState | null {
   cleaned.searchParams.delete("turn");
   window.history.replaceState(null, "", cleaned.toString());
   return { conversationId, turnId, userMessage };
-}
-
-function formatConversationDate(iso: string): string {
-  const date = new Date(iso);
-  const now = new Date();
-  const diffDays = Math.floor(
-    (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24),
-  );
-  if (diffDays === 0) return "Today";
-  if (diffDays === 1) return "Yesterday";
-  if (diffDays < 7)
-    return date.toLocaleDateString(undefined, { weekday: "short" });
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 /**
@@ -523,6 +513,18 @@ export default function Chat() {
 
         {/* ── Main chat panel ───────────────────────────────────────────── */}
         <div className="flex min-w-0 flex-1 flex-col">
+          {/* Mobile-only new-chat bar — the conversation sidebar is lg:flex only */}
+          <div className="flex shrink-0 items-center justify-end border-b border-border/50 px-3 py-1.5 lg:hidden">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => chat.handleNewConversation()}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              New chat
+            </Button>
+          </div>
           <FullChatPanel
             chat={chat}
             avatarSize={30}

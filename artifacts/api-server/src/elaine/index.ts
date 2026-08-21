@@ -335,6 +335,7 @@ import {
   LOOKUP_BOOK_VALUE_TOOL_NAME,
   LOOKUP_RETAIL_VALUE_TOOL_NAME,
   NAVIGATE_TOOL_NAME,
+  START_NEW_CHAT_TOOL_NAME,
   QUERY_HOUSEHOLD_TOOL_NAME,
   RECORD_LESSON_TOOL_NAME,
   REMEMBER_TOOL_NAME,
@@ -4238,7 +4239,7 @@ THINK → PLAN → ACT (mandatory for every multi-step or trip-related question)
 - User: "What should I pack?" → Privately: (1) Do I have destination + trip dates? If not, search. (2) Call get_weather_forecast or web_search depending on how far out. (3) Synthesize weather + destination + duration into packing advice. Visible reply: just the packing suggestions.
 If information was already established earlier in this conversation (e.g. the trip was shown via show_trip_card or the user already told you the dates), use it — don't re-search unless you need updated detail.
 
-TOOLS: You have tools available for navigation suggestions, explicit memory, durable research tasks, and proposing changes throughout the app. Each tool's own description explains exactly when and how to use it — follow those rules precisely, especially around never fabricating numeric IDs and asking permission in your visible reply before any action tool. If a request naturally involves multiple write-actions, call all relevant action tools in the same turn and name every proposed change so nothing is a surprise. Use queue_research_task only for multi-search work that may outlast this response; ordinary current questions should use the immediate read tools. Use list_elaine_tasks/get_elaine_task for status and exact IDs before proposing cancellation.
+TOOLS: You have tools available for navigation suggestions, starting a fresh conversation, explicit memory, durable research tasks, and proposing changes throughout the app. Each tool's own description explains exactly when and how to use it — follow those rules precisely, especially around never fabricating numeric IDs and asking permission in your visible reply before any action tool. When the user asks to start a new chat, reset the conversation, or begin fresh, call start_new_chat rather than telling them to find a button — you can do it yourself. If a request naturally involves multiple write-actions, call all relevant action tools in the same turn and name every proposed change so nothing is a surprise. Use queue_research_task only for multi-search work that may outlast this response; ordinary current questions should use the immediate read tools. Use list_elaine_tasks/get_elaine_task for status and exact IDs before proposing cancellation.
 
 SOURCE SELECTION: Prefer the current screen and conversation for already-present facts, Batchelor App APIs for household/app state, first-party connected providers for the user's email/calendar data, specialized APIs for weather/maps/flights/market data, and web search for current public information. Use model knowledge only for stable general explanation or synthesis. If a preferred source fails, say what failed and use the next deliberate fallback; do not present a fallback as the preferred source. Current claims must be backed by current retrieved evidence.
 
@@ -5098,6 +5099,7 @@ router.post("/chat", async (req, res) => {
   // in the order the model produced them.
   const resolvedActions: ProposedAction[] = [];
   let navigate: { path: string; reason: string } | null = null;
+  let newChatRequested = false;
   let updatedActionConfirmationMode: ActionConfirmationMode | null = null;
   const executedActions: Array<
     ProposedAction & { status: number; result: unknown }
@@ -5711,6 +5713,17 @@ router.post("/chat", async (req, res) => {
         } catch {
           // Malformed JSON from the model — drop it, keep the reply text.
         }
+        continue;
+      }
+
+      if (name === START_NEW_CHAT_TOOL_NAME) {
+        newChatRequested = true;
+        runtime.recordObservation({
+          callId: schedule.id,
+          toolName: name,
+          success: true,
+          summary: "New chat session requested",
+        });
         continue;
       }
 
@@ -7770,6 +7783,7 @@ router.post("/chat", async (req, res) => {
     role: "assistant",
     content,
     navigate,
+    newChatRequested: newChatRequested || undefined,
     actions: resolvedActions,
     executedActions,
     actionConfirmationMode:

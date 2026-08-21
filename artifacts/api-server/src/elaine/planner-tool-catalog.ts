@@ -59,6 +59,7 @@ export const ACTION_CONFIRMATION_MODES = [
 // ---------------------------------------------------------------------------
 
 export const NAVIGATE_TOOL_NAME = "suggest_navigation";
+export const START_NEW_CHAT_TOOL_NAME = "start_new_chat";
 export const REMEMBER_TOOL_NAME = "remember_household_fact";
 export const RECORD_LESSON_TOOL_NAME = "remember_lesson";
 export const SET_MODE_TOOL_NAME = "set_action_confirmation_mode";
@@ -807,6 +808,15 @@ export const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
 ];
 
 export const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+  {
+    type: "function",
+    function: {
+      name: START_NEW_CHAT_TOOL_NAME,
+      description:
+        "Start a completely fresh conversation — clears the current chat history and opens a new empty session. Use this ONLY when the user explicitly asks to start over, begin a new chat, clear the conversation, or reset the session. Never call this for ordinary topic changes or task transitions within a conversation.",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
   {
     type: "function",
     function: {

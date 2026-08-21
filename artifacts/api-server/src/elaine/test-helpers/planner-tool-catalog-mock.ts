@@ -61,6 +61,7 @@ export interface PlannerToolCatalogMockShape {
   LOOKUP_BOOK_VALUE_TOOL_NAME: string;
   LOOKUP_RETAIL_VALUE_TOOL_NAME: string;
   NAVIGATE_TOOL_NAME: string;
+  START_NEW_CHAT_TOOL_NAME: string;
   QUERY_HOUSEHOLD_TOOL_NAME: string;
   RECORD_LESSON_TOOL_NAME: string;
   REMEMBER_TOOL_NAME: string;
@@ -120,6 +121,7 @@ export const PLANNER_TOOL_CATALOG_MOCK_DEFAULTS: PlannerToolCatalogMockShape = {
   LOOKUP_BOOK_VALUE_TOOL_NAME: "lookup_book_value",
   LOOKUP_RETAIL_VALUE_TOOL_NAME: "lookup_retail_value",
   NAVIGATE_TOOL_NAME: "suggest_navigation",
+  START_NEW_CHAT_TOOL_NAME: "start_new_chat",
   QUERY_HOUSEHOLD_TOOL_NAME: "query_household_data",
   RECORD_LESSON_TOOL_NAME: "remember_lesson",
   REMEMBER_TOOL_NAME: "remember_household_fact",

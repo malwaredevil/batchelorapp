@@ -510,7 +510,12 @@ export function useElaineChat({
               setExecutedActions(res.executedActions);
               invalidateActionQueries();
             }
-            if (res.conversationId !== undefined) {
+            // Skip conversation-ID update when a new chat was requested —
+            // handleNewConversation fires last (below) and resets it to null;
+            // updating it here first would win the React batch and leave the
+            // hook pointing at the old conversation for the first render after
+            // the new-chat transition.
+            if (res.conversationId !== undefined && !res.newChatRequested) {
               setConversationId(res.conversationId);
               qc.invalidateQueries({
                 queryKey: getListElaineConversationsQueryKey(),
@@ -520,6 +525,20 @@ export function useElaineChat({
               });
             }
             setRuntimeTrace(null);
+            // Fire last so its state resets (messages → [], conversationId →
+            // null) always win the React batch over any earlier setConversationId
+            // / setMessages calls above.
+            if (res.newChatRequested) {
+              // Clear any queued messages before rotating.  handleNewConversation
+              // fires newConversation.mutate asynchronously — the new conversation
+              // ID is only available in its onSuccess callback.  If we let the
+              // queue drain normally the finally block would call runSend with
+              // the OLD conversationId still captured in its closure, routing the
+              // queued message to the wrong thread.  Discarding is correct: the
+              // messages were composed in the context of the ending conversation.
+              queueRef.current = [];
+              handleNewConversation();
+            }
           },
         });
       } catch {
@@ -976,9 +995,12 @@ export function useElaineChat({
                 queryKey: getGetElaineSettingsQueryKey(),
               });
             }
-            // Track the conversation ID returned by the server so future
-            // sends continue in the same named conversation.
-            if (res.conversationId !== undefined) {
+            // Skip conversation-ID update when a new chat was requested —
+            // handleNewConversation fires last (below) and resets it to null;
+            // updating it here first would win the React batch and leave the
+            // hook pointing at the old conversation for the first render after
+            // the new-chat transition.
+            if (res.conversationId !== undefined && !res.newChatRequested) {
               setConversationId(res.conversationId);
               qc.invalidateQueries({
                 queryKey: getListElaineConversationsQueryKey(),
@@ -988,6 +1010,15 @@ export function useElaineChat({
               });
             }
             setRuntimeTrace(null);
+            // Fire last so its state resets (messages → [], conversationId →
+            // null) always win the React batch over any earlier setConversationId
+            // / setMessages calls above.
+            if (res.newChatRequested) {
+              // Clear any queued messages before rotating — see the same guard
+              // in the handoff path above for the full rationale.
+              queueRef.current = [];
+              handleNewConversation();
+            }
           },
         },
         abortController.signal,

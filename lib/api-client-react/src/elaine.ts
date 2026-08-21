@@ -441,6 +441,9 @@ export interface AssistantChatResponse {
   runtimeTrace?: ElaineRuntimeTrace;
   /** Reasoning summary for the current turn, if the model produced one. */
   reasoningSummary?: string | null;
+  /** When true the client should immediately open a fresh conversation after
+   *  this turn, as if the user had pressed "New chat". */
+  newChatRequested?: boolean;
 }
 
 export interface AssistantSettings {

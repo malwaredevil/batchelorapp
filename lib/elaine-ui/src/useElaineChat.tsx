@@ -505,13 +505,17 @@ export function useElaineChat({
               });
             }
             if (res.navigate) setPendingNavigate(res.navigate);
-            if (res.newChatRequested) handleNewConversation();
             if (res.actions.length > 0) setPendingActions(res.actions);
             if (res.executedActions.length > 0) {
               setExecutedActions(res.executedActions);
               invalidateActionQueries();
             }
-            if (res.conversationId !== undefined) {
+            // Skip conversation-ID update when a new chat was requested —
+            // handleNewConversation fires last (below) and resets it to null;
+            // updating it here first would win the React batch and leave the
+            // hook pointing at the old conversation for the first render after
+            // the new-chat transition.
+            if (res.conversationId !== undefined && !res.newChatRequested) {
               setConversationId(res.conversationId);
               qc.invalidateQueries({
                 queryKey: getListElaineConversationsQueryKey(),
@@ -521,6 +525,10 @@ export function useElaineChat({
               });
             }
             setRuntimeTrace(null);
+            // Fire last so its state resets (messages → [], conversationId →
+            // null) always win the React batch over any earlier setConversationId
+            // / setMessages calls above.
+            if (res.newChatRequested) handleNewConversation();
           },
         });
       } catch {
@@ -965,7 +973,6 @@ export function useElaineChat({
               });
             }
             if (res.navigate) setPendingNavigate(res.navigate);
-            if (res.newChatRequested) handleNewConversation();
             if (res.actions.length > 0) setPendingActions(res.actions);
             if (res.executedActions.length > 0) {
               setExecutedActions(res.executedActions);
@@ -978,9 +985,12 @@ export function useElaineChat({
                 queryKey: getGetElaineSettingsQueryKey(),
               });
             }
-            // Track the conversation ID returned by the server so future
-            // sends continue in the same named conversation.
-            if (res.conversationId !== undefined) {
+            // Skip conversation-ID update when a new chat was requested —
+            // handleNewConversation fires last (below) and resets it to null;
+            // updating it here first would win the React batch and leave the
+            // hook pointing at the old conversation for the first render after
+            // the new-chat transition.
+            if (res.conversationId !== undefined && !res.newChatRequested) {
               setConversationId(res.conversationId);
               qc.invalidateQueries({
                 queryKey: getListElaineConversationsQueryKey(),
@@ -990,6 +1000,10 @@ export function useElaineChat({
               });
             }
             setRuntimeTrace(null);
+            // Fire last so its state resets (messages → [], conversationId →
+            // null) always win the React batch over any earlier setConversationId
+            // / setMessages calls above.
+            if (res.newChatRequested) handleNewConversation();
           },
         },
         abortController.signal,

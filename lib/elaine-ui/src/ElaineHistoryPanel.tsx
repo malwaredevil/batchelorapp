@@ -17,7 +17,7 @@ import {
 import { Button } from "@workspace/ui";
 import { Input } from "@workspace/ui";
 
-function formatConversationDate(iso: string): string {
+export function formatConversationDate(iso: string): string {
   const date = new Date(iso);
   const now = new Date();
   const diffDays = Math.floor(

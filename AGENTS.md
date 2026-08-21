@@ -375,14 +375,14 @@ exist only for insert attribution, never for access control.
 
 ### 4.2 Two Different Auth Mechanisms (both correct)
 
-| Route type                                                                                                                               | Auth method                      | Missing auth = bug? |
-| ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- | ------------------- |
-| `/api/pottery/*`, `/api/quilting/*`, `/api/ornaments/*`, `/api/travels/*`, `/api/hub/*`, `/api/elaine/*`, `/api/config/*` | `requireAuth` session middleware | ✅ Yes — flag it    |
-| `/api/auth/*` state-changing authenticated routes (change-password, logout) | `requireAuth` session middleware | ✅ Yes — flag it    |
-| `/api/auth/*` public sub-routes: login, registration, forgot-password, reset-password, OAuth callbacks | Intentionally unauthenticated (open by design) | ❌ No — intentional |
-| `/api/agentphone/webhook`, `/api/elaine/email-webhook`                                                                                   | HMAC-SHA256 signature            | ❌ No — intentional |
-| `GET /api/travels/trips/:id/share?token=...`                                                                                             | Bearer token in query param      | ❌ No — intentional |
-| `GET /api/dev/screenshot-login`                                                                                                          | `NODE_ENV` guard                 | ❌ No — dev only    |
+| Route type                                                                                                                | Auth method                                    | Missing auth = bug? |
+| ------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ------------------- |
+| `/api/pottery/*`, `/api/quilting/*`, `/api/ornaments/*`, `/api/travels/*`, `/api/hub/*`, `/api/elaine/*`, `/api/config/*` | `requireAuth` session middleware               | ✅ Yes — flag it    |
+| `/api/auth/*` state-changing authenticated routes (change-password, logout)                                               | `requireAuth` session middleware               | ✅ Yes — flag it    |
+| `/api/auth/*` public sub-routes: login, registration, forgot-password, reset-password, OAuth callbacks                    | Intentionally unauthenticated (open by design) | ❌ No — intentional |
+| `/api/agentphone/webhook`, `/api/elaine/email-webhook`                                                                    | HMAC-SHA256 signature                          | ❌ No — intentional |
+| `GET /api/travels/trips/:id/share?token=...`                                                                              | Bearer token in query param                    | ❌ No — intentional |
+| `GET /api/dev/screenshot-login`                                                                                           | `NODE_ENV` guard                               | ❌ No — dev only    |
 
 ### 4.3 AI Provider Routing Is Centralized
 

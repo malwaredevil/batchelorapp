@@ -51,10 +51,11 @@ ownership checks on these tables.**
 - **Session routes** (`/api/pottery`, `/api/quilting`, `/api/ornaments`, `/api/travels`,
   `/api/hub`, `/api/elaine`, `/api/config`) use the `requireAuth` middleware
   (Express session cookie). Missing `requireAuth` here IS a bug.
-- **Public auth sub-routes** within `/api/auth` — login, registration, forgot-password,
-  reset-password, and OAuth callbacks — are **intentionally public** (no `requireAuth`).
-  Only state-changing authenticated routes within `/api/auth` (e.g. change-password, logout)
-  require it. Do not flag the absence of `requireAuth` on the public auth sub-routes.
+- **`/api/auth` routes** follow the same `requireAuth` rule as all other session routes —
+  missing middleware IS a bug — **except** for the following explicitly public sub-routes:
+  login, registration, forgot-password, reset-password, and OAuth callbacks.
+  All other `/api/auth` routes (including read-only ones such as `/api/auth/me`) are
+  protected. Do not flag the absence of `requireAuth` on the listed public sub-routes.
 - **Webhook routes** (`/api/agentphone/webhook`, `/api/elaine/email-webhook`) use
   **HMAC-SHA256 signature verification**, NOT a session cookie. They must NOT have
   `requireAuth`. Do not flag the absence of `requireAuth` on these routes.

@@ -83,6 +83,11 @@ export function parseAfterArg(args: string[]): string | undefined {
       "--after requires an ISO timestamp argument, e.g. --after 2026-08-21T17:30:00Z",
     );
   }
+  if (isNaN(Date.parse(value))) {
+    throw new Error(
+      `--after value "${value}" is not a valid date — provide an ISO timestamp, e.g. 2026-08-21T17:30:00Z`,
+    );
+  }
   return value;
 }
 

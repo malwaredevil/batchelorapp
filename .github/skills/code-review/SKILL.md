@@ -57,7 +57,7 @@ Flag only when Elaine **cannot do what the UI can do at all** — i.e., neither 
 ### Security Boundaries
 
 - `requireAuth` is mandatory on all session routes: pottery, quilting, ornaments, travels, hub, elaine, config, users
-- Within `/api/auth`, login, registration, forgot-password, reset-password, and OAuth callbacks are **intentionally public** — only state-changing authenticated routes (e.g. change-password, logout) need `requireAuth`
+- Within `/api/auth`, all routes require `requireAuth` **except** these explicitly public ones: `POST /auth/login`, `POST /auth/logout`, `POST /auth/forgot-password`, `POST /auth/reset-password`, `GET /auth/providers`, `GET /auth/google`, `GET /auth/google/callback`; read-only routes like `GET /auth/me` are protected
 - Every webhook endpoint must check the dedup table **before** any side effects
 - User-supplied URLs must pass through `ssrf-safe-fetch.ts`
 - Zod validation before every DB write

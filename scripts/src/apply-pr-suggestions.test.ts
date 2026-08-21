@@ -190,8 +190,15 @@ function makeEdit(overrides: Partial<SuggestionEdit> = {}): SuggestionEdit {
     "--after followed by another flag throws",
   );
 
+  // Present with a malformed (non-date) value → throws so a bad cutoff cannot slip through.
+  assert.throws(
+    () => parseAfterArg(["--after", "not-a-date"]),
+    /not a valid date/,
+    "--after with non-date string throws a descriptive error",
+  );
+
   console.log(
-    "✓ parseAfterArg returns undefined when absent, value when present, throws when missing",
+    "✓ parseAfterArg returns undefined when absent, value when present, throws on missing or malformed value",
   );
 }
 

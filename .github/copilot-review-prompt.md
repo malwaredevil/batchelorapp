@@ -52,10 +52,15 @@ ownership checks on these tables.**
   `/api/hub`, `/api/elaine`, `/api/config`) use the `requireAuth` middleware
   (Express session cookie). Missing `requireAuth` here IS a bug.
 - **`/api/auth` routes** follow the same `requireAuth` rule as all other session routes —
-  missing middleware IS a bug — **except** for the following explicitly public sub-routes:
-  login, registration, forgot-password, reset-password, and OAuth callbacks.
-  All other `/api/auth` routes (including read-only ones such as `/api/auth/me`) are
-  protected. Do not flag the absence of `requireAuth` on the listed public sub-routes.
+  missing middleware IS a bug — **except** for the following explicitly public sub-routes
+  (verified against `artifacts/api-server/src/routes/auth.ts`):
+  - `POST /auth/login`, `POST /auth/logout`
+  - `POST /auth/forgot-password`, `POST /auth/reset-password`
+  - `GET /auth/providers` (called by the unauthenticated login page)
+  - `GET /auth/google`, `GET /auth/google/callback` (OAuth redirect/callback)
+    All other `/api/auth` routes (including read-only ones such as `GET /auth/me`,
+    `PATCH /auth/me`, `POST /auth/phone/verify`, `POST /auth/change-password`) are
+    protected. Do not flag the absence of `requireAuth` on the listed public sub-routes.
 - **Webhook routes** (`/api/agentphone/webhook`, `/api/elaine/email-webhook`) use
   **HMAC-SHA256 signature verification**, NOT a session cookie. They must NOT have
   `requireAuth`. Do not flag the absence of `requireAuth` on these routes.

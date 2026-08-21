@@ -40,6 +40,10 @@ When an issue body contains a "STOP GATE" section:
 | 2B — Elaine tools     | `feat/epic-242-elaine-completeness` | #255, then #256                                      |
 | 3 — Strategic Phase 1 | `feat/strategic-phase1`             | #257→#258→#223→#224→#225→#226→#227→#228              |
 
+## Code review
+
+When performing a code review, apply the full review checklist in `.github/copilot-review-prompt.md`.
+
 ## Intentional patterns — do not flag these
 
 - Missing `requireAuth` on `/api/agentphone/webhook` and `/api/elaine/email-webhook` — uses HMAC auth instead

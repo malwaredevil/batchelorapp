@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # pre-publish.sh — automated pre-publish gate
 # Usage: pnpm --filter @workspace/scripts run pre-publish
+# [test-probe] bot reviewer discovery — this line exists only to trigger CI/bot review
 #
 # Deliberately excludes checks that GitHub CI already covers (typecheck, lint,
 # codegen drift, PII scan) — step (e) verifies CI is green before publishing,
@@ -298,3 +299,4 @@ echo "  │ Stage 4   — post-publish Sentry delta (~5 min after deploy):      
 echo "  │              compare new issues against baseline IDs, fix regressions,     │"
 echo "  │              then sentry-baseline clear.                                   │"
 echo "  └────────────────────────────────────────────────────────────────────────────┘"
+

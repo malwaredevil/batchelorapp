@@ -21,7 +21,7 @@ has exactly one "household" with a handful of user accounts.
 - **Runtime:** Node 24, TypeScript 5.9, pnpm workspaces
 - **API:** Express 5, Drizzle ORM, PostgreSQL (hosted on Supabase)
 - **Frontends:** React 18 + Vite (3 separate SPA bundles: `modules`, `web`, `elaine`)
-- **AI:** OpenAI Responses API (Elaine primary chat/reasoning) + OpenRouter (fallback and other paths); Voyage (embeddings); Jina (CLIP)
+- **AI:** OpenAI Responses API (Elaine chat/reasoning and selected vision workflows) + OpenRouter (fallback for remaining LLM paths); Voyage (embeddings); Jina (CLIP)
 - **Auth:** Session cookie (express-session + bcrypt) + Google OAuth
 - **Email:** Resend
 - **Storage:** Supabase private buckets (`pottery`, `quilting`, `ornaments`, `travels`)

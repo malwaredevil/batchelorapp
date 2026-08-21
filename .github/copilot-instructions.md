@@ -9,7 +9,7 @@ For the full implementation guide, read `AGENTS.md` in the repo root first.
 
 - **NEVER** run `drizzle-kit push` or `drizzle-kit push --force` — it will wipe the shared Supabase database
 - **NEVER** commit files matching `.agents/`, `.local/`, `threat_model.md`, `.env`
-- **NEVER** add `new OpenAI(...)` calls — use `artifacts/api-server/src/lib/ai-client.ts` (OpenRouter only)
+- **NEVER** add `new OpenAI(...)` calls directly in routes or features — use the centralized clients: `artifacts/api-server/src/lib/ai-client.ts` (OpenRouter) or `artifacts/api-server/src/lib/openai-responses.ts` (Responses API)
 - **NEVER** add raw `fetch('/api/...')` in frontend artifacts — use generated hooks from `@workspace/api-client-react`
 - **NEVER** push directly to `main` — use the campaign branch for your current work
 - **NEVER** add `passOnStoreError: true` to rate limiters
@@ -40,11 +40,15 @@ When an issue body contains a "STOP GATE" section:
 | 2B — Elaine tools     | `feat/epic-242-elaine-completeness` | #255, then #256                                      |
 | 3 — Strategic Phase 1 | `feat/strategic-phase1`             | #257→#258→#223→#224→#225→#226→#227→#228              |
 
+## Code review
+
+When performing a code review, read `AGENTS.md` as authoritative, then apply the full review checklist in `.github/copilot-review-prompt.md`; never suppress a finding that `AGENTS.md` requires, including restricted-path additions.
+
 ## Intentional patterns — do not flag these
 
 - Missing `requireAuth` on `/api/agentphone/webhook` and `/api/elaine/email-webhook` — uses HMAC auth instead
 - Missing per-user ownership filters on pottery/quilting/ornaments/travels routes — household-shared by design
-- `OPENAI_API_KEY` present but unused — kept for future use, all calls go through OpenRouter
+- `OPENAI_API_KEY` actively used for Elaine's primary reasoning path AND selected vision workflows (quilting analyses, fabric identity) via OpenAI Responses API (`openai-responses.ts`); OpenRouter handles only paths not yet explicitly migrated — never suggest removing the key, consolidating to one gateway, or moving Responses-backed code to OpenRouter
 - Dev-only `installScreenshotImageAutoAuth` patching `HTMLImageElement.prototype.src` — gated by `NODE_ENV`
 - Email webhook router mounted before the `/elaine` session-auth router — this is a security control
 

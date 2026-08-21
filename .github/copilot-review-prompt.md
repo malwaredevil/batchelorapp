@@ -5,8 +5,13 @@
 > protocol, prohibited commands, and branch names, see `AGENTS.md` and issue #260.
 
 Use this document as your full context before beginning any code review of this repository.
-Paste it at the start of a Copilot chat session, then ask Copilot to review specific files
-or areas. Each finding should be formatted as a GitHub Issue (template at the bottom).
+
+**When performing a PR review** (primary use case): post findings as inline review comments
+directly on the relevant diff lines — do not open GitHub Issues for PR review findings.
+
+**When used in a manual Copilot chat session**: paste this document, then ask Copilot to
+review specific files or areas. Each finding should be formatted as a GitHub Issue
+(template at the bottom).
 
 ---
 
@@ -21,7 +26,7 @@ has exactly one "household" with a handful of user accounts.
 - **Runtime:** Node 24, TypeScript 5.9, pnpm workspaces
 - **API:** Express 5, Drizzle ORM, PostgreSQL (hosted on Supabase)
 - **Frontends:** React 18 + Vite (3 separate SPA bundles: `modules`, `web`, `elaine`)
-- **AI:** OpenRouter (unified proxy for all LLM calls); Voyage (embeddings); Jina (CLIP)
+- **AI:** OpenAI Responses API (Elaine chat/reasoning and selected vision workflows) + OpenRouter (fallback for remaining LLM paths); Voyage (embeddings); Jina (CLIP)
 - **Auth:** Session cookie (express-session + bcrypt) + Google OAuth
 - **Email:** Resend
 - **Storage:** Supabase private buckets (`pottery`, `quilting`, `ornaments`, `travels`)
@@ -43,22 +48,38 @@ ownership checks on these tables.**
 
 ### 2b. Two Completely Different Authentication Mechanisms
 
-- **Session routes** (`/api/pottery`, `/api/quilting`, `/api/ornaments`, `/api/travels`,
-  `/api/hub`, `/api/elaine`, `/api/auth`, `/api/config`) use the `requireAuth` middleware
-  (Express session cookie). Missing `requireAuth` here IS a bug.
-- **Webhook routes** (`/api/agentphone/webhook`, `/api/elaine/email-webhook`) use
-  **HMAC-SHA256 signature verification**, NOT a session cookie. They must NOT have
-  `requireAuth`. Do not flag the absence of `requireAuth` on these routes.
-- **Share-token route** (`GET /api/travels/trips/:id/share?token=...`) is intentionally
-  public — a bearer token is the only gate. Do not flag this as missing auth.
-- **Dev-only route** (`/api/dev/screenshot-login`) only exists in development and is
-  guarded by `NODE_ENV`. Do not flag this.
+**Default rule: every API route requires `requireAuth` (Express session middleware) unless
+it appears in the explicit exceptions below.** Missing `requireAuth` on any route not in
+that list IS a bug — flag it.
 
-### 2c. OpenRouter is the Only AI Gateway
+**Explicit public exceptions** (no `requireAuth` — intentional):
 
-All LLM calls (chat completions, vision, some embeddings) route through OpenRouter.
-`OPENAI_API_KEY` is present but unused — it is kept for potential future use. Do not
-suggest adding direct OpenAI API calls or suggest the key is dead.
+- **`/api/auth` public sub-routes** (verified against `artifacts/api-server/src/routes/auth.ts`):
+  - `POST /auth/login`, `POST /auth/logout`
+  - `POST /auth/forgot-password`, `POST /auth/reset-password`
+  - `GET /auth/providers` (called by the unauthenticated login page)
+  - `GET /auth/google`, `GET /auth/google/callback` (OAuth redirect/callback)
+  - All other `/api/auth` routes (`GET /auth/me`, `PATCH /auth/me`,
+    `POST /auth/change-password`, `POST /auth/phone/verify`, etc.) are **protected**.
+- **Webhook routes** (`/api/agentphone/webhook`, `/api/elaine/email-webhook`) —
+  HMAC-SHA256 signature verification; must NOT have `requireAuth`.
+- **Slack receivers** (`POST /api/slack/webhook`, `POST /api/slack/slash`) —
+  Slack HMAC signature verification; must NOT have `requireAuth`.
+- **Apify callback** (`POST /api/ornaments/webhook/apify`) — token/signature-gated;
+  must NOT have `requireAuth`.
+- **Health probes** (`GET /api/health/live`, `GET /api/health/ready`, `GET /api/healthz`) —
+  platform liveness/readiness checks; intentionally public.
+- **Share-token route** (`GET /api/travels/trips/:id/share?token=...`) — bearer token only.
+- **Dev-only route** (`GET /api/dev/screenshot-login`) — `NODE_ENV` guard, dev only.
+
+### 2c. Mixed AI Gateway: OpenAI Responses API + OpenRouter
+
+Elaine's primary chat and reasoning path uses the **OpenAI Responses API** directly
+(`artifacts/api-server/src/lib/openai-responses.ts`) via `OPENAI_API_KEY`. Vision workflows
+(e.g. quilting analyses, fabric identity) also route through `openai-responses.ts`. OpenRouter
+handles fallbacks and the remaining AI paths not yet explicitly migrated. Do not suggest removing
+`OPENAI_API_KEY` (it is actively used), consolidating to a single gateway, or adding
+`new OpenAI(...)` calls outside the centralized clients.
 
 ### 2d. Elaine Restricted Channels
 
@@ -441,10 +462,10 @@ Do **not** flag:
 
 - Formatting, indentation, or whitespace issues (Prettier handles this)
 - Missing JSDoc / TSDoc comments
-- Test coverage gaps (missing tests for covered functionality)
+- Test coverage gaps for trivial or already-covered code **not modified** in this PR; but **do flag** when new or materially changed non-trivial logic ships without a matching test (see `AGENTS.md §3f`)
 - The household-sharing model (see §2a)
 - The webhook routes lacking `requireAuth` (see §2b)
-- The OpenRouter-only AI routing (see §2c)
+- The mixed OpenAI Responses + OpenRouter routing (see §2c)
 - The `RESTRICTED_EXCLUDED_ACTION_TYPES` set (see §2d)
 - The `drizzle-kit push --force` ban (see §2e)
 - The dev-only screenshot token bypass (see §2g)
@@ -452,11 +473,14 @@ Do **not** flag:
 
 ---
 
-## 8. GitHub Issue Output Format
+## 8. Output Format
 
-For every finding, produce a GitHub Issue using this exact format. Be specific — a vague
-issue title like "Improve error handling" is not actionable. Each issue must name the exact
-file(s) and line(s) so a developer can go directly to the problem.
+**When performing a PR review** (the primary use case for this file): post inline review
+comments directly on the relevant diff lines. Be specific — name the exact file and line.
+
+**When used in a manual Copilot chat session**: produce a GitHub Issue for each finding
+using this exact format. Be specific — a vague issue title like "Improve error handling"
+is not actionable. Each issue must name the exact file(s) and line(s).
 
 ```markdown
 ## Title

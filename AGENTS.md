@@ -375,12 +375,19 @@ exist only for insert attribution, never for access control.
 
 ### 4.2 Two Different Auth Mechanisms (both correct)
 
-| Route type                                                                                                                               | Auth method                      | Missing auth = bug? |
-| ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- | ------------------- |
-| `/api/pottery/*`, `/api/quilting/*`, `/api/ornaments/*`, `/api/travels/*`, `/api/hub/*`, `/api/elaine/*`, `/api/auth/*`, `/api/config/*` | `requireAuth` session middleware | ✅ Yes — flag it    |
-| `/api/agentphone/webhook`, `/api/elaine/email-webhook`                                                                                   | HMAC-SHA256 signature            | ❌ No — intentional |
-| `GET /api/travels/trips/:id/share?token=...`                                                                                             | Bearer token in query param      | ❌ No — intentional |
-| `GET /api/dev/screenshot-login`                                                                                                          | `NODE_ENV` guard                 | ❌ No — dev only    |
+**Default rule:** every API route requires `requireAuth` (Express session middleware).
+Missing `requireAuth` on any route not listed as a public exception below is a bug.
+
+Exceptions — intentionally unauthenticated:
+
+| Route                                                                                                                                                                                                     | Auth method instead                            |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `/api/auth` public sub-routes: `POST /auth/login`, `POST /auth/logout`, `POST /auth/forgot-password`, `POST /auth/reset-password`, `GET /auth/providers`, `GET /auth/google`, `GET /auth/google/callback` | Intentionally unauthenticated (open by design) |
+| `GET /api/health/live`, `GET /api/health/ready`, `GET /api/healthz`                                                                                                                                       | Platform health/readiness probes               |
+| `/api/agentphone/webhook`, `/api/elaine/email-webhook`, `/api/slack/webhook`, `/api/slack/slash`                                                                                                          | HMAC-SHA256 signature verification             |
+| `POST /api/ornaments/webhook/apify`                                                                                                                                                                       | Apify webhook token/signature validation       |
+| `GET /api/travels/trips/:id/share?token=...`                                                                                                                                                              | Bearer token in query param                    |
+| `GET /api/dev/screenshot-login`                                                                                                                                                                           | `NODE_ENV` guard (dev only)                    |
 
 ### 4.3 AI Provider Routing Is Centralized
 

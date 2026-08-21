@@ -12,8 +12,11 @@ import {
   commentToEdit,
   extractSuggestionLines,
   hasResolvablePosition,
+  isAfterTimestamp,
   isAlreadyApplied,
   isBotComment,
+  isOnCurrentHead,
+  parseAfterArg,
   planEdits,
 } from "./apply-pr-suggestions.js";
 import type { ReviewComment, SuggestionEdit } from "./apply-pr-suggestions.js";
@@ -21,6 +24,8 @@ import type { ReviewComment, SuggestionEdit } from "./apply-pr-suggestions.js";
 function makeComment(overrides: Partial<ReviewComment> = {}): ReviewComment {
   return {
     id: 1,
+    commit_id: "abc1234def5678901234567890123456789012ab",
+    created_at: "2026-01-01T00:00:00Z",
     path: "src/foo.ts",
     body: "```suggestion\nconst x = 1;\n```",
     line: 10,
@@ -92,6 +97,109 @@ function makeEdit(overrides: Partial<SuggestionEdit> = {}): SuggestionEdit {
   );
 
   console.log("✓ isBotComment / hasResolvablePosition gate correctly");
+}
+
+// ── isOnCurrentHead ──────────────────────────────────────────────────────
+
+{
+  const HEAD = "abc1234def5678901234567890123456789012ab";
+  const OTHER = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+
+  assert.equal(
+    isOnCurrentHead(makeComment(), HEAD),
+    true,
+    "comment with matching head SHA is retained",
+  );
+  assert.equal(
+    isOnCurrentHead(makeComment({ commit_id: OTHER }), HEAD),
+    false,
+    "comment from an earlier commit SHA is rejected",
+  );
+  assert.equal(
+    isOnCurrentHead(makeComment({ commit_id: OTHER }), OTHER),
+    true,
+    "predicate is symmetric: any SHA matches itself",
+  );
+
+  console.log(
+    "✓ isOnCurrentHead retains current-head comments and rejects stale ones",
+  );
+}
+
+// ── isAfterTimestamp ──────────────────────────────────────────────────────
+
+{
+  const CUTOFF = "2026-08-21T17:30:00Z";
+  const CUTOFF_MS = Date.parse(CUTOFF);
+
+  assert.equal(
+    isAfterTimestamp(
+      makeComment({ created_at: "2026-08-21T17:00:00Z" }),
+      CUTOFF_MS,
+    ),
+    false,
+    "comment before cutoff is rejected",
+  );
+  assert.equal(
+    isAfterTimestamp(makeComment({ created_at: CUTOFF }), CUTOFF_MS),
+    true,
+    "comment exactly at cutoff is retained (inclusive boundary)",
+  );
+  assert.equal(
+    isAfterTimestamp(
+      makeComment({ created_at: "2026-08-21T18:00:00Z" }),
+      CUTOFF_MS,
+    ),
+    true,
+    "comment after cutoff is retained",
+  );
+
+  console.log(
+    "✓ isAfterTimestamp enforces promotion-time boundary — before rejected, equal/after retained",
+  );
+}
+
+// ── parseAfterArg ─────────────────────────────────────────────────────────
+
+{
+  // Absent flag → undefined (no filtering).
+  assert.equal(
+    parseAfterArg(["--dry-run"]),
+    undefined,
+    "--after absent returns undefined",
+  );
+
+  // Present with a valid value → returns the value.
+  assert.equal(
+    parseAfterArg(["--after", "2026-08-21T17:30:00Z"]),
+    "2026-08-21T17:30:00Z",
+    "--after with value returns that value",
+  );
+
+  // Present without a following value → throws.
+  assert.throws(
+    () => parseAfterArg(["--after"]),
+    /--after requires an ISO timestamp/,
+    "--after as last arg throws a descriptive error",
+  );
+
+  // Present followed by another flag → throws (not silently disabled).
+  assert.throws(
+    () => parseAfterArg(["--after", "--dry-run"]),
+    /--after requires an ISO timestamp/,
+    "--after followed by another flag throws",
+  );
+
+  // Present with a malformed (non-date) value → throws so a bad cutoff cannot slip through.
+  assert.throws(
+    () => parseAfterArg(["--after", "not-a-date"]),
+    /not a valid date/,
+    "--after with non-date string throws a descriptive error",
+  );
+
+  console.log(
+    "✓ parseAfterArg returns undefined when absent, value when present, throws on missing or malformed value",
+  );
 }
 
 // ── commentToEdit ────────────────────────────────────────────────────────

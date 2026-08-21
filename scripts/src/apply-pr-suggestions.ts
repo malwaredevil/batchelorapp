@@ -56,6 +56,8 @@ const TOKEN = process.env["GH_PAT"];
 
 export interface ReviewComment {
   id: number;
+  commit_id: string;
+  created_at: string;
   path: string;
   body: string;
   line: number | null;
@@ -63,6 +65,56 @@ export interface ReviewComment {
   side: "LEFT" | "RIGHT" | null;
   user: { login: string; type: string };
   html_url: string;
+}
+
+/**
+ * Parses the optional `--after <ISO timestamp>` CLI argument.
+ * Returns the timestamp string when present, or undefined when the flag is absent.
+ * Throws a descriptive Error (rather than calling process.exit) when `--after`
+ * is present but its value is missing or is another flag — keeping this logic
+ * unit-testable without spawning a subprocess.
+ */
+export function parseAfterArg(args: string[]): string | undefined {
+  const idx = args.indexOf("--after");
+  if (idx === -1) return undefined;
+  const value = args[idx + 1];
+  if (value === undefined || value.startsWith("--")) {
+    throw new Error(
+      "--after requires an ISO timestamp argument, e.g. --after 2026-08-21T17:30:00Z",
+    );
+  }
+  if (isNaN(Date.parse(value))) {
+    throw new Error(
+      `--after value "${value}" is not a valid date — provide an ISO timestamp, e.g. 2026-08-21T17:30:00Z`,
+    );
+  }
+  return value;
+}
+
+/**
+ * True when a review comment is anchored to the given PR head SHA.
+ * Extracted for unit-testability: the filter in main() delegates to this
+ * predicate so a later refactor cannot silently break the stale-suggestion guard.
+ */
+export function isOnCurrentHead(
+  comment: ReviewComment,
+  headSha: string,
+): boolean {
+  return comment.commit_id === headSha;
+}
+
+/**
+ * True when a review comment was created at or after the given millisecond
+ * timestamp. Used in Stage 3d.6 (post-promotion) to exclude draft-stage
+ * suggestion comments that share the same head SHA.
+ *
+ * Exported for unit-testability — the filter in main() delegates here.
+ */
+export function isAfterTimestamp(
+  comment: ReviewComment,
+  afterMs: number,
+): boolean {
+  return Date.parse(comment.created_at) >= afterMs;
 }
 
 export interface SuggestionEdit {
@@ -270,10 +322,38 @@ async function main(): Promise<void> {
     `Checking PR #${pr.number} (${pr.head.ref}) for bot suggestions...`,
   );
 
+  const currentHeadSha = pr.head.sha;
+  let afterTimestamp: string | undefined;
+  try {
+    afterTimestamp = parseAfterArg(args);
+  } catch (err) {
+    console.error((err as Error).message);
+    process.exit(1);
+  }
+
   const comments = await fetchAllReviewComments(pr.number);
-  const botSuggestionComments = comments.filter(isBotComment);
+  // Only consider comments anchored to the current PR head commit — stale
+  // suggestion blocks from earlier commits can still have resolvable positions
+  // if nothing later touched those lines, but applying them risks reintroducing
+  // a superseded suggestion that a subsequent push was meant to replace.
+  // In Stage 3d.6 (post-promotion), pass --after <promotion ISO timestamp> so
+  // only reviews posted after promotion are applied, preventing draft-stage
+  // [SKIP]ed suggestions from being silently applied on the same head SHA.
+  let headComments = comments.filter((c) => isOnCurrentHead(c, currentHeadSha));
+  if (afterTimestamp) {
+    const afterMs = Date.parse(afterTimestamp);
+    if (isNaN(afterMs)) {
+      console.error(
+        `--after value is not a valid ISO timestamp: ${afterTimestamp}`,
+      );
+      process.exit(1);
+    }
+    headComments = headComments.filter((c) => isAfterTimestamp(c, afterMs));
+    console.log(`Filtering to comments created at or after ${afterTimestamp}.`);
+  }
+  const botSuggestionComments = headComments.filter(isBotComment);
   console.log(
-    `${comments.length} review comment(s) total, ${botSuggestionComments.length} from bot accounts.`,
+    `${comments.length} review comment(s) total, ${headComments.length} on current head (${currentHeadSha.slice(0, 8)})${afterTimestamp ? " after promotion timestamp" : ""}, ${botSuggestionComments.length} from bot accounts.`,
   );
 
   const edits: SuggestionEdit[] = [];

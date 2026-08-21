@@ -796,6 +796,16 @@ describe("start_new_chat tool → SSE done payload", () => {
       chatWindowSize: "comfortable",
       actionConfirmationMode: "one_by_one",
     });
+    // registerToolCalls must return an array (one schedule per input call).
+    // After vi.clearAllMocks() it returns undefined, making every tool call
+    // silently vetoed before it reaches the name === START_NEW_CHAT_TOOL_NAME
+    // branch.  Restore a pass-through that allows every call.
+    mockRegisterToolCalls.mockImplementation(
+      (
+        candidates: Array<{ id?: string; name: string }>,
+      ): Array<{ id: string; allowed: true }> =>
+        candidates.map((c) => ({ id: c.id ?? "mock-call-id", allowed: true })),
+    );
     mockRecordModelRound.mockReturnValue(true);
     mockVerify.mockReturnValue({
       shouldReplan: false,

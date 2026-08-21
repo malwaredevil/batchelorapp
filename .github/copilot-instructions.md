@@ -9,7 +9,7 @@ For the full implementation guide, read `AGENTS.md` in the repo root first.
 
 - **NEVER** run `drizzle-kit push` or `drizzle-kit push --force` — it will wipe the shared Supabase database
 - **NEVER** commit files matching `.agents/`, `.local/`, `threat_model.md`, `.env`
-- **NEVER** add `new OpenAI(...)` calls — use `artifacts/api-server/src/lib/ai-client.ts` (OpenRouter only)
+- **NEVER** add `new OpenAI(...)` calls directly in routes or features — use the centralized clients: `artifacts/api-server/src/lib/ai-client.ts` (OpenRouter) or `artifacts/api-server/src/lib/openai-responses.ts` (Responses API)
 - **NEVER** add raw `fetch('/api/...')` in frontend artifacts — use generated hooks from `@workspace/api-client-react`
 - **NEVER** push directly to `main` — use the campaign branch for your current work
 - **NEVER** add `passOnStoreError: true` to rate limiters

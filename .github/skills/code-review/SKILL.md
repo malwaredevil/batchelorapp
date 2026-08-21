@@ -42,10 +42,13 @@ Every new collection module must follow the pottery gold-standard pattern:
 
 ### Elaine Parity
 
-Every user-facing feature must ship with a matching Elaine update in the **same PR**:
+Every user-facing feature must ship with a matching Elaine capability in the **same PR**.
+Dedicated tools are preferred; for reviewed JSON operations the OpenAPI-generated
+`app-operation-tools.ts` bridge also satisfies parity (see `AGENTS.md §4.8`).
 
-- Tool in `capability-registry.ts`
-- Entry in `planner-tool-catalog.ts`
+Flag only when Elaine **cannot do what the UI can do at all** — i.e., neither exists:
+
+- No entry in `capability-registry.ts` **and** no matching `website-operation-inventory.json` row
 - Destructive actions must appear in `RESTRICTED_EXCLUDED_ACTION_TYPES` or the restricted allowlist
 
 ### Security Boundaries

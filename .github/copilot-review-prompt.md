@@ -21,7 +21,7 @@ has exactly one "household" with a handful of user accounts.
 - **Runtime:** Node 24, TypeScript 5.9, pnpm workspaces
 - **API:** Express 5, Drizzle ORM, PostgreSQL (hosted on Supabase)
 - **Frontends:** React 18 + Vite (3 separate SPA bundles: `modules`, `web`, `elaine`)
-- **AI:** OpenRouter (unified proxy for all LLM calls); Voyage (embeddings); Jina (CLIP)
+- **AI:** OpenAI Responses API (Elaine primary chat/reasoning) + OpenRouter (fallback and other paths); Voyage (embeddings); Jina (CLIP)
 - **Auth:** Session cookie (express-session + bcrypt) + Google OAuth
 - **Email:** Resend
 - **Storage:** Supabase private buckets (`pottery`, `quilting`, `ornaments`, `travels`)
@@ -443,10 +443,10 @@ Do **not** flag:
 
 - Formatting, indentation, or whitespace issues (Prettier handles this)
 - Missing JSDoc / TSDoc comments
-- Test coverage gaps (missing tests for covered functionality)
+- Test coverage gaps for trivial or already-covered code **not modified** in this PR; but **do flag** when new or materially changed non-trivial logic ships without a matching test (see `AGENTS.md §3f`)
 - The household-sharing model (see §2a)
 - The webhook routes lacking `requireAuth` (see §2b)
-- The OpenRouter-only AI routing (see §2c)
+- The mixed OpenAI Responses + OpenRouter routing (see §2c)
 - The `RESTRICTED_EXCLUDED_ACTION_TYPES` set (see §2d)
 - The `drizzle-kit push --force` ban (see §2e)
 - The dev-only screenshot token bypass (see §2g)
@@ -454,11 +454,14 @@ Do **not** flag:
 
 ---
 
-## 8. GitHub Issue Output Format
+## 8. Output Format
 
-For every finding, produce a GitHub Issue using this exact format. Be specific — a vague
-issue title like "Improve error handling" is not actionable. Each issue must name the exact
-file(s) and line(s) so a developer can go directly to the problem.
+**When performing a PR review** (the primary use case for this file): post inline review
+comments directly on the relevant diff lines. Be specific — name the exact file and line.
+
+**When used in a manual Copilot chat session**: produce a GitHub Issue for each finding
+using this exact format. Be specific — a vague issue title like "Improve error handling"
+is not actionable. Each issue must name the exact file(s) and line(s).
 
 ```markdown
 ## Title

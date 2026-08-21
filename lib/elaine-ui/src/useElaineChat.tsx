@@ -505,6 +505,7 @@ export function useElaineChat({
               });
             }
             if (res.navigate) setPendingNavigate(res.navigate);
+            if (res.newChatRequested) handleNewConversation();
             if (res.actions.length > 0) setPendingActions(res.actions);
             if (res.executedActions.length > 0) {
               setExecutedActions(res.executedActions);
@@ -964,6 +965,7 @@ export function useElaineChat({
               });
             }
             if (res.navigate) setPendingNavigate(res.navigate);
+            if (res.newChatRequested) handleNewConversation();
             if (res.actions.length > 0) setPendingActions(res.actions);
             if (res.executedActions.length > 0) {
               setExecutedActions(res.executedActions);

@@ -523,6 +523,18 @@ export default function Chat() {
 
         {/* ── Main chat panel ───────────────────────────────────────────── */}
         <div className="flex min-w-0 flex-1 flex-col">
+          {/* Mobile-only new-chat bar — the conversation sidebar is lg:flex only */}
+          <div className="flex shrink-0 items-center justify-end border-b border-border/50 px-3 py-1.5 lg:hidden">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => chat.handleNewConversation()}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              New chat
+            </Button>
+          </div>
           <FullChatPanel
             chat={chat}
             avatarSize={30}

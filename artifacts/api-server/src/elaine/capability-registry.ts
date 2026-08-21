@@ -744,6 +744,17 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
     retry: "safe",
     channels: ["web"],
   }),
+  ...policies(["start_new_chat"], {
+    domain: "navigation",
+    kind: "utility",
+    risk: "none",
+    auth: "session",
+    confirmation: "never",
+    executorPrefix: "navigation",
+    audit: "runtime_observation",
+    retry: "safe",
+    channels: ["web"],
+  }),
   ...policies(["set_action_confirmation_mode"], {
     domain: "hub",
     kind: "utility",

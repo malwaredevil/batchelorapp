@@ -987,6 +987,7 @@ export const PLANNER_TOOL_CATALOG_REQUIRED_EXPORTS: ReadonlyArray<{
   { key: "LOOKUP_BOOK_VALUE_TOOL_NAME", value: "lookup_book_value" },
   { key: "LOOKUP_RETAIL_VALUE_TOOL_NAME", value: "lookup_retail_value" },
   { key: "NAVIGATE_TOOL_NAME", value: "suggest_navigation" },
+  { key: "START_NEW_CHAT_TOOL_NAME", value: "start_new_chat" },
   { key: "QUERY_HOUSEHOLD_TOOL_NAME", value: "query_household_data" },
   { key: "RECORD_LESSON_TOOL_NAME", value: "remember_lesson" },
   { key: "REMEMBER_TOOL_NAME", value: "remember_household_fact" },

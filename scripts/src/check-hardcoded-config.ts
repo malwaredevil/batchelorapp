@@ -272,10 +272,10 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   // file entered a diff (scaffolded-read-registry dispatch hook). All three are
   // fixed algorithm/abuse-guard parameters, not owner-facing product config:
   // MAX_PHONE_CODE_ATTEMPTS: brute-force guard on phone verification codes.
-  "artifacts/api-server/src/elaine/index.ts:914",
+  "artifacts/api-server/src/elaine/index.ts:915",
   // MAX_ROUNDS: bounded tool-loop iteration caps in two internal helpers.
-  "artifacts/api-server/src/elaine/index.ts:10202",
-  "artifacts/api-server/src/elaine/index.ts:10464",
+  "artifacts/api-server/src/elaine/index.ts:10216",
+  "artifacts/api-server/src/elaine/index.ts:10478",
 
   // ---- observability / request-logging threshold ----
   // Fixed monitoring constant; changing it has no product-visible effect.
@@ -299,8 +299,8 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   // budget; these inner loops are implementation guards for the restricted
   // channel path that are too tightly coupled to the response-parsing logic
   // to be safely raised by the owner.
-  "artifacts/api-server/src/elaine/index.ts:10202", // MAX_ROUNDS (restricted-channel OpenAI-Responses attempt loop)
-  "artifacts/api-server/src/elaine/index.ts:10464", // MAX_ROUNDS (restricted-channel reply loop, SMS/email/Slack)
+  "artifacts/api-server/src/elaine/index.ts:10216", // MAX_ROUNDS (restricted-channel OpenAI-Responses attempt loop)
+  "artifacts/api-server/src/elaine/index.ts:10478", // MAX_ROUNDS (restricted-channel reply loop, SMS/email/Slack)
 
   // ---- routes/ornaments/ornaments.ts ----
   // Pre-existing input-validation caps (notes length, supplemental-image

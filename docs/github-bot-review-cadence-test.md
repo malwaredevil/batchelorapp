@@ -1,3 +1,3 @@
 # GitHub bot review cadence test
 
-Temporary file for observing automated review timing. This pull request will be closed without merging after the cadence experiment.
+This temporary file supports a GitHub review cadence experiment. It has no product impact and this pull request will be closed without merging.

@@ -1,0 +1,1783 @@
+{
+  "version": 1,
+  "findings": [
+    {
+      "id": "duplicate-code:artifacts/api-server/src/lib/app-gmail-tokens.ts:getValidAppGmailAccessToken:artifacts/api-server/src/lib/gmail-tokens.ts:getValidGmailAccessToken",
+      "category": "duplicate-code",
+      "file": "artifacts/api-server/src/lib/app-gmail-tokens.ts",
+      "symbol": "getValidAppGmailAccessToken",
+      "evidence": "artifacts/api-server/src/lib/gmail-tokens.ts:getValidGmailAccessToken",
+      "metric": 0.8935185185185185
+    },
+    {
+      "id": "duplicate-code:artifacts/api-server/src/lib/collection-item-serializer.ts:buildCatsMap:artifacts/api-server/src/lib/magnets/serialize.ts:buildCatsMap",
+      "category": "duplicate-code",
+      "file": "artifacts/api-server/src/lib/collection-item-serializer.ts",
+      "symbol": "buildCatsMap",
+      "evidence": "artifacts/api-server/src/lib/magnets/serialize.ts:buildCatsMap",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/api-server/src/lib/collection-item-serializer.ts:buildImgsMap:artifacts/api-server/src/lib/magnets/serialize.ts:buildImagesMap",
+      "category": "duplicate-code",
+      "file": "artifacts/api-server/src/lib/collection-item-serializer.ts",
+      "symbol": "buildImgsMap",
+      "evidence": "artifacts/api-server/src/lib/magnets/serialize.ts:buildImagesMap",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/api-server/src/lib/collection-search.ts:buildOrnamentSearchDocument:artifacts/api-server/src/lib/collection-search.ts:buildPotterySearchDocument",
+      "category": "duplicate-code",
+      "file": "artifacts/api-server/src/lib/collection-search.ts",
+      "symbol": "buildOrnamentSearchDocument",
+      "evidence": "artifacts/api-server/src/lib/collection-search.ts:buildPotterySearchDocument",
+      "metric": 0.8787878787878788
+    },
+    {
+      "id": "duplicate-code:artifacts/api-server/src/lib/collection-search.ts:buildPotterySearchDocument:artifacts/api-server/src/lib/collection-search.ts:buildFabricSearchDocument",
+      "category": "duplicate-code",
+      "file": "artifacts/api-server/src/lib/collection-search.ts",
+      "symbol": "buildPotterySearchDocument",
+      "evidence": "artifacts/api-server/src/lib/collection-search.ts:buildFabricSearchDocument",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/api-server/src/lib/gmail-scan.ts:startGmailScanScheduler:artifacts/api-server/src/lib/travels-nudges.ts:startNudgeScheduler",
+      "category": "duplicate-code",
+      "file": "artifacts/api-server/src/lib/gmail-scan.ts",
+      "symbol": "startGmailScanScheduler",
+      "evidence": "artifacts/api-server/src/lib/travels-nudges.ts:startNudgeScheduler",
+      "metric": 0.8757763975155279
+    },
+    {
+      "id": "duplicate-code:artifacts/api-server/src/lib/google-calendar-tokens.ts:getTravelCalendarConnection:artifacts/api-server/src/lib/google-calendar-tokens.ts:getHallmarkCalendarConnection",
+      "category": "duplicate-code",
+      "file": "artifacts/api-server/src/lib/google-calendar-tokens.ts",
+      "symbol": "getTravelCalendarConnection",
+      "evidence": "artifacts/api-server/src/lib/google-calendar-tokens.ts:getHallmarkCalendarConnection",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/api-server/src/lib/quilting/recognition.ts:loadPatternSnapshot:artifacts/api-server/src/lib/quilting/recognition.ts:loadQuiltSnapshot",
+      "category": "duplicate-code",
+      "file": "artifacts/api-server/src/lib/quilting/recognition.ts",
+      "symbol": "loadPatternSnapshot",
+      "evidence": "artifacts/api-server/src/lib/quilting/recognition.ts:loadQuiltSnapshot",
+      "metric": 0.8541666666666666
+    },
+    {
+      "id": "duplicate-code:artifacts/api-server/src/lib/quilting/recognition.ts:runPatternRecognition:artifacts/api-server/src/lib/quilting/recognition.ts:runQuiltRecognition",
+      "category": "duplicate-code",
+      "file": "artifacts/api-server/src/lib/quilting/recognition.ts",
+      "symbol": "runPatternRecognition",
+      "evidence": "artifacts/api-server/src/lib/quilting/recognition.ts:runQuiltRecognition",
+      "metric": 0.9297520661157025
+    },
+    {
+      "id": "duplicate-code:artifacts/api-server/src/lib/serialize.ts:serializeFabric:artifacts/api-server/src/lib/serialize.ts:serializePattern",
+      "category": "duplicate-code",
+      "file": "artifacts/api-server/src/lib/serialize.ts",
+      "symbol": "serializeFabric",
+      "evidence": "artifacts/api-server/src/lib/serialize.ts:serializePattern",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/api-server/src/lib/serialize.ts:serializeFabrics:artifacts/api-server/src/lib/serialize.ts:serializePatterns",
+      "category": "duplicate-code",
+      "file": "artifacts/api-server/src/lib/serialize.ts",
+      "symbol": "serializeFabrics",
+      "evidence": "artifacts/api-server/src/lib/serialize.ts:serializePatterns",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/api-server/src/lib/travels-calendar-scan.ts:run:artifacts/api-server/src/lib/travels-nudges.ts:run",
+      "category": "duplicate-code",
+      "file": "artifacts/api-server/src/lib/travels-calendar-scan.ts",
+      "symbol": "run",
+      "evidence": "artifacts/api-server/src/lib/travels-nudges.ts:run",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/api-server/src/lib/travels-calendar-scan.ts:startCalendarTripScanScheduler:artifacts/api-server/src/lib/travels-nudges.ts:startNudgeScheduler",
+      "category": "duplicate-code",
+      "file": "artifacts/api-server/src/lib/travels-calendar-scan.ts",
+      "symbol": "startCalendarTripScanScheduler",
+      "evidence": "artifacts/api-server/src/lib/travels-nudges.ts:startNudgeScheduler",
+      "metric": 0.8703703703703703
+    },
+    {
+      "id": "duplicate-code:artifacts/api-server/src/lib/visual-embed.ts:_jinaClassify:artifacts/api-server/src/lib/visual-embed.ts:generateVisualEmbedding",
+      "category": "duplicate-code",
+      "file": "artifacts/api-server/src/lib/visual-embed.ts",
+      "symbol": "_jinaClassify",
+      "evidence": "artifacts/api-server/src/lib/visual-embed.ts:generateVisualEmbedding",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/api-server/src/routes/quilting/patterns.ts:bulkReanalyzePatterns:artifacts/api-server/src/routes/quilting/quilts.ts:bulkReanalyzeQuilts",
+      "category": "duplicate-code",
+      "file": "artifacts/api-server/src/routes/quilting/patterns.ts",
+      "symbol": "bulkReanalyzePatterns",
+      "evidence": "artifacts/api-server/src/routes/quilting/quilts.ts:bulkReanalyzeQuilts",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/elaine/src/hooks/use-toast.ts:reducer:artifacts/mockup-sandbox/src/hooks/use-toast.ts:reducer",
+      "category": "duplicate-code",
+      "file": "artifacts/elaine/src/hooks/use-toast.ts",
+      "symbol": "reducer",
+      "evidence": "artifacts/mockup-sandbox/src/hooks/use-toast.ts:reducer",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/elaine/src/hooks/use-toast.ts:toast:artifacts/mockup-sandbox/src/hooks/use-toast.ts:toast",
+      "category": "duplicate-code",
+      "file": "artifacts/elaine/src/hooks/use-toast.ts",
+      "symbol": "toast",
+      "evidence": "artifacts/mockup-sandbox/src/hooks/use-toast.ts:toast",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/elaine/src/hooks/use-toast.ts:useToast:artifacts/mockup-sandbox/src/hooks/use-toast.ts:useToast",
+      "category": "duplicate-code",
+      "file": "artifacts/elaine/src/hooks/use-toast.ts",
+      "symbol": "useToast",
+      "evidence": "artifacts/mockup-sandbox/src/hooks/use-toast.ts:useToast",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/mockup-sandbox/src/components/ui/calendar.tsx:Calendar:lib/ui/src/calendar.tsx:Calendar",
+      "category": "duplicate-code",
+      "file": "artifacts/mockup-sandbox/src/components/ui/calendar.tsx",
+      "symbol": "Calendar",
+      "evidence": "lib/ui/src/calendar.tsx:Calendar",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/mockup-sandbox/src/components/ui/calendar.tsx:CalendarDayButton:lib/ui/src/calendar.tsx:CalendarDayButton",
+      "category": "duplicate-code",
+      "file": "artifacts/mockup-sandbox/src/components/ui/calendar.tsx",
+      "symbol": "CalendarDayButton",
+      "evidence": "lib/ui/src/calendar.tsx:CalendarDayButton",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/mockup-sandbox/src/components/ui/calendar.tsx:Chevron:lib/ui/src/calendar.tsx:Chevron",
+      "category": "duplicate-code",
+      "file": "artifacts/mockup-sandbox/src/components/ui/calendar.tsx",
+      "symbol": "Chevron",
+      "evidence": "lib/ui/src/calendar.tsx:Chevron",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/mockup-sandbox/src/components/ui/chart.tsx:ChartStyle:lib/ui/src/chart.tsx:ChartStyle",
+      "category": "duplicate-code",
+      "file": "artifacts/mockup-sandbox/src/components/ui/chart.tsx",
+      "symbol": "ChartStyle",
+      "evidence": "lib/ui/src/chart.tsx:ChartStyle",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/mockup-sandbox/src/components/ui/chart.tsx:getPayloadConfigFromPayload:lib/ui/src/chart.tsx:getPayloadConfigFromPayload",
+      "category": "duplicate-code",
+      "file": "artifacts/mockup-sandbox/src/components/ui/chart.tsx",
+      "symbol": "getPayloadConfigFromPayload",
+      "evidence": "lib/ui/src/chart.tsx:getPayloadConfigFromPayload",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/mockup-sandbox/src/components/ui/field.tsx:FieldError:lib/ui/src/field.tsx:FieldError",
+      "category": "duplicate-code",
+      "file": "artifacts/mockup-sandbox/src/components/ui/field.tsx",
+      "symbol": "FieldError",
+      "evidence": "lib/ui/src/field.tsx:FieldError",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/mockup-sandbox/src/components/ui/form.tsx:useFormField:lib/ui/src/form.tsx:useFormField",
+      "category": "duplicate-code",
+      "file": "artifacts/mockup-sandbox/src/components/ui/form.tsx",
+      "symbol": "useFormField",
+      "evidence": "lib/ui/src/form.tsx:useFormField",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/mockup-sandbox/src/components/ui/input-group.tsx:InputGroupAddon:lib/ui/src/input-group.tsx:InputGroupAddon",
+      "category": "duplicate-code",
+      "file": "artifacts/mockup-sandbox/src/components/ui/input-group.tsx",
+      "symbol": "InputGroupAddon",
+      "evidence": "lib/ui/src/input-group.tsx:InputGroupAddon",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/mockup-sandbox/src/components/ui/sidebar.tsx:Sidebar:lib/ui/src/sidebar.tsx:Sidebar",
+      "category": "duplicate-code",
+      "file": "artifacts/mockup-sandbox/src/components/ui/sidebar.tsx",
+      "symbol": "Sidebar",
+      "evidence": "lib/ui/src/sidebar.tsx:Sidebar",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/mockup-sandbox/src/components/ui/sidebar.tsx:SidebarMenuButton:lib/ui/src/sidebar.tsx:SidebarMenuButton",
+      "category": "duplicate-code",
+      "file": "artifacts/mockup-sandbox/src/components/ui/sidebar.tsx",
+      "symbol": "SidebarMenuButton",
+      "evidence": "lib/ui/src/sidebar.tsx:SidebarMenuButton",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/mockup-sandbox/src/components/ui/sidebar.tsx:SidebarProvider:lib/ui/src/sidebar.tsx:SidebarProvider",
+      "category": "duplicate-code",
+      "file": "artifacts/mockup-sandbox/src/components/ui/sidebar.tsx",
+      "symbol": "SidebarProvider",
+      "evidence": "lib/ui/src/sidebar.tsx:SidebarProvider",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/mockup-sandbox/src/components/ui/sidebar.tsx:SidebarTrigger:lib/ui/src/sidebar.tsx:SidebarTrigger",
+      "category": "duplicate-code",
+      "file": "artifacts/mockup-sandbox/src/components/ui/sidebar.tsx",
+      "symbol": "SidebarTrigger",
+      "evidence": "lib/ui/src/sidebar.tsx:SidebarTrigger",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/mockup-sandbox/src/components/ui/toaster.tsx:Toaster:lib/ui/src/toaster.tsx:Toaster",
+      "category": "duplicate-code",
+      "file": "artifacts/mockup-sandbox/src/components/ui/toaster.tsx",
+      "symbol": "Toaster",
+      "evidence": "lib/ui/src/toaster.tsx:Toaster",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/modules/src/hooks/use-toast.ts:reducer:artifacts/elaine/src/hooks/use-toast.ts:reducer",
+      "category": "duplicate-code",
+      "file": "artifacts/modules/src/hooks/use-toast.ts",
+      "symbol": "reducer",
+      "evidence": "artifacts/elaine/src/hooks/use-toast.ts:reducer",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/modules/src/hooks/use-toast.ts:toast:artifacts/elaine/src/hooks/use-toast.ts:toast",
+      "category": "duplicate-code",
+      "file": "artifacts/modules/src/hooks/use-toast.ts",
+      "symbol": "toast",
+      "evidence": "artifacts/elaine/src/hooks/use-toast.ts:toast",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/modules/src/hooks/use-toast.ts:useToast:artifacts/elaine/src/hooks/use-toast.ts:useToast",
+      "category": "duplicate-code",
+      "file": "artifacts/modules/src/hooks/use-toast.ts",
+      "symbol": "useToast",
+      "evidence": "artifacts/elaine/src/hooks/use-toast.ts:useToast",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/modules/src/ornaments/components/tag-selector.tsx:TagSelector:artifacts/modules/src/pottery/components/tag-selector.tsx:TagSelector",
+      "category": "duplicate-code",
+      "file": "artifacts/modules/src/ornaments/components/tag-selector.tsx",
+      "symbol": "TagSelector",
+      "evidence": "artifacts/modules/src/pottery/components/tag-selector.tsx:TagSelector",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/modules/src/pottery/components/autocomplete-input.tsx:AutocompleteInput:artifacts/modules/src/quilting/components/autocomplete-input.tsx:AutocompleteInput",
+      "category": "duplicate-code",
+      "file": "artifacts/modules/src/pottery/components/autocomplete-input.tsx",
+      "symbol": "AutocompleteInput",
+      "evidence": "artifacts/modules/src/quilting/components/autocomplete-input.tsx:AutocompleteInput",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/modules/src/pottery/pages/categories.tsx:PotteryCategoryRow:artifacts/modules/src/quilting/pages/categories.tsx:QuiltingCategoryRow",
+      "category": "duplicate-code",
+      "file": "artifacts/modules/src/pottery/pages/categories.tsx",
+      "symbol": "PotteryCategoryRow",
+      "evidence": "artifacts/modules/src/quilting/pages/categories.tsx:QuiltingCategoryRow",
+      "metric": 0.8513513513513513
+    },
+    {
+      "id": "duplicate-code:artifacts/modules/src/quilting/components/quick-edit-fabric-sheet.tsx:QuickEditFabricSheet:artifacts/modules/src/quilting/components/quick-edit-pattern-sheet.tsx:QuickEditPatternSheet",
+      "category": "duplicate-code",
+      "file": "artifacts/modules/src/quilting/components/quick-edit-fabric-sheet.tsx",
+      "symbol": "QuickEditFabricSheet",
+      "evidence": "artifacts/modules/src/quilting/components/quick-edit-pattern-sheet.tsx:QuickEditPatternSheet",
+      "metric": 0.8837485172004745
+    },
+    {
+      "id": "duplicate-code:artifacts/modules/src/quilting/components/quick-edit-quilt-sheet.tsx:QuickEditQuiltSheet:artifacts/modules/src/quilting/components/quick-edit-fabric-sheet.tsx:QuickEditFabricSheet",
+      "category": "duplicate-code",
+      "file": "artifacts/modules/src/quilting/components/quick-edit-quilt-sheet.tsx",
+      "symbol": "QuickEditQuiltSheet",
+      "evidence": "artifacts/modules/src/quilting/components/quick-edit-fabric-sheet.tsx:QuickEditFabricSheet",
+      "metric": 0.8799076212471132
+    },
+    {
+      "id": "duplicate-code:artifacts/modules/src/quilting/lib/svg-export.ts:downloadSvgAsJpeg:artifacts/modules/src/quilting/lib/svg-export.ts:downloadSvgAsPng",
+      "category": "duplicate-code",
+      "file": "artifacts/modules/src/quilting/lib/svg-export.ts",
+      "symbol": "downloadSvgAsJpeg",
+      "evidence": "artifacts/modules/src/quilting/lib/svg-export.ts:downloadSvgAsPng",
+      "metric": 0.9007936507936508
+    },
+    {
+      "id": "duplicate-code:artifacts/modules/src/quilting/lib/whole-quilt-storage.ts:readLegacySingle:artifacts/modules/src/quilting/pages/blocks/whole-quilt.tsx:loadDesign",
+      "category": "duplicate-code",
+      "file": "artifacts/modules/src/quilting/lib/whole-quilt-storage.ts",
+      "symbol": "readLegacySingle",
+      "evidence": "artifacts/modules/src/quilting/pages/blocks/whole-quilt.tsx:loadDesign",
+      "metric": 0.8620689655172413
+    },
+    {
+      "id": "duplicate-code:artifacts/modules/src/quilting/pages/blocks/designer.tsx:flipCellContentH:artifacts/modules/src/quilting/pages/blocks/designer.tsx:flipCellContentV",
+      "category": "duplicate-code",
+      "file": "artifacts/modules/src/quilting/pages/blocks/designer.tsx",
+      "symbol": "flipCellContentH",
+      "evidence": "artifacts/modules/src/quilting/pages/blocks/designer.tsx:flipCellContentV",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/modules/src/quilting/pages/blocks/designer.tsx:handleRotateCCW:artifacts/modules/src/quilting/pages/blocks/designer.tsx:handleRotate180",
+      "category": "duplicate-code",
+      "file": "artifacts/modules/src/quilting/pages/blocks/designer.tsx",
+      "symbol": "handleRotateCCW",
+      "evidence": "artifacts/modules/src/quilting/pages/blocks/designer.tsx:handleRotate180",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/modules/src/quilting/pages/blocks/designer.tsx:rotateCellContent90CW:artifacts/modules/src/quilting/pages/blocks/designer.tsx:flipCellContentH",
+      "category": "duplicate-code",
+      "file": "artifacts/modules/src/quilting/pages/blocks/designer.tsx",
+      "symbol": "rotateCellContent90CW",
+      "evidence": "artifacts/modules/src/quilting/pages/blocks/designer.tsx:flipCellContentH",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/modules/src/quilting/pages/blocks/detail.tsx:handleSaveCategories:artifacts/modules/src/quilting/pages/layouts/detail.tsx:handleSaveCategories",
+      "category": "duplicate-code",
+      "file": "artifacts/modules/src/quilting/pages/blocks/detail.tsx",
+      "symbol": "handleSaveCategories",
+      "evidence": "artifacts/modules/src/quilting/pages/layouts/detail.tsx:handleSaveCategories",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/modules/src/quilting/pages/fabrics/detail.tsx:handleSaveCategories:artifacts/modules/src/quilting/pages/quilts/detail.tsx:handleSaveCategories",
+      "category": "duplicate-code",
+      "file": "artifacts/modules/src/quilting/pages/fabrics/detail.tsx",
+      "symbol": "handleSaveCategories",
+      "evidence": "artifacts/modules/src/quilting/pages/quilts/detail.tsx:handleSaveCategories",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/modules/src/quilting/pages/maintenance.tsx:FabricsPanel:artifacts/modules/src/quilting/pages/maintenance.tsx:PatternsPanel",
+      "category": "duplicate-code",
+      "file": "artifacts/modules/src/quilting/pages/maintenance.tsx",
+      "symbol": "FabricsPanel",
+      "evidence": "artifacts/modules/src/quilting/pages/maintenance.tsx:PatternsPanel",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/modules/src/quilting/pages/patterns/index.tsx:PatternCard:artifacts/modules/src/quilting/pages/quilts/index.tsx:QuiltCard",
+      "category": "duplicate-code",
+      "file": "artifacts/modules/src/quilting/pages/patterns/index.tsx",
+      "symbol": "PatternCard",
+      "evidence": "artifacts/modules/src/quilting/pages/quilts/index.tsx:QuiltCard",
+      "metric": 0.8663594470046083
+    },
+    {
+      "id": "duplicate-code:artifacts/modules/src/travels/components/ReminderEditDialog.tsx:addCustomEmail:artifacts/modules/src/travels/pages/TripDetail.tsx:addCustomEmail",
+      "category": "duplicate-code",
+      "file": "artifacts/modules/src/travels/components/ReminderEditDialog.tsx",
+      "symbol": "addCustomEmail",
+      "evidence": "artifacts/modules/src/travels/pages/TripDetail.tsx:addCustomEmail",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/modules/src/travels/pages/Destinations.tsx:AngelaCat:artifacts/modules/src/travels/pages/Destinations.tsx:JohnCat",
+      "category": "duplicate-code",
+      "file": "artifacts/modules/src/travels/pages/Destinations.tsx",
+      "symbol": "AngelaCat",
+      "evidence": "artifacts/modules/src/travels/pages/Destinations.tsx:JohnCat",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/modules/src/travels/pages/Destinations.tsx:JohnCat:artifacts/modules/src/travels/pages/Destinations.tsx:AshleyCat",
+      "category": "duplicate-code",
+      "file": "artifacts/modules/src/travels/pages/Destinations.tsx",
+      "symbol": "JohnCat",
+      "evidence": "artifacts/modules/src/travels/pages/Destinations.tsx:AshleyCat",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/modules/src/travels/pages/Destinations.tsx:KarisCat:artifacts/modules/src/travels/pages/Destinations.tsx:JohnCat",
+      "category": "duplicate-code",
+      "file": "artifacts/modules/src/travels/pages/Destinations.tsx",
+      "symbol": "KarisCat",
+      "evidence": "artifacts/modules/src/travels/pages/Destinations.tsx:JohnCat",
+      "metric": 0.9692307692307692
+    },
+    {
+      "id": "duplicate-code:artifacts/web/src/components/widgets.tsx:QuiltingStatsWidget:artifacts/web/src/components/widgets.tsx:TravelStatsWidget",
+      "category": "duplicate-code",
+      "file": "artifacts/web/src/components/widgets.tsx",
+      "symbol": "QuiltingStatsWidget",
+      "evidence": "artifacts/web/src/components/widgets.tsx:TravelStatsWidget",
+      "metric": 0.9801324503311258
+    },
+    {
+      "id": "duplicate-code:artifacts/web/src/hooks/use-toast.ts:reducer:artifacts/elaine/src/hooks/use-toast.ts:reducer",
+      "category": "duplicate-code",
+      "file": "artifacts/web/src/hooks/use-toast.ts",
+      "symbol": "reducer",
+      "evidence": "artifacts/elaine/src/hooks/use-toast.ts:reducer",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/web/src/hooks/use-toast.ts:toast:artifacts/elaine/src/hooks/use-toast.ts:toast",
+      "category": "duplicate-code",
+      "file": "artifacts/web/src/hooks/use-toast.ts",
+      "symbol": "toast",
+      "evidence": "artifacts/elaine/src/hooks/use-toast.ts:toast",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:artifacts/web/src/hooks/use-toast.ts:useToast:artifacts/elaine/src/hooks/use-toast.ts:useToast",
+      "category": "duplicate-code",
+      "file": "artifacts/web/src/hooks/use-toast.ts",
+      "symbol": "useToast",
+      "evidence": "artifacts/elaine/src/hooks/use-toast.ts:useToast",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:lib/api-client-react/src/elaine.ts:useGetElaineAdminConfig:lib/api-client-react/src/elaine.ts:useGetElaineConversation",
+      "category": "duplicate-code",
+      "file": "lib/api-client-react/src/elaine.ts",
+      "symbol": "useGetElaineAdminConfig",
+      "evidence": "lib/api-client-react/src/elaine.ts:useGetElaineConversation",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:lib/api-client-react/src/elaine.ts:useGetElaineConversation:lib/api-client-react/src/elaine.ts:useGetElaineSettings",
+      "category": "duplicate-code",
+      "file": "lib/api-client-react/src/elaine.ts",
+      "symbol": "useGetElaineConversation",
+      "evidence": "lib/api-client-react/src/elaine.ts:useGetElaineSettings",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:lib/api-client-react/src/elaine.ts:useGetElaineNudgesUnseenCount:lib/api-client-react/src/elaine.ts:useGetElaineConversation",
+      "category": "duplicate-code",
+      "file": "lib/api-client-react/src/elaine.ts",
+      "symbol": "useGetElaineNudgesUnseenCount",
+      "evidence": "lib/api-client-react/src/elaine.ts:useGetElaineConversation",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:lib/api-client-react/src/elaine.ts:useGetElaineTaskCounts:lib/api-client-react/src/elaine.ts:useGetElaineConversationCount",
+      "category": "duplicate-code",
+      "file": "lib/api-client-react/src/elaine.ts",
+      "symbol": "useGetElaineTaskCounts",
+      "evidence": "lib/api-client-react/src/elaine.ts:useGetElaineConversationCount",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:lib/api-client-react/src/elaine.ts:useListElaineMemory:lib/api-client-react/src/elaine.ts:useListElaineAdminModels",
+      "category": "duplicate-code",
+      "file": "lib/api-client-react/src/elaine.ts",
+      "symbol": "useListElaineMemory",
+      "evidence": "lib/api-client-react/src/elaine.ts:useListElaineAdminModels",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:lib/api-client-react/src/travels.ts:useGetCalendarStatus:lib/api-client-react/src/travels.ts:useGetCardLayout",
+      "category": "duplicate-code",
+      "file": "lib/api-client-react/src/travels.ts",
+      "symbol": "useGetCalendarStatus",
+      "evidence": "lib/api-client-react/src/travels.ts:useGetCardLayout",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:lib/api-client-react/src/travels.ts:useGetCardLayout:lib/api-client-react/src/travels.ts:useGetTravelsSettings",
+      "category": "duplicate-code",
+      "file": "lib/api-client-react/src/travels.ts",
+      "symbol": "useGetCardLayout",
+      "evidence": "lib/api-client-react/src/travels.ts:useGetTravelsSettings",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:lib/api-client-react/src/travels.ts:useGetGmailStatus:lib/api-client-react/src/travels.ts:useGetCardLayout",
+      "category": "duplicate-code",
+      "file": "lib/api-client-react/src/travels.ts",
+      "symbol": "useGetGmailStatus",
+      "evidence": "lib/api-client-react/src/travels.ts:useGetCardLayout",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:lib/api-client-react/src/travels.ts:useGetGmailSuggestions:lib/api-client-react/src/travels.ts:useListDestinations",
+      "category": "duplicate-code",
+      "file": "lib/api-client-react/src/travels.ts",
+      "symbol": "useGetGmailSuggestions",
+      "evidence": "lib/api-client-react/src/travels.ts:useListDestinations",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:lib/api-client-react/src/travels.ts:useGetTravelCalendarStatus:lib/api-client-react/src/travels.ts:useGetCardLayout",
+      "category": "duplicate-code",
+      "file": "lib/api-client-react/src/travels.ts",
+      "symbol": "useGetTravelCalendarStatus",
+      "evidence": "lib/api-client-react/src/travels.ts:useGetCardLayout",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:lib/api-client-react/src/travels.ts:useGetTripCardCollapse:lib/api-client-react/src/travels.ts:useGetGmailInbox",
+      "category": "duplicate-code",
+      "file": "lib/api-client-react/src/travels.ts",
+      "symbol": "useGetTripCardCollapse",
+      "evidence": "lib/api-client-react/src/travels.ts:useGetGmailInbox",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:lib/api-client-react/src/travels.ts:useListAllConnectedCalendarEvents:lib/api-client-react/src/travels.ts:useListTravelCalendarEvents",
+      "category": "duplicate-code",
+      "file": "lib/api-client-react/src/travels.ts",
+      "symbol": "useListAllConnectedCalendarEvents",
+      "evidence": "lib/api-client-react/src/travels.ts:useListTravelCalendarEvents",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:lib/api-client-react/src/travels.ts:useListCalendars:lib/api-client-react/src/travels.ts:useListDestinations",
+      "category": "duplicate-code",
+      "file": "lib/api-client-react/src/travels.ts",
+      "symbol": "useListCalendars",
+      "evidence": "lib/api-client-react/src/travels.ts:useListDestinations",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:lib/api-client-react/src/travels.ts:useListCalendarTripSuggestions:lib/api-client-react/src/travels.ts:useListDestinations",
+      "category": "duplicate-code",
+      "file": "lib/api-client-react/src/travels.ts",
+      "symbol": "useListCalendarTripSuggestions",
+      "evidence": "lib/api-client-react/src/travels.ts:useListDestinations",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:lib/api-client-react/src/travels.ts:useListConnectedCalendars:lib/api-client-react/src/travels.ts:useListDestinations",
+      "category": "duplicate-code",
+      "file": "lib/api-client-react/src/travels.ts",
+      "symbol": "useListConnectedCalendars",
+      "evidence": "lib/api-client-react/src/travels.ts:useListDestinations",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:lib/api-client-react/src/travels.ts:useListDestinations:lib/api-client-react/src/travels.ts:useListTravelsAppUsers",
+      "category": "duplicate-code",
+      "file": "lib/api-client-react/src/travels.ts",
+      "symbol": "useListDestinations",
+      "evidence": "lib/api-client-react/src/travels.ts:useListTravelsAppUsers",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:lib/api-client-react/src/travels.ts:useListGoogleEventColors:lib/api-client-react/src/travels.ts:useListDestinations",
+      "category": "duplicate-code",
+      "file": "lib/api-client-react/src/travels.ts",
+      "symbol": "useListGoogleEventColors",
+      "evidence": "lib/api-client-react/src/travels.ts:useListDestinations",
+      "metric": 1
+    },
+    {
+      "id": "duplicate-code:lib/api-client-react/src/travels.ts:useListReminders:lib/api-client-react/src/travels.ts:useListAllReminders",
+      "category": "duplicate-code",
+      "file": "lib/api-client-react/src/travels.ts",
+      "symbol": "useListReminders",
+      "evidence": "lib/api-client-react/src/travels.ts:useListAllReminders",
+      "metric": 1
+    },
+    {
+      "id": "hardcoded-config:artifacts/api-server/src/elaine/index.ts:constant:constant:MAX_PHONE_CODE_ATTEMPTS:const MAX_PHONE_CODE_ATTEMPTS = 5;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/elaine/index.ts",
+      "symbol": "constant",
+      "evidence": "constant:MAX_PHONE_CODE_ATTEMPTS:const MAX_PHONE_CODE_ATTEMPTS = 5;",
+      "metric": 1
+    },
+    {
+      "id": "hardcoded-config:artifacts/api-server/src/elaine/index.ts:constant:constant:MAX_ROUNDS:const MAX_ROUNDS = 3;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/elaine/index.ts",
+      "symbol": "constant",
+      "evidence": "constant:MAX_ROUNDS:const MAX_ROUNDS = 3;",
+      "metric": 1
+    },
+    {
+      "id": "hardcoded-config:artifacts/api-server/src/lib/comm-check-scheduler.ts:constant:constant:CHANNEL_DELIVERY_TIMEOUT_MS:const CHANNEL_DELIVERY_TIMEOUT_MS = 60_000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/comm-check-scheduler.ts",
+      "symbol": "constant",
+      "evidence": "constant:CHANNEL_DELIVERY_TIMEOUT_MS:const CHANNEL_DELIVERY_TIMEOUT_MS = 60_000;",
+      "metric": 1
+    },
+    {
+      "id": "hardcoded-config:artifacts/api-server/src/routes/magnets/magnets.ts:constant:constant:MAX_REANALYZE_IMAGES:const MAX_REANALYZE_IMAGES = 5;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/magnets/magnets.ts",
+      "symbol": "constant",
+      "evidence": "constant:MAX_REANALYZE_IMAGES:const MAX_REANALYZE_IMAGES = 5;",
+      "metric": 1
+    },
+    {
+      "id": "hardcoded-config:artifacts/api-server/src/routes/pottery/pottery.ts:constant:constant:MAX_LABEL:const MAX_LABEL = 100;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/pottery/pottery.ts",
+      "symbol": "constant",
+      "evidence": "constant:MAX_LABEL:const MAX_LABEL = 100;",
+      "metric": 1
+    },
+    {
+      "id": "hardcoded-config:artifacts/api-server/src/routes/pottery/pottery.ts:constant:constant:MAX_NAME:const MAX_NAME = 200;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/pottery/pottery.ts",
+      "symbol": "constant",
+      "evidence": "constant:MAX_NAME:const MAX_NAME = 200;",
+      "metric": 1
+    },
+    {
+      "id": "hardcoded-config:artifacts/api-server/src/routes/pottery/pottery.ts:constant:constant:MAX_SUPPLEMENTAL_IMAGES:const MAX_SUPPLEMENTAL_IMAGES = 20;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/pottery/pottery.ts",
+      "symbol": "constant",
+      "evidence": "constant:MAX_SUPPLEMENTAL_IMAGES:const MAX_SUPPLEMENTAL_IMAGES = 20;",
+      "metric": 1
+    },
+    {
+      "id": "hardcoded-config:artifacts/api-server/src/routes/pottery/pottery.ts:constant:constant:MAX_TEXT:const MAX_TEXT = 500;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/pottery/pottery.ts",
+      "symbol": "constant",
+      "evidence": "constant:MAX_TEXT:const MAX_TEXT = 500;",
+      "metric": 1
+    },
+    {
+      "id": "hardcoded-config:artifacts/api-server/src/routes/quilting/category-helpers.ts:constant:constant:MAX_CATEGORY_NAME_LEN:export const MAX_CATEGORY_NAME_LEN = 100;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/category-helpers.ts",
+      "symbol": "constant",
+      "evidence": "constant:MAX_CATEGORY_NAME_LEN:export const MAX_CATEGORY_NAME_LEN = 100;",
+      "metric": 1
+    },
+    {
+      "id": "hardcoded-config:artifacts/api-server/src/routes/quilting/fabrics.ts:constant:constant:MAX_FIELD:const MAX_FIELD = 200;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/fabrics.ts",
+      "symbol": "constant",
+      "evidence": "constant:MAX_FIELD:const MAX_FIELD = 200;",
+      "metric": 1
+    },
+    {
+      "id": "hardcoded-config:artifacts/api-server/src/routes/quilting/fabrics.ts:constant:constant:MAX_REANALYZE_IMAGES:const MAX_REANALYZE_IMAGES = 5;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/fabrics.ts",
+      "symbol": "constant",
+      "evidence": "constant:MAX_REANALYZE_IMAGES:const MAX_REANALYZE_IMAGES = 5;",
+      "metric": 1
+    },
+    {
+      "id": "hardcoded-config:artifacts/api-server/src/routes/quilting/fabrics.ts:constant:constant:MAX_SUPPLEMENTAL_IMAGES:const MAX_SUPPLEMENTAL_IMAGES = 10;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/fabrics.ts",
+      "symbol": "constant",
+      "evidence": "constant:MAX_SUPPLEMENTAL_IMAGES:const MAX_SUPPLEMENTAL_IMAGES = 10;",
+      "metric": 1
+    },
+    {
+      "id": "hardcoded-config:artifacts/api-server/src/routes/quilting/patterns.ts:constant:constant:MAX_FIELD:const MAX_FIELD = 200;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/patterns.ts",
+      "symbol": "constant",
+      "evidence": "constant:MAX_FIELD:const MAX_FIELD = 200;",
+      "metric": 1
+    },
+    {
+      "id": "hardcoded-config:artifacts/api-server/src/routes/quilting/patterns.ts:constant:constant:MAX_LABEL:const MAX_LABEL = 100;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/patterns.ts",
+      "symbol": "constant",
+      "evidence": "constant:MAX_LABEL:const MAX_LABEL = 100;",
+      "metric": 1
+    },
+    {
+      "id": "hardcoded-config:artifacts/api-server/src/routes/quilting/patterns.ts:constant:constant:MAX_NAME:const MAX_NAME = 200;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/patterns.ts",
+      "symbol": "constant",
+      "evidence": "constant:MAX_NAME:const MAX_NAME = 200;",
+      "metric": 1
+    },
+    {
+      "id": "hardcoded-config:artifacts/api-server/src/routes/quilting/patterns.ts:constant:constant:MAX_NOTES:const MAX_NOTES = 4000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/patterns.ts",
+      "symbol": "constant",
+      "evidence": "constant:MAX_NOTES:const MAX_NOTES = 4000;",
+      "metric": 1
+    },
+    {
+      "id": "hardcoded-config:artifacts/api-server/src/routes/quilting/patterns.ts:constant:constant:MAX_REANALYZE_IMAGES:const MAX_REANALYZE_IMAGES = 5;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/patterns.ts",
+      "symbol": "constant",
+      "evidence": "constant:MAX_REANALYZE_IMAGES:const MAX_REANALYZE_IMAGES = 5;",
+      "metric": 1
+    },
+    {
+      "id": "hardcoded-config:artifacts/api-server/src/routes/quilting/quilts.ts:constant:constant:MAX_LABEL:const MAX_LABEL = 100;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/quilts.ts",
+      "symbol": "constant",
+      "evidence": "constant:MAX_LABEL:const MAX_LABEL = 100;",
+      "metric": 1
+    },
+    {
+      "id": "hardcoded-config:artifacts/api-server/src/routes/quilting/quilts.ts:constant:constant:MAX_NAME:const MAX_NAME = 200;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/quilts.ts",
+      "symbol": "constant",
+      "evidence": "constant:MAX_NAME:const MAX_NAME = 200;",
+      "metric": 1
+    },
+    {
+      "id": "hardcoded-config:artifacts/api-server/src/routes/quilting/quilts.ts:constant:constant:MAX_NOTES:const MAX_NOTES = 4000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/quilts.ts",
+      "symbol": "constant",
+      "evidence": "constant:MAX_NOTES:const MAX_NOTES = 4000;",
+      "metric": 1
+    },
+    {
+      "id": "hardcoded-config:artifacts/modules/src/ornaments/pages/hallmark-events.tsx:constant:constant:GCAL_QUERY_TIMEOUT_MS:const GCAL_QUERY_TIMEOUT_MS = 10_000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/modules/src/ornaments/pages/hallmark-events.tsx",
+      "symbol": "constant",
+      "evidence": "constant:GCAL_QUERY_TIMEOUT_MS:const GCAL_QUERY_TIMEOUT_MS = 10_000;",
+      "metric": 1
+    }
+  ],
+  "exceptions": [
+    {
+      "id": "exception:duplicate-code:artifacts/modules/src/magnets/pages/categories.tsx:CategoryActionMenu:artifacts/modules/src/ornaments/pages/categories.tsx:CategoryActionMenu",
+      "category": "duplicate-code",
+      "file": "artifacts/modules/src/magnets/pages/categories.tsx",
+      "evidence": "artifacts/modules/src/ornaments/pages/categories.tsx:CategoryActionMenu",
+      "reason": "Generated API hooks and query keys make this menu adapter domain-specific; a generic menu would expose an unnecessarily wide hook contract.",
+      "metric": 1
+    },
+    {
+      "id": "exception:duplicate-code:artifacts/modules/src/quilting/components/FabricAiLab.tsx:canvasCoord:artifacts/modules/src/quilting/components/FabricCreaseRemoverModal.tsx:canvasCoord",
+      "category": "duplicate-code",
+      "file": "artifacts/modules/src/quilting/components/FabricAiLab.tsx",
+      "evidence": "artifacts/modules/src/quilting/components/FabricCreaseRemoverModal.tsx:canvasCoord",
+      "reason": "The AI Lab canvas reset lifecycle differs from the crease-removal editor.",
+      "metric": 1
+    },
+    {
+      "id": "exception:duplicate-code:artifacts/modules/src/quilting/components/FabricAiLab.tsx:handleOuterWheel:artifacts/modules/src/quilting/components/FabricCreaseRemoverModal.tsx:handleOuterWheel",
+      "category": "duplicate-code",
+      "file": "artifacts/modules/src/quilting/components/FabricAiLab.tsx",
+      "evidence": "artifacts/modules/src/quilting/components/FabricCreaseRemoverModal.tsx:handleOuterWheel",
+      "reason": "The AI Lab canvas editing setup is coupled to its AI-result lifecycle.",
+      "metric": 1
+    },
+    {
+      "id": "exception:duplicate-code:artifacts/modules/src/quilting/components/FabricAiLab.tsx:loadMaskFromDataUrl:artifacts/modules/src/quilting/components/FabricCreaseRemoverModal.tsx:loadMaskFromDataUrl",
+      "category": "duplicate-code",
+      "file": "artifacts/modules/src/quilting/components/FabricAiLab.tsx",
+      "evidence": "artifacts/modules/src/quilting/components/FabricCreaseRemoverModal.tsx:loadMaskFromDataUrl",
+      "reason": "The AI Lab canvas sizing behavior is coupled to its result/save lifecycle.",
+      "metric": 1
+    },
+    {
+      "id": "exception:duplicate-code:artifacts/modules/src/quilting/components/FabricAiLab.tsx:paint:artifacts/modules/src/quilting/components/FabricCreaseRemoverModal.tsx:paint",
+      "category": "duplicate-code",
+      "file": "artifacts/modules/src/quilting/components/FabricAiLab.tsx",
+      "evidence": "artifacts/modules/src/quilting/components/FabricCreaseRemoverModal.tsx:paint",
+      "reason": "The AI Lab canvas editing action is coupled to its AI-result lifecycle.",
+      "metric": 1
+    },
+    {
+      "id": "exception:duplicate-code:artifacts/modules/src/quilting/components/FabricAiLab.tsx:syncCanvasSize:artifacts/modules/src/quilting/components/FabricCreaseRemoverModal.tsx:syncCanvasSize",
+      "category": "duplicate-code",
+      "file": "artifacts/modules/src/quilting/components/FabricAiLab.tsx",
+      "evidence": "artifacts/modules/src/quilting/components/FabricCreaseRemoverModal.tsx:syncCanvasSize",
+      "reason": "The AI Lab canvas has a distinct result and save lifecycle from the crease-removal editor.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/app.ts:constant:constant:SLOW_REQUEST_THRESHOLD_MS:const SLOW_REQUEST_THRESHOLD_MS = 2_000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/app.ts",
+      "evidence": "constant:SLOW_REQUEST_THRESHOLD_MS:const SLOW_REQUEST_THRESHOLD_MS = 2_000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with SLOW_REQUEST_THRESHOLD_MS in const SLOW_REQUEST_THRESHOLD_MS = 2_000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/elaine/adaptive-actions.ts:cluster:cluster:maxItems,minItems:items: { type: \"string\" },",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/elaine/adaptive-actions.ts",
+      "evidence": "cluster:maxItems,minItems:items: { type: \"string\" },",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed cluster expression with minItems, maxItems in items: { type: \"string\" },.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/elaine/app-operation-tools.ts:constant:constant:MAX_REQUEST_BYTES:const MAX_REQUEST_BYTES = 200_000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/elaine/app-operation-tools.ts",
+      "evidence": "constant:MAX_REQUEST_BYTES:const MAX_REQUEST_BYTES = 200_000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_REQUEST_BYTES in const MAX_REQUEST_BYTES = 200_000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/elaine/app-operation-tools.ts:constant:constant:MAX_RESPONSE_BYTES:const MAX_RESPONSE_BYTES = 512_000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/elaine/app-operation-tools.ts",
+      "evidence": "constant:MAX_RESPONSE_BYTES:const MAX_RESPONSE_BYTES = 512_000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_RESPONSE_BYTES in const MAX_RESPONSE_BYTES = 512_000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/elaine/magnets-actions.ts:constant:constant:MAX_REANALYZE_IMAGES:const MAX_REANALYZE_IMAGES = 5;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/elaine/magnets-actions.ts",
+      "evidence": "constant:MAX_REANALYZE_IMAGES:const MAX_REANALYZE_IMAGES = 5;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_REANALYZE_IMAGES in const MAX_REANALYZE_IMAGES = 5;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/elaine/runtime/trace-store.ts:cluster:cluster:modelRounds,replans:usage: {",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/elaine/runtime/trace-store.ts",
+      "evidence": "cluster:modelRounds,replans:usage: {",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed cluster expression with modelRounds, replans in usage: {.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/elaine/runtime/turn-runtime.ts:cluster:cluster:elapsedMs,modelRounds,replans:usage: {",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/elaine/runtime/turn-runtime.ts",
+      "evidence": "cluster:elapsedMs,modelRounds,replans:usage: {",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed cluster expression with modelRounds, replans, elapsedMs in usage: {.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/elaine/test-helpers/runtime-mock.ts:cluster:cluster:maxElapsedMs,maxModelRounds,maxReplans,maxToolCalls:budget: {",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/elaine/test-helpers/runtime-mock.ts",
+      "evidence": "cluster:maxElapsedMs,maxModelRounds,maxReplans,maxToolCalls:budget: {",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed cluster expression with maxModelRounds, maxToolCalls, maxReplans, maxElapsedMs in budget: {.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/elaine/turn-registry.ts:constant:constant:MAX_BUFFERED_EVENTS:const MAX_BUFFERED_EVENTS = 10_000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/elaine/turn-registry.ts",
+      "evidence": "constant:MAX_BUFFERED_EVENTS:const MAX_BUFFERED_EVENTS = 10_000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_BUFFERED_EVENTS in const MAX_BUFFERED_EVENTS = 10_000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/instrument.ts:constant:constant:MAX_REDACT_DEPTH:const MAX_REDACT_DEPTH = 12;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/instrument.ts",
+      "evidence": "constant:MAX_REDACT_DEPTH:const MAX_REDACT_DEPTH = 12;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_REDACT_DEPTH in const MAX_REDACT_DEPTH = 12;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/agentphone-http.ts:constant:constant:BASE_DELAY_MS:const BASE_DELAY_MS = 500;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/agentphone-http.ts",
+      "evidence": "constant:BASE_DELAY_MS:const BASE_DELAY_MS = 500;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with BASE_DELAY_MS in const BASE_DELAY_MS = 500;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/agentphone-http.ts:constant:constant:MAX_RETRIES:const MAX_RETRIES = 2;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/agentphone-http.ts",
+      "evidence": "constant:MAX_RETRIES:const MAX_RETRIES = 2;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_RETRIES in const MAX_RETRIES = 2;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/circuit-breaker.ts:cluster:cluster:failureThreshold,resetTimeoutMs,successThreshold,windowMs:export const circuitBreaker = new CircuitBreaker({",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/circuit-breaker.ts",
+      "evidence": "cluster:failureThreshold,resetTimeoutMs,successThreshold,windowMs:export const circuitBreaker = new CircuitBreaker({",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed cluster expression with failureThreshold, successThreshold, windowMs, resetTimeoutMs in export const circuitBreaker = new CircuitBreaker({.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/circuit-breaker.ts:constant:constant:DEFAULT_FAILURE_THRESHOLD:const DEFAULT_FAILURE_THRESHOLD = 5;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/circuit-breaker.ts",
+      "evidence": "constant:DEFAULT_FAILURE_THRESHOLD:const DEFAULT_FAILURE_THRESHOLD = 5;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with DEFAULT_FAILURE_THRESHOLD in const DEFAULT_FAILURE_THRESHOLD = 5;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/circuit-breaker.ts:constant:constant:DEFAULT_RESET_TIMEOUT_MS:const DEFAULT_RESET_TIMEOUT_MS = 30_000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/circuit-breaker.ts",
+      "evidence": "constant:DEFAULT_RESET_TIMEOUT_MS:const DEFAULT_RESET_TIMEOUT_MS = 30_000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with DEFAULT_RESET_TIMEOUT_MS in const DEFAULT_RESET_TIMEOUT_MS = 30_000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/circuit-breaker.ts:constant:constant:DEFAULT_SUCCESS_THRESHOLD:const DEFAULT_SUCCESS_THRESHOLD = 2;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/circuit-breaker.ts",
+      "evidence": "constant:DEFAULT_SUCCESS_THRESHOLD:const DEFAULT_SUCCESS_THRESHOLD = 2;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with DEFAULT_SUCCESS_THRESHOLD in const DEFAULT_SUCCESS_THRESHOLD = 2;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/circuit-breaker.ts:constant:constant:DEFAULT_WINDOW_MS:const DEFAULT_WINDOW_MS = 60_000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/circuit-breaker.ts",
+      "evidence": "constant:DEFAULT_WINDOW_MS:const DEFAULT_WINDOW_MS = 60_000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with DEFAULT_WINDOW_MS in const DEFAULT_WINDOW_MS = 60_000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/crease-removal.ts:cluster:cluster:maxRetries,timeout:apiKey: env.openaiApiKey, // openai-direct-ok — images.edit not available via OpenRouter",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/crease-removal.ts",
+      "evidence": "cluster:maxRetries,timeout:apiKey: env.openaiApiKey, // openai-direct-ok — images.edit not available via OpenRouter",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed cluster expression with timeout, maxRetries in apiKey: env.openaiApiKey, // openai-direct-ok — images.edit not available via OpenRouter.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/document-generation.ts:constant:constant:MAX_TABLE_ROWS:const MAX_TABLE_ROWS = 2000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/document-generation.ts",
+      "evidence": "constant:MAX_TABLE_ROWS:const MAX_TABLE_ROWS = 2000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_TABLE_ROWS in const MAX_TABLE_ROWS = 2000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/document-parsing.ts:constant:constant:MAX_EXTRACTED_CHARS:const MAX_EXTRACTED_CHARS = 8000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/document-parsing.ts",
+      "evidence": "constant:MAX_EXTRACTED_CHARS:const MAX_EXTRACTED_CHARS = 8000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_EXTRACTED_CHARS in const MAX_EXTRACTED_CHARS = 8000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/document-parsing.ts:constant:constant:MAX_XLSX_ROWS_PER_SHEET:const MAX_XLSX_ROWS_PER_SHEET = 200;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/document-parsing.ts",
+      "evidence": "constant:MAX_XLSX_ROWS_PER_SHEET:const MAX_XLSX_ROWS_PER_SHEET = 200;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_XLSX_ROWS_PER_SHEET in const MAX_XLSX_ROWS_PER_SHEET = 200;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/ebay/sold-listings.ts:cluster:cluster:pollIntervalMs,timeoutMs:{",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/ebay/sold-listings.ts",
+      "evidence": "cluster:pollIntervalMs,timeoutMs:{",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed cluster expression with timeoutMs, pollIntervalMs in {.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/elaine-cross-channel.ts:constant:constant:MAX_ENTRIES:const MAX_ENTRIES = 15;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/elaine-cross-channel.ts",
+      "evidence": "constant:MAX_ENTRIES:const MAX_ENTRIES = 15;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_ENTRIES in const MAX_ENTRIES = 15;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/elaine-cross-channel.ts:constant:constant:MAX_TOPIC_CHARS:const MAX_TOPIC_CHARS = 120;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/elaine-cross-channel.ts",
+      "evidence": "constant:MAX_TOPIC_CHARS:const MAX_TOPIC_CHARS = 120;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_TOPIC_CHARS in const MAX_TOPIC_CHARS = 120;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/gmail-scan.ts:constant:constant:MAX_LABELED_MESSAGES_PER_SCAN:const MAX_LABELED_MESSAGES_PER_SCAN = 100;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/gmail-scan.ts",
+      "evidence": "constant:MAX_LABELED_MESSAGES_PER_SCAN:const MAX_LABELED_MESSAGES_PER_SCAN = 100;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_LABELED_MESSAGES_PER_SCAN in const MAX_LABELED_MESSAGES_PER_SCAN = 100;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/gmail-scan.ts:constant:constant:MAX_MESSAGES_PER_SCAN:const MAX_MESSAGES_PER_SCAN = 150;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/gmail-scan.ts",
+      "evidence": "constant:MAX_MESSAGES_PER_SCAN:const MAX_MESSAGES_PER_SCAN = 150;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_MESSAGES_PER_SCAN in const MAX_MESSAGES_PER_SCAN = 150;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/google-oauth.ts:constant:constant:OAUTH_EXPIRY_BUFFER_MS:export const OAUTH_EXPIRY_BUFFER_MS = 60_000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/google-oauth.ts",
+      "evidence": "constant:OAUTH_EXPIRY_BUFFER_MS:export const OAUTH_EXPIRY_BUFFER_MS = 60_000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with OAUTH_EXPIRY_BUFFER_MS in export const OAUTH_EXPIRY_BUFFER_MS = 60_000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/image.ts:cluster:cluster:cornerThreshold,lengthThreshold,maxIterations,spliceThreshold:colorMode: ColorMode.Color,",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/image.ts",
+      "evidence": "cluster:cornerThreshold,lengthThreshold,maxIterations,spliceThreshold:colorMode: ColorMode.Color,",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed cluster expression with spliceThreshold, cornerThreshold, lengthThreshold, maxIterations in colorMode: ColorMode.Color,.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/image.ts:cluster:cluster:cornerThreshold,lengthThreshold,spliceThreshold:posterizeColors: POSTERIZE_COLORS,",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/image.ts",
+      "evidence": "cluster:cornerThreshold,lengthThreshold,spliceThreshold:posterizeColors: POSTERIZE_COLORS,",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed cluster expression with spliceThreshold, cornerThreshold, lengthThreshold in posterizeColors: POSTERIZE_COLORS,.",
+      "metric": 2
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/image.ts:cluster:cluster:cornerThreshold,lengthThreshold,spliceThreshold:textureSuppressSigma: 0.6,",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/image.ts",
+      "evidence": "cluster:cornerThreshold,lengthThreshold,spliceThreshold:textureSuppressSigma: 0.6,",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed cluster expression with spliceThreshold, cornerThreshold, lengthThreshold in textureSuppressSigma: 0.6,.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/image.ts:cluster:cluster:cornerThreshold,lengthThreshold,spliceThreshold:textureSuppressSigma: 1.4,",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/image.ts",
+      "evidence": "cluster:cornerThreshold,lengthThreshold,spliceThreshold:textureSuppressSigma: 1.4,",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed cluster expression with spliceThreshold, cornerThreshold, lengthThreshold in textureSuppressSigma: 1.4,.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/image.ts:cluster:cluster:cornerThreshold,lengthThreshold,spliceThreshold:textureSuppressSigma: 3.2,",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/image.ts",
+      "evidence": "cluster:cornerThreshold,lengthThreshold,spliceThreshold:textureSuppressSigma: 3.2,",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed cluster expression with spliceThreshold, cornerThreshold, lengthThreshold in textureSuppressSigma: 3.2,.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/image.ts:cluster:cluster:cornerThreshold,lengthThreshold,spliceThreshold:textureSuppressSigma: 4.5,",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/image.ts",
+      "evidence": "cluster:cornerThreshold,lengthThreshold,spliceThreshold:textureSuppressSigma: 4.5,",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed cluster expression with spliceThreshold, cornerThreshold, lengthThreshold in textureSuppressSigma: 4.5,.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/image.ts:constant:constant:MAX_AI_DIMENSION:const MAX_AI_DIMENSION = 1024;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/image.ts",
+      "evidence": "constant:MAX_AI_DIMENSION:const MAX_AI_DIMENSION = 1024;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_AI_DIMENSION in const MAX_AI_DIMENSION = 1024;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/image.ts:constant:constant:MAX_INPUT_PIXELS:const MAX_INPUT_PIXELS = 50_000_000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/image.ts",
+      "evidence": "constant:MAX_INPUT_PIXELS:const MAX_INPUT_PIXELS = 50_000_000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_INPUT_PIXELS in const MAX_INPUT_PIXELS = 50_000_000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/image.ts:constant:constant:MAX_STORAGE_DIMENSION:const MAX_STORAGE_DIMENSION = 2048;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/image.ts",
+      "evidence": "constant:MAX_STORAGE_DIMENSION:const MAX_STORAGE_DIMENSION = 2048;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_STORAGE_DIMENSION in const MAX_STORAGE_DIMENSION = 2048;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/integrations-health-nudges.ts:constant:constant:MAX_FAILURE_NUDGES_PER_RUN:const MAX_FAILURE_NUDGES_PER_RUN = 3;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/integrations-health-nudges.ts",
+      "evidence": "constant:MAX_FAILURE_NUDGES_PER_RUN:const MAX_FAILURE_NUDGES_PER_RUN = 3;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_FAILURE_NUDGES_PER_RUN in const MAX_FAILURE_NUDGES_PER_RUN = 3;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/integrations-health-nudges.ts:constant:constant:STARTUP_DELAY_MS:const STARTUP_DELAY_MS = 90_000; // 90 seconds",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/integrations-health-nudges.ts",
+      "evidence": "constant:STARTUP_DELAY_MS:const STARTUP_DELAY_MS = 90_000; // 90 seconds",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with STARTUP_DELAY_MS in const STARTUP_DELAY_MS = 90_000; // 90 seconds.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/jobs/worker.ts:constant:constant:HEARTBEAT_INTERVAL_MS:const HEARTBEAT_INTERVAL_MS = 60_000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/jobs/worker.ts",
+      "evidence": "constant:HEARTBEAT_INTERVAL_MS:const HEARTBEAT_INTERVAL_MS = 60_000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with HEARTBEAT_INTERVAL_MS in const HEARTBEAT_INTERVAL_MS = 60_000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/openrouter-models.ts:constant:constant:DEFAULT_FETCH_TIMEOUT_MS:const DEFAULT_FETCH_TIMEOUT_MS = 8_000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/openrouter-models.ts",
+      "evidence": "constant:DEFAULT_FETCH_TIMEOUT_MS:const DEFAULT_FETCH_TIMEOUT_MS = 8_000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with DEFAULT_FETCH_TIMEOUT_MS in const DEFAULT_FETCH_TIMEOUT_MS = 8_000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/ornaments/book-value.ts:constant:constant:FETCH_TIMEOUT_MS:const FETCH_TIMEOUT_MS = 20_000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/ornaments/book-value.ts",
+      "evidence": "constant:FETCH_TIMEOUT_MS:const FETCH_TIMEOUT_MS = 20_000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with FETCH_TIMEOUT_MS in const FETCH_TIMEOUT_MS = 20_000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/ornaments/dimensions.ts:constant:constant:MAX_DIMENSIONS_LENGTH:const MAX_DIMENSIONS_LENGTH = 100;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/ornaments/dimensions.ts",
+      "evidence": "constant:MAX_DIMENSIONS_LENGTH:const MAX_DIMENSIONS_LENGTH = 100;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_DIMENSIONS_LENGTH in const MAX_DIMENSIONS_LENGTH = 100;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/ornaments/hallmark-events-source.ts:constant:constant:REQUEST_TIMEOUT_MS:const REQUEST_TIMEOUT_MS = 45_000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/ornaments/hallmark-events-source.ts",
+      "evidence": "constant:REQUEST_TIMEOUT_MS:const REQUEST_TIMEOUT_MS = 45_000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with REQUEST_TIMEOUT_MS in const REQUEST_TIMEOUT_MS = 45_000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/ornaments/hallmark-search.ts:cluster:cluster:maxItems,pollIntervalMs,timeoutMs:{",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/ornaments/hallmark-search.ts",
+      "evidence": "cluster:maxItems,pollIntervalMs,timeoutMs:{",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed cluster expression with timeoutMs, pollIntervalMs, maxItems in {.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/reminders-scheduler.ts:constant:constant:CLAIM_BATCH_SIZE:const CLAIM_BATCH_SIZE = 200;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/reminders-scheduler.ts",
+      "evidence": "constant:CLAIM_BATCH_SIZE:const CLAIM_BATCH_SIZE = 200;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with CLAIM_BATCH_SIZE in const CLAIM_BATCH_SIZE = 200;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/sentry-error-nudges.ts:constant:constant:MAX_DETAILED_ISSUES:const MAX_DETAILED_ISSUES = 5;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/sentry-error-nudges.ts",
+      "evidence": "constant:MAX_DETAILED_ISSUES:const MAX_DETAILED_ISSUES = 5;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_DETAILED_ISSUES in const MAX_DETAILED_ISSUES = 5;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/sentry-issues.ts:constant:constant:FETCH_TIMEOUT_MS:const FETCH_TIMEOUT_MS = 15_000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/sentry-issues.ts",
+      "evidence": "constant:FETCH_TIMEOUT_MS:const FETCH_TIMEOUT_MS = 15_000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with FETCH_TIMEOUT_MS in const FETCH_TIMEOUT_MS = 15_000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/sentry-issues.ts:constant:constant:MAX_ISSUES:const MAX_ISSUES = 50;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/sentry-issues.ts",
+      "evidence": "constant:MAX_ISSUES:const MAX_ISSUES = 50;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_ISSUES in const MAX_ISSUES = 50;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/ssrf-safe-fetch.ts:constant:constant:DNS_TIMEOUT_MS:const DNS_TIMEOUT_MS = 2000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/ssrf-safe-fetch.ts",
+      "evidence": "constant:DNS_TIMEOUT_MS:const DNS_TIMEOUT_MS = 2000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with DNS_TIMEOUT_MS in const DNS_TIMEOUT_MS = 2000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/ssrf-safe-fetch.ts:constant:constant:FETCH_ABSOLUTE_TIMEOUT_MS:const FETCH_ABSOLUTE_TIMEOUT_MS = 12_000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/ssrf-safe-fetch.ts",
+      "evidence": "constant:FETCH_ABSOLUTE_TIMEOUT_MS:const FETCH_ABSOLUTE_TIMEOUT_MS = 12_000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with FETCH_ABSOLUTE_TIMEOUT_MS in const FETCH_ABSOLUTE_TIMEOUT_MS = 12_000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/ssrf-safe-fetch.ts:constant:constant:MAX_BODY_BYTES:const MAX_BODY_BYTES = 200_000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/ssrf-safe-fetch.ts",
+      "evidence": "constant:MAX_BODY_BYTES:const MAX_BODY_BYTES = 200_000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_BODY_BYTES in const MAX_BODY_BYTES = 200_000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/ssrf-safe-fetch.ts:constant:constant:MAX_REDIRECTS:const MAX_REDIRECTS = 5;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/ssrf-safe-fetch.ts",
+      "evidence": "constant:MAX_REDIRECTS:const MAX_REDIRECTS = 5;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_REDIRECTS in const MAX_REDIRECTS = 5;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/ssrf-safe-fetch.ts:constant:constant:MAX_TEXT_LENGTH:const MAX_TEXT_LENGTH = 6_000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/ssrf-safe-fetch.ts",
+      "evidence": "constant:MAX_TEXT_LENGTH:const MAX_TEXT_LENGTH = 6_000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_TEXT_LENGTH in const MAX_TEXT_LENGTH = 6_000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/storage-core.ts:constant:constant:MAX_CACHE_ENTRIES_PER_BUCKET:const MAX_CACHE_ENTRIES_PER_BUCKET = 250;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/storage-core.ts",
+      "evidence": "constant:MAX_CACHE_ENTRIES_PER_BUCKET:const MAX_CACHE_ENTRIES_PER_BUCKET = 250;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_CACHE_ENTRIES_PER_BUCKET in const MAX_CACHE_ENTRIES_PER_BUCKET = 250;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/travels-nudges.ts:constant:constant:AQI_UNHEALTHY_THRESHOLD:const AQI_UNHEALTHY_THRESHOLD = 100;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/travels-nudges.ts",
+      "evidence": "constant:AQI_UNHEALTHY_THRESHOLD:const AQI_UNHEALTHY_THRESHOLD = 100;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with AQI_UNHEALTHY_THRESHOLD in const AQI_UNHEALTHY_THRESHOLD = 100;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/travels/google-maps.ts:constant:constant:DEFAULT_TIMEOUT_MS:const DEFAULT_TIMEOUT_MS = 8000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/travels/google-maps.ts",
+      "evidence": "constant:DEFAULT_TIMEOUT_MS:const DEFAULT_TIMEOUT_MS = 8000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with DEFAULT_TIMEOUT_MS in const DEFAULT_TIMEOUT_MS = 8000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/web-search-citations.ts:constant:constant:MAX_WEB_SEARCH_CITATIONS:const MAX_WEB_SEARCH_CITATIONS = 20;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/web-search-citations.ts",
+      "evidence": "constant:MAX_WEB_SEARCH_CITATIONS:const MAX_WEB_SEARCH_CITATIONS = 20;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_WEB_SEARCH_CITATIONS in const MAX_WEB_SEARCH_CITATIONS = 20;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/web-search.ts:constant:constant:DEFAULT_SEARCH_TIMEOUT_MS:const DEFAULT_SEARCH_TIMEOUT_MS = 15_000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/web-search.ts",
+      "evidence": "constant:DEFAULT_SEARCH_TIMEOUT_MS:const DEFAULT_SEARCH_TIMEOUT_MS = 15_000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with DEFAULT_SEARCH_TIMEOUT_MS in const DEFAULT_SEARCH_TIMEOUT_MS = 15_000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/web-search.ts:constant:constant:FETCH_PAGE_TIMEOUT_MS:const FETCH_PAGE_TIMEOUT_MS = 20_000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/web-search.ts",
+      "evidence": "constant:FETCH_PAGE_TIMEOUT_MS:const FETCH_PAGE_TIMEOUT_MS = 20_000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with FETCH_PAGE_TIMEOUT_MS in const FETCH_PAGE_TIMEOUT_MS = 20_000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/web-search.ts:constant:constant:MAX_IMAGES:const MAX_IMAGES = 4;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/web-search.ts",
+      "evidence": "constant:MAX_IMAGES:const MAX_IMAGES = 4;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_IMAGES in const MAX_IMAGES = 4;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/admin/integrations-health.ts:constant:constant:CHECK_RETRY_DELAY_MS:const CHECK_RETRY_DELAY_MS = 2_000; // 2-second pause between attempts",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/admin/integrations-health.ts",
+      "evidence": "constant:CHECK_RETRY_DELAY_MS:const CHECK_RETRY_DELAY_MS = 2_000; // 2-second pause between attempts",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with CHECK_RETRY_DELAY_MS in const CHECK_RETRY_DELAY_MS = 2_000; // 2-second pause between attempts.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/admin/integrations-health.ts:constant:constant:CHECK_TIMEOUT_MS:const CHECK_TIMEOUT_MS = 15_000; // 15 seconds per service",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/admin/integrations-health.ts",
+      "evidence": "constant:CHECK_TIMEOUT_MS:const CHECK_TIMEOUT_MS = 15_000; // 15 seconds per service",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with CHECK_TIMEOUT_MS in const CHECK_TIMEOUT_MS = 15_000; // 15 seconds per service.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/auth.ts:constant:constant:MAX_PHONE_CODE_ATTEMPTS:const MAX_PHONE_CODE_ATTEMPTS = 5;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/auth.ts",
+      "evidence": "constant:MAX_PHONE_CODE_ATTEMPTS:const MAX_PHONE_CODE_ATTEMPTS = 5;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_PHONE_CODE_ATTEMPTS in const MAX_PHONE_CODE_ATTEMPTS = 5;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/hub.ts:constant:constant:FETCH_TIMEOUT_MS:const FETCH_TIMEOUT_MS = 10_000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/hub.ts",
+      "evidence": "constant:FETCH_TIMEOUT_MS:const FETCH_TIMEOUT_MS = 10_000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with FETCH_TIMEOUT_MS in const FETCH_TIMEOUT_MS = 10_000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/hub.ts:constant:constant:MAX_REDIRECTS:const MAX_REDIRECTS = 5;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/hub.ts",
+      "evidence": "constant:MAX_REDIRECTS:const MAX_REDIRECTS = 5;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_REDIRECTS in const MAX_REDIRECTS = 5;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/messenger/gifs.ts:constant:constant:DEFAULT_LIMIT:const DEFAULT_LIMIT = 24;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/messenger/gifs.ts",
+      "evidence": "constant:DEFAULT_LIMIT:const DEFAULT_LIMIT = 24;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with DEFAULT_LIMIT in const DEFAULT_LIMIT = 24;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/messenger/gifs.ts:constant:constant:MAX_LIMIT:const MAX_LIMIT = 50;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/messenger/gifs.ts",
+      "evidence": "constant:MAX_LIMIT:const MAX_LIMIT = 50;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_LIMIT in const MAX_LIMIT = 50;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/messenger/link-preview.ts:constant:constant:DIRECT_FETCH_TIMEOUT_MS:const DIRECT_FETCH_TIMEOUT_MS = 3000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/messenger/link-preview.ts",
+      "evidence": "constant:DIRECT_FETCH_TIMEOUT_MS:const DIRECT_FETCH_TIMEOUT_MS = 3000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with DIRECT_FETCH_TIMEOUT_MS in const DIRECT_FETCH_TIMEOUT_MS = 3000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/messenger/link-preview.ts:constant:constant:MIN_REMAINING_MS:const MIN_REMAINING_MS = 500;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/messenger/link-preview.ts",
+      "evidence": "constant:MIN_REMAINING_MS:const MIN_REMAINING_MS = 500;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MIN_REMAINING_MS in const MIN_REMAINING_MS = 500;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/messenger/link-preview.ts:constant:constant:PREVIEW_TIMEOUT_MS:const PREVIEW_TIMEOUT_MS = 6000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/messenger/link-preview.ts",
+      "evidence": "constant:PREVIEW_TIMEOUT_MS:const PREVIEW_TIMEOUT_MS = 6000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with PREVIEW_TIMEOUT_MS in const PREVIEW_TIMEOUT_MS = 6000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/messenger/typing.ts:constant:constant:TYPING_TTL_MS:const TYPING_TTL_MS = 2500;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/messenger/typing.ts",
+      "evidence": "constant:TYPING_TTL_MS:const TYPING_TTL_MS = 2500;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with TYPING_TTL_MS in const TYPING_TTL_MS = 2500;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/ornaments/ornaments.ts:constant:constant:MAX_LABEL:const MAX_LABEL = 100;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/ornaments/ornaments.ts",
+      "evidence": "constant:MAX_LABEL:const MAX_LABEL = 100;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_LABEL in const MAX_LABEL = 100;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/ornaments/ornaments.ts:constant:constant:MAX_NAME:const MAX_NAME = 200;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/ornaments/ornaments.ts",
+      "evidence": "constant:MAX_NAME:const MAX_NAME = 200;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_NAME in const MAX_NAME = 200;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/ornaments/ornaments.ts:constant:constant:MAX_NOTES:const MAX_NOTES = 4000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/ornaments/ornaments.ts",
+      "evidence": "constant:MAX_NOTES:const MAX_NOTES = 4000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_NOTES in const MAX_NOTES = 4000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/ornaments/ornaments.ts:constant:constant:MAX_SUPPLEMENTAL_IMAGES:const MAX_SUPPLEMENTAL_IMAGES = 20;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/ornaments/ornaments.ts",
+      "evidence": "constant:MAX_SUPPLEMENTAL_IMAGES:const MAX_SUPPLEMENTAL_IMAGES = 20;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_SUPPLEMENTAL_IMAGES in const MAX_SUPPLEMENTAL_IMAGES = 20;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/ornaments/ornaments.ts:constant:constant:MAX_TEXT:const MAX_TEXT = 500;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/ornaments/ornaments.ts",
+      "evidence": "constant:MAX_TEXT:const MAX_TEXT = 500;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_TEXT in const MAX_TEXT = 500;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/pottery/compare.ts:constant:constant:MAX_EXTRA_IMAGES:const MAX_EXTRA_IMAGES = 1;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/pottery/compare.ts",
+      "evidence": "constant:MAX_EXTRA_IMAGES:const MAX_EXTRA_IMAGES = 1;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_EXTRA_IMAGES in const MAX_EXTRA_IMAGES = 1;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/pottery/pottery.ts:constant:constant:MAX_NOTES:const MAX_NOTES = 4000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/pottery/pottery.ts",
+      "evidence": "constant:MAX_NOTES:const MAX_NOTES = 4000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_NOTES in const MAX_NOTES = 4000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/quilting/block-templates.ts:constant:constant:MAX_NAME_LEN:const MAX_NAME_LEN = 120;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/block-templates.ts",
+      "evidence": "constant:MAX_NAME_LEN:const MAX_NAME_LEN = 120;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_NAME_LEN in const MAX_NAME_LEN = 120;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/quilting/block-templates.ts:constant:constant:MAX_TAG_LEN:const MAX_TAG_LEN = 100;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/block-templates.ts",
+      "evidence": "constant:MAX_TAG_LEN:const MAX_TAG_LEN = 100;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_TAG_LEN in const MAX_TAG_LEN = 100;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/quilting/block-templates.ts:constant:constant:MAX_TAGS:const MAX_TAGS = 20;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/block-templates.ts",
+      "evidence": "constant:MAX_TAGS:const MAX_TAGS = 20;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_TAGS in const MAX_TAGS = 20;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/quilting/category-helpers.ts:constant:constant:MAX_CATEGORY_NAMES:export const MAX_CATEGORY_NAMES = 20;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/category-helpers.ts",
+      "evidence": "constant:MAX_CATEGORY_NAMES:export const MAX_CATEGORY_NAMES = 20;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_CATEGORY_NAMES in export const MAX_CATEGORY_NAMES = 20;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/quilting/compare.ts:constant:constant:MAX_AI_IMAGES:const MAX_AI_IMAGES = 24;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/compare.ts",
+      "evidence": "constant:MAX_AI_IMAGES:const MAX_AI_IMAGES = 24;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_AI_IMAGES in const MAX_AI_IMAGES = 24;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/quilting/compare.ts:constant:constant:MAX_EXTRA_IMAGES:const MAX_EXTRA_IMAGES = 2;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/compare.ts",
+      "evidence": "constant:MAX_EXTRA_IMAGES:const MAX_EXTRA_IMAGES = 2;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_EXTRA_IMAGES in const MAX_EXTRA_IMAGES = 2;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/quilting/fabrics.ts:constant:constant:MAX_LABEL:const MAX_LABEL = 100;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/fabrics.ts",
+      "evidence": "constant:MAX_LABEL:const MAX_LABEL = 100;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_LABEL in const MAX_LABEL = 100;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/quilting/fabrics.ts:constant:constant:MAX_NAME:const MAX_NAME = 200;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/fabrics.ts",
+      "evidence": "constant:MAX_NAME:const MAX_NAME = 200;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_NAME in const MAX_NAME = 200;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/quilting/fabrics.ts:constant:constant:MAX_NOTES:const MAX_NOTES = 4000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/fabrics.ts",
+      "evidence": "constant:MAX_NOTES:const MAX_NOTES = 4000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_NOTES in const MAX_NOTES = 4000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/quilting/stats.ts:constant:constant:TOP_LIMIT:const TOP_LIMIT = 8;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/stats.ts",
+      "evidence": "constant:TOP_LIMIT:const TOP_LIMIT = 8;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with TOP_LIMIT in const TOP_LIMIT = 8;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/travels/gmail.ts:constant:constant:DEFAULT_INBOX_PAGE_SIZE:const DEFAULT_INBOX_PAGE_SIZE = 20;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/travels/gmail.ts",
+      "evidence": "constant:DEFAULT_INBOX_PAGE_SIZE:const DEFAULT_INBOX_PAGE_SIZE = 20;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with DEFAULT_INBOX_PAGE_SIZE in const DEFAULT_INBOX_PAGE_SIZE = 20;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/travels/gmail.ts:constant:constant:MAX_BULK_LINK_MESSAGES:const MAX_BULK_LINK_MESSAGES = 25;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/travels/gmail.ts",
+      "evidence": "constant:MAX_BULK_LINK_MESSAGES:const MAX_BULK_LINK_MESSAGES = 25;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_BULK_LINK_MESSAGES in const MAX_BULK_LINK_MESSAGES = 25;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/travels/gmail.ts:constant:constant:MAX_INBOX_PAGE_SIZE:const MAX_INBOX_PAGE_SIZE = 50;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/travels/gmail.ts",
+      "evidence": "constant:MAX_INBOX_PAGE_SIZE:const MAX_INBOX_PAGE_SIZE = 50;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_INBOX_PAGE_SIZE in const MAX_INBOX_PAGE_SIZE = 50;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/travels/gmail.ts:constant:constant:MIN_INBOX_PAGE_SIZE:const MIN_INBOX_PAGE_SIZE = 10;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/travels/gmail.ts",
+      "evidence": "constant:MIN_INBOX_PAGE_SIZE:const MIN_INBOX_PAGE_SIZE = 10;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MIN_INBOX_PAGE_SIZE in const MIN_INBOX_PAGE_SIZE = 10;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/travels/magnets.ts:constant:constant:BACKFILL_LIMIT:const BACKFILL_LIMIT = 50;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/travels/magnets.ts",
+      "evidence": "constant:BACKFILL_LIMIT:const BACKFILL_LIMIT = 50;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with BACKFILL_LIMIT in const BACKFILL_LIMIT = 50;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/travels/magnets.ts:constant:constant:RESULT_LIMIT:const RESULT_LIMIT = 5;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/travels/magnets.ts",
+      "evidence": "constant:RESULT_LIMIT:const RESULT_LIMIT = 5;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with RESULT_LIMIT in const RESULT_LIMIT = 5;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/elaine/src/hooks/use-toast.ts:constant:constant:TOAST_LIMIT:const TOAST_LIMIT = 1;",
+      "category": "hardcoded-config",
+      "file": "artifacts/elaine/src/hooks/use-toast.ts",
+      "evidence": "constant:TOAST_LIMIT:const TOAST_LIMIT = 1;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with TOAST_LIMIT in const TOAST_LIMIT = 1;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/mockup-sandbox/mockupPreviewPlugin.ts:cluster:cluster:pollInterval,stabilityThreshold:awaitWriteFinish: {",
+      "category": "hardcoded-config",
+      "file": "artifacts/mockup-sandbox/mockupPreviewPlugin.ts",
+      "evidence": "cluster:pollInterval,stabilityThreshold:awaitWriteFinish: {",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed cluster expression with stabilityThreshold, pollInterval in awaitWriteFinish: {.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/mockup-sandbox/src/hooks/use-toast.ts:constant:constant:TOAST_LIMIT:const TOAST_LIMIT = 1;",
+      "category": "hardcoded-config",
+      "file": "artifacts/mockup-sandbox/src/hooks/use-toast.ts",
+      "evidence": "constant:TOAST_LIMIT:const TOAST_LIMIT = 1;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with TOAST_LIMIT in const TOAST_LIMIT = 1;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/modules/src/hooks/use-toast.ts:constant:constant:TOAST_LIMIT:const TOAST_LIMIT = 1;",
+      "category": "hardcoded-config",
+      "file": "artifacts/modules/src/hooks/use-toast.ts",
+      "evidence": "constant:TOAST_LIMIT:const TOAST_LIMIT = 1;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with TOAST_LIMIT in const TOAST_LIMIT = 1;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/modules/src/quilting/components/FabricAiLab.tsx:constant:constant:MAX_SCALE:const MAX_SCALE = 10;",
+      "category": "hardcoded-config",
+      "file": "artifacts/modules/src/quilting/components/FabricAiLab.tsx",
+      "evidence": "constant:MAX_SCALE:const MAX_SCALE = 10;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_SCALE in const MAX_SCALE = 10;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/modules/src/quilting/components/FabricCreaseRemoverModal.tsx:constant:constant:MAX_SCALE:const MAX_SCALE = 10;",
+      "category": "hardcoded-config",
+      "file": "artifacts/modules/src/quilting/components/FabricCreaseRemoverModal.tsx",
+      "evidence": "constant:MAX_SCALE:const MAX_SCALE = 10;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_SCALE in const MAX_SCALE = 10;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/modules/src/quilting/pages/fabrics/index.tsx:constant:constant:CREASE_BATCH_SIZE:const CREASE_BATCH_SIZE = 3;",
+      "category": "hardcoded-config",
+      "file": "artifacts/modules/src/quilting/pages/fabrics/index.tsx",
+      "evidence": "constant:CREASE_BATCH_SIZE:const CREASE_BATCH_SIZE = 3;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with CREASE_BATCH_SIZE in const CREASE_BATCH_SIZE = 3;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/web/src/hooks/use-toast.ts:constant:constant:TOAST_LIMIT:const TOAST_LIMIT = 1;",
+      "category": "hardcoded-config",
+      "file": "artifacts/web/src/hooks/use-toast.ts",
+      "evidence": "constant:TOAST_LIMIT:const TOAST_LIMIT = 1;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with TOAST_LIMIT in const TOAST_LIMIT = 1;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/web/src/pages/control-panel.tsx:constant:constant:POLL_INTERVAL_MS:const POLL_INTERVAL_MS = 30_000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/web/src/pages/control-panel.tsx",
+      "evidence": "constant:POLL_INTERVAL_MS:const POLL_INTERVAL_MS = 30_000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with POLL_INTERVAL_MS in const POLL_INTERVAL_MS = 30_000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:lib/collection-ui/src/async-action-status.ts:constant:constant:ERROR_DISPLAY_MS:const ERROR_DISPLAY_MS = 5000;",
+      "category": "hardcoded-config",
+      "file": "lib/collection-ui/src/async-action-status.ts",
+      "evidence": "constant:ERROR_DISPLAY_MS:const ERROR_DISPLAY_MS = 5000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with ERROR_DISPLAY_MS in const ERROR_DISPLAY_MS = 5000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:lib/collection-ui/src/async-action-status.ts:constant:constant:SUCCESS_DISPLAY_MS:const SUCCESS_DISPLAY_MS = 2500;",
+      "category": "hardcoded-config",
+      "file": "lib/collection-ui/src/async-action-status.ts",
+      "evidence": "constant:SUCCESS_DISPLAY_MS:const SUCCESS_DISPLAY_MS = 2500;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with SUCCESS_DISPLAY_MS in const SUCCESS_DISPLAY_MS = 2500;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:lib/elaine-ui/src/CommandPalette.tsx:constant:constant:MAX_RECENT:const MAX_RECENT = 5;",
+      "category": "hardcoded-config",
+      "file": "lib/elaine-ui/src/CommandPalette.tsx",
+      "evidence": "constant:MAX_RECENT:const MAX_RECENT = 5;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_RECENT in const MAX_RECENT = 5;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:lib/elaine-ui/src/ElaineChatPanel.tsx:constant:constant:INLINE_CITATION_LIMIT:const INLINE_CITATION_LIMIT = 4;",
+      "category": "hardcoded-config",
+      "file": "lib/elaine-ui/src/ElaineChatPanel.tsx",
+      "evidence": "constant:INLINE_CITATION_LIMIT:const INLINE_CITATION_LIMIT = 4;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with INLINE_CITATION_LIMIT in const INLINE_CITATION_LIMIT = 4;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:lib/elaine-ui/src/ElaineChatPanel.tsx:constant:constant:SCROLL_TOP_LOAD_THRESHOLD:const SCROLL_TOP_LOAD_THRESHOLD = 80;",
+      "category": "hardcoded-config",
+      "file": "lib/elaine-ui/src/ElaineChatPanel.tsx",
+      "evidence": "constant:SCROLL_TOP_LOAD_THRESHOLD:const SCROLL_TOP_LOAD_THRESHOLD = 80;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with SCROLL_TOP_LOAD_THRESHOLD in const SCROLL_TOP_LOAD_THRESHOLD = 80;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:lib/elaine-ui/src/ElaineWidget.tsx:constant:constant:MIN_H:const MIN_H = 340;",
+      "category": "hardcoded-config",
+      "file": "lib/elaine-ui/src/ElaineWidget.tsx",
+      "evidence": "constant:MIN_H:const MIN_H = 340;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MIN_H in const MIN_H = 340;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:lib/elaine-ui/src/ElaineWidget.tsx:constant:constant:MIN_W:const MIN_W = 280;",
+      "category": "hardcoded-config",
+      "file": "lib/elaine-ui/src/ElaineWidget.tsx",
+      "evidence": "constant:MIN_W:const MIN_W = 280;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MIN_W in const MIN_W = 280;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:lib/elaine-ui/src/useTTS.ts:constant:constant:DEFAULT_RATE:const DEFAULT_RATE = 1;",
+      "category": "hardcoded-config",
+      "file": "lib/elaine-ui/src/useTTS.ts",
+      "evidence": "constant:DEFAULT_RATE:const DEFAULT_RATE = 1;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with DEFAULT_RATE in const DEFAULT_RATE = 1;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:lib/elaine-ui/src/useTTS.ts:constant:constant:MAX_RATE:const MAX_RATE = 2;",
+      "category": "hardcoded-config",
+      "file": "lib/elaine-ui/src/useTTS.ts",
+      "evidence": "constant:MAX_RATE:const MAX_RATE = 2;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_RATE in const MAX_RATE = 2;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:lib/messenger-ui/src/MessengerNavIcon.tsx:constant:constant:MIN_H:const MIN_H = 280;",
+      "category": "hardcoded-config",
+      "file": "lib/messenger-ui/src/MessengerNavIcon.tsx",
+      "evidence": "constant:MIN_H:const MIN_H = 280;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MIN_H in const MIN_H = 280;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:lib/messenger-ui/src/MessengerNavIcon.tsx:constant:constant:MIN_W:const MIN_W = 320;",
+      "category": "hardcoded-config",
+      "file": "lib/messenger-ui/src/MessengerNavIcon.tsx",
+      "evidence": "constant:MIN_W:const MIN_W = 320;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MIN_W in const MIN_W = 320;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:lib/messenger-ui/src/MessengerNotification.tsx:constant:constant:AUTO_DISMISS_MS:const AUTO_DISMISS_MS = 8_000;",
+      "category": "hardcoded-config",
+      "file": "lib/messenger-ui/src/MessengerNotification.tsx",
+      "evidence": "constant:AUTO_DISMISS_MS:const AUTO_DISMISS_MS = 8_000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with AUTO_DISMISS_MS in const AUTO_DISMISS_MS = 8_000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:lib/messenger-ui/src/MessengerToast.tsx:constant:constant:AUTO_DISMISS_MS:const AUTO_DISMISS_MS = 5_000;",
+      "category": "hardcoded-config",
+      "file": "lib/messenger-ui/src/MessengerToast.tsx",
+      "evidence": "constant:AUTO_DISMISS_MS:const AUTO_DISMISS_MS = 5_000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with AUTO_DISMISS_MS in const AUTO_DISMISS_MS = 5_000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:lib/ui/src/toast.tsx:constant:constant:TOAST_LIMIT:const TOAST_LIMIT = 1;",
+      "category": "hardcoded-config",
+      "file": "lib/ui/src/toast.tsx",
+      "evidence": "constant:TOAST_LIMIT:const TOAST_LIMIT = 1;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with TOAST_LIMIT in const TOAST_LIMIT = 1;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:lib/upload-validation/src/index.ts:constant:constant:MAX_CONCURRENT_IMAGE_TRANSFORMS:const MAX_CONCURRENT_IMAGE_TRANSFORMS = 2;",
+      "category": "hardcoded-config",
+      "file": "lib/upload-validation/src/index.ts",
+      "evidence": "constant:MAX_CONCURRENT_IMAGE_TRANSFORMS:const MAX_CONCURRENT_IMAGE_TRANSFORMS = 2;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_CONCURRENT_IMAGE_TRANSFORMS in const MAX_CONCURRENT_IMAGE_TRANSFORMS = 2;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:lib/upload-validation/src/index.ts:constant:constant:MAX_INPUT_PIXELS:export const MAX_INPUT_PIXELS = 50_000_000;",
+      "category": "hardcoded-config",
+      "file": "lib/upload-validation/src/index.ts",
+      "evidence": "constant:MAX_INPUT_PIXELS:export const MAX_INPUT_PIXELS = 50_000_000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_INPUT_PIXELS in export const MAX_INPUT_PIXELS = 50_000_000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:lib/upload-validation/src/index.ts:constant:constant:MAX_STORAGE_DIMENSION:export const MAX_STORAGE_DIMENSION = 4096;",
+      "category": "hardcoded-config",
+      "file": "lib/upload-validation/src/index.ts",
+      "evidence": "constant:MAX_STORAGE_DIMENSION:export const MAX_STORAGE_DIMENSION = 4096;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_STORAGE_DIMENSION in export const MAX_STORAGE_DIMENSION = 4096;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:lib/web-core/src/mount-app.tsx:constant:constant:STALE_CHUNK_RELOAD_COOLDOWN_MS:const STALE_CHUNK_RELOAD_COOLDOWN_MS = 10_000;",
+      "category": "hardcoded-config",
+      "file": "lib/web-core/src/mount-app.tsx",
+      "evidence": "constant:STALE_CHUNK_RELOAD_COOLDOWN_MS:const STALE_CHUNK_RELOAD_COOLDOWN_MS = 10_000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with STALE_CHUNK_RELOAD_COOLDOWN_MS in const STALE_CHUNK_RELOAD_COOLDOWN_MS = 10_000;.",
+      "metric": 1
+    }
+  ]
+}

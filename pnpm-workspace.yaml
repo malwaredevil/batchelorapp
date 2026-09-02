@@ -123,13 +123,15 @@ overrides:
   "lightningcss>lightningcss-win32-x64-msvc": "-"
   # Security overrides — each is bounded to the patched major so an unreviewed
   # new major can never be silently selected by a future lockfile regeneration.
+  "@xmldom/xmldom": ">=0.8.15 <0.9" # GHSA-6gmq-8vp8-gcm6: namespace-confusion issue; patched 0.8.15; mammoth expects ^0.8
+  browserslist: ">=4.28.7 <5" # GHSA-c83g-rgw3-j3cx / GHSA-73wf-gq98-2v4g: arbitrary file read + poisoned-stats DoS; patched 4.28.7
   dompurify: ">=3.4.12 <4" # GHSA: XSS bypass; patched 3.4.12; parent expects ^3
-  fast-uri: ">=3.1.5 <4" # CVE-2026-18446 / GHSA-7p8r-x3mc-p8w7: host confusion via backslash; patched 3.1.5; parent expects ^3
+  fast-uri: ">=3.1.6 <4" # GHSA-5jgf-p345-68v8 plus related URL-confusion advisories; patched 3.1.6; parent expects ^3
   ip-address: ">=10.3.1 <11" # GHSA-mwp4-54f8-5fhr (CVE-2026-69198): leading-zero octet SSRF / trust-boundary bypass; patched 10.3.1; parent (express-rate-limit) expects ^10
   linkify-it: ">=5.0.2 <6" # GHSA: ReDoS; patched 5.0.2; parent expects ^5
   markdown-it: ">=14.2.0 <15" # GHSA: HTML injection; patched 14.2.0; parent expects ^14
   postcss: ">=8.5.23 <9" # GHSA-fxqj-rqcc-2cmp (CVE-2026-69153): incomplete fix of prior sourceMappingURL path-traversal GHSA; patched 8.5.23; parent expects ^8
-  qs: ">=6.15.2 <7" # CVE: prototype pollution; patched 6.15.2; parent expects ^6
+  qs: ">=6.16.0 <7" # GHSA-x5fp-wj9c-mxmx / GHSA-4mjr-xmp4-gh2g: prototype-pollution and isBuffer DoS; patched 6.16.0
   "rollup>@rollup/rollup-android-arm-eabi": "-"
   "rollup>@rollup/rollup-android-arm64": "-"
   "rollup>@rollup/rollup-darwin-arm64": "-"

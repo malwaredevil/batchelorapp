@@ -844,6 +844,22 @@
       "metric": 1
     },
     {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/elaine/index.ts:constant:constant:MAX_PHONE_CODE_ATTEMPTS:const MAX_PHONE_CODE_ATTEMPTS = 5;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/elaine/index.ts",
+      "evidence": "constant:MAX_PHONE_CODE_ATTEMPTS:const MAX_PHONE_CODE_ATTEMPTS = 5;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_PHONE_CODE_ATTEMPTS in const MAX_PHONE_CODE_ATTEMPTS = 5;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/elaine/index.ts:constant:constant:MAX_ROUNDS:const MAX_ROUNDS = 3;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/elaine/index.ts",
+      "evidence": "constant:MAX_ROUNDS:const MAX_ROUNDS = 3;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_ROUNDS in const MAX_ROUNDS = 3;.",
+      "metric": 2
+    },
+    {
       "id": "exception:hardcoded-config:artifacts/api-server/src/elaine/magnets-actions.ts:constant:constant:MAX_REANALYZE_IMAGES:const MAX_REANALYZE_IMAGES = 5;",
       "category": "hardcoded-config",
       "file": "artifacts/api-server/src/elaine/magnets-actions.ts",
@@ -945,6 +961,14 @@
       "file": "artifacts/api-server/src/lib/circuit-breaker.ts",
       "evidence": "constant:DEFAULT_WINDOW_MS:const DEFAULT_WINDOW_MS = 60_000;",
       "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with DEFAULT_WINDOW_MS in const DEFAULT_WINDOW_MS = 60_000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/comm-check-scheduler.ts:constant:constant:CHANNEL_DELIVERY_TIMEOUT_MS:const CHANNEL_DELIVERY_TIMEOUT_MS = 60_000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/comm-check-scheduler.ts",
+      "evidence": "constant:CHANNEL_DELIVERY_TIMEOUT_MS:const CHANNEL_DELIVERY_TIMEOUT_MS = 60_000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with CHANNEL_DELIVERY_TIMEOUT_MS in const CHANNEL_DELIVERY_TIMEOUT_MS = 60_000;.",
       "metric": 1
     },
     {
@@ -1332,6 +1356,14 @@
       "metric": 1
     },
     {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/magnets/magnets.ts:constant:constant:MAX_REANALYZE_IMAGES:const MAX_REANALYZE_IMAGES = 5;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/magnets/magnets.ts",
+      "evidence": "constant:MAX_REANALYZE_IMAGES:const MAX_REANALYZE_IMAGES = 5;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_REANALYZE_IMAGES in const MAX_REANALYZE_IMAGES = 5;.",
+      "metric": 1
+    },
+    {
       "id": "exception:hardcoded-config:artifacts/api-server/src/routes/messenger/gifs.ts:constant:constant:DEFAULT_LIMIT:const DEFAULT_LIMIT = 24;",
       "category": "hardcoded-config",
       "file": "artifacts/api-server/src/routes/messenger/gifs.ts",
@@ -1428,11 +1460,43 @@
       "metric": 1
     },
     {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/pottery/pottery.ts:constant:constant:MAX_LABEL:const MAX_LABEL = 100;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/pottery/pottery.ts",
+      "evidence": "constant:MAX_LABEL:const MAX_LABEL = 100;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_LABEL in const MAX_LABEL = 100;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/pottery/pottery.ts:constant:constant:MAX_NAME:const MAX_NAME = 200;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/pottery/pottery.ts",
+      "evidence": "constant:MAX_NAME:const MAX_NAME = 200;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_NAME in const MAX_NAME = 200;.",
+      "metric": 1
+    },
+    {
       "id": "exception:hardcoded-config:artifacts/api-server/src/routes/pottery/pottery.ts:constant:constant:MAX_NOTES:const MAX_NOTES = 4000;",
       "category": "hardcoded-config",
       "file": "artifacts/api-server/src/routes/pottery/pottery.ts",
       "evidence": "constant:MAX_NOTES:const MAX_NOTES = 4000;",
       "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_NOTES in const MAX_NOTES = 4000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/pottery/pottery.ts:constant:constant:MAX_SUPPLEMENTAL_IMAGES:const MAX_SUPPLEMENTAL_IMAGES = 20;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/pottery/pottery.ts",
+      "evidence": "constant:MAX_SUPPLEMENTAL_IMAGES:const MAX_SUPPLEMENTAL_IMAGES = 20;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_SUPPLEMENTAL_IMAGES in const MAX_SUPPLEMENTAL_IMAGES = 20;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/pottery/pottery.ts:constant:constant:MAX_TEXT:const MAX_TEXT = 500;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/pottery/pottery.ts",
+      "evidence": "constant:MAX_TEXT:const MAX_TEXT = 500;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_TEXT in const MAX_TEXT = 500;.",
       "metric": 1
     },
     {
@@ -1460,6 +1524,14 @@
       "metric": 1
     },
     {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/quilting/category-helpers.ts:constant:constant:MAX_CATEGORY_NAME_LEN:export const MAX_CATEGORY_NAME_LEN = 100;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/category-helpers.ts",
+      "evidence": "constant:MAX_CATEGORY_NAME_LEN:export const MAX_CATEGORY_NAME_LEN = 100;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_CATEGORY_NAME_LEN in export const MAX_CATEGORY_NAME_LEN = 100;.",
+      "metric": 1
+    },
+    {
       "id": "exception:hardcoded-config:artifacts/api-server/src/routes/quilting/category-helpers.ts:constant:constant:MAX_CATEGORY_NAMES:export const MAX_CATEGORY_NAMES = 20;",
       "category": "hardcoded-config",
       "file": "artifacts/api-server/src/routes/quilting/category-helpers.ts",
@@ -1484,6 +1556,14 @@
       "metric": 1
     },
     {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/quilting/fabrics.ts:constant:constant:MAX_FIELD:const MAX_FIELD = 200;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/fabrics.ts",
+      "evidence": "constant:MAX_FIELD:const MAX_FIELD = 200;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_FIELD in const MAX_FIELD = 200;.",
+      "metric": 1
+    },
+    {
       "id": "exception:hardcoded-config:artifacts/api-server/src/routes/quilting/fabrics.ts:constant:constant:MAX_LABEL:const MAX_LABEL = 100;",
       "category": "hardcoded-config",
       "file": "artifacts/api-server/src/routes/quilting/fabrics.ts",
@@ -1503,6 +1583,86 @@
       "id": "exception:hardcoded-config:artifacts/api-server/src/routes/quilting/fabrics.ts:constant:constant:MAX_NOTES:const MAX_NOTES = 4000;",
       "category": "hardcoded-config",
       "file": "artifacts/api-server/src/routes/quilting/fabrics.ts",
+      "evidence": "constant:MAX_NOTES:const MAX_NOTES = 4000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_NOTES in const MAX_NOTES = 4000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/quilting/fabrics.ts:constant:constant:MAX_REANALYZE_IMAGES:const MAX_REANALYZE_IMAGES = 5;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/fabrics.ts",
+      "evidence": "constant:MAX_REANALYZE_IMAGES:const MAX_REANALYZE_IMAGES = 5;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_REANALYZE_IMAGES in const MAX_REANALYZE_IMAGES = 5;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/quilting/fabrics.ts:constant:constant:MAX_SUPPLEMENTAL_IMAGES:const MAX_SUPPLEMENTAL_IMAGES = 10;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/fabrics.ts",
+      "evidence": "constant:MAX_SUPPLEMENTAL_IMAGES:const MAX_SUPPLEMENTAL_IMAGES = 10;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_SUPPLEMENTAL_IMAGES in const MAX_SUPPLEMENTAL_IMAGES = 10;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/quilting/patterns.ts:constant:constant:MAX_FIELD:const MAX_FIELD = 200;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/patterns.ts",
+      "evidence": "constant:MAX_FIELD:const MAX_FIELD = 200;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_FIELD in const MAX_FIELD = 200;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/quilting/patterns.ts:constant:constant:MAX_LABEL:const MAX_LABEL = 100;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/patterns.ts",
+      "evidence": "constant:MAX_LABEL:const MAX_LABEL = 100;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_LABEL in const MAX_LABEL = 100;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/quilting/patterns.ts:constant:constant:MAX_NAME:const MAX_NAME = 200;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/patterns.ts",
+      "evidence": "constant:MAX_NAME:const MAX_NAME = 200;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_NAME in const MAX_NAME = 200;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/quilting/patterns.ts:constant:constant:MAX_NOTES:const MAX_NOTES = 4000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/patterns.ts",
+      "evidence": "constant:MAX_NOTES:const MAX_NOTES = 4000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_NOTES in const MAX_NOTES = 4000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/quilting/patterns.ts:constant:constant:MAX_REANALYZE_IMAGES:const MAX_REANALYZE_IMAGES = 5;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/patterns.ts",
+      "evidence": "constant:MAX_REANALYZE_IMAGES:const MAX_REANALYZE_IMAGES = 5;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_REANALYZE_IMAGES in const MAX_REANALYZE_IMAGES = 5;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/quilting/quilts.ts:constant:constant:MAX_LABEL:const MAX_LABEL = 100;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/quilts.ts",
+      "evidence": "constant:MAX_LABEL:const MAX_LABEL = 100;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_LABEL in const MAX_LABEL = 100;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/quilting/quilts.ts:constant:constant:MAX_NAME:const MAX_NAME = 200;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/quilts.ts",
+      "evidence": "constant:MAX_NAME:const MAX_NAME = 200;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_NAME in const MAX_NAME = 200;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/routes/quilting/quilts.ts:constant:constant:MAX_NOTES:const MAX_NOTES = 4000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/routes/quilting/quilts.ts",
       "evidence": "constant:MAX_NOTES:const MAX_NOTES = 4000;",
       "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_NOTES in const MAX_NOTES = 4000;.",
       "metric": 1
@@ -1593,6 +1753,14 @@
       "file": "artifacts/modules/src/hooks/use-toast.ts",
       "evidence": "constant:TOAST_LIMIT:const TOAST_LIMIT = 1;",
       "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with TOAST_LIMIT in const TOAST_LIMIT = 1;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/modules/src/ornaments/pages/hallmark-events.tsx:constant:constant:GCAL_QUERY_TIMEOUT_MS:const GCAL_QUERY_TIMEOUT_MS = 10_000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/modules/src/ornaments/pages/hallmark-events.tsx",
+      "evidence": "constant:GCAL_QUERY_TIMEOUT_MS:const GCAL_QUERY_TIMEOUT_MS = 10_000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with GCAL_QUERY_TIMEOUT_MS in const GCAL_QUERY_TIMEOUT_MS = 10_000;.",
       "metric": 1
     },
     {

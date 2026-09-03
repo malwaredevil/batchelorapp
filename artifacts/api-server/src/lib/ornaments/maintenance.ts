@@ -1,11 +1,9 @@
-export const ORNAMENT_MAINTENANCE_REASONS = [
-  "embedding",
-  "seriesOrCollection",
-  "year",
-] as const;
+import {
+  ORNAMENT_MAINTENANCE_REASONS,
+  type OrnamentMaintenanceReason,
+} from "@workspace/ornaments-shared";
 
-export type OrnamentMaintenanceReason =
-  (typeof ORNAMENT_MAINTENANCE_REASONS)[number];
+export { ORNAMENT_MAINTENANCE_REASONS, type OrnamentMaintenanceReason };
 
 export interface OrnamentMaintenanceFields {
   embedding: unknown;

@@ -3,7 +3,24 @@ import {
   parseAiAppraisalRange,
   computeConsensusValue,
   computeOrnamentEstimatedValue,
+  ORNAMENT_MAINTENANCE_REASONS,
+  ornamentMaintenanceReasonLabels,
 } from "./index";
+
+describe("ornament maintenance reasons", () => {
+  it("defines the repair reasons and their display labels", () => {
+    expect(ORNAMENT_MAINTENANCE_REASONS).toEqual([
+      "embedding",
+      "seriesOrCollection",
+      "year",
+    ]);
+    expect(ornamentMaintenanceReasonLabels).toEqual({
+      embedding: "search embedding",
+      seriesOrCollection: "series or collection",
+      year: "release year",
+    });
+  });
+});
 
 describe("parseAiAppraisalRange", () => {
   it("parses a standard hyphen range", () => {

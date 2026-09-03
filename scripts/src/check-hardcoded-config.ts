@@ -275,7 +275,7 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   "artifacts/modules/src/quilting/pages/fabrics/index.tsx:567", // CREASE_BATCH_SIZE
   // Fixed per-request image cap that prevents oversized AI payloads.
   "artifacts/api-server/src/routes/magnets/magnets.ts:259", // MAX_REANALYZE_IMAGES
-  "artifacts/api-server/src/elaine/magnets-actions.ts:511",
+  "artifacts/api-server/src/elaine/magnets-actions.ts:516",
   // UI-only reconnect poll cadence; it controls a local query refresh, not
   // any owner-facing product behavior or server-side resource budget.
   "artifacts/web/src/pages/control-panel.tsx:381", // POLL_INTERVAL_MS

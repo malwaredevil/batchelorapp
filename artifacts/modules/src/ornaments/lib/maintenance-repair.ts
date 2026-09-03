@@ -1,19 +1,13 @@
-export const ORNAMENT_MAINTENANCE_REASONS = [
-  "embedding",
-  "seriesOrCollection",
-  "year",
-] as const;
+import {
+  ORNAMENT_MAINTENANCE_REASONS,
+  ornamentMaintenanceReasonLabels,
+  type OrnamentMaintenanceReason,
+} from "@workspace/ornaments-shared";
 
-export type OrnamentMaintenanceReason =
-  (typeof ORNAMENT_MAINTENANCE_REASONS)[number];
-
-export const ornamentMaintenanceReasonLabels: Record<
-  OrnamentMaintenanceReason,
-  string
-> = {
-  embedding: "search embedding",
-  seriesOrCollection: "series or collection",
-  year: "release year",
+export {
+  ORNAMENT_MAINTENANCE_REASONS,
+  ornamentMaintenanceReasonLabels,
+  type OrnamentMaintenanceReason,
 };
 
 export function getOrnamentMaintenanceRepairHref(

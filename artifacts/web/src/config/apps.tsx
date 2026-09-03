@@ -163,7 +163,7 @@ export const APPS: AppEntry[] = [
     id: "magnets",
     name: "Magnets",
     href: `${base}modules/magnets/`,
-    image: `${base}images/magnets-collection.png`,
+    image: `${base}images/magnets-collection.svg`,
     updated: "Your magnet collection",
     stats: [
       { value: "—", label: "Magnets" },

@@ -6,6 +6,7 @@
  */
 import { and, inArray } from "drizzle-orm";
 import { db, magnetsCategories } from "@workspace/db";
+import { getCategoryPalette } from "@workspace/web-core/colors";
 
 export interface ResolveOptions {
   /** Maximum number of distinct category names to process (default 20). */
@@ -45,7 +46,13 @@ export async function resolveOrCreateMagnetCategories(
   // Insert missing categories (household-wide unique constraint handles conflicts).
   await db
     .insert(magnetsCategories)
-    .values(unique.map((name) => ({ userId, name })))
+    .values(
+      unique.map((name) => ({
+        userId,
+        name,
+        ...getCategoryPalette(name),
+      })),
+    )
     .onConflictDoNothing();
 
   // Fetch resolved IDs.

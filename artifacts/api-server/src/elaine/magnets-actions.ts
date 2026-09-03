@@ -14,6 +14,7 @@ import {
   magnetsItemCategories,
   magnetsImages,
 } from "@workspace/db";
+import { getCategoryPalette } from "@workspace/web-core/colors";
 import { analyzeMagnetImage } from "../lib/magnets/openai";
 import { deleteImage } from "../lib/magnets/storage";
 import { resolveOrCreateMagnetCategories } from "../lib/magnets/resolve-categories";
@@ -255,7 +256,11 @@ export const magnetActionExecutors: Record<MagnetActionType, ActionExecutor> = {
   ) => {
     await db
       .insert(magnetsCategories)
-      .values({ name: payload.name, userId })
+      .values({
+        name: payload.name,
+        userId,
+        ...getCategoryPalette(payload.name),
+      })
       .onConflictDoNothing();
     const [row] = await db
       .select()

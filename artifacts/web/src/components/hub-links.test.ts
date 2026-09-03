@@ -344,7 +344,7 @@ describe("hub hero cards and quick links — extracted hrefs must resolve to kno
 
     expect(appsSource).toContain('id: "magnets"');
     expect(appsSource).toContain(
-      "image: `${base}images/magnets-collection.png`",
+      "image: `${base}images/magnets-collection.svg`",
     );
     expect(launcherSource).toContain(
       '{ label: "Magnet", href: `${base}modules/magnets/add` }',

@@ -14,6 +14,24 @@ export interface AiAppraisalRange {
   high: number | null;
 }
 
+export const ORNAMENT_MAINTENANCE_REASONS = [
+  "embedding",
+  "seriesOrCollection",
+  "year",
+] as const;
+
+export type OrnamentMaintenanceReason =
+  (typeof ORNAMENT_MAINTENANCE_REASONS)[number];
+
+export const ornamentMaintenanceReasonLabels: Record<
+  OrnamentMaintenanceReason,
+  string
+> = {
+  embedding: "search embedding",
+  seriesOrCollection: "series or collection",
+  year: "release year",
+};
+
 // Matches "$10 - $18", "$10-$18", "$10 – $18", "$10—$18", "$10.50-$18.25", etc.
 const APPRAISAL_RANGE_RE = /\$(\d+(?:\.\d+)?)\s*[-–—]\s*\$(\d+(?:\.\d+)?)/;
 

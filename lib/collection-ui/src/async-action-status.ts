@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 
-export type AsyncActionStatus = "processing" | "success" | "error";
+export type AsyncActionStatus = "queued" | "processing" | "success" | "error";
 
 // How long a finished status stays visible before auto-clearing back to idle.
 const SUCCESS_DISPLAY_MS = 2500;
@@ -28,7 +28,14 @@ export function getAsyncActionStatus(
 
 /** True while the action for `key` is in flight — use to block duplicate triggers. */
 export function isAsyncActionBusy(key: string): boolean {
-  return statuses.get(key) === "processing";
+  const status = statuses.get(key);
+  return status === "queued" || status === "processing";
+}
+
+/** Reserve a key for a queued bulk action without showing a spinner yet. */
+export function markAsyncActionQueued(key: string): void {
+  statuses.set(key, "queued");
+  notify();
 }
 
 /** Mark `key` as in-flight. Prefer `trackAsyncAction` when you have a single
@@ -71,14 +78,18 @@ export function markAsyncActionSettled(
 
 /**
  * Clear all settled ("success"/"error") statuses whose key starts with
- * `prefix`, leaving in-flight "processing" entries untouched. Used by a bulk
- * run's "Done" button to dismiss the sticky per-card outcome icons without
+ * `prefix`, leaving queued/in-flight entries untouched. Used by a bulk run's
+ * "Done" button to dismiss the sticky per-card outcome icons without
  * disturbing any single-item refresh that may still be running.
  */
 export function clearSettledAsyncActionStatuses(prefix: string): void {
   let changed = false;
   for (const [key, status] of statuses) {
-    if (key.startsWith(prefix) && status !== "processing") {
+    if (
+      key.startsWith(prefix) &&
+      status !== "queued" &&
+      status !== "processing"
+    ) {
       statuses.delete(key);
       changed = true;
     }
@@ -128,7 +139,12 @@ export function useAsyncActionStatus(
 ): AsyncActionStatus | undefined {
   return useSyncExternalStore(
     subscribe,
-    () => getAsyncActionStatus(key),
+    // Queued bulk items are reserved to prevent duplicate refreshes but do
+    // not show a spinner until their individual request actually begins.
+    () => {
+      const status = getAsyncActionStatus(key);
+      return status === "queued" ? undefined : status;
+    },
     () => undefined,
   );
 }

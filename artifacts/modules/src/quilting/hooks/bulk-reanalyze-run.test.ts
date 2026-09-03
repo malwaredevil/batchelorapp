@@ -33,6 +33,22 @@ function makeHook(
   return { ...rendered, invalidate, onSettled, onFailed };
 }
 
+function makeIndividualItemHook(runItem: (id: number) => Promise<unknown>) {
+  const invalidate = vi.fn();
+  const onSettled = vi.fn();
+  const onFailed = vi.fn();
+  const rendered = renderHook(() =>
+    useBulkReanalyzeRun({
+      runItem,
+      keyFor,
+      invalidate,
+      onSettled,
+      onFailed,
+    }),
+  );
+  return { ...rendered, invalidate, onSettled, onFailed };
+}
+
 beforeEach(() => {
   // Reset the module-scoped status store between tests.
   clearAsyncActionStatuses([1, 2, 3, 7, 8, 9].map(keyFor));
@@ -67,6 +83,61 @@ describe("useBulkReanalyzeRun", () => {
     expect(result.current.isPending).toBe(false);
     expect(invalidate).toHaveBeenCalled();
     expect(onSettled).toHaveBeenCalledWith({ succeeded: [1], failed: [2] });
+  });
+
+  it("settles gallery items independently while queued items stay spinner-free", async () => {
+    const deferred = new Map<
+      number,
+      { resolve: () => void; reject: (error: Error) => void }
+    >();
+    const runItem = vi.fn(
+      (id: number) =>
+        new Promise<void>((resolve, reject) => {
+          deferred.set(id, { resolve, reject });
+        }),
+    );
+    const { result, onSettled } = makeIndividualItemHook(runItem);
+
+    let runPromise!: Promise<unknown>;
+    act(() => {
+      runPromise = result.current.run([1, 2, 3, 4]);
+    });
+
+    // Three requests match the existing bulk concurrency limit. The fourth
+    // item is reserved against duplicate actions but has no visible spinner.
+    expect(getAsyncActionStatus(keyFor(1))).toBe("processing");
+    expect(getAsyncActionStatus(keyFor(2))).toBe("processing");
+    expect(getAsyncActionStatus(keyFor(3))).toBe("processing");
+    expect(getAsyncActionStatus(keyFor(4))).toBe("queued");
+
+    await act(async () => {
+      deferred.get(1)!.resolve();
+      await Promise.resolve();
+    });
+    expect(getAsyncActionStatus(keyFor(1))).toBe("success");
+    expect(getAsyncActionStatus(keyFor(2))).toBe("processing");
+    expect(getAsyncActionStatus(keyFor(4))).toBe("processing");
+
+    await act(async () => {
+      deferred.get(2)!.reject(new Error("AI unavailable"));
+      await Promise.resolve();
+    });
+    expect(getAsyncActionStatus(keyFor(2))).toBe("error");
+    expect(getAsyncActionStatus(keyFor(3))).toBe("processing");
+
+    await act(async () => {
+      deferred.get(3)!.resolve();
+      deferred.get(4)!.resolve();
+      await runPromise;
+    });
+
+    expect(getAsyncActionStatus(keyFor(3))).toBe("success");
+    expect(getAsyncActionStatus(keyFor(4))).toBe("success");
+    expect(onSettled).toHaveBeenCalledWith({
+      succeeded: [1, 3, 4],
+      failed: [2],
+    });
+    expect(result.current.isPending).toBe(false);
   });
 
   it("dismiss before success: late result must not write sticky icons", async () => {

@@ -1,4 +1,5 @@
 import { z } from "zod/v4";
+import { getCategoryPalette } from "@workspace/web-core/colors";
 import { and, eq, isNull, or } from "drizzle-orm";
 import type OpenAI from "openai";
 import {
@@ -284,7 +285,11 @@ export const potteryActionExecutors: Record<PotteryActionType, ActionExecutor> =
     ) => {
       const [row] = await db
         .insert(potteryCategories)
-        .values({ name: payload.name, userId })
+        .values({
+          name: payload.name,
+          userId,
+          ...getCategoryPalette(payload.name),
+        })
         .returning();
       return {
         status: 201,

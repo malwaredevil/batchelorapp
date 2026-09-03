@@ -261,12 +261,6 @@ export function MagazineSplit() {
           </div>
           <div className="flex flex-col gap-2 min-w-[120px]">
             <span className="font-semibold uppercase tracking-widest text-stone-400 text-[10px]">
-              Condition
-            </span>
-            <span className="font-medium text-stone-800">Mint in Box</span>
-          </div>
-          <div className="flex flex-col gap-2 min-w-[120px]">
-            <span className="font-semibold uppercase tracking-widest text-stone-400 text-[10px]">
               Dimensions
             </span>
             <span className="font-medium text-stone-800">3.5 in</span>

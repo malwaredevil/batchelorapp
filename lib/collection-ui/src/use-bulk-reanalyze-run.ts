@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import {
   isAsyncActionBusy,
+  markAsyncActionQueued,
   markAsyncActionProcessing,
   markAsyncActionSettled,
   clearAsyncActionStatuses,
@@ -17,12 +18,19 @@ import {
 // must not write sticky icons back — its statuses are dropped instead.
 // ---------------------------------------------------------------------------
 
-export interface BulkReanalyzeRunDeps {
-  /** The orval mutation's mutateAsync (e.g. useBulkReanalyzeQuilts/Patterns). */
-  mutateAsync: (args: { data: { ids: number[] } }) => Promise<{
-    succeeded: number[];
-    failed: number[];
-  }>;
+export interface BulkReanalyzeRunDeps<
+  TResult extends BulkReanalyzeRunResult = BulkReanalyzeRunResult,
+> {
+  /**
+   * Aggregate bulk mutation. Retained for maintenance-style batch screens
+   * whose API only returns a final succeeded/failed summary.
+   */
+  mutateAsync?: (args: { data: { ids: number[] } }) => Promise<TResult>;
+  /**
+   * Individual gallery-item mutation. When supplied, the shared lifecycle
+   * runs up to three items at once and settles each card as it finishes.
+   */
+  runItem?: (id: number) => Promise<unknown>;
   /** Per-item status-store key, e.g. quiltReanalyzeKey. */
   keyFor: (id: number) => string;
   /**
@@ -33,7 +41,7 @@ export interface BulkReanalyzeRunDeps {
    */
   invalidate: () => unknown;
   /** Called with the result of a non-dismissed run (toast + clear selection). */
-  onSettled: (result: { succeeded: number[]; failed: number[] }) => void;
+  onSettled: (result: TResult) => void;
   /** Called when a non-dismissed run throws (toast). */
   onFailed: () => void;
 }
@@ -43,13 +51,16 @@ export interface BulkReanalyzeRunResult {
   failed: number[];
 }
 
-export function useBulkReanalyzeRun({
+export function useBulkReanalyzeRun<
+  TResult extends BulkReanalyzeRunResult = BulkReanalyzeRunResult,
+>({
   mutateAsync,
+  runItem,
   keyFor,
   invalidate,
   onSettled,
   onFailed,
-}: BulkReanalyzeRunDeps) {
+}: BulkReanalyzeRunDeps<TResult>) {
   const [isPending, setIsPending] = useState(false);
   const pendingRef = useRef(false);
   const genRef = useRef(0);
@@ -65,11 +76,48 @@ export function useBulkReanalyzeRun({
     }
   }
 
+  async function runItemsIndividually(
+    ids: number[],
+    generation: number,
+  ): Promise<BulkReanalyzeRunResult> {
+    const succeeded: number[] = [];
+    const failed: number[] = [];
+    let nextIndex = 0;
+
+    // Keep the existing server-side bulk behavior's concurrency ceiling.
+    // Requests are intentionally individual so each card can settle as soon
+    // as its own AI work finishes, without waiting for the slowest item.
+    const workerCount = Math.min(3, ids.length);
+    await Promise.all(
+      Array.from({ length: workerCount }, async () => {
+        while (nextIndex < ids.length) {
+          const id = ids[nextIndex++];
+          const key = keyFor(id);
+          markAsyncActionProcessing(key);
+          try {
+            await runItem!(id);
+            succeeded.push(id);
+            if (generation === genRef.current) {
+              markAsyncActionSettled(key, "success", { sticky: true });
+            }
+          } catch {
+            failed.push(id);
+            if (generation === genRef.current) {
+              markAsyncActionSettled(key, "error", { sticky: true });
+            }
+          }
+        }
+      }),
+    );
+
+    return { succeeded, failed };
+  }
+
   /**
    * Run the bulk action. Refuses to start while another run is pending, so
    * two runs' per-card statuses can never interleave.
    */
-  async function run(ids: number[]): Promise<BulkReanalyzeRunResult | null> {
+  async function run(ids: number[]): Promise<TResult | null> {
     const uniqueIds = [...new Set(ids)];
     const keys = uniqueIds.map(keyFor);
     if (
@@ -80,11 +128,20 @@ export function useBulkReanalyzeRun({
       return null;
     }
     const gen = genRef.current;
-    keys.forEach(markAsyncActionProcessing);
+    // Gallery runs reserve every selected item, but only items with an active
+    // HTTP request show a spinner. This prevents a queued item looking stuck
+    // while preserving duplicate-request protection.
+    if (runItem) {
+      keys.forEach(markAsyncActionQueued);
+    } else {
+      keys.forEach(markAsyncActionProcessing);
+    }
     pendingRef.current = true;
     setIsPending(true);
     try {
-      const result = await mutateAsync({ data: { ids: uniqueIds } });
+      const result: TResult = runItem
+        ? ((await runItemsIndividually(uniqueIds, gen)) as TResult)
+        : await mutateAsync!({ data: { ids: uniqueIds } });
       if (gen !== genRef.current) {
         // Run was dismissed while in flight — drop its statuses entirely
         // (list data may still have changed server-side, so refresh it).
@@ -92,13 +149,15 @@ export function useBulkReanalyzeRun({
         await safeInvalidate();
         return null;
       }
-      const succeededIds = new Set(result.succeeded);
-      for (const id of uniqueIds) {
-        markAsyncActionSettled(
-          keyFor(id),
-          succeededIds.has(id) ? "success" : "error",
-          { sticky: true },
-        );
+      if (!runItem) {
+        const succeededIds = new Set(result.succeeded);
+        for (const id of uniqueIds) {
+          markAsyncActionSettled(
+            keyFor(id),
+            succeededIds.has(id) ? "success" : "error",
+            { sticky: true },
+          );
+        }
       }
       await safeInvalidate();
       if (gen !== genRef.current) {

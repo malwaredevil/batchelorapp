@@ -20,6 +20,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AddMagnetImageBody,
   ApplyPatternAnalysis200,
   ApplyPatternAnalysisBody,
   AssignUnmatchedDocumentBody,
@@ -30,6 +31,7 @@ import type {
   ConfigAppConfigListResponse,
   ConfigUpdateAppConfigBody,
   ConfigUpdateAppConfigResponse,
+  DeleteMagnetUnusedCategories200,
   DeleteOrnamentUnusedCategories200,
   DeletePotteryUnusedCategories200,
   DeleteQuiltingUnusedCategories200,
@@ -62,6 +64,7 @@ import type {
   LabRemoveCreasesOpenaiBody,
   ListFabricsParams,
   ListJobsParams,
+  ListMagnetsParams,
   ListOperationEventsParams,
   ListOrnamentsParams,
   ListParams,
@@ -70,6 +73,16 @@ import type {
   ListQuiltsParams,
   LoginInput,
   LookupOrnamentEbayPriceBody,
+  MagnetsCategory,
+  MagnetsCategoryColorInput,
+  MagnetsCategoryInput,
+  MagnetsMagnetCreate,
+  MagnetsMagnetImage,
+  MagnetsMagnetImageUpdate,
+  MagnetsMagnetItem,
+  MagnetsMagnetListResponse,
+  MagnetsMagnetUpdate,
+  MagnetsMergeCategoryInput,
   MarkMessageRead200,
   MergeQuiltingCategory200,
   MessengerAddReactionBody,
@@ -102,8 +115,7 @@ import type {
   OperationsOperationProvidersResponse,
   OperationsOperationsSummaryResponse,
   OperationsUpdateBudgetBody,
-  OrnamentsBarcodeCorrectionInput,
-  OrnamentsBarcodeCorrectionResult,
+  OrnamentsApplyExistingCategoriesResult,
   OrnamentsBarcodeLookupInput,
   OrnamentsBarcodeLookupResult,
   OrnamentsBarcodePhotoInput,
@@ -116,6 +128,7 @@ import type {
   OrnamentsCreateAndBackfillCategoriesInput,
   OrnamentsCreateAndBackfillCategoriesResult,
   OrnamentsEbayPriceResult,
+  OrnamentsIdentityRefreshResult,
   OrnamentsMergeCategoryInput,
   OrnamentsOrnamentImage,
   OrnamentsOrnamentImageUpdate,
@@ -212,6 +225,7 @@ import type {
   RunPatternAnalysisBody,
   SavePatternRequirementsBody,
   SendPhoneCodeInput,
+  SetMagnetPrimaryImage200,
   TravelsBulkCreatePackingItemsBody,
   TravelsCheckFlightsBody,
   TravelsCheckReservationNow200,
@@ -14917,7 +14931,7 @@ export const getGetOrnamentStragglersUrl = () => {
 }
 
 /**
- * @summary List ornaments missing an embedding or core attributes
+ * @summary List ornaments missing an embedding, series/collection, or year
  */
 export const getOrnamentStragglers = async ( options?: RequestInit): Promise<OrnamentsStragglers> => {
 
@@ -14964,7 +14978,7 @@ export type GetOrnamentStragglersQueryError = ErrorType<unknown>
 
 
 /**
- * @summary List ornaments missing an embedding or core attributes
+ * @summary List ornaments missing an embedding, series/collection, or year
  */
 
 export function useGetOrnamentStragglers<TData = Awaited<ReturnType<typeof getOrnamentStragglers>>, TError = ErrorType<unknown>>(
@@ -15347,6 +15361,77 @@ export const useReanalyzeOrnament = <TError = ErrorType<Error>,
       return useMutation(getReanalyzeOrnamentMutationOptions(options));
     }
 
+export const getRefreshOrnamentIdentityUrl = (id: number,) => {
+
+
+
+
+  return `/api/ornaments/items/${id}/identity-refresh`
+}
+
+/**
+ * @summary Refresh only missing, unlocked ornament identity evidence from its photos
+ */
+export const refreshOrnamentIdentity = async (id: number, options?: RequestInit): Promise<OrnamentsIdentityRefreshResult> => {
+
+  return customFetch<OrnamentsIdentityRefreshResult>(getRefreshOrnamentIdentityUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRefreshOrnamentIdentityMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refreshOrnamentIdentity>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof refreshOrnamentIdentity>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['refreshOrnamentIdentity'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof refreshOrnamentIdentity>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  refreshOrnamentIdentity(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RefreshOrnamentIdentityMutationResult = NonNullable<Awaited<ReturnType<typeof refreshOrnamentIdentity>>>
+
+    export type RefreshOrnamentIdentityMutationError = ErrorType<Error>
+
+    /**
+ * @summary Refresh only missing, unlocked ornament identity evidence from its photos
+ */
+export const useRefreshOrnamentIdentity = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof refreshOrnamentIdentity>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof refreshOrnamentIdentity>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getRefreshOrnamentIdentityMutationOptions(options));
+    }
+
 export const getSetOrnamentPrimaryImageUrl = (id: number,) => {
 
 
@@ -15637,78 +15722,6 @@ export const useDeleteOrnamentImage = <TError = ErrorType<Error>,
       return useMutation(getDeleteOrnamentImageMutationOptions(options));
     }
 
-export const getLookupOrnamentBarcodeUrl = (id: number,) => {
-
-
-
-
-  return `/api/ornaments/items/${id}/lookup-barcode`
-}
-
-/**
- * @summary Look up a barcode via UPCitemdb and return candidate fields (does not save)
- */
-export const lookupOrnamentBarcode = async (id: number,
-    ornamentsBarcodeLookupInput: OrnamentsBarcodeLookupInput, options?: RequestInit): Promise<OrnamentsBarcodeLookupResult> => {
-
-  return customFetch<OrnamentsBarcodeLookupResult>(getLookupOrnamentBarcodeUrl(id),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(ornamentsBarcodeLookupInput)
-  }
-);}
-
-
-
-
-
-export const getLookupOrnamentBarcodeMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof lookupOrnamentBarcode>>, TError,{id: number;data: BodyType<OrnamentsBarcodeLookupInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof lookupOrnamentBarcode>>, TError,{id: number;data: BodyType<OrnamentsBarcodeLookupInput>}, TContext> => {
-
-const mutationKey = ['lookupOrnamentBarcode'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof lookupOrnamentBarcode>>, {id: number;data: BodyType<OrnamentsBarcodeLookupInput>}> = (props) => {
-          const {id,data} = props ?? {};
-
-          return  lookupOrnamentBarcode(id,data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type LookupOrnamentBarcodeMutationResult = NonNullable<Awaited<ReturnType<typeof lookupOrnamentBarcode>>>
-    export type LookupOrnamentBarcodeMutationBody = BodyType<OrnamentsBarcodeLookupInput>
-    export type LookupOrnamentBarcodeMutationError = ErrorType<unknown>
-
-    /**
- * @summary Look up a barcode via UPCitemdb and return candidate fields (does not save)
- */
-export const useLookupOrnamentBarcode = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof lookupOrnamentBarcode>>, TError,{id: number;data: BodyType<OrnamentsBarcodeLookupInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof lookupOrnamentBarcode>>,
-        TError,
-        {id: number;data: BodyType<OrnamentsBarcodeLookupInput>},
-        TContext
-      > => {
-      return useMutation(getLookupOrnamentBarcodeMutationOptions(options));
-    }
-
 export const getLookupBarcodeUrl = () => {
 
 
@@ -15718,7 +15731,7 @@ export const getLookupBarcodeUrl = () => {
 }
 
 /**
- * @summary Look up a barcode via UPCitemdb for the add-item form (does not save)
+ * @summary Identify an ornament barcode using live eBay data with an AI fallback (does not save)
  */
 export const lookupBarcode = async (ornamentsBarcodeLookupInput: OrnamentsBarcodeLookupInput, options?: RequestInit): Promise<OrnamentsBarcodeLookupResult> => {
 
@@ -15767,7 +15780,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type LookupBarcodeMutationError = ErrorType<unknown>
 
     /**
- * @summary Look up a barcode via UPCitemdb for the add-item form (does not save)
+ * @summary Identify an ornament barcode using live eBay data with an AI fallback (does not save)
  */
 export const useLookupBarcode = <TError = ErrorType<unknown>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof lookupBarcode>>, TError,{data: BodyType<OrnamentsBarcodeLookupInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -15778,77 +15791,6 @@ export const useLookupBarcode = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getLookupBarcodeMutationOptions(options));
-    }
-
-export const getReportBarcodeCorrectionUrl = () => {
-
-
-
-
-  return `/api/ornaments/items/report-barcode-correction`
-}
-
-/**
- * @summary Submit a correction when a barcode lookup returned wrong information
- */
-export const reportBarcodeCorrection = async (ornamentsBarcodeCorrectionInput: OrnamentsBarcodeCorrectionInput, options?: RequestInit): Promise<OrnamentsBarcodeCorrectionResult> => {
-
-  return customFetch<OrnamentsBarcodeCorrectionResult>(getReportBarcodeCorrectionUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(ornamentsBarcodeCorrectionInput)
-  }
-);}
-
-
-
-
-
-export const getReportBarcodeCorrectionMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reportBarcodeCorrection>>, TError,{data: BodyType<OrnamentsBarcodeCorrectionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof reportBarcodeCorrection>>, TError,{data: BodyType<OrnamentsBarcodeCorrectionInput>}, TContext> => {
-
-const mutationKey = ['reportBarcodeCorrection'];
-const {mutation: mutationOptions, request: requestOptions} = options ?
-      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
-      options
-      : {...options, mutation: {...options.mutation, mutationKey}}
-      : {mutation: { mutationKey, }, request: undefined};
-
-
-
-
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reportBarcodeCorrection>>, {data: BodyType<OrnamentsBarcodeCorrectionInput>}> = (props) => {
-          const {data} = props ?? {};
-
-          return  reportBarcodeCorrection(data,requestOptions)
-        }
-
-
-
-
-
-
-  return  { mutationFn, ...mutationOptions }}
-
-    export type ReportBarcodeCorrectionMutationResult = NonNullable<Awaited<ReturnType<typeof reportBarcodeCorrection>>>
-    export type ReportBarcodeCorrectionMutationBody = BodyType<OrnamentsBarcodeCorrectionInput>
-    export type ReportBarcodeCorrectionMutationError = ErrorType<unknown>
-
-    /**
- * @summary Submit a correction when a barcode lookup returned wrong information
- */
-export const useReportBarcodeCorrection = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reportBarcodeCorrection>>, TError,{data: BodyType<OrnamentsBarcodeCorrectionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
- ): UseMutationResult<
-        Awaited<ReturnType<typeof reportBarcodeCorrection>>,
-        TError,
-        {data: BodyType<OrnamentsBarcodeCorrectionInput>},
-        TContext
-      > => {
-      return useMutation(getReportBarcodeCorrectionMutationOptions(options));
     }
 
 export const getExtractOrnamentBarcodePhotoUrl = () => {
@@ -17078,6 +17020,77 @@ export const useCreateAndBackfillOrnamentCategories = <TError = ErrorType<unknow
         TContext
       > => {
       return useMutation(getCreateAndBackfillOrnamentCategoriesMutationOptions(options));
+    }
+
+export const getApplyExistingOrnamentCategoriesUrl = () => {
+
+
+
+
+  return `/api/ornaments/categories/apply-existing`
+}
+
+/**
+ * @summary Apply matching existing categories to every active ornament without creating or removing categories
+ */
+export const applyExistingOrnamentCategories = async ( options?: RequestInit): Promise<OrnamentsApplyExistingCategoriesResult> => {
+
+  return customFetch<OrnamentsApplyExistingCategoriesResult>(getApplyExistingOrnamentCategoriesUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getApplyExistingOrnamentCategoriesMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyExistingOrnamentCategories>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof applyExistingOrnamentCategories>>, TError,void, TContext> => {
+
+const mutationKey = ['applyExistingOrnamentCategories'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof applyExistingOrnamentCategories>>, void> = () => {
+
+
+          return  applyExistingOrnamentCategories(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApplyExistingOrnamentCategoriesMutationResult = NonNullable<Awaited<ReturnType<typeof applyExistingOrnamentCategories>>>
+
+    export type ApplyExistingOrnamentCategoriesMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Apply matching existing categories to every active ornament without creating or removing categories
+ */
+export const useApplyExistingOrnamentCategories = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyExistingOrnamentCategories>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof applyExistingOrnamentCategories>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getApplyExistingOrnamentCategoriesMutationOptions(options));
     }
 
 export const getListNotesUrl = () => {
@@ -20596,5 +20609,1262 @@ export const useUpdateState = <TError = ErrorType<Error>,
         TContext
       > => {
       return useMutation(getUpdateStateMutationOptions(options));
+    }
+
+export const getListMagnetsUrl = (params?: ListMagnetsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ["categoryIds"];
+
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? 'null' : String(v));
+      });
+      return;
+    }
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/magnets/items?${stringifiedParams}` : `/api/magnets/items`
+}
+
+/**
+ * @summary List magnets (paginated)
+ */
+export const listMagnets = async (params?: ListMagnetsParams, options?: RequestInit): Promise<MagnetsMagnetListResponse> => {
+
+  return customFetch<MagnetsMagnetListResponse>(getListMagnetsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListMagnetsQueryKey = (params?: ListMagnetsParams,) => {
+    return [
+    `/api/magnets/items`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListMagnetsQueryOptions = <TData = Awaited<ReturnType<typeof listMagnets>>, TError = ErrorType<unknown>>(params?: ListMagnetsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMagnets>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListMagnetsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listMagnets>>> = ({ signal }) => listMagnets(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listMagnets>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListMagnetsQueryResult = NonNullable<Awaited<ReturnType<typeof listMagnets>>>
+export type ListMagnetsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List magnets (paginated)
+ */
+
+export function useListMagnets<TData = Awaited<ReturnType<typeof listMagnets>>, TError = ErrorType<unknown>>(
+ params?: ListMagnetsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMagnets>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListMagnetsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateMagnetUrl = () => {
+
+
+
+
+  return `/api/magnets/items`
+}
+
+/**
+ * @summary Create a magnet
+ */
+export const createMagnet = async (magnetsMagnetCreate: MagnetsMagnetCreate, options?: RequestInit): Promise<MagnetsMagnetItem> => {
+
+  return customFetch<MagnetsMagnetItem>(getCreateMagnetUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(magnetsMagnetCreate)
+  }
+);}
+
+
+
+
+
+export const getCreateMagnetMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createMagnet>>, TError,{data: BodyType<MagnetsMagnetCreate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createMagnet>>, TError,{data: BodyType<MagnetsMagnetCreate>}, TContext> => {
+
+const mutationKey = ['createMagnet'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createMagnet>>, {data: BodyType<MagnetsMagnetCreate>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createMagnet(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateMagnetMutationResult = NonNullable<Awaited<ReturnType<typeof createMagnet>>>
+    export type CreateMagnetMutationBody = BodyType<MagnetsMagnetCreate>
+    export type CreateMagnetMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a magnet
+ */
+export const useCreateMagnet = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createMagnet>>, TError,{data: BodyType<MagnetsMagnetCreate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createMagnet>>,
+        TError,
+        {data: BodyType<MagnetsMagnetCreate>},
+        TContext
+      > => {
+      return useMutation(getCreateMagnetMutationOptions(options));
+    }
+
+export const getGetMagnetUrl = (id: number,) => {
+
+
+
+
+  return `/api/magnets/items/${id}`
+}
+
+/**
+ * @summary Get a magnet
+ */
+export const getMagnet = async (id: number, options?: RequestInit): Promise<MagnetsMagnetItem> => {
+
+  return customFetch<MagnetsMagnetItem>(getGetMagnetUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMagnetQueryKey = (id: number,) => {
+    return [
+    `/api/magnets/items/${id}`
+    ] as const;
+    }
+
+
+export const getGetMagnetQueryOptions = <TData = Awaited<ReturnType<typeof getMagnet>>, TError = ErrorType<Error>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMagnet>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMagnetQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMagnet>>> = ({ signal }) => getMagnet(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMagnet>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMagnetQueryResult = NonNullable<Awaited<ReturnType<typeof getMagnet>>>
+export type GetMagnetQueryError = ErrorType<Error>
+
+
+/**
+ * @summary Get a magnet
+ */
+
+export function useGetMagnet<TData = Awaited<ReturnType<typeof getMagnet>>, TError = ErrorType<Error>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMagnet>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMagnetQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateMagnetUrl = (id: number,) => {
+
+
+
+
+  return `/api/magnets/items/${id}`
+}
+
+/**
+ * @summary Update a magnet
+ */
+export const updateMagnet = async (id: number,
+    magnetsMagnetUpdate: MagnetsMagnetUpdate, options?: RequestInit): Promise<MagnetsMagnetItem> => {
+
+  return customFetch<MagnetsMagnetItem>(getUpdateMagnetUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(magnetsMagnetUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateMagnetMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateMagnet>>, TError,{id: number;data: BodyType<MagnetsMagnetUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateMagnet>>, TError,{id: number;data: BodyType<MagnetsMagnetUpdate>}, TContext> => {
+
+const mutationKey = ['updateMagnet'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateMagnet>>, {id: number;data: BodyType<MagnetsMagnetUpdate>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateMagnet(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateMagnetMutationResult = NonNullable<Awaited<ReturnType<typeof updateMagnet>>>
+    export type UpdateMagnetMutationBody = BodyType<MagnetsMagnetUpdate>
+    export type UpdateMagnetMutationError = ErrorType<Error>
+
+    /**
+ * @summary Update a magnet
+ */
+export const useUpdateMagnet = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateMagnet>>, TError,{id: number;data: BodyType<MagnetsMagnetUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateMagnet>>,
+        TError,
+        {id: number;data: BodyType<MagnetsMagnetUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateMagnetMutationOptions(options));
+    }
+
+export const getDeleteMagnetUrl = (id: number,) => {
+
+
+
+
+  return `/api/magnets/items/${id}`
+}
+
+/**
+ * @summary Soft-delete a magnet
+ */
+export const deleteMagnet = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteMagnetUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteMagnetMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteMagnet>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteMagnet>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteMagnet'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteMagnet>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteMagnet(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteMagnetMutationResult = NonNullable<Awaited<ReturnType<typeof deleteMagnet>>>
+
+    export type DeleteMagnetMutationError = ErrorType<Error>
+
+    /**
+ * @summary Soft-delete a magnet
+ */
+export const useDeleteMagnet = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteMagnet>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteMagnet>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteMagnetMutationOptions(options));
+    }
+
+export const getReanalyzeMagnetUrl = (id: number,) => {
+
+
+
+
+  return `/api/magnets/items/${id}/reanalyze`
+}
+
+/**
+ * @summary Re-analyse a magnet with AI vision
+ */
+export const reanalyzeMagnet = async (id: number, options?: RequestInit): Promise<MagnetsMagnetItem> => {
+
+  return customFetch<MagnetsMagnetItem>(getReanalyzeMagnetUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getReanalyzeMagnetMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reanalyzeMagnet>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reanalyzeMagnet>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['reanalyzeMagnet'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reanalyzeMagnet>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  reanalyzeMagnet(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReanalyzeMagnetMutationResult = NonNullable<Awaited<ReturnType<typeof reanalyzeMagnet>>>
+
+    export type ReanalyzeMagnetMutationError = ErrorType<Error>
+
+    /**
+ * @summary Re-analyse a magnet with AI vision
+ */
+export const useReanalyzeMagnet = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reanalyzeMagnet>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reanalyzeMagnet>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getReanalyzeMagnetMutationOptions(options));
+    }
+
+export const getAddMagnetImageUrl = (id: number,) => {
+
+
+
+
+  return `/api/magnets/items/${id}/images`
+}
+
+/**
+ * @summary Upload a photo for a magnet
+ */
+export const addMagnetImage = async (id: number,
+    addMagnetImageBody: AddMagnetImageBody, options?: RequestInit): Promise<MagnetsMagnetImage> => {
+    const formData = new FormData();
+formData.append(`image`, addMagnetImageBody.image);
+if(addMagnetImageBody.label !== undefined) {
+ formData.append(`label`, addMagnetImageBody.label);
+ }
+
+  return customFetch<MagnetsMagnetImage>(getAddMagnetImageUrl(id),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body: formData
+  }
+);}
+
+
+
+
+
+export const getAddMagnetImageMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addMagnetImage>>, TError,{id: number;data: BodyType<AddMagnetImageBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof addMagnetImage>>, TError,{id: number;data: BodyType<AddMagnetImageBody>}, TContext> => {
+
+const mutationKey = ['addMagnetImage'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addMagnetImage>>, {id: number;data: BodyType<AddMagnetImageBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  addMagnetImage(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AddMagnetImageMutationResult = NonNullable<Awaited<ReturnType<typeof addMagnetImage>>>
+    export type AddMagnetImageMutationBody = BodyType<AddMagnetImageBody>
+    export type AddMagnetImageMutationError = ErrorType<Error>
+
+    /**
+ * @summary Upload a photo for a magnet
+ */
+export const useAddMagnetImage = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addMagnetImage>>, TError,{id: number;data: BodyType<AddMagnetImageBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof addMagnetImage>>,
+        TError,
+        {id: number;data: BodyType<AddMagnetImageBody>},
+        TContext
+      > => {
+      return useMutation(getAddMagnetImageMutationOptions(options));
+    }
+
+export const getUpdateMagnetImageUrl = (id: number,
+    imageId: number,) => {
+
+
+
+
+  return `/api/magnets/items/${id}/images/${imageId}`
+}
+
+/**
+ * @summary Update a supplemental image's label
+ */
+export const updateMagnetImage = async (id: number,
+    imageId: number,
+    magnetsMagnetImageUpdate: MagnetsMagnetImageUpdate, options?: RequestInit): Promise<MagnetsMagnetImage> => {
+
+  return customFetch<MagnetsMagnetImage>(getUpdateMagnetImageUrl(id,imageId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(magnetsMagnetImageUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateMagnetImageMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateMagnetImage>>, TError,{id: number;imageId: number;data: BodyType<MagnetsMagnetImageUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateMagnetImage>>, TError,{id: number;imageId: number;data: BodyType<MagnetsMagnetImageUpdate>}, TContext> => {
+
+const mutationKey = ['updateMagnetImage'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateMagnetImage>>, {id: number;imageId: number;data: BodyType<MagnetsMagnetImageUpdate>}> = (props) => {
+          const {id,imageId,data} = props ?? {};
+
+          return  updateMagnetImage(id,imageId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateMagnetImageMutationResult = NonNullable<Awaited<ReturnType<typeof updateMagnetImage>>>
+    export type UpdateMagnetImageMutationBody = BodyType<MagnetsMagnetImageUpdate>
+    export type UpdateMagnetImageMutationError = ErrorType<Error>
+
+    /**
+ * @summary Update a supplemental image's label
+ */
+export const useUpdateMagnetImage = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateMagnetImage>>, TError,{id: number;imageId: number;data: BodyType<MagnetsMagnetImageUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateMagnetImage>>,
+        TError,
+        {id: number;imageId: number;data: BodyType<MagnetsMagnetImageUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateMagnetImageMutationOptions(options));
+    }
+
+export const getDeleteMagnetImageUrl = (id: number,
+    imageId: number,) => {
+
+
+
+
+  return `/api/magnets/items/${id}/images/${imageId}`
+}
+
+/**
+ * @summary Delete a photo
+ */
+export const deleteMagnetImage = async (id: number,
+    imageId: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteMagnetImageUrl(id,imageId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteMagnetImageMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteMagnetImage>>, TError,{id: number;imageId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteMagnetImage>>, TError,{id: number;imageId: number}, TContext> => {
+
+const mutationKey = ['deleteMagnetImage'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteMagnetImage>>, {id: number;imageId: number}> = (props) => {
+          const {id,imageId} = props ?? {};
+
+          return  deleteMagnetImage(id,imageId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteMagnetImageMutationResult = NonNullable<Awaited<ReturnType<typeof deleteMagnetImage>>>
+
+    export type DeleteMagnetImageMutationError = ErrorType<Error>
+
+    /**
+ * @summary Delete a photo
+ */
+export const useDeleteMagnetImage = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteMagnetImage>>, TError,{id: number;imageId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteMagnetImage>>,
+        TError,
+        {id: number;imageId: number},
+        TContext
+      > => {
+      return useMutation(getDeleteMagnetImageMutationOptions(options));
+    }
+
+export const getSetMagnetPrimaryImageUrl = (id: number,
+    imageId: number,) => {
+
+
+
+
+  return `/api/magnets/items/${id}/images/${imageId}/primary`
+}
+
+/**
+ * @summary Promote an image to primary (gallery cover)
+ */
+export const setMagnetPrimaryImage = async (id: number,
+    imageId: number, options?: RequestInit): Promise<SetMagnetPrimaryImage200> => {
+
+  return customFetch<SetMagnetPrimaryImage200>(getSetMagnetPrimaryImageUrl(id,imageId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getSetMagnetPrimaryImageMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setMagnetPrimaryImage>>, TError,{id: number;imageId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setMagnetPrimaryImage>>, TError,{id: number;imageId: number}, TContext> => {
+
+const mutationKey = ['setMagnetPrimaryImage'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setMagnetPrimaryImage>>, {id: number;imageId: number}> = (props) => {
+          const {id,imageId} = props ?? {};
+
+          return  setMagnetPrimaryImage(id,imageId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetMagnetPrimaryImageMutationResult = NonNullable<Awaited<ReturnType<typeof setMagnetPrimaryImage>>>
+
+    export type SetMagnetPrimaryImageMutationError = ErrorType<Error>
+
+    /**
+ * @summary Promote an image to primary (gallery cover)
+ */
+export const useSetMagnetPrimaryImage = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setMagnetPrimaryImage>>, TError,{id: number;imageId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setMagnetPrimaryImage>>,
+        TError,
+        {id: number;imageId: number},
+        TContext
+      > => {
+      return useMutation(getSetMagnetPrimaryImageMutationOptions(options));
+    }
+
+export const getListMagnetCategoriesUrl = () => {
+
+
+
+
+  return `/api/magnets/categories`
+}
+
+/**
+ * @summary List categories
+ */
+export const listMagnetCategories = async ( options?: RequestInit): Promise<MagnetsCategory[]> => {
+
+  return customFetch<MagnetsCategory[]>(getListMagnetCategoriesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListMagnetCategoriesQueryKey = () => {
+    return [
+    `/api/magnets/categories`
+    ] as const;
+    }
+
+
+export const getListMagnetCategoriesQueryOptions = <TData = Awaited<ReturnType<typeof listMagnetCategories>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMagnetCategories>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListMagnetCategoriesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listMagnetCategories>>> = ({ signal }) => listMagnetCategories({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listMagnetCategories>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListMagnetCategoriesQueryResult = NonNullable<Awaited<ReturnType<typeof listMagnetCategories>>>
+export type ListMagnetCategoriesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List categories
+ */
+
+export function useListMagnetCategories<TData = Awaited<ReturnType<typeof listMagnetCategories>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listMagnetCategories>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListMagnetCategoriesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateMagnetCategoryUrl = () => {
+
+
+
+
+  return `/api/magnets/categories`
+}
+
+/**
+ * @summary Create a category
+ */
+export const createMagnetCategory = async (magnetsCategoryInput: MagnetsCategoryInput, options?: RequestInit): Promise<MagnetsCategory> => {
+
+  return customFetch<MagnetsCategory>(getCreateMagnetCategoryUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(magnetsCategoryInput)
+  }
+);}
+
+
+
+
+
+export const getCreateMagnetCategoryMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createMagnetCategory>>, TError,{data: BodyType<MagnetsCategoryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createMagnetCategory>>, TError,{data: BodyType<MagnetsCategoryInput>}, TContext> => {
+
+const mutationKey = ['createMagnetCategory'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createMagnetCategory>>, {data: BodyType<MagnetsCategoryInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createMagnetCategory(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateMagnetCategoryMutationResult = NonNullable<Awaited<ReturnType<typeof createMagnetCategory>>>
+    export type CreateMagnetCategoryMutationBody = BodyType<MagnetsCategoryInput>
+    export type CreateMagnetCategoryMutationError = ErrorType<Error>
+
+    /**
+ * @summary Create a category
+ */
+export const useCreateMagnetCategory = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createMagnetCategory>>, TError,{data: BodyType<MagnetsCategoryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createMagnetCategory>>,
+        TError,
+        {data: BodyType<MagnetsCategoryInput>},
+        TContext
+      > => {
+      return useMutation(getCreateMagnetCategoryMutationOptions(options));
+    }
+
+export const getDeleteMagnetUnusedCategoriesUrl = () => {
+
+
+
+
+  return `/api/magnets/categories/unused`
+}
+
+/**
+ * @summary Delete all categories with no items assigned
+ */
+export const deleteMagnetUnusedCategories = async ( options?: RequestInit): Promise<DeleteMagnetUnusedCategories200> => {
+
+  return customFetch<DeleteMagnetUnusedCategories200>(getDeleteMagnetUnusedCategoriesUrl(),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteMagnetUnusedCategoriesMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteMagnetUnusedCategories>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteMagnetUnusedCategories>>, TError,void, TContext> => {
+
+const mutationKey = ['deleteMagnetUnusedCategories'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteMagnetUnusedCategories>>, void> = () => {
+
+
+          return  deleteMagnetUnusedCategories(requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteMagnetUnusedCategoriesMutationResult = NonNullable<Awaited<ReturnType<typeof deleteMagnetUnusedCategories>>>
+
+    export type DeleteMagnetUnusedCategoriesMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Delete all categories with no items assigned
+ */
+export const useDeleteMagnetUnusedCategories = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteMagnetUnusedCategories>>, TError,void, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteMagnetUnusedCategories>>,
+        TError,
+        void,
+        TContext
+      > => {
+      return useMutation(getDeleteMagnetUnusedCategoriesMutationOptions(options));
+    }
+
+export const getRenameMagnetCategoryUrl = (id: number,) => {
+
+
+
+
+  return `/api/magnets/categories/${id}`
+}
+
+/**
+ * @summary Rename a category
+ */
+export const renameMagnetCategory = async (id: number,
+    magnetsCategoryInput: MagnetsCategoryInput, options?: RequestInit): Promise<MagnetsCategory> => {
+
+  return customFetch<MagnetsCategory>(getRenameMagnetCategoryUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(magnetsCategoryInput)
+  }
+);}
+
+
+
+
+
+export const getRenameMagnetCategoryMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof renameMagnetCategory>>, TError,{id: number;data: BodyType<MagnetsCategoryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof renameMagnetCategory>>, TError,{id: number;data: BodyType<MagnetsCategoryInput>}, TContext> => {
+
+const mutationKey = ['renameMagnetCategory'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof renameMagnetCategory>>, {id: number;data: BodyType<MagnetsCategoryInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  renameMagnetCategory(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RenameMagnetCategoryMutationResult = NonNullable<Awaited<ReturnType<typeof renameMagnetCategory>>>
+    export type RenameMagnetCategoryMutationBody = BodyType<MagnetsCategoryInput>
+    export type RenameMagnetCategoryMutationError = ErrorType<Error>
+
+    /**
+ * @summary Rename a category
+ */
+export const useRenameMagnetCategory = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof renameMagnetCategory>>, TError,{id: number;data: BodyType<MagnetsCategoryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof renameMagnetCategory>>,
+        TError,
+        {id: number;data: BodyType<MagnetsCategoryInput>},
+        TContext
+      > => {
+      return useMutation(getRenameMagnetCategoryMutationOptions(options));
+    }
+
+export const getDeleteMagnetCategoryUrl = (id: number,) => {
+
+
+
+
+  return `/api/magnets/categories/${id}`
+}
+
+/**
+ * @summary Delete a category
+ */
+export const deleteMagnetCategory = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteMagnetCategoryUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteMagnetCategoryMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteMagnetCategory>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteMagnetCategory>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteMagnetCategory'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteMagnetCategory>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteMagnetCategory(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteMagnetCategoryMutationResult = NonNullable<Awaited<ReturnType<typeof deleteMagnetCategory>>>
+
+    export type DeleteMagnetCategoryMutationError = ErrorType<Error>
+
+    /**
+ * @summary Delete a category
+ */
+export const useDeleteMagnetCategory = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteMagnetCategory>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteMagnetCategory>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteMagnetCategoryMutationOptions(options));
+    }
+
+export const getUpdateMagnetCategoryColorsUrl = (id: number,) => {
+
+
+
+
+  return `/api/magnets/categories/${id}/colors`
+}
+
+/**
+ * @summary Update a category's colours
+ */
+export const updateMagnetCategoryColors = async (id: number,
+    magnetsCategoryColorInput: MagnetsCategoryColorInput, options?: RequestInit): Promise<MagnetsCategory> => {
+
+  return customFetch<MagnetsCategory>(getUpdateMagnetCategoryColorsUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(magnetsCategoryColorInput)
+  }
+);}
+
+
+
+
+
+export const getUpdateMagnetCategoryColorsMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateMagnetCategoryColors>>, TError,{id: number;data: BodyType<MagnetsCategoryColorInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateMagnetCategoryColors>>, TError,{id: number;data: BodyType<MagnetsCategoryColorInput>}, TContext> => {
+
+const mutationKey = ['updateMagnetCategoryColors'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateMagnetCategoryColors>>, {id: number;data: BodyType<MagnetsCategoryColorInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateMagnetCategoryColors(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateMagnetCategoryColorsMutationResult = NonNullable<Awaited<ReturnType<typeof updateMagnetCategoryColors>>>
+    export type UpdateMagnetCategoryColorsMutationBody = BodyType<MagnetsCategoryColorInput>
+    export type UpdateMagnetCategoryColorsMutationError = ErrorType<Error>
+
+    /**
+ * @summary Update a category's colours
+ */
+export const useUpdateMagnetCategoryColors = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateMagnetCategoryColors>>, TError,{id: number;data: BodyType<MagnetsCategoryColorInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateMagnetCategoryColors>>,
+        TError,
+        {id: number;data: BodyType<MagnetsCategoryColorInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateMagnetCategoryColorsMutationOptions(options));
+    }
+
+export const getMergeMagnetCategoryUrl = (id: number,) => {
+
+
+
+
+  return `/api/magnets/categories/${id}/merge`
+}
+
+/**
+ * @summary Merge a category into another (reassigns items, deletes source)
+ */
+export const mergeMagnetCategory = async (id: number,
+    magnetsMergeCategoryInput: MagnetsMergeCategoryInput, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getMergeMagnetCategoryUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(magnetsMergeCategoryInput)
+  }
+);}
+
+
+
+
+
+export const getMergeMagnetCategoryMutationOptions = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof mergeMagnetCategory>>, TError,{id: number;data: BodyType<MagnetsMergeCategoryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof mergeMagnetCategory>>, TError,{id: number;data: BodyType<MagnetsMergeCategoryInput>}, TContext> => {
+
+const mutationKey = ['mergeMagnetCategory'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof mergeMagnetCategory>>, {id: number;data: BodyType<MagnetsMergeCategoryInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  mergeMagnetCategory(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type MergeMagnetCategoryMutationResult = NonNullable<Awaited<ReturnType<typeof mergeMagnetCategory>>>
+    export type MergeMagnetCategoryMutationBody = BodyType<MagnetsMergeCategoryInput>
+    export type MergeMagnetCategoryMutationError = ErrorType<Error>
+
+    /**
+ * @summary Merge a category into another (reassigns items, deletes source)
+ */
+export const useMergeMagnetCategory = <TError = ErrorType<Error>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof mergeMagnetCategory>>, TError,{id: number;data: BodyType<MagnetsMergeCategoryInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof mergeMagnetCategory>>,
+        TError,
+        {id: number;data: BodyType<MagnetsMergeCategoryInput>},
+        TContext
+      > => {
+      return useMutation(getMergeMagnetCategoryMutationOptions(options));
     }
 

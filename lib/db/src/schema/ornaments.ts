@@ -27,7 +27,6 @@ export const ornamentsItems = pgTable(
     quantity: integer("quantity").notNull().default(1),
     notes: text("notes"),
     dimensions: text("dimensions"),
-    condition: text("condition"),
     origin: text("origin"),
     acquiredAt: date("acquired_at"),
     // Verbatim text transcribed from the printed description on the back of
@@ -105,6 +104,24 @@ export const ornamentsItems = pgTable(
       "hnsw",
       table.visualEmbedding.op("vector_cosine_ops"),
     ),
+    index("ornaments_items_name_trgm_idx")
+      .using("gin", table.name.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
+    index("ornaments_items_series_trgm_idx")
+      .using("gin", table.seriesOrCollection.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
+    index("ornaments_items_brand_trgm_idx")
+      .using("gin", table.brand.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
+    index("ornaments_items_notes_trgm_idx")
+      .using("gin", table.notes.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
+    index("ornaments_items_description_trgm_idx")
+      .using("gin", table.description.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
+    index("ornaments_items_ai_description_trgm_idx")
+      .using("gin", table.aiDescription.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
     index("ornaments_items_user_id_idx").on(table.userId),
     index("ornaments_items_series_idx").on(table.seriesOrCollection),
   ],
@@ -162,257 +179,8 @@ export const ornamentsImages = pgTable(
   (table) => [index("ornaments_images_item_idx").on(table.itemId)],
 ).enableRLS();
 
-/**
- * Per-UPC cache of UPCitemdb barcode lookups so repeat scans of the same
- * ornament (or ornaments bought in multiples) don't re-hit the outside API.
- */
-export const ornamentsBarcodeCache = pgTable("ornaments_barcode_cache", {
-  barcode: text("barcode").primaryKey(),
-  found: integer("found").notNull().default(0),
-  name: text("name"),
-  brand: text("brand"),
-  seriesOrCollection: text("series_or_collection"),
-  year: integer("year"),
-  description: text("description"),
-  imageUrl: text("image_url"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-  // Hallmark.com enrichment (added via schema-statements.ts ALTER TABLE)
-  hallmarkSku: text("hallmark_sku"),
-  hallmarkSeriesName: text("hallmark_series_name"),
-  hallmarkSequenceNumber: integer("hallmark_sequence_number"),
-  hallmarkArtist: text("hallmark_artist"),
-  hallmarkOriginalRetailPrice: numeric("hallmark_original_retail_price", {
-    precision: 10,
-    scale: 2,
-  }),
-  hallmarkProductUrl: text("hallmark_product_url"),
-  hallmarkConfidence: numeric("hallmark_confidence", {
-    precision: 4,
-    scale: 3,
-  }),
-  hallmarkEnrichedAt: timestamp("hallmark_enriched_at", {
-    withTimezone: true,
-  }),
-  hallmarkCollectorPriceUsd: numeric("hallmark_collector_price_usd", {
-    precision: 10,
-    scale: 2,
-  }),
-  hallmarkInStock: boolean("hallmark_in_stock"),
-  hallmarkImages: text("hallmark_images").array(),
-}).enableRLS();
-
 export type OrnamentCategoryRow = typeof ornamentsCategories.$inferSelect;
 export type OrnamentItemCategoryRow =
   typeof ornamentsItemCategories.$inferSelect;
 export type OrnamentImageRow = typeof ornamentsImages.$inferSelect;
 export type InsertOrnamentImage = typeof ornamentsImages.$inferInsert;
-export type OrnamentBarcodeCacheRow = typeof ornamentsBarcodeCache.$inferSelect;
-
-// ---------------------------------------------------------------------------
-// Hallmark catalog — raw scraped product data keyed by Hallmark SKU/MPN
-// ---------------------------------------------------------------------------
-
-/**
- * Flat catalog of Hallmark ornaments scraped from hallmark.com via the
- * Apify catalog-crawl actor. One row per unique Hallmark SKU.
- * Not linked to household ownership — pure reference/catalog data.
- */
-export const hallmarkCatalog = pgTable(
-  "hallmark_catalog",
-  {
-    id: serial("id").primaryKey(),
-    hallmarkSku: text("hallmark_sku").notNull().unique(),
-    name: text("name").notNull(),
-    description: text("description"),
-    seriesName: text("series_name"),
-    sequenceNumber: integer("sequence_number"),
-    year: integer("year"),
-    artist: text("artist"),
-    retailPriceUsd: numeric("retail_price_usd", { precision: 10, scale: 2 }),
-    productUrl: text("product_url"),
-    images: text("images").array(),
-    ornamentCategory: text("ornament_category"),
-    crawledAt: timestamp("crawled_at", { withTimezone: true }).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    index("hallmark_catalog_year_idx").on(table.year),
-    index("hallmark_catalog_series_idx").on(table.seriesName),
-  ],
-).enableRLS();
-
-export type HallmarkCatalogRow = typeof hallmarkCatalog.$inferSelect;
-export type InsertHallmarkCatalog = typeof hallmarkCatalog.$inferInsert;
-
-export const hallmarkHistoricalCatalog = pgTable(
-  "hallmark_historical_catalog",
-  {
-    id: serial("id").primaryKey(),
-    hallmarkSku: text("hallmark_sku"),
-    name: text("name").notNull(),
-    year: integer("year"),
-    seriesName: text("series_name"),
-    sequenceNumber: integer("sequence_number"),
-    artist: text("artist"),
-    collectorPriceUsd: numeric("collector_price_usd", {
-      precision: 10,
-      scale: 2,
-    }),
-    productUrl: text("product_url").notNull().unique(),
-    images: text("images").array(),
-    source: text("source").notNull().default("hallmarkornaments.com"),
-    crawledAt: timestamp("crawled_at", { withTimezone: true }).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    index("hallmark_hist_sku_idx").on(table.hallmarkSku),
-    index("hallmark_hist_year_idx").on(table.year),
-    index("hallmark_hist_series_idx").on(table.seriesName),
-  ],
-).enableRLS();
-
-export type HallmarkHistoricalCatalogRow =
-  typeof hallmarkHistoricalCatalog.$inferSelect;
-export type InsertHallmarkHistoricalCatalog =
-  typeof hallmarkHistoricalCatalog.$inferInsert;
-
-/**
- * Collector price + availability catalog scraped from hookedonhallmark.com
- * via the Apify hooh-crawl actor. Covers 1973-present with ~16 500 rows.
- * Key value-add over the other two tables: real retail/collector prices,
- * in-stock status, and richer series data from product name parsing.
- * Cross-reference with hallmark_historical_catalog by hallmark_sku to
- * backfill collector_price_usd on that table.
- */
-export const hallmarkHoohCatalog = pgTable(
-  "hallmark_hooh_catalog",
-  {
-    id: serial("id").primaryKey(),
-    productUrl: text("product_url").notNull().unique(),
-    catalogId: integer("catalog_id"),
-    hallmarkSku: text("hallmark_sku"),
-    name: text("name"),
-    year: integer("year"),
-    subcategory: text("subcategory"),
-    seriesName: text("series_name"),
-    sequenceNumber: integer("sequence_number"),
-    retailPriceUsd: numeric("retail_price_usd", { precision: 10, scale: 2 }),
-    inStock: boolean("in_stock"),
-    source: text("source").notNull().default("hookedonhallmark.com"),
-    crawledAt: timestamp("crawled_at", { withTimezone: true }).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    index("hallmark_hooh_sku_idx").on(table.hallmarkSku),
-    index("hallmark_hooh_year_idx").on(table.year),
-    index("hallmark_hooh_series_idx").on(table.seriesName),
-  ],
-).enableRLS();
-
-export type HallmarkHoohCatalogRow = typeof hallmarkHoohCatalog.$inferSelect;
-export type InsertHallmarkHoohCatalog = typeof hallmarkHoohCatalog.$inferInsert;
-
-/**
- * Single merged view of all three Hallmark catalog sources.
- * Keyed by hallmark_sku (unique). Populated by the merge-hallmark-catalogs
- * script and kept in sync whenever Apify re-crawls update the source tables.
- *
- * Priority rules (applied at merge time):
- *   name / series / year: hallmark_historical_catalog > hallmark_catalog > hallmark_hooh_catalog
- *   artist:               hallmark_catalog > hallmark_historical_catalog
- *   retail_price_usd:     hallmark_catalog only (official Hallmark.com retail)
- *   collector_price_usd:  hallmark_historical_catalog only (hallmarkornaments.com)
- *   in_stock:             hallmark_hooh_catalog only (hookedonhallmark.com availability)
- *   images:               hallmark_catalog + hallmark_historical_catalog, merged & deduped
- */
-export const hallmarkOrnaments = pgTable(
-  "hallmark_ornaments",
-  {
-    id: serial("id").primaryKey(),
-    hallmarkSku: text("hallmark_sku").notNull().unique(),
-    name: text("name").notNull(),
-    description: text("description"),
-    seriesName: text("series_name"),
-    sequenceNumber: integer("sequence_number"),
-    year: integer("year"),
-    artist: text("artist"),
-    retailPriceUsd: numeric("retail_price_usd", { precision: 10, scale: 2 }),
-    collectorPriceUsd: numeric("collector_price_usd", {
-      precision: 10,
-      scale: 2,
-    }),
-    inStock: boolean("in_stock"),
-    ornamentCategory: text("ornament_category"),
-    subcategory: text("subcategory"),
-    images: text("images").array(),
-    productUrlHallmark: text("product_url_hallmark"),
-    productUrlHistorical: text("product_url_historical"),
-    productUrlHooh: text("product_url_hooh"),
-    inHallmarkCatalog: boolean("in_hallmark_catalog").notNull().default(false),
-    inHistoricalCatalog: boolean("in_historical_catalog")
-      .notNull()
-      .default(false),
-    inHoohCatalog: boolean("in_hooh_catalog").notNull().default(false),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    index("hallmark_ornaments_year_idx").on(table.year),
-    index("hallmark_ornaments_series_idx").on(table.seriesName),
-  ],
-).enableRLS();
-
-export type HallmarkOrnamentsRow = typeof hallmarkOrnaments.$inferSelect;
-export type InsertHallmarkOrnament = typeof hallmarkOrnaments.$inferInsert;
-
-// ---------------------------------------------------------------------------
-// User-submitted barcode corrections
-// ---------------------------------------------------------------------------
-
-/**
- * User-flagged barcode corrections. When a lookup returns wrong data the user
- * can submit the correct name/brand/series/year. The most recent row for a
- * given barcode takes precedence over any cache or catalog result.
- */
-export const ornamentUpcCorrections = pgTable(
-  "ornament_upc_corrections",
-  {
-    id: serial("id").primaryKey(),
-    barcode: text("barcode").notNull(),
-    correctedName: text("corrected_name"),
-    correctedBrand: text("corrected_brand"),
-    correctedSeriesOrCollection: text("corrected_series_or_collection"),
-    correctedYear: integer("corrected_year"),
-    wrongName: text("wrong_name"),
-    wrongBrand: text("wrong_brand"),
-    submittedBy: integer("submitted_by"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [index("idx_ornament_upc_corrections_barcode").on(table.barcode)],
-);
-
-export type OrnamentUpcCorrectionRow =
-  typeof ornamentUpcCorrections.$inferSelect;

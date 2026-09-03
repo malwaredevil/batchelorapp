@@ -114,6 +114,10 @@ run_bg guardrails pnpm --filter @workspace/scripts run check-guardrails -- --bas
 # matching entry in the sync-github-secrets.ts SECRETS registry.
 run_bg secretsregistry pnpm --filter @workspace/scripts run check-secrets-registry
 
+# Scheduler-name guard: every scheduled task name must be registered so
+# reconcileSchedulerRuns() can retain and monitor its claim rows.
+run_bg schedulernames pnpm --filter @workspace/scripts run check-scheduler-names
+
 # Hardcoded-config guard: flags new limits/timeouts/budgets/caps/thresholds
 # baked into source as literals instead of being owner-adjustable. Same
 # script CI's Guardrails workflow calls (diff-scoped against origin/main).
@@ -125,12 +129,21 @@ run_bg hardcodedconfig pnpm --filter @workspace/scripts run check-hardcoded-conf
 # script CI's Guardrails workflow calls (diff-scoped against origin/main).
 run_bg duplicatecode pnpm --filter @workspace/scripts run check-duplicate-code -- --base origin/main
 
+# Architecture policy: compares merge-base and working-tree findings against
+# the reviewed debt baseline. It blocks new/worsened drift while keeping
+# unchanged legacy debt visible for a focused follow-up or completion note.
+run_bg architecturepolicy pnpm --filter @workspace/scripts run check-architecture-policy -- --base origin/main
+
 # Backup-coverage guard: every pgTable() in lib/db/src/schema/*.ts must appear
 # in a copyTable() call in both backup-to-replit.ts and restore-from-replit.ts,
 # or be explicitly listed in INTENTIONAL_SKIPS inside check-backup-coverage.ts.
 # Catches the recurring class of bug where a new feature table is added to the
 # Drizzle schema but the hand-maintained backup/restore scripts are not updated.
 run_bg backupcoverage pnpm --filter @workspace/scripts run check-backup-coverage
+
+# Database-security policy guard: keeps the direct-access allowlist aligned
+# with the checked-in hardening migration without connecting to the database.
+run_bg databasesecurity pnpm --filter @workspace/scripts run security:check
 
 # GitHub CI status (network-bound — runs in parallel with the local guards)
 run_bg cistatus pnpm --filter @workspace/scripts run check-ci-status
@@ -156,15 +169,18 @@ declare -A LABELS=(
   [composition]="Composition and configuration"
   [guardrails]="Guardrail bans (drizzle-kit push, restricted files, etc.)"
   [secretsregistry]="Secrets registry drift"
+  [schedulernames]="Scheduler names registered"
   [hardcodedconfig]="Hardcoded configuration values (should be owner-adjustable)"
   [duplicatecode]="Likely duplicate code (heuristic structural match)"
+  [architecturepolicy]="Architecture policy (no new or worsened debt)"
   [backupcoverage]="Backup coverage (schema tables vs backup/restore scripts)"
+  [databasesecurity]="Database security policy and hardening"
   [cistatus]="GitHub CI status"
   [githubdrift]="GitHub workflow drift (Dependabot auto-merge guard)"
 )
 
 FAILED=()
-for key in appconfig forbidden secretsscan uploadlimit pgsingleton composition guardrails secretsregistry hardcodedconfig duplicatecode backupcoverage cistatus githubdrift; do
+for key in appconfig forbidden secretsscan uploadlimit pgsingleton composition guardrails secretsregistry schedulernames hardcodedconfig duplicatecode architecturepolicy backupcoverage databasesecurity cistatus githubdrift; do
   code=$(cat "$LOGDIR/$key.exit" 2>/dev/null || echo 1)
   if [[ "$code" -eq 0 ]]; then
     echo -e "${GREEN}✓${RESET} ${LABELS[$key]}"

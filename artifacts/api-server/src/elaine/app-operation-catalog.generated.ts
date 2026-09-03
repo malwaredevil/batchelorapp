@@ -76,6 +76,17 @@ export const ELAINE_APP_OPERATION_CATALOG = [
     },
   },
   {
+    operationId: "applyExistingOrnamentCategories",
+    method: "POST",
+    path: "/ornaments/categories/apply-existing",
+    domain: "ornaments",
+    summary:
+      "Apply matching existing categories to every active ornament without creating or removing categories",
+    access: "action",
+    parameters: [],
+    requestBody: null,
+  },
+  {
     operationId: "applyFabricIdentityResearch",
     method: "PATCH",
     path: "/quilting/fabrics/{id}/identity-research/{researchId}",
@@ -457,6 +468,40 @@ export const ELAINE_APP_OPERATION_CATALOG = [
     },
   },
   {
+    operationId: "createMagnet",
+    method: "POST",
+    path: "/magnets/items",
+    domain: "magnets",
+    summary: "Create a magnet",
+    access: "action",
+    parameters: [],
+    requestBody: {
+      required: true,
+      schema: {
+        type: "object",
+        required: ["name"],
+        properties: {
+          name: {
+            type: "string",
+            minLength: 1,
+          },
+          notes: {
+            type: ["string", "null"],
+          },
+          description: {
+            type: ["string", "null"],
+          },
+          categoryIds: {
+            type: "array",
+            items: {
+              type: "integer",
+            },
+          },
+        },
+      },
+    },
+  },
+  {
     operationId: "createPackingTemplate",
     method: "POST",
     path: "/travels/packing-templates",
@@ -663,6 +708,16 @@ export const ELAINE_APP_OPERATION_CATALOG = [
         },
       },
     ],
+    requestBody: null,
+  },
+  {
+    operationId: "deleteMagnetUnusedCategories",
+    method: "DELETE",
+    path: "/magnets/categories/unused",
+    domain: "magnets",
+    summary: "Delete all categories with no items assigned",
+    access: "action",
+    parameters: [],
     requestBody: null,
   },
   {
@@ -1223,6 +1278,25 @@ export const ELAINE_APP_OPERATION_CATALOG = [
     requestBody: null,
   },
   {
+    operationId: "getMagnet",
+    method: "GET",
+    path: "/magnets/items/{id}",
+    domain: "magnets",
+    summary: "Get a magnet",
+    access: "read",
+    parameters: [
+      {
+        name: "id",
+        in: "path",
+        required: true,
+        schema: {
+          type: "integer",
+        },
+      },
+    ],
+    requestBody: null,
+  },
+  {
     operationId: "getOperationsSummary",
     method: "GET",
     path: "/operations/summary",
@@ -1563,6 +1637,94 @@ export const ELAINE_APP_OPERATION_CATALOG = [
     summary: "List all saved quilt layouts",
     access: "read",
     parameters: [],
+    requestBody: null,
+  },
+  {
+    operationId: "listMagnetCategories",
+    method: "GET",
+    path: "/magnets/categories",
+    domain: "magnets",
+    summary: "List categories",
+    access: "read",
+    parameters: [],
+    requestBody: null,
+  },
+  {
+    operationId: "listMagnets",
+    method: "GET",
+    path: "/magnets/items",
+    domain: "magnets",
+    summary: "List magnets (paginated)",
+    access: "read",
+    parameters: [
+      {
+        name: "q",
+        in: "query",
+        required: false,
+        schema: {
+          type: "string",
+        },
+      },
+      {
+        name: "categoryId",
+        in: "query",
+        required: false,
+        schema: {
+          type: "integer",
+        },
+      },
+      {
+        name: "categoryIds",
+        in: "query",
+        required: false,
+        schema: {
+          type: "array",
+          items: {
+            type: "integer",
+          },
+        },
+      },
+      {
+        name: "uncategorized",
+        in: "query",
+        required: false,
+        schema: {
+          type: "boolean",
+          default: false,
+        },
+      },
+      {
+        name: "sort",
+        in: "query",
+        required: false,
+        schema: {
+          type: "string",
+          enum: ["newest", "oldest", "name-asc", "name-desc"],
+          default: "newest",
+        },
+      },
+      {
+        name: "page",
+        in: "query",
+        required: false,
+        schema: {
+          type: "integer",
+          minimum: 1,
+          default: 1,
+        },
+      },
+      {
+        name: "pageSize",
+        in: "query",
+        required: false,
+        schema: {
+          type: "integer",
+          minimum: 1,
+          maximum: 200,
+          default: 60,
+        },
+      },
+    ],
     requestBody: null,
   },
   {
@@ -1937,6 +2099,26 @@ export const ELAINE_APP_OPERATION_CATALOG = [
     domain: "ornaments",
     summary:
       "Refresh all AI and market data — reanalyze images, book value, eBay price, and AI appraisal all at once",
+    access: "action",
+    parameters: [
+      {
+        name: "id",
+        in: "path",
+        required: true,
+        schema: {
+          type: "integer",
+        },
+      },
+    ],
+    requestBody: null,
+  },
+  {
+    operationId: "refreshOrnamentIdentity",
+    method: "POST",
+    path: "/ornaments/items/{id}/identity-refresh",
+    domain: "ornaments",
+    summary:
+      "Refresh only missing, unlocked ornament identity evidence from its photos",
     access: "action",
     parameters: [
       {
@@ -3028,6 +3210,75 @@ export const ELAINE_APP_OPERATION_CATALOG = [
               maxLength: 100,
             },
             maxItems: 20,
+          },
+        },
+      },
+    },
+  },
+  {
+    operationId: "updateMagnetCategoryColors",
+    method: "PUT",
+    path: "/magnets/categories/{id}/colors",
+    domain: "magnets",
+    summary: "Update a category's colours",
+    access: "action",
+    parameters: [
+      {
+        name: "id",
+        in: "path",
+        required: true,
+        schema: {
+          type: "integer",
+        },
+      },
+    ],
+    requestBody: {
+      required: true,
+      schema: {
+        type: "object",
+        properties: {
+          bgColor: {
+            type: ["string", "null"],
+          },
+          textColor: {
+            type: ["string", "null"],
+          },
+        },
+      },
+    },
+  },
+  {
+    operationId: "updateMagnetImage",
+    method: "PATCH",
+    path: "/magnets/items/{id}/images/{imageId}",
+    domain: "magnets",
+    summary: "Update a supplemental image's label",
+    access: "action",
+    parameters: [
+      {
+        name: "id",
+        in: "path",
+        required: true,
+        schema: {
+          type: "integer",
+        },
+      },
+      {
+        name: "imageId",
+        in: "path",
+        required: true,
+        schema: {
+          type: "integer",
+        },
+      },
+    ],
+    requestBody: {
+      required: true,
+      schema: {
+        type: "object",
+        properties: {
+          label: {
+            type: ["string", "null"],
           },
         },
       },

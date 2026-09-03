@@ -25,6 +25,8 @@ import {
   reminders,
   ornamentsItems,
   ornamentsImages,
+  magnetsItems,
+  magnetsImages,
 } from "@workspace/db";
 import { logActivity } from "../lib/soft-delete";
 
@@ -273,6 +275,27 @@ router.get("/recycle-bin", async (req, res) => {
         expiresAt: addExpiry(r.deletedAt!),
       });
     }
+  }
+  if (!entityTypeFilter || entityTypeFilter === "magnet") {
+    const rows = await db
+      .select({
+        id: magnetsItems.id,
+        name: magnetsItems.name,
+        imagePath: magnetsItems.imagePath,
+        deletedAt: magnetsItems.deletedAt,
+      })
+      .from(magnetsItems)
+      .where(isNotNull(magnetsItems.deletedAt))
+      .orderBy(magnetsItems.deletedAt);
+    for (const r of rows)
+      items.push({
+        entityType: "magnet",
+        entityId: r.id,
+        entityLabel: r.name,
+        thumbnailPath: r.imagePath,
+        deletedAt: r.deletedAt!,
+        expiresAt: addExpiry(r.deletedAt!),
+      });
   }
 
   // Sort all results newest-deleted-first.
@@ -574,6 +597,34 @@ router.post("/recycle-bin/:entityType/:id/restore", async (req, res) => {
         actorChannel: "web",
         actionType: "restore_ornament",
         entityType: "ornament",
+        entityId: id,
+        reversible: false,
+      });
+      res.json({ ok: true });
+      return;
+    }
+    case "magnet": {
+      const [row] = await db
+        .select({ id: magnetsItems.id })
+        .from(magnetsItems)
+        .where(and(eq(magnetsItems.id, id), isNotNull(magnetsItems.deletedAt)));
+      if (!row) {
+        res.status(404).json({ error: "Item not found in recycle bin" });
+        return;
+      }
+      await db
+        .update(magnetsImages)
+        .set({ deletedAt: null })
+        .where(eq(magnetsImages.itemId, id));
+      await db
+        .update(magnetsItems)
+        .set({ deletedAt: null })
+        .where(eq(magnetsItems.id, id));
+      void logActivity({
+        actorUserId: userId,
+        actorChannel: "web",
+        actionType: "restore_magnet",
+        entityType: "magnet",
         entityId: id,
         reversible: false,
       });

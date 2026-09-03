@@ -3,9 +3,14 @@ import { db, ornamentsItems } from "@workspace/db";
 import {
   parseAiAppraisalRange,
   computeConsensusValue,
+  computeOrnamentEstimatedValue,
 } from "@workspace/ornaments-shared";
 
 export interface OrnamentValuationTotals {
+  /** Collection estimate using market signals, then retail as a fallback. */
+  estimatedValueTotal: number;
+  /** How many distinct items contributed to the collection estimate. */
+  itemsWithEstimatedValue: number;
   /** Sum of each item's parsed AI-appraisal low estimate × quantity. */
   aiAppraisalLowTotal: number;
   /** Sum of each item's parsed AI-appraisal high estimate × quantity. */
@@ -42,6 +47,7 @@ export async function computeOrnamentValuationTotals(
       bookValue: ornamentsItems.bookValue,
       ebayPriceMinUsd: ornamentsItems.ebayPriceMinUsd,
       ebayPriceMaxUsd: ornamentsItems.ebayPriceMaxUsd,
+      ebayLastSoldPriceUsd: ornamentsItems.ebayLastSoldPriceUsd,
       aiAppraisal: ornamentsItems.aiAppraisal,
       retailValueUsd: ornamentsItems.retailValueUsd,
     })
@@ -51,6 +57,8 @@ export async function computeOrnamentValuationTotals(
   let aiAppraisalLowTotal = 0;
   let aiAppraisalHighTotal = 0;
   let itemsWithAiAppraisal = 0;
+  let estimatedValueTotal = 0;
+  let itemsWithEstimatedValue = 0;
   let consensusValueTotal = 0;
   let itemsWithConsensusValue = 0;
   let retailValueTotal = 0;
@@ -63,6 +71,10 @@ export async function computeOrnamentValuationTotals(
       row.ebayPriceMinUsd != null ? parseFloat(row.ebayPriceMinUsd) : null;
     const ebayPriceMaxUsd =
       row.ebayPriceMaxUsd != null ? parseFloat(row.ebayPriceMaxUsd) : null;
+    const ebayLastSoldPriceUsd =
+      row.ebayLastSoldPriceUsd != null
+        ? parseFloat(row.ebayLastSoldPriceUsd)
+        : null;
     const retailValueUsd =
       row.retailValueUsd != null ? parseFloat(row.retailValueUsd) : null;
 
@@ -73,10 +85,24 @@ export async function computeOrnamentValuationTotals(
       itemsWithAiAppraisal += 1;
     }
 
+    const estimated = computeOrnamentEstimatedValue({
+      bookValue,
+      ebayPriceMinUsd,
+      ebayPriceMaxUsd,
+      ebayLastSoldPriceUsd,
+      aiAppraisal: row.aiAppraisal,
+      retailValueUsd,
+    });
+    if (estimated.value != null) {
+      estimatedValueTotal += estimated.value * qty;
+      itemsWithEstimatedValue += 1;
+    }
+
     const consensus = computeConsensusValue({
       bookValue,
       ebayPriceMinUsd,
       ebayPriceMaxUsd,
+      ebayLastSoldPriceUsd,
       aiAppraisal: row.aiAppraisal,
     });
     if (consensus != null) {
@@ -91,6 +117,8 @@ export async function computeOrnamentValuationTotals(
   }
 
   return {
+    estimatedValueTotal,
+    itemsWithEstimatedValue,
     aiAppraisalLowTotal,
     aiAppraisalHighTotal,
     itemsWithAiAppraisal,

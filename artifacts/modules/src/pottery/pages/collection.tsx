@@ -3,7 +3,6 @@ import { Link, useLocation, useSearch } from "wouter";
 import {
   useListPottery,
   useListPotteryCategories as useListCategories,
-  useBulkReanalyzePottery,
   useReanalyzePottery,
   useUpdatePottery,
   useDeletePottery,
@@ -31,7 +30,7 @@ import {
   Tag,
   Trash2,
 } from "lucide-react";
-import { GalleryPaginator } from "@/components/GalleryPaginator";
+import { GalleryPaginationPair } from "@/components/GalleryPaginationPair";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -58,6 +57,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { colorToHex } from "@/pottery/lib/colors";
+import { resolveCategoryPalette } from "@workspace/web-core/colors";
 import { usePageAssistantContext } from "@/pottery/lib/assistant-context";
 import { toast } from "sonner";
 import {
@@ -189,26 +189,21 @@ function CompareModal({
                     <div className="flex flex-wrap gap-1">
                       {[...item.categories]
                         .sort((a, b) => a.name.localeCompare(b.name))
-                        .map((cat) => (
-                          <Badge
-                            key={cat.id}
-                            variant="outline"
-                            className={cn(
-                              "text-xs",
-                              cat.bgColor && "border-transparent",
-                            )}
-                            style={
-                              cat.bgColor
-                                ? {
-                                    backgroundColor: cat.bgColor,
-                                    color: cat.textColor ?? "#fff",
-                                  }
-                                : undefined
-                            }
-                          >
-                            {cat.name}
-                          </Badge>
-                        ))}
+                        .map((cat) => {
+                          const palette = resolveCategoryPalette(cat);
+                          return (
+                            <Badge
+                              key={cat.id}
+                              className="border-transparent text-xs"
+                              style={{
+                                backgroundColor: palette.bgColor,
+                                color: palette.textColor,
+                              }}
+                            >
+                              {cat.name}
+                            </Badge>
+                          );
+                        })}
                     </div>
                   )}
                   {item.patternDescription && (
@@ -433,26 +428,21 @@ function PieceCard({
             <div className="flex flex-wrap gap-1">
               {[...item.categories]
                 .sort((a, b) => a.name.localeCompare(b.name))
-                .map((cat) => (
-                  <Badge
-                    key={cat.id}
-                    variant="outline"
-                    className={cn(
-                      "text-[10px] px-1.5 py-0",
-                      cat.bgColor && "border-transparent",
-                    )}
-                    style={
-                      cat.bgColor
-                        ? {
-                            backgroundColor: cat.bgColor,
-                            color: cat.textColor ?? "#fff",
-                          }
-                        : undefined
-                    }
-                  >
-                    {cat.name}
-                  </Badge>
-                ))}
+                .map((cat) => {
+                  const palette = resolveCategoryPalette(cat);
+                  return (
+                    <Badge
+                      key={cat.id}
+                      className="border-transparent px-1.5 py-0 text-[10px]"
+                      style={{
+                        backgroundColor: palette.bgColor,
+                        color: palette.textColor,
+                      }}
+                    >
+                      {cat.name}
+                    </Badge>
+                  );
+                })}
             </div>
           ) : (
             <Badge
@@ -866,11 +856,17 @@ export default function Collection() {
   // persist until "Done", with a generation guard so a dismissed run's
   // late result can never write icons back.
   const queryClient = useQueryClient();
-  const { mutateAsync: bulkMutateAsync } = useBulkReanalyzePottery();
+  const { mutateAsync: reanalyzeItemAsync } = useReanalyzePottery({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListPotteryQueryKey() });
+      },
+    },
+  });
   const bulkMode = useMultiSelectMode(POTTERY_BULK_MAX);
   const [bulkStatus, setBulkStatus] = useState<string | null>(null);
   const bulkRun = useBulkReanalyzeRun({
-    mutateAsync: bulkMutateAsync,
+    runItem: (id) => reanalyzeItemAsync({ id }),
     keyFor: potteryReanalyzeKey,
     invalidate: () =>
       queryClient.invalidateQueries({ queryKey: getListPotteryQueryKey() }),
@@ -901,14 +897,6 @@ export default function Collection() {
     setBulkStatus(null);
     clearSettledAsyncActionStatuses(POTTERY_REANALYZE_KEY_PREFIX);
   }
-
-  const { mutateAsync: reanalyzeItemAsync } = useReanalyzePottery({
-    mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getListPotteryQueryKey() });
-      },
-    },
-  });
 
   function handleReanalyze(id: number) {
     const key = potteryReanalyzeKey(id);
@@ -1273,7 +1261,7 @@ export default function Collection() {
             </button>
             {usedCategories.map((cat) => {
               const active = filterCategoryIds.has(cat.id);
-              const hasBg = !!cat.bgColor;
+              const palette = resolveCategoryPalette(cat);
               return (
                 <button
                   key={cat.id}
@@ -1288,25 +1276,12 @@ export default function Collection() {
                   }
                   className={cn(
                     "rounded-full border px-3 py-1 text-xs font-medium transition",
-                    !hasBg &&
-                      (active
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-card-border bg-card text-muted-foreground hover:border-primary/40"),
-                    hasBg && "border",
                   )}
-                  style={
-                    hasBg
-                      ? {
-                          backgroundColor: active
-                            ? cat.bgColor!
-                            : "transparent",
-                          color: active
-                            ? (cat.textColor ?? "#fff")
-                            : cat.bgColor!,
-                          borderColor: cat.bgColor!,
-                        }
-                      : undefined
-                  }
+                  style={{
+                    backgroundColor: active ? palette.bgColor : "transparent",
+                    color: active ? palette.textColor : palette.bgColor,
+                    borderColor: palette.bgColor,
+                  }}
                   data-testid={`filter-cat-${cat.id}`}
                 >
                   {cat.name}
@@ -1440,47 +1415,38 @@ export default function Collection() {
             </div>
           ) : (
             <>
-              {totalPages > 1 && (
-                <GalleryPaginator
-                  page={page}
-                  totalPages={totalPages}
-                  onPageChange={(p) => setPage(p)}
-                  className="mb-4"
-                />
-              )}
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                {paged.map((item) => (
-                  <PieceCard
-                    key={item.id}
-                    item={item}
-                    selecting={compareMode || bulkMode.active}
-                    selected={
-                      bulkMode.active
-                        ? bulkMode.selectedIds.includes(item.id)
-                        : selectedIds.includes(item.id)
-                    }
-                    onToggleSelect={
-                      bulkMode.active ? bulkMode.toggle : toggleSelect
-                    }
-                    onQuickEdit={setQuickEditItem}
-                    onReanalyze={handleReanalyze}
-                    onColorFilter={(c) =>
-                      setFilterColor(filterColor === c ? null : c)
-                    }
-                    activeColor={filterColor}
-                    onSetCategories={setCategoryEditItem}
-                    onDelete={(item) => setDeleteConfirmId(item.id)}
-                  />
-                ))}
-              </div>
-              {totalPages > 1 && (
-                <GalleryPaginator
-                  page={page}
-                  totalPages={totalPages}
-                  onPageChange={(p) => setPage(p)}
-                  className="mt-6"
-                />
-              )}
+              <GalleryPaginationPair
+                page={page}
+                totalPages={totalPages}
+                onPageChange={setPage}
+                hasResults={filtered.length > 0}
+              >
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                  {paged.map((item) => (
+                    <PieceCard
+                      key={item.id}
+                      item={item}
+                      selecting={compareMode || bulkMode.active}
+                      selected={
+                        bulkMode.active
+                          ? bulkMode.selectedIds.includes(item.id)
+                          : selectedIds.includes(item.id)
+                      }
+                      onToggleSelect={
+                        bulkMode.active ? bulkMode.toggle : toggleSelect
+                      }
+                      onQuickEdit={setQuickEditItem}
+                      onReanalyze={handleReanalyze}
+                      onColorFilter={(c) =>
+                        setFilterColor(filterColor === c ? null : c)
+                      }
+                      activeColor={filterColor}
+                      onSetCategories={setCategoryEditItem}
+                      onDelete={(item) => setDeleteConfirmId(item.id)}
+                    />
+                  ))}
+                </div>
+              </GalleryPaginationPair>
             </>
           )}
         </>

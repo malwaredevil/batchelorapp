@@ -27,6 +27,7 @@ function isTransientError(err: unknown): boolean {
     const msg = err.message.toLowerCase();
     if (
       msg.includes("timeout") ||
+      msg.includes("connection terminated") ||
       msg.includes("econnreset") ||
       msg.includes("econnrefused") ||
       msg.includes("network") ||

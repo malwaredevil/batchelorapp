@@ -1,5 +1,6 @@
 import { inArray } from "drizzle-orm";
 import { db, quiltingCategories } from "@workspace/db";
+import { getCategoryPalette } from "@workspace/web-core/colors";
 
 export interface ResolveQuiltingCategoriesOptions {
   maxCategories?: number;
@@ -31,7 +32,12 @@ export async function resolveOrCreateQuiltingCategories(
 
   await db
     .insert(quiltingCategories)
-    .values(unique.map((name) => ({ name })))
+    .values(
+      unique.map((name) => ({
+        name,
+        ...getCategoryPalette(name),
+      })),
+    )
     .onConflictDoNothing();
 
   const rows = await db

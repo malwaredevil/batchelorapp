@@ -43,6 +43,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { resolveCategoryPalette } from "@workspace/web-core/colors";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -76,6 +77,8 @@ import {
 import {
   CollectionDetailHero,
   CollectionDetailPanelStack,
+  getPhotoRecognitionRefetchInterval,
+  PhotoRecognitionStatus,
   ReminderBellButton,
 } from "@workspace/collection-ui";
 
@@ -708,6 +711,10 @@ export default function PieceDetail() {
     query: {
       enabled: Number.isFinite(id),
       queryKey: getGetPotteryQueryKey(id),
+      refetchInterval: (query) =>
+        getPhotoRecognitionRefetchInterval(
+          query.state.data?.recognitionRefreshStatus,
+        ),
     },
   });
   const { data: allCategories = [] } = useListCategories();
@@ -1028,6 +1035,8 @@ export default function PieceDetail() {
             )}
           </div>
 
+          <PhotoRecognitionStatus status={item.recognitionRefreshStatus} />
+
           {/* AI description */}
           {editing ? (
             <EditField
@@ -1075,29 +1084,24 @@ export default function PieceDetail() {
               <div className="flex flex-wrap gap-1.5">
                 {[...item.categories]
                   .sort((a, b) => a.name.localeCompare(b.name))
-                  .map((cat) => (
-                    <button
-                      key={cat.id}
-                      type="button"
-                      onClick={() => navigate("/pottery?cat=" + cat.id)}
-                      title={`Filter collection by "${cat.name}"`}
-                      className={cn(
-                        "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition hover:opacity-80",
-                        !cat.bgColor &&
-                          "border border-card-border bg-muted text-muted-foreground",
-                      )}
-                      style={
-                        cat.bgColor
-                          ? {
-                              backgroundColor: cat.bgColor,
-                              color: cat.textColor ?? "#fff",
-                            }
-                          : undefined
-                      }
-                    >
-                      {cat.name}
-                    </button>
-                  ))}
+                  .map((cat) => {
+                    const palette = resolveCategoryPalette(cat);
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => navigate("/pottery?cat=" + cat.id)}
+                        title={`Filter collection by "${cat.name}"`}
+                        className="inline-flex items-center rounded-full border border-transparent px-2.5 py-0.5 text-xs font-medium transition hover:opacity-80"
+                        style={{
+                          backgroundColor: palette.bgColor,
+                          color: palette.textColor,
+                        }}
+                      >
+                        {cat.name}
+                      </button>
+                    );
+                  })}
               </div>
             </div>
           )}

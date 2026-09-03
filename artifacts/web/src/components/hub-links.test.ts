@@ -193,6 +193,12 @@ const MODULES_ROUTES: string[] = [
   "/modules/ornaments/maintenance",
   "/modules/ornaments/hallmark-events",
   "/modules/ornaments/ornament/:id",
+  // magnets
+  "/modules/magnets/",
+  "/modules/magnets/item/:id",
+  "/modules/magnets/add",
+  "/modules/magnets/bulk-add",
+  "/modules/magnets/categories",
   // office
   "/modules/office/",
   "/modules/office/gmail",
@@ -320,5 +326,33 @@ describe("hub hero cards and quick links — extracted hrefs must resolve to kno
 
   it("accepts /elaine/ as a root-level (non-modules) route", () => {
     expect(isKnownRoute("/elaine/")).toBe(true);
+  });
+
+  it("keeps the Magnets Hub card fully registered", () => {
+    const appsSource = readFileSync(
+      resolve(WORKSPACE_ROOT, "artifacts/web/src/config/apps.tsx"),
+      "utf-8",
+    );
+    const launcherSource = readFileSync(
+      resolve(WORKSPACE_ROOT, "artifacts/web/src/components/AppLauncher.tsx"),
+      "utf-8",
+    );
+    const widgetSource = readFileSync(
+      resolve(WORKSPACE_ROOT, "artifacts/web/src/hooks/use-widgets.ts"),
+      "utf-8",
+    );
+
+    expect(appsSource).toContain('id: "magnets"');
+    expect(appsSource).toContain(
+      "image: `${base}images/magnets-collection.svg`",
+    );
+    expect(launcherSource).toContain(
+      '{ label: "Magnet", href: `${base}modules/magnets/add` }',
+    );
+    expect(launcherSource).toContain("const MAGNETS_QUICK_LINKS");
+    expect(launcherSource).toContain("magnets: {");
+    expect(launcherSource).toContain("magnetsData?.total");
+    expect(launcherSource).toContain("magnetsCategoriesData");
+    expect(widgetSource).toContain('  "magnets",');
   });
 });

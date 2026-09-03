@@ -1,6 +1,7 @@
 import { z } from "zod/v4";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import type OpenAI from "openai";
+import { getCategoryPalette } from "@workspace/web-core/colors";
 import {
   db,
   fabrics,
@@ -19,21 +20,20 @@ import {
   detectCreasesFromBuffer,
   removeCreasesFromBuffer,
 } from "../lib/crease-removal";
-import {
-  bulkReanalyzeFabrics,
-  createFabricFromBuffer,
-} from "../routes/quilting/fabrics";
+import { createFabricFromBuffer } from "../routes/quilting/fabrics";
 import { env } from "../lib/env";
 import { consumeAiRateLimit } from "../middleware/rateLimit";
 
 export const AddPhotoToQuiltingPayload = z.object({
   attachmentUrl: z.string().url().max(2000),
 });
-import { bulkReanalyzePatterns } from "../routes/quilting/patterns";
+import { deleteQuiltById } from "../routes/quilting/quilts";
 import {
-  bulkReanalyzeQuilts,
-  deleteQuiltById,
-} from "../routes/quilting/quilts";
+  runFabricRecognition,
+  runPatternRecognition,
+  runQuiltRecognition,
+} from "../lib/quilting/recognition";
+import { runQuiltingBulkReanalysis } from "../lib/quilting/bulk-reanalyze";
 import {
   renameQuiltingCategory,
   mergeQuiltingCategories,
@@ -402,7 +402,7 @@ async function resolveOrCreateQuiltingCategories(
     try {
       const [created] = await db
         .insert(quiltingCategories)
-        .values({ name })
+        .values({ name, ...getCategoryPalette(name) })
         .returning({ id: quiltingCategories.id });
       if (created) ids.push(created.id);
     } catch {
@@ -633,7 +633,11 @@ export const quiltingActionExecutors: Record<
   ) => {
     const [row] = await db
       .insert(quiltingCategories)
-      .values({ name: payload.name, userId })
+      .values({
+        name: payload.name,
+        userId,
+        ...getCategoryPalette(payload.name),
+      })
       .returning();
     return {
       status: 201,
@@ -961,10 +965,12 @@ export const quiltingActionExecutors: Record<
 
     const result =
       payload.entityType === "fabric"
-        ? await bulkReanalyzeFabrics(ids ?? [])
+        ? await runQuiltingBulkReanalysis(ids ?? [], (id) =>
+            runFabricRecognition(id, "bulk-reanalyze-fabric"),
+          )
         : payload.entityType === "pattern"
-          ? await bulkReanalyzePatterns(ids ?? [])
-          : await bulkReanalyzeQuilts(ids ?? []);
+          ? await runQuiltingBulkReanalysis(ids ?? [], runPatternRecognition)
+          : await runQuiltingBulkReanalysis(ids ?? [], runQuiltRecognition);
 
     return {
       status: 200,

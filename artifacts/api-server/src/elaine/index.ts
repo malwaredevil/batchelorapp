@@ -140,10 +140,7 @@ import {
   lookupEbayMarketValue,
   buildEbayQuery,
 } from "../lib/pottery/ebay-market-value";
-import {
-  searchHallmark,
-  lookupHallmarkFromDb,
-} from "../lib/ornaments/hallmark-search";
+import { searchHallmark } from "../lib/ornaments/hallmark-search";
 import { lookupBarcode } from "../lib/ornaments/barcode";
 import { lookupFlightPrices } from "../lib/travels/flights";
 import { removeWishlistItemExecutor } from "./travel-wishlist-executors";
@@ -176,6 +173,12 @@ import {
   type OrnamentActionType,
 } from "./ornaments-actions";
 import {
+  magnetActionSchemas,
+  magnetActionExecutors,
+  buildMagnetActionLabel,
+  type MagnetActionType,
+} from "./magnets-actions";
+import {
   buildUniversalActionLabel,
   universalActionExecutors,
   universalActionSchemas,
@@ -205,6 +208,7 @@ import {
   communicationActionSchemas,
   executeListContactChannels,
   executeListScheduledContacts,
+  formatScheduledTime,
   LIST_CONTACT_CHANNELS_TOOL_NAME,
   LIST_SCHEDULED_CONTACTS_TOOL_NAME,
   type CommunicationActionType,
@@ -222,6 +226,7 @@ import {
   loadCrossChannelContext,
   appendCrossChannelEntry,
 } from "../lib/elaine-cross-channel";
+import { findManageableReminder } from "../lib/reminders-management";
 import {
   RESTRICTED_EXCLUDED_ACTION_TYPES,
   RESTRICTED_SOFT_TOOL_NAMES,
@@ -466,6 +471,7 @@ const APP_IDS = [
   "pottery",
   "quilting",
   "ornaments",
+  "magnets",
   "hub",
   "elaine",
 ] as const;
@@ -686,6 +692,26 @@ async function getReminderLabelInfo(
     .from(reminders)
     .where(eq(reminders.id, reminderId));
   return item ?? null;
+}
+
+async function getManageableTripReminderLabelInfo(
+  reminderId: number,
+  tripId: number,
+  userId: number,
+): Promise<{ id: number; title: string; dueAt: Date | null } | null> {
+  const reminder = await findManageableReminder(reminderId, userId);
+  if (
+    !reminder ||
+    reminder.entityType !== "travels_trip" ||
+    reminder.entityId !== tripId
+  ) {
+    return null;
+  }
+  return {
+    id: reminder.id,
+    title: reminder.title,
+    dueAt: reminder.dueAt,
+  };
 }
 
 async function getDocumentLabelInfo(documentId: number): Promise<{
@@ -1151,6 +1177,7 @@ const ActionBody = z.discriminatedUnion("type", [
   ...potteryActionSchemas,
   ...quiltingActionSchemas,
   ...ornamentActionSchemas,
+  ...magnetActionSchemas,
   ...universalActionSchemas,
   ...adaptiveActionSchemas,
   ...appOperationActionSchemas,
@@ -1211,8 +1238,22 @@ const ORNAMENT_ACTION_TYPES = new Set<string>([
   "ornament_ebay_price_lookup",
   "suggest_and_create_ornament_categories",
 ]);
+const MAGNET_ACTION_TYPES = new Set<string>([
+  "update_magnet_item",
+  "delete_magnet_item",
+  "create_magnet_category",
+  "delete_magnet_category",
+  "rename_magnet_category",
+  "merge_magnet_categories",
+  "lock_magnet_field",
+  "update_magnet_item_categories",
+  "delete_magnet_photo",
+  "promote_magnet_photo",
+  "reanalyze_magnet",
+  "add_photo_to_magnets",
+]);
 
-async function buildActionLabel(
+export async function buildActionLabel(
   action: PendingAction,
   userId: number,
 ): Promise<string> {
@@ -1332,9 +1373,23 @@ async function buildActionLabel(
       return `Update ${name}${changes.length ? `: ${changes.join(", ")}` : ""}`;
     }
     case "delete_reminder": {
-      const reminder = await getReminderLabelInfo(action.payload.reminderId);
-      const name = reminder ? `"${reminder.title}"` : "this reminder";
-      return `Delete ${name}`;
+      const reminder = await getManageableTripReminderLabelInfo(
+        action.payload.reminderId,
+        action.payload.tripId,
+        userId,
+      );
+      if (!reminder) {
+        throw new Error("Reminder not found or not manageable");
+      }
+      const timezone = await getUserTimezone(userId);
+      const due =
+        reminder.dueAt === null
+          ? ""
+          : ` due ${formatScheduledTime(
+              reminder.dueAt.toISOString(),
+              timezone,
+            )}`;
+      return `Delete "${reminder.title}" (reminder #${reminder.id}${due})`;
     }
     case "add_itinerary_day": {
       const trip = await getTripLabelInfo(action.payload.tripId);
@@ -1442,6 +1497,11 @@ async function buildActionLabel(
           action as { type: OrnamentActionType; payload: unknown },
         );
       }
+      if (MAGNET_ACTION_TYPES.has(action.type as MagnetActionType)) {
+        return buildMagnetActionLabel(
+          action as { type: MagnetActionType; payload: unknown },
+        );
+      }
       if (
         universalActionSchemas.some(
           (schema) =>
@@ -1526,6 +1586,7 @@ type TravelActionType = Exclude<
   | PotteryActionType
   | QuiltingActionType
   | OrnamentActionType
+  | MagnetActionType
   | UniversalActionType
   | AdaptiveActionType
   | AppOperationActionType
@@ -1919,16 +1980,7 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
     payload: z.infer<typeof DeleteReminderActionPayload>,
     userId: number,
   ) => {
-    const [existing] = await db
-      .select({
-        id: reminders.id,
-        entityType: reminders.entityType,
-        entityId: reminders.entityId,
-      })
-      .from(reminders)
-      .where(
-        and(eq(reminders.id, payload.reminderId), isNull(reminders.deletedAt)),
-      );
+    const existing = await findManageableReminder(payload.reminderId, userId);
     if (
       !existing ||
       existing.entityType !== "travels_trip" ||
@@ -1937,22 +1989,34 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
       return { status: 404, body: { error: "Reminder not found" } };
     }
 
-    await db
+    const [deleted] = await db
       .update(reminders)
-      .set({ deletedAt: new Date() })
-      .where(eq(reminders.id, payload.reminderId));
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(
+        and(
+          eq(reminders.id, existing.id),
+          eq(reminders.entityType, "travels_trip"),
+          eq(reminders.entityId, payload.tripId),
+          isNull(reminders.deletedAt),
+        ),
+      )
+      .returning({ id: reminders.id });
+    if (!deleted) {
+      return { status: 404, body: { error: "Reminder not found" } };
+    }
     void logActivity({
       actorUserId: userId,
       actorChannel: "elaine",
       actionType: "delete_reminder",
       entityType: "reminder",
-      entityId: payload.reminderId,
+      entityId: deleted.id,
+      entityLabel: existing.title,
       reversible: true,
     });
 
     return {
       status: 200,
-      body: { type: "delete_reminder", result: { id: payload.reminderId } },
+      body: { type: "delete_reminder", result: { id: deleted.id } },
     };
   }) as ActionExecutor,
 
@@ -2865,6 +2929,7 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
   ...potteryActionExecutors,
   ...quiltingActionExecutors,
   ...ornamentActionExecutors,
+  ...magnetActionExecutors,
   ...universalActionExecutors,
   ...adaptiveActionExecutors,
   ...communicationActionExecutors,
@@ -2889,6 +2954,7 @@ const NAVIGATE_PATH_RE_BY_APP: Record<AppId, RegExp> = {
     /^\/(fabrics\/\d+|fabrics\/add|fabrics|patterns\/\d+|patterns\/add|patterns|quilts\/\d+|quilts\/add|quilts|compare|blocks\/\d+\/edit|blocks\/\d+\/cut-pattern|blocks\/\d+|blocks\/new|blocks|library\/blocks\/\d+\/edit|library\/blocks\/new|library\/blocks|layouts\/\d+\/edit|layouts\/\d+|layouts\/new|layouts|whole-quilt\/designer|whole-quilt|shopping|tools\/yardage|categories|maintenance)?$/,
   ornaments:
     /^\/(ornament\/\d+|add|scan|stats|categories|maintenance|settings)?$/,
+  magnets: /^\/(item\/\d+|add|bulk-add|categories)?$/,
   hub: /^\/(account)?$/,
   elaine: /^\/$/,
 };
@@ -2898,7 +2964,7 @@ const NAVIGATE_PATH_RE_BY_APP: Record<AppId, RegExp> = {
 // The client detects these prefixes and uses window.location.href instead of
 // the SPA router so the correct React bundle loads.
 const CROSS_APP_NAVIGATE_RE =
-  /^\/(pottery|quilting|travels|ornaments|elaine)(\/[^?#]*)?(\?[a-zA-Z0-9=+%._~!$&'()*,;:-]*)?\/?$|^\/barcode-lookup$/;
+  /^\/(pottery|quilting|travels|ornaments|magnets|elaine)(\/[^?#]*)?(\?[a-zA-Z0-9=+%._~!$&'()*,;:-]*)?\/?$|^\/barcode-lookup$/;
 
 function navigatePayloadSchemaFor(appId: AppId) {
   return z.object({
@@ -3753,6 +3819,15 @@ router.get("/conversations", async (req, res) => {
   });
 });
 
+router.get("/conversations/count", async (req, res) => {
+  const userId = req.session.userId!;
+  const [result] = await db
+    .select({ total: count() })
+    .from(elaineHistoryConversations)
+    .where(eq(elaineHistoryConversations.userId, userId));
+  res.json({ count: Number(result?.total ?? 0) });
+});
+
 // POST /conversations — create a new named conversation.
 router.post("/conversations", async (req, res) => {
   const userId = req.session.userId!;
@@ -3948,6 +4023,7 @@ const CURRENT_APP_LABEL: Record<AppId, string> = {
   pottery: "Pottery",
   quilting: "Quilting",
   ornaments: "Ornaments",
+  magnets: "Magnets",
   hub: "the Batchelor hub (app launcher)",
   elaine: "her own dedicated space (the Elaine app)",
 };
@@ -4181,9 +4257,9 @@ Quilting app:
 
 Ornaments app:
 - Collection ("/"): the full Christmas ornaments collection grid/list, with search and filtering.
-- Add Ornament ("/camera-add"): the add-ornament workflow page. Shows two side-by-side options: "Bulk add Photos" (opens a multi-photo picker — AI identifies and catalogues each image) and "Scan Ornament Barcode" (opens an inline live barcode scanner). Photos and barcode scans are processed in a live queue shown below the options. After a barcode scan returns a result, the user is asked "Is this the right ornament?" — they confirm or reject before the data is applied. "Done adding Ornament" navigates to the new ornament's edit page; "Cancel" deletes any in-progress ornament and returns to the collection.
+- Add Ornament ("/camera-add"): the add-ornament workflow page. "Take Photos" opens the camera; the first camera photo opens the image editor, where the user can make edits or choose "Retake Image." Saving that edited image creates and AI-catalogues the ornament, then opens its edit page for details and additional images. "Upload Photos" retains its multi-photo queue behavior, and "Scan Ornament Barcode" opens an inline live barcode scanner. After a barcode scan returns a result, the user is asked "Is this the right ornament?" — they confirm or reject before the data is applied. "Cancel" deletes any in-progress ornament and returns to the collection.
 - Add Ornament form ("/add"): the manual entry form, pre-filled when navigating here after a confirmed barcode scan from the camera-add page.
-- Ornament detail ("/ornament/:id"): everything about one ornament — photos, name, series/collection, year, brand, condition, origin, dimensions, notes, AI description/motifs/colors, locked fields, category assignment, and book value.
+- Ornament detail ("/ornament/:id"): everything about one ornament — photos, name, series/collection, year, brand, origin, dimensions, notes, AI description/motifs/colors, locked fields, category assignment, and book value.
 - Lookup Ornament ("/scan"): barcode lookup tool — lookup only, nothing is saved. Scan a barcode or upload a photo to extract a barcode, see the ornament's catalog details, and confirm whether the information is correct. If the result is wrong, the user can submit a correction (stored for future lookups).
 - Stats ("/stats"): collection-wide statistics — totals, quantities, book value, and breakdowns by series/collection.
 - Categories ("/categories"): manage the categories used to organize the collection, including merging categories together.
@@ -4259,7 +4335,7 @@ In both cases, make this your FIRST tool call — before writing any reply text 
 ${askVsActGuidance}
 ${confirmationModeSection}
 
-REMINDERS: Use add_reminder for requests like "remind me to check in for our flight" or "remind me to book the hotel by Friday" — include recipientEmails only if the user asked to also notify someone. Use edit_reminder for changes to an existing reminder (title, description, due date, done state, or recipients) — only include the fields the user asked to change, and never guess a reminder id. Use delete_reminder to permanently remove an existing reminder; never guess a reminder id for either. These three are all trip-scoped — only usable when the user is talking about a specific trip. For a general-purpose "remind me..." with no trip involved (e.g. "remind me tomorrow to call the vet", "email and slack me next Tuesday at 9am about the dentist"), use create_reminder instead — it always targets the requesting user's own account and never a household member. For scheduling a call or message TO another household member at a future time, use call_contact/message_contact's own scheduleAt field, not create_reminder. For scheduling a call-BACK to the requesting user themselves ("call me at 2:30", "call me in an hour and remind me to X"), use call_me's own scheduleAt field the same way — it is not limited to immediate calls. All of create_reminder's when field and call_contact/message_contact/call_me's scheduleAt field accept a structured relative-time spec — always translate the user's relative phrasing ("tomorrow", "in 3 days", "next Tuesday") into that spec's fields yourself; never compute or write out an ISO datetime from a relative phrase, the resolver does that math deterministically. Use list_reminders to see every reminder the user can manage — from create_reminder, any collection item's bell icon, or trip reminders — with exact numeric ids, due dates, recurrence, and status; call it first whenever the user asks what's upcoming/overdue or you need a reminder's id before acting on it (never guess one). Use snooze_reminder to move any reminder the user can manage to a new time (the when field, same relative-time spec) or to skip just the next occurrence of a recurring one (skipNext: true) without changing its recurrence rule — this works across all reminder sources, not just create_reminder's.
+REMINDERS: Use add_reminder for requests like "remind me to check in for our flight" or "remind me to book the hotel by Friday" — include recipientEmails only if the user asked to also notify someone. Use edit_reminder for changes to an existing reminder (title, description, due date, done state, or recipients) — only include the fields the user asked to change, and never guess a reminder id. Use delete_reminder to permanently remove an existing reminder. If the user's cancellation request does not itself contain one unambiguous exact numeric reminder id, call list_reminders first and match against its manageable active reminders. If more than one reminder plausibly matches the user's words, ask which one they mean and do not call delete_reminder yet. Never substitute a different id merely because it belongs to the same trip. These trip reminder actions are only usable when the user is talking about a specific trip. For a general-purpose "remind me..." with no trip involved (e.g. "remind me tomorrow to call the vet", "email and slack me next Tuesday at 9am about the dentist"), use create_reminder instead — it always targets the requesting user's own account and never a household member. For scheduling a call or message TO another household member at a future time, use call_contact/message_contact's own scheduleAt field, not create_reminder. For scheduling a call-BACK to the requesting user themselves ("call me at 2:30", "call me in an hour and remind me to X"), use call_me's own scheduleAt field the same way — it is not limited to immediate calls. All of create_reminder's when field and call_contact/message_contact/call_me's scheduleAt field accept a structured relative-time spec — always translate the user's relative phrasing ("tomorrow", "in 3 days", "next Tuesday") into that spec's fields yourself; never compute or write out an ISO datetime from a relative phrase, the resolver does that math deterministically. Use list_reminders to see every reminder the user can manage — from create_reminder, any collection item's bell icon, or trip reminders — with exact numeric ids, due dates, recurrence, and status; call it first whenever the user asks what's upcoming/overdue or you need a reminder's id before acting on it (never guess one). Use snooze_reminder to move any reminder the user can manage to a new time (the when field, same relative-time spec) or to skip just the next occurrence of a recurring one (skipNext: true) without changing its recurrence rule — this works across all reminder sources, not just create_reminder's.
 
 ITINERARY: Use add_itinerary_day for requests like "add a day trip to Kyoto on the 14th" — it appends a brand-new day to the trip's itinerary. Use regenerate_itinerary_day for requests like "regenerate day 3" or "come up with a new plan for that day" — it re-runs AI planning for ONE existing day and replaces its activities, using balanced-pace, general-interest defaults since it can't see any per-session style/interest picks the user made in the UI. Only use regenerate_itinerary_day on a day number you can see listed on screen (e.g. "Day 3"); never guess a day number, and never use it to create a new day (use add_itinerary_day for that). Use generate_itinerary for requests like "plan my whole trip" or "generate an itinerary" — it replaces ALL days with a fresh AI-generated plan; if the trip already has itinerary days shown on screen, say so and confirm the user wants to overwrite them before calling it. Each activity you can see on screen has a 1-based day/activity number and a status (tentative or confirmed); tentative activities synced from a document are flagged as such. Use confirm_itinerary_activity to mark a tentative activity firm (or back to tentative) once the user has verified it, and remove_itinerary_activity to delete an activity outright (e.g. a wrong or duplicate document-derived entry) — both require the exact day and activity numbers shown on screen, never guessed.
 
@@ -4271,7 +4347,7 @@ SHARING & PHOTOS: Use generate_trip_share_link when asked to create/get a sharea
 
 DISPLAY PREFERENCES: Use update_card_layout when the user wants to reorder the cards on Trip Detail pages (Reminders, Itinerary, Documents, Packing/To-do, Photos, Magnets, Weather & Nearby) — this is personal to the requesting user only, applies to every trip they view, and needs the FULL new order, not just the cards that moved. Use update_trip_card_collapse to collapse/expand specific cards on ONE trip for the requesting user only, again personal and never shared with the household — provide the full set of card ids that should end up collapsed.
 
-IMAGE RECOGNITION: You CAN see and analyze photos attached via the paperclip button. For a photo of a pottery/ceramic piece, ALWAYS call analyze_pottery_photo before answering an identification, style, shape, maker, or glaze question — never guess those from general knowledge alone, even for a piece that will never be saved to the collection; the tool runs the app's real vision-analysis pipeline (the same one used when cataloguing a piece) and your answer must be grounded in its result. Do the same for a quilting fabric photo with analyze_fabric_photo (print type, designer, line, fiber content, colorway) and for a Hallmark/Christmas ornament photo with analyze_ornament_photo (name, series/collection, year, and any UPC visible on the box or tag). All three are one-off, non-destructive lookups — they never create or edit a collection item; only call an update_*/create_* action tool afterward if the user explicitly asks to save the result. If the attached photo is NOT a pottery piece, quilting fabric, or ornament (e.g. a random household item, receipt, or unrelated object), these three tools don't apply — describe what you see and use your own visual judgement and general knowledge instead, and say plainly if you're not sure what it is rather than asserting a guess as fact. For any other visual question ("what's wrong with this?", "describe this", condition/age assessment, etc.) on a photo that IS a pottery/fabric/ornament item, still run the matching analyze_*_photo tool first so your answer is grounded in the real analysis, then add your own visual commentary on top of it. Never tell the user you cannot see or analyze attached photos — you can.
+IMAGE RECOGNITION: You CAN see and analyze photos attached via the paperclip button. For a photo of a pottery/ceramic piece, ALWAYS call analyze_pottery_photo before answering an identification, style, shape, maker, or glaze question — never guess those from general knowledge alone, even for a piece that will never be saved to the collection; the tool runs the app's real vision-analysis pipeline (the same one used when cataloguing a piece) and your answer must be grounded in its result. Do the same for a quilting fabric photo with analyze_fabric_photo (print type, designer, line, fiber content, colorway) and for a Hallmark/Christmas ornament photo with analyze_ornament_photo (name, series/collection, year, and any UPC visible on the box or tag). All three are one-off, non-destructive lookups — they never create or edit a collection item; only call an update_*/create_* action tool afterward if the user explicitly asks to save the result. If the attached photo is NOT a pottery piece, quilting fabric, or ornament (e.g. a random household item, receipt, or unrelated object), these three tools don't apply — describe what you see and use your own visual judgement and general knowledge instead, and say plainly if you're not sure what it is rather than asserting a guess as fact. For any other visual question ("what's wrong with this?", "describe this", wear or age assessment, etc.) on a photo that IS a pottery/fabric/ornament item, still run the matching analyze_*_photo tool first so your answer is grounded in the real analysis, then add your own visual commentary on top of it. Never tell the user you cannot see or analyze attached photos — you can.
 
 GENERAL PRODUCT LOOKUP (a photo of something that is NOT already one of the household's Pottery/Quilting/Ornaments pieces — e.g. a random item photographed in a store, a gadget, a book, a toy, anything unrelated to those collections): this is a different situation from the collection-specific photo flows described elsewhere in this prompt (cataloguing a new piece, checking an existing ornament's eBay/Hallmark value, comparing a scanned photo against the collection, magnet duplicate-checks) — those only apply when the user is actually working within one of those collections. For a standalone "what is this / tell me about this" product photo with no collection context, don't stop at a visual description — research it in as few turns as possible: (1) use your vision to identify what you can from the image itself — product name/model, brand, category, distinguishing features/text/logos; (2) in that SAME turn, call ebay_search AND web_search together in parallel using what you identified — ebay_search for real market/resale price data (it returns actual sold prices, so prefer it over web_search for a pure price question), web_search for what the product actually is plus reviews/reputation/alternatives — rather than calling one, waiting, then deciding whether to call the other. Only reach for fetch_page afterward, and only if a specific listing or review page still needs more detail. Never rely on an un-sourced training-data guess for a price or reputation claim. This is simple factual research, not a judgment call — do not use consult_experts for it. Apply the WEB SEARCH CORROBORATION rules above to any claim sourced from web_search, and hedge exactly as those rules require when sources are thin or conflicting; (3) give the user the researched, sourced answer (what it is, price range, reputation, alternatives) rather than just describing what the photo shows. Do NOT add, catalog, or file the item into Pottery, Quilting, or Ornaments — this is an information lookup only, never an implicit cataloguing action. Only take that step if the user explicitly asks to add it — then call add_photo_to_pottery, add_photo_to_quilting, or add_photo_to_ornaments (passing the exact attachmentUrl of the photo from this message) to create the item using the same AI cataloguing pipeline the app uses. If the user asks to add it but doesn't specify which collection, ask before proceeding. Never file an item automatically, speculatively, or without a clear, explicit user request.
 
@@ -4300,11 +4376,11 @@ POTTERY ITEMS: Use update_pottery_item to edit an existing piece (name, notes, q
 
 QUILTING ITEMS: Use update_fabric / delete_fabric, update_pattern / delete_pattern for editing or removing an existing fabric or pattern — only if its numeric id is visible on screen, never guessed, and be clear in your visible reply that a delete is permanent. You can't create a brand-new fabric or finished quilt from chat since both require an uploaded photo you have no way to attach — but use create_pattern to add a new quilt pattern record (name, designer, block size, difficulty, source, notes; no image) since a pattern's image is optional. Use delete_quilt to permanently remove a finished quilt and its photos — only with a visible quiltId, and say clearly it's permanent. Use create_shopping_item / update_shopping_item / delete_shopping_item to manage the fabric/supplies shopping list. Use create_quilting_category / delete_quilting_category to manage categories; never guess a category id for deletion. Use rename_quilting_category to rename one, and merge_quilting_categories to fold one category into another (destructive to the source category — say so clearly); never guess either category id. Use create_block / create_layout to add a new blank block template or quilt layout (metadata + an empty grid only — this does NOT design the block's pattern or place blocks into the layout, since chat-driven geometry editing isn't supported; tell the user to open the block/layout editor in the app to actually design it). Use delete_block / delete_layout to remove one, only with a visible id. Use bulk_reanalyze_quilting to re-run AI analysis on fabrics, patterns, or finished quilts — pass specific ids when visible on screen, or omit ids to run against everything of that type still needing analysis; mention this takes a while. Use calculate_yardage whenever the user asks how much backing or binding fabric they need for a given quilt size — never do this arithmetic yourself, always call the tool so the numbers are accurate; it's a read-only estimate, not a saved record.
 
-ORNAMENTS ITEMS: Use update_ornament_item to edit an existing ornament (name, notes, quantity, series/collection, year, brand, condition, origin, dimensions) — only include fields that actually change, and only if the ornament's numeric id is visible on screen (look for "itemId: <number>"); never guess one. This also works right after an upload if the user tells you details in chat instead of typing them into the form. Use delete_ornament_item to permanently remove an ornament and its photos — say clearly in your visible reply that this deletes the item, since it's destructive. Use create_ornament_category / delete_ornament_category to manage the categories used to organize the collection; never guess a category id for deletion. Use update_ornament_item_categories to replace the full set of categories assigned to one ornament (pass every category id that should end up assigned, not just the ones to add). Use merge_ornament_categories to fold one category into another — this deletes the source category, so say so clearly since it's destructive; never guess either category id. Use lock_ornament_field to lock or unlock one AI-derived field (name, seriesOrCollection, year, dimensions, dominantColors, motifs, aiDescription, barcodeValue) on an ornament so future AI re-analysis will or won't overwrite it — only with a visible itemId. Use delete_ornament_photo to remove one supplemental photo from an ornament, and promote_ornament_photo to make a supplemental photo the new primary photo (this re-runs AI analysis with the new primary image, subject to locked fields) — both need a visible itemId and imageId, never guessed. Use bulk_reanalyze_ornaments to re-run AI analysis on several ornaments at once; pass itemIds if specific ones are visible on screen, or omit it to run against every ornament still missing AI analysis (capped at 20) — mention in your visible reply that this takes a while and calls AI per item. Use suggest_and_create_ornament_categories when the user wants help organizing an uncategorized or sparsely-categorized collection (e.g. "suggest and create some ornament categories", "organize my ornaments") — it takes no parameters, analyzes the whole collection's names/series/motifs/colors/brand/notes for recurring themes, skips any name that already matches an existing category, creates the rest, and immediately assigns every matching existing ornament to them (not just future ones); mention in your visible reply that this analyzes the collection and may take a moment.
+ORNAMENTS ITEMS: Use update_ornament_item to edit an existing ornament (name, notes, quantity, series/collection, year, brand, origin, dimensions) — only include fields that actually change, and only if the ornament's numeric id is visible on screen (look for "itemId: <number>"); never guess one. This also works right after an upload if the user tells you details in chat instead of typing them into the form. Use delete_ornament_item to permanently remove an ornament and its photos — say clearly in your visible reply that this deletes the item, since it's destructive. Use create_ornament_category / delete_ornament_category to manage the categories used to organize the collection; never guess a category id for deletion. Use update_ornament_item_categories to replace the full set of categories assigned to one ornament (pass every category id that should end up assigned, not just the ones to add). Use merge_ornament_categories to fold one category into another — this deletes the source category, so say so clearly since it's destructive; never guess either category id. Use lock_ornament_field to lock or unlock one AI-derived field (name, seriesOrCollection, year, dimensions, dominantColors, motifs, aiDescription, barcodeValue) on an ornament so future AI re-analysis will or won't overwrite it — only with a visible itemId. Use delete_ornament_photo to remove one supplemental photo from an ornament, and promote_ornament_photo to make a supplemental photo the new primary photo (this re-runs AI analysis with the new primary image, subject to locked fields) — both need a visible itemId and imageId, never guessed. Use bulk_reanalyze_ornaments to re-run AI analysis on several ornaments at once; pass itemIds if specific ones are visible on screen, or omit it to run against every ornament still missing AI analysis (capped at 20) — mention in your visible reply that this takes a while and calls AI per item. Use suggest_and_create_ornament_categories when the user wants help organizing an uncategorized or sparsely-categorized collection (e.g. "suggest and create some ornament categories", "organize my ornaments") — it takes no parameters, analyzes the whole collection's names/series/motifs/colors/brand/notes for recurring themes, skips any name that already matches an existing category, creates the rest, and immediately assigns every matching existing ornament to them (not just future ones); mention in your visible reply that this analyzes the collection and may take a moment.
 
 CONTEXT-AWARE LOOKUPS — read the on-screen state and act, don't ask: When the user asks a contextual question and the answer is already implicit in the page they're viewing, extract the data silently and call the right tool — never ask them to re-state what you can already see.
 
-**Ornament detail page** (context starts with "Ornament detail — itemId: …"): The context includes the ornament's name, brand, series/collection, year, barcode/UPC, condition, and any existing book value.
+**Ornament detail page** (context starts with "Ornament detail — itemId: …"): The context includes the ornament's name, brand, series/collection, year, barcode/UPC, and any existing book value.
 - "What's this worth?", "what would this sell for on eBay?", "check eBay for this", "how much is it?", "what's the value?", "what's the book value?" → call **both** ebay_search AND lookup_book_value in the same turn, in parallel. lookup_book_value is the app's real two-source book-value check (hallmarkornaments.com + hookedonhallmark.com, taking the higher of the two) — the exact same logic used when a book value is looked up for a saved item, so NEVER use search_hallmark for a value question; search_hallmark returns a different number (Hallmark's own catalog/retail price). Build the eBay query as "Hallmark Keepsake [name] [year]" (e.g. "Hallmark Keepsake Darth Vader 2023") — do NOT append the word "ornament". Pass lookup_book_value the ornament's name from context, plus series/year if known. When you report back: lead with the book value from lookup_book_value, then give the eBay sold-price range. If eBay returns no results, the book value is still a useful answer — don't say you couldn't find the value just because eBay had nothing. Do not ask which ornament.
 - "Look it up on Hallmark", "is this still on Hallmark.com?", "find the Hallmark listing", "what series is this in?", "tell me about this ornament" → call search_hallmark with the ornament's name or series from context — this is Hallmark's own catalog/retail/series info, a different question from book value. Do not ask which ornament.
 - "What did this originally sell for?", "what's the retail value?", "what was the MSRP?", "what did it cost new?", "link me to the product page" → call lookup_retail_value with the ornament's name from context, plus series/year if known. This is a DIFFERENT number from book value (secondary-market) and eBay (current resale) — it's what the ornament sold for new, plus a link to its product page when one is found. Report the value and, if present, the product link.
@@ -6303,21 +6379,15 @@ router.post("/chat", async (req, res) => {
               resultText =
                 "Invalid Hallmark search — provide a name or hallmarkSku.";
             } else {
-              // DB-first: skip Apify if the ornament is already in the local catalog
-              let result = await lookupHallmarkFromDb(parsed.data).catch(
-                () => null,
-              );
-              if (!result && env.apifyApiToken) {
-                result = await searchHallmark(parsed.data).catch(
-                  (err: unknown) => {
+              const result = env.apifyApiToken
+                ? await searchHallmark(parsed.data).catch((err: unknown) => {
                     logger.warn(
                       { err },
                       "elaine hallmark search failed (non-fatal)",
                     );
                     return null;
-                  },
-                );
-              }
+                  })
+                : null;
               if (!result) {
                 resultText = `No Hallmark product found for "${parsed.data.hallmarkSku ?? parsed.data.name ?? "(unknown)"}". Try a different name or SKU.`;
               } else {
@@ -6331,10 +6401,6 @@ router.post("/chat", async (req, res) => {
                 if (result.originalRetailPrice != null)
                   lines.push(
                     `Original retail: $${result.originalRetailPrice.toFixed(2)}`,
-                  );
-                if (result.collectorPriceUsd != null)
-                  lines.push(
-                    `Collector price: $${result.collectorPriceUsd.toFixed(2)}`,
                   );
                 if (result.description)
                   lines.push(`Description: ${result.description}`);
@@ -7107,29 +7173,9 @@ router.post("/chat", async (req, res) => {
                     );
                   if (result.description)
                     lines.push(`Description: ${result.description}`);
-                  if (result.hallmarkArtist)
-                    lines.push(`Artist: ${result.hallmarkArtist}`);
-                  if (result.hallmarkSku)
-                    lines.push(`Hallmark SKU: ${result.hallmarkSku}`);
-                  if (result.hallmarkSeriesName)
-                    lines.push(`Hallmark series: ${result.hallmarkSeriesName}`);
-                  if (result.hallmarkRetailPriceUsd != null)
-                    lines.push(
-                      `Original retail price: $${result.hallmarkRetailPriceUsd}`,
-                    );
-                  if (result.hallmarkCollectorPriceUsd != null)
-                    lines.push(
-                      `Collector book value: $${result.hallmarkCollectorPriceUsd}`,
-                    );
-                  if (result.hallmarkInStock != null)
-                    lines.push(
-                      `In stock on Hallmark.com: ${result.hallmarkInStock ? "yes" : "no"}`,
-                    );
-                  if (result.hallmarkProductUrl)
-                    lines.push(`Hallmark page: ${result.hallmarkProductUrl}`);
                 } else {
                   lines.push(
-                    `No product found for barcode ${parsed.data.barcode}. Not in the Hallmark catalog or general product database.`,
+                    `No product found for barcode ${parsed.data.barcode} from the live eBay or AI lookup.`,
                   );
                 }
                 resultText = lines.join("\n");
@@ -7944,6 +7990,24 @@ router.get("/tasks", async (req, res) => {
     .default(50)
     .parse(req.query.limit);
   res.json({ tasks: await listElaineTasksForUser(userId, limit) });
+});
+
+router.get("/tasks/count", async (req, res) => {
+  const userId = req.session.userId!;
+  const result = await pool.query<{ open_count: string }>(
+    `SELECT count(*) FILTER (
+       WHERE status IN ('queued', 'scheduled', 'retry_wait', 'running')
+          OR (status = 'succeeded' AND result->>'state' = 'blocked')
+          OR status NOT IN (
+            'cancelled', 'running', 'queued', 'scheduled', 'retry_wait',
+            'succeeded', 'failed', 'dead_letter'
+          )
+     ) AS open_count
+     FROM app_jobs
+     WHERE type = 'elaine.research' AND created_by_user_id = $1`,
+    [userId],
+  );
+  res.json({ openCount: Number(result.rows[0]?.open_count ?? 0) });
 });
 
 router.get("/tasks/:id", async (req, res) => {
@@ -9203,17 +9267,15 @@ async function executeRestrictedSoftTool(
       const parsed = SearchHallmarkToolPayload.safeParse(JSON.parse(args));
       if (!parsed.success)
         return "Invalid Hallmark search — provide a name or hallmarkSku.";
-      // DB-first: skip Apify if the ornament is already in the local catalog
-      let result = await lookupHallmarkFromDb(parsed.data).catch(() => null);
-      if (!result && env.apifyApiToken) {
-        result = await searchHallmark(parsed.data).catch((err: unknown) => {
-          logger.warn(
-            { err },
-            "restricted-elaine hallmark search failed (non-fatal)",
-          );
-          return null;
-        });
-      }
+      const result = env.apifyApiToken
+        ? await searchHallmark(parsed.data).catch((err: unknown) => {
+            logger.warn(
+              { err },
+              "restricted-elaine hallmark search failed (non-fatal)",
+            );
+            return null;
+          })
+        : null;
       if (!result)
         return `No Hallmark product found for "${parsed.data.hallmarkSku ?? parsed.data.name ?? "(unknown)"}". Try a different name or SKU.`;
       const lines = [`Hallmark product: ${result.name ?? "Unknown"}`];
@@ -9225,8 +9287,6 @@ async function executeRestrictedSoftTool(
         lines.push(
           `Original retail: $${result.originalRetailPrice.toFixed(2)}`,
         );
-      if (result.collectorPriceUsd != null)
-        lines.push(`Collector price: $${result.collectorPriceUsd.toFixed(2)}`);
       if (result.description) lines.push(`Description: ${result.description}`);
       if (result.hallmarkProductUrl)
         lines.push(`URL: ${result.hallmarkProductUrl}`);
@@ -9581,29 +9641,9 @@ async function executeRestrictedSoftTool(
           lines.push(`Series/Collection: ${result.seriesOrCollection}`);
         if (result.description)
           lines.push(`Description: ${result.description}`);
-        if (result.hallmarkArtist)
-          lines.push(`Artist: ${result.hallmarkArtist}`);
-        if (result.hallmarkSku)
-          lines.push(`Hallmark SKU: ${result.hallmarkSku}`);
-        if (result.hallmarkSeriesName)
-          lines.push(`Hallmark series: ${result.hallmarkSeriesName}`);
-        if (result.hallmarkRetailPriceUsd != null)
-          lines.push(
-            `Original retail price: $${result.hallmarkRetailPriceUsd}`,
-          );
-        if (result.hallmarkCollectorPriceUsd != null)
-          lines.push(
-            `Collector book value: $${result.hallmarkCollectorPriceUsd}`,
-          );
-        if (result.hallmarkInStock != null)
-          lines.push(
-            `In stock on Hallmark.com: ${result.hallmarkInStock ? "yes" : "no"}`,
-          );
-        if (result.hallmarkProductUrl)
-          lines.push(`Hallmark page: ${result.hallmarkProductUrl}`);
       } else {
         lines.push(
-          `No product found for barcode ${parsed.data.barcode}. Not in the Hallmark catalog or general product database.`,
+          `No product found for barcode ${parsed.data.barcode} from the live eBay or AI lookup.`,
         );
       }
       return lines.join("\n");

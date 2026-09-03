@@ -33,6 +33,33 @@ export interface PhotoQueueCallbacks {
   onError: (err: unknown) => void;
 }
 
+/** The first camera capture gets an edit step before AI creation. */
+export function shouldEditFirstCameraCapture(
+  ornamentId: number | null,
+  hasPhoto: boolean,
+): boolean {
+  return ornamentId === null && !hasPhoto;
+}
+
+/** Destination after an edited first photo creates its ornament. */
+export function deriveCreatedOrnamentRoute(id: number): string {
+  return `/ornaments/ornament/${id}?edit=1`;
+}
+
+/**
+ * Builds the first-photo create request from the editor's exported file and
+ * returns the record's edit destination once AI creation finishes.
+ */
+export async function createOrnamentFromEditedPhoto(
+  create: CreateOrnamentFn,
+  edited: File,
+): Promise<{ id: number; to: string }> {
+  const formData = new FormData();
+  formData.append("image", edited);
+  const result = await create(formData);
+  return { id: result.id, to: deriveCreatedOrnamentRoute(result.id) };
+}
+
 // ─── Serial photo queue ───────────────────────────────────────────────────────
 
 /**

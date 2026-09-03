@@ -8,7 +8,6 @@ import {
   desc,
   eq,
   getTableColumns,
-  ilike,
   inArray,
   isNull,
   notInArray,
@@ -74,14 +73,20 @@ import {
   generateVisualEmbedding,
   generateZoneEmbedding,
 } from "../../lib/visual-embed";
+import {
+  createScanFingerprint,
+  generateMultiPhotoVisualEmbedding,
+  runCompletePhotoScan,
+  scheduleCompletePhotoScan,
+} from "../../lib/ai-scan-pipeline";
 import { serializeItem, serializeItems } from "../../lib/pottery/serialize";
 import { env } from "../../lib/env";
 import { logger } from "../../lib/logger";
 import pLimit from "p-limit";
 import {
-  semanticCollectionSearch,
-  buildPotterySearchDocument,
-} from "../../lib/collection-search";
+  collectionSearchArrayText,
+  createCollectionTextSearch,
+} from "../../lib/collection-text-search";
 import { getModels } from "../../lib/ai-client";
 import {
   assignGenerationRunTarget,
@@ -156,102 +161,23 @@ router.get("/items", async (req, res) => {
   }
   const { q, categoryId, page, pageSize } = parsed.data;
 
-  // When a text query is provided, try hybrid semantic search first.
-  // Uses vector embeddings + Voyage reranking for ranked relevance ordering.
-  // Falls back to ILIKE when embeddings are unavailable or the result set is empty.
-  if (q && q.trim()) {
-    try {
-      let catItemIds: Set<number> | null = null;
-      if (categoryId !== undefined) {
-        const catRows = await db
-          .select({ itemId: itemCategories.itemId })
-          .from(itemCategories)
-          .where(eq(itemCategories.categoryId, categoryId));
-        catItemIds = new Set(catRows.map((r) => r.itemId));
-        if (catItemIds.size === 0) {
-          res.json(
-            ListPotteryResponse.parse({ items: [], total: 0, page, pageSize }),
-          );
-          return;
-        }
-      }
-
-      const rankedIds = await semanticCollectionSearch({
-        query: q.trim(),
-        table: potteryItems,
-        textEmbeddingCol: "embedding",
-        visualEmbeddingCol: "visual_embedding",
-        visibilityWhere: isNull(potteryItems.deletedAt),
-        db,
-        fetchDocuments: async (ids) => {
-          const rows = await db
-            .select(itemColumns)
-            .from(potteryItems)
-            .where(
-              and(
-                inArray(potteryItems.id, ids),
-                isNull(potteryItems.deletedAt),
-              ),
-            );
-          return rows.map((r) => ({
-            id: r.id,
-            text: buildPotterySearchDocument(r),
-          }));
-        },
-      });
-
-      if (rankedIds.length > 0) {
-        const filteredIds = catItemIds
-          ? rankedIds.filter((id) => catItemIds!.has(id))
-          : rankedIds;
-
-        const total = filteredIds.length;
-        const offset = (page - 1) * pageSize;
-        const pageIds = filteredIds.slice(offset, offset + pageSize);
-
-        if (pageIds.length === 0) {
-          res.json(
-            ListPotteryResponse.parse({ items: [], total, page, pageSize }),
-          );
-          return;
-        }
-
-        const pageRows = await db
-          .select(itemColumns)
-          .from(potteryItems)
-          .where(
-            and(
-              inArray(potteryItems.id, pageIds),
-              isNull(potteryItems.deletedAt),
-            ),
-          );
-        const byId = new Map(pageRows.map((r) => [r.id, r]));
-        const orderedRows = pageIds
-          .filter((id) => byId.has(id))
-          .map((id) => byId.get(id)!);
-        const items = await serializeItems(orderedRows);
-        res.json(ListPotteryResponse.parse({ items, total, page, pageSize }));
-        return;
-      }
-    } catch {
-      // Semantic search unavailable (embeddings missing/AI down) — fall through to ILIKE.
-    }
-  }
-
-  // ILIKE fallback: plain text match on name/style/shape/maker/pattern.
   const conditions: SQL<unknown>[] = [];
-  if (q && q.trim()) {
-    const term = `%${q.trim().toLowerCase()}%`;
-    conditions.push(
-      or(
-        ilike(potteryItems.name, term),
-        ilike(potteryItems.patternDescription, term),
-        ilike(potteryItems.style, term),
-        ilike(potteryItems.shape, term),
-        ilike(potteryItems.maker, term),
-      )!,
-    );
-  }
+  const textSearch = q
+    ? createCollectionTextSearch(q, {
+        title: [potteryItems.name],
+        broad: [
+          potteryItems.patternDescription,
+          potteryItems.style,
+          potteryItems.shape,
+          potteryItems.maker,
+          potteryItems.makerInfo,
+          potteryItems.notes,
+          potteryItems.aiDescription,
+          collectionSearchArrayText(potteryItems.motifs),
+        ],
+      })
+    : null;
+  if (textSearch?.where) conditions.push(textSearch.where);
 
   // Category filter: join to itemCategories to filter by categoryId.
   if (categoryId !== undefined) {
@@ -291,7 +217,10 @@ router.get("/items", async (req, res) => {
     .select(itemColumns)
     .from(potteryItems)
     .where(finalWhere)
-    .orderBy(desc(potteryItems.createdAt))
+    .orderBy(
+      ...(textSearch?.relevance ? [textSearch.relevance] : []),
+      desc(potteryItems.createdAt),
+    )
     .limit(pageSize)
     .offset(offset);
 
@@ -760,6 +689,7 @@ router.post(
         .values({ itemId: id, storagePath, label, position: maxPos + 1 })
         .returning();
 
+      schedulePotteryRecognition(id);
       res.status(201).json({
         id: newImg.id,
         url: `/api/pottery/items/${id}/images/${newImg.id}`,
@@ -817,6 +747,7 @@ router.patch("/items/:id/images/:imageId", async (req, res) => {
           .returning()
       : [existing];
 
+  if (body.position !== undefined) schedulePotteryRecognition(id);
   res.json({
     id: updated.id,
     url: `/api/pottery/items/${id}/images/${updated.id}`,
@@ -863,6 +794,7 @@ router.delete("/items/:id/images/:imageId", async (req, res) => {
     .update(potteryImages)
     .set({ deletedAt: new Date() })
     .where(eq(potteryImages.id, imageId));
+  schedulePotteryRecognition(id);
   res.status(200).json({ ok: true });
 });
 
@@ -913,6 +845,7 @@ router.put(
         .set({ imagePath: newPath })
         .where(eq(potteryItems.id, id));
       if (oldPath) await deleteImage(oldPath).catch(() => {});
+      schedulePotteryRecognition(id);
       const [updated] = await db
         .select()
         .from(potteryItems)
@@ -987,6 +920,7 @@ router.put(
         .set({ storagePath: newPath })
         .where(eq(potteryImages.id, imageId));
       await deleteImage(oldPath).catch(() => {});
+      schedulePotteryRecognition(id);
       const [updated] = await db
         .select()
         .from(potteryItems)
@@ -1042,47 +976,64 @@ async function syncDuplicateCategory(
 }
 
 // ---------------------------------------------------------------------------
-// Shared AI analysis pipeline — used by both reanalyze and set-primary-image
+// Shared AI analysis pipeline — used by reanalyze, bulk actions, and
+// primary-image promotion. It always snapshots every ordered photo first.
 // ---------------------------------------------------------------------------
 
-export async function runItemAnalysis(id: number): Promise<unknown> {
-  const [item, elaineConfig] = await Promise.all([
-    db
-      .select(itemColumns)
-      .from(potteryItems)
-      .where(eq(potteryItems.id, id))
-      .limit(1)
-      .then((rows) => rows[0]),
-    getElaineGlobalConfig(),
-  ]);
+type PotteryScanSnapshot = {
+  item: Omit<PotteryItemRow, "embedding" | "visualEmbedding" | "zoneEmbedding">;
+  dataUrls: string[];
+  primaryBuffer: Buffer;
+  context: AnalysisContext;
+  model: string;
+};
+
+async function loadPotteryScanSnapshot(
+  id: number,
+): Promise<{ fingerprint: string; value: PotteryScanSnapshot }> {
+  const [item] = await db
+    .select(itemColumns)
+    .from(potteryItems)
+    .where(and(eq(potteryItems.id, id), isNull(potteryItems.deletedAt)))
+    .limit(1);
   if (!item)
     throw Object.assign(new Error("Pottery piece not found."), { status: 404 });
 
-  const suppRows = (
-    await db
-      .select({ storagePath: potteryImages.storagePath })
-      .from(potteryImages)
-      .where(eq(potteryImages.itemId, id))
-      .orderBy(asc(potteryImages.position))
-  ).slice(0, elaineConfig.thresholds.potteryMaxAiSupplemental);
+  const supplemental = await db
+    .select({
+      id: potteryImages.id,
+      storagePath: potteryImages.storagePath,
+      position: potteryImages.position,
+    })
+    .from(potteryImages)
+    .where(and(eq(potteryImages.itemId, id), isNull(potteryImages.deletedAt)))
+    .orderBy(asc(potteryImages.position), asc(potteryImages.id));
 
-  const [primaryResult, ...suppResults] = await Promise.all([
-    downloadImageBuffer(item.imagePath),
-    ...suppRows.map((r) => downloadImageBuffer(r.storagePath)),
-  ]);
-
-  const primaryContentType =
-    sniffImageType(primaryResult.buffer) ?? "image/jpeg";
-  const dataUrls = [
-    toDataUrl(primaryResult.buffer, primaryContentType),
-    ...suppResults.map((r) =>
-      toDataUrl(r.buffer, sniffImageType(r.buffer) ?? "image/jpeg"),
-    ),
+  const ordered = [
+    { order: 0, sourceId: `primary:${id}`, storagePath: item.imagePath },
+    ...supplemental.map((photo, index) => ({
+      order: index + 1,
+      sourceId: photo.id,
+      storagePath: photo.storagePath,
+    })),
   ];
+  const downloaded = await Promise.all(
+    ordered.map(async (photo) => {
+      const image = await downloadImageBuffer(photo.storagePath);
+      return {
+        ...photo,
+        buffer: image.buffer,
+        dataUrl: toDataUrl(
+          image.buffer,
+          sniffImageType(image.buffer) ?? "image/jpeg",
+        ),
+      };
+    }),
+  );
 
   // Pass existing field values as context so locked facts anchor the refresh
   // and previously-known values give the AI a better starting point.
-  const reanalysisContext: AnalysisContext = {
+  const context: AnalysisContext = {
     lockedFields: item.lockedFields ?? [],
     name: item.name,
     patternDescription: item.patternDescription,
@@ -1094,38 +1045,67 @@ export async function runItemAnalysis(id: number): Promise<unknown> {
     dominantColors: item.dominantColors,
     motifs: item.motifs,
   };
-  const analysisModel = (await getModels()).fastVision;
+  const model = (await getModels()).fastVision;
 
-  // Phase 1: analysis + visual embed + zone analysis in parallel.
-  // All three use .catch(() => null) so a single API error (e.g. Jina rate
-  // limit) cannot kill the whole item — the analysis itself still succeeds and
-  // existing embedding values are left untouched (see spread below).
-  const [analysis, visualEmbedding, surfaceZones] = await Promise.all([
+  return {
+    fingerprint: createScanFingerprint({
+      photos: downloaded.map((photo) => ({
+        order: photo.order,
+        sourceId: photo.sourceId,
+        content: photo.dataUrl,
+      })),
+      facts: context,
+      lockedFields: context.lockedFields,
+      model,
+      promptVersion: "pottery-recognition-v2",
+    }),
+    value: {
+      item,
+      dataUrls: downloaded.map((photo) => photo.dataUrl),
+      primaryBuffer: downloaded[0]!.buffer,
+      context,
+      model,
+    },
+  };
+}
+
+async function executePotteryScan(
+  snapshot: PotteryScanSnapshot,
+  feature: string,
+) {
+  // Phase 1: analysis + full-evidence visual embed + zone analysis in
+  // parallel. Optional providers cannot kill the primary extraction.
+  const [analysis, visual, surfaceZones] = await Promise.all([
     runAnalysisWithEvidence(
       {
         module: "pottery",
-        feature: "reanalyze-item",
+        feature,
         targetType: "pottery_item",
-        targetId: id,
-        userId: item.userId ?? undefined,
-        model: analysisModel,
+        targetId: snapshot.item.id,
+        userId: snapshot.item.userId ?? undefined,
+        model: snapshot.model,
       },
-      () => analyzeImage(dataUrls, reanalysisContext),
+      () => analyzeImage(snapshot.dataUrls, snapshot.context),
     ),
-    generateVisualEmbedding(primaryResult.buffer).catch(() => null),
-    analyzePotteryZones(dataUrls).catch(() => null),
+    generateMultiPhotoVisualEmbedding(
+      snapshot.dataUrls,
+      generateVisualEmbedding,
+    ),
+    analyzePotteryZones(snapshot.dataUrls).catch(() => null),
   ]);
 
-  // Phase 2: text embed + zone embed in parallel.
+  // Zone embedding is intentionally primary-only: it represents the main
+  // decorative body, while the whole-piece visual vector above represents all
+  // ordered evidence.
   const [embedding, zoneEmbedding] = await Promise.all([
     embedText(buildEmbeddingText(analysis)),
-    generateZoneEmbedding(primaryResult.buffer).catch(() => null),
+    generateZoneEmbedding(snapshot.primaryBuffer).catch(() => null),
   ]);
 
   // Optional backstamp enhancement when no maker was found in the main pass.
   if (!analysis.maker) {
     const backstampResult = await locateBackstampAndEnhanceMaker(
-      dataUrls,
+      snapshot.dataUrls,
     ).catch(() => null);
     if (backstampResult?.maker) {
       analysis.maker = backstampResult.maker;
@@ -1133,6 +1113,41 @@ export async function runItemAnalysis(id: number): Promise<unknown> {
     }
   }
 
+  return {
+    analysis,
+    embedding,
+    visualEmbedding: visual.value,
+    surfaceZones,
+    zoneEmbedding,
+  };
+}
+
+export async function runItemAnalysis(
+  id: number,
+  feature = "reanalyze-item",
+): Promise<unknown> {
+  const scan = await runCompletePhotoScan({
+    loadSnapshot: () => loadPotteryScanSnapshot(id),
+    execute: (snapshot) => executePotteryScan(snapshot, feature),
+  });
+
+  if (scan.stale) {
+    const [current] = await db
+      .select(itemColumns)
+      .from(potteryItems)
+      .where(and(eq(potteryItems.id, id), isNull(potteryItems.deletedAt)))
+      .limit(1);
+    if (!current) {
+      throw Object.assign(new Error("Pottery piece not found."), {
+        status: 404,
+      });
+    }
+    return GetPotteryResponse.parse(await serializeItem(current));
+  }
+
+  const { item } = scan.snapshot;
+  const { analysis, embedding, visualEmbedding, surfaceZones, zoneEmbedding } =
+    scan.result;
   const locked = new Set(item.lockedFields ?? []);
   const keep = <T>(field: string, aiVal: T, existing: T): T =>
     locked.has(field) ? existing : (aiVal ?? existing);
@@ -1212,6 +1227,18 @@ export async function runItemAnalysis(id: number): Promise<unknown> {
   await syncDuplicateCategory(id, item.quantity);
 
   return GetPotteryResponse.parse(await serializeItem(updated));
+}
+
+export function schedulePotteryRecognition(id: number): void {
+  scheduleCompletePhotoScan(
+    `pottery:${id}`,
+    () => runItemAnalysis(id, "automatic-photo-intake"),
+    (error) =>
+      logger.warn(
+        { error, itemId: id },
+        "pottery automatic recognition failed",
+      ),
+  );
 }
 
 // ---------------------------------------------------------------------------

@@ -67,9 +67,6 @@ function buildPageContainer(
         item.dimensions
           ? `<span style="font-size:11px;"><b>Dimensions:</b> ${escHtml(item.dimensions)}</span>`
           : "",
-        item.condition
-          ? `<span style="font-size:11px;"><b>Condition:</b> ${escHtml(item.condition)}</span>`
-          : "",
         item.quantity && item.quantity > 1
           ? `<span style="font-size:11px;"><b>Qty:</b> ${item.quantity}</span>`
           : "",

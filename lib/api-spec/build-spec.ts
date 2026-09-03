@@ -251,6 +251,9 @@ interface CollectionSource {
 
 const COLLECTION_SOURCES: CollectionSource[] = [
   // scaffold:anchor:collection-sources — scaffold-collection-module inserts entries below; do not remove
+  // scaffold:begin:magnets
+  { id: "magnets", file: "magnets.yaml", schemaPrefix: "Magnets" },
+  // scaffold:end:magnets
 ];
 
 // ---------------------------------------------------------------------------

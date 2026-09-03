@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Search, X, ArrowUpDown, Check, LayoutGrid, List } from "lucide-react";
+import { resolveCategoryPalette } from "@workspace/web-core/colors";
 import { cn } from "@workspace/web-core/utils";
 
 export interface SortOption<K extends string = string> {
@@ -277,7 +278,7 @@ export function CollectionSearchBar<K extends string>({
           </button>
           {categories.map((cat) => {
             const active = activeCategoryIds.has(cat.id);
-            const hasBg = !!cat.bgColor;
+            const palette = resolveCategoryPalette(cat);
             return (
               <button
                 key={cat.id}
@@ -285,23 +286,12 @@ export function CollectionSearchBar<K extends string>({
                 onClick={() => onCategoryToggle(cat.id)}
                 className={cn(
                   "rounded-full border px-3 py-1 text-xs font-medium transition",
-                  !hasBg &&
-                    (active
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-card-border bg-card text-muted-foreground hover:border-primary/40"),
-                  hasBg && "border",
                 )}
-                style={
-                  hasBg
-                    ? {
-                        backgroundColor: active ? cat.bgColor! : "transparent",
-                        color: active
-                          ? (cat.textColor ?? "#fff")
-                          : cat.bgColor!,
-                        borderColor: cat.bgColor!,
-                      }
-                    : undefined
-                }
+                style={{
+                  backgroundColor: active ? palette.bgColor : "transparent",
+                  color: active ? palette.textColor : palette.bgColor,
+                  borderColor: palette.bgColor,
+                }}
               >
                 {cat.name}
               </button>

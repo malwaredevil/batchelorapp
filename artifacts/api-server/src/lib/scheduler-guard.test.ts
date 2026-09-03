@@ -56,6 +56,7 @@ vi.mock("@sentry/node", () => ({
 // Import after mocks are registered
 import {
   shouldRunScheduledTask,
+  recordScheduledTaskSuccess,
   startSchedulerHeartbeat,
   reconcileSchedulerRuns,
   CLAIM_GRACE_MS,
@@ -449,6 +450,53 @@ describe("shouldRunScheduledTask", () => {
   });
 });
 
+describe("recordScheduledTaskSuccess", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("retries a transient pooler failure so a completed task updates its health state", async () => {
+    mockExecute
+      .mockRejectedValueOnce(new Error("Connection terminated unexpectedly"))
+      .mockResolvedValueOnce({ rows: [] });
+
+    const recording = recordScheduledTaskSuccess("sentry-error-nudges");
+    await vi.advanceTimersByTimeAsync(501);
+    await recording;
+
+    expect(mockExecute).toHaveBeenCalledTimes(2);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        label: "scheduler-guard: record success (sentry-error-nudges)",
+      }),
+      "retry: transient failure, retrying",
+    );
+  });
+
+  it("keeps the existing non-fatal behavior only after the retry also fails", async () => {
+    mockExecute.mockRejectedValue(
+      new Error("Connection terminated unexpectedly"),
+    );
+
+    const recording = recordScheduledTaskSuccess("sentry-error-nudges");
+    await vi.advanceTimersByTimeAsync(501);
+    await recording;
+
+    expect(mockExecute).toHaveBeenCalledTimes(2);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ taskName: "sentry-error-nudges" }),
+      "scheduler-guard: failed to record task success — continuing",
+    );
+  });
+});
+
 // ── startSchedulerHeartbeat ───────────────────────────────────────────────────
 //
 // These tests verify the staleness formula:
@@ -568,9 +616,10 @@ describe("startSchedulerHeartbeat", () => {
     expect(statuses).not.toContain("error");
   });
 
-  it("task just outside tolerance — error check-in sent", async () => {
+  it("task just outside tolerance — warning and ok check-in sent", async () => {
     // A 1-hour task whose last success was 91 min ago exceeds the 90-min
-    // stale threshold by 1 minute and must trigger an "error" check-in.
+    // candidate threshold by 1 minute, but has not remained stale for a full
+    // extra heartbeat interval, so it must warn without opening an incident.
     const successAgeMs = 91 * 60 * 1000; // 91 minutes — just past stale threshold
     expect(successAgeMs).toBeGreaterThan(STALE_THRESHOLD_ONE_HOUR_MS); // sanity
 
@@ -591,13 +640,64 @@ describe("startSchedulerHeartbeat", () => {
       (args) => (args[0] as { status: string }).status,
     );
     expect(statuses).toContain("in_progress");
-    expect(statuses).toContain("error");
-    expect(statuses).not.toContain("ok");
+    expect(statuses).toContain("ok");
+    expect(statuses).not.toContain("error");
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        staleCandidates: expect.arrayContaining([
+          expect.objectContaining({
+            name: "stale-task",
+            remainingConfirmationMs: expect.any(Number),
+          }),
+        ]),
+      }),
+      expect.stringContaining("awaiting one more heartbeat"),
+    );
+  });
+
+  it("uses strict boundaries for candidate and confirmed staleness", async () => {
+    const candidateThresholdMs = STALE_THRESHOLD_ONE_HOUR_MS;
+    const confirmedThresholdMs = candidateThresholdMs + HEARTBEAT_INTERVAL_MS;
+    const ageOffsetAtFirstCheck = FIRST_CHECK_DELAY_MS;
+
+    setupHeartbeatMock([
+      makeRow({
+        name: "exact-candidate-boundary",
+        expectedIntervalMs: ONE_HOUR_MS,
+        successAgeMs: candidateThresholdMs - ageOffsetAtFirstCheck,
+      }),
+      makeRow({
+        name: "exact-confirmed-boundary",
+        expectedIntervalMs: ONE_HOUR_MS,
+        successAgeMs: confirmedThresholdMs - ageOffsetAtFirstCheck,
+      }),
+    ]);
+
+    stopHeartbeat = startSchedulerHeartbeat();
+    await vi.advanceTimersByTimeAsync(ageOffsetAtFirstCheck);
+
+    const statuses = (
+      Sentry.captureCheckIn as ReturnType<typeof vi.fn>
+    ).mock.calls.map((args) => (args[0] as { status: string }).status);
+    expect(statuses).toContain("ok");
+    expect(statuses).not.toContain("error");
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        staleCandidates: [
+          expect.objectContaining({
+            name: "exact-confirmed-boundary",
+            remainingConfirmationMs: 0,
+          }),
+        ],
+      }),
+      expect.stringContaining("awaiting one more heartbeat"),
+    );
   });
 
   it("mix of healthy and stale tasks — error check-in names only the stale task", async () => {
     // Task A: 1-hour interval, 61 min ago → within tolerance → healthy
-    // Task B: 1-hour interval, 91 min ago → past stale threshold → stale
+    // Task B: 1-hour interval, 106 min ago → past the 90-min candidate
+    // threshold plus one 15-min heartbeat interval → confirmed stale
     // The heartbeat must fire an error check-in and the logger.error call
     // must include Task B in the `stale` array but not Task A.
     setupHeartbeatMock([
@@ -609,7 +709,7 @@ describe("startSchedulerHeartbeat", () => {
       makeRow({
         name: "stale-task",
         expectedIntervalMs: ONE_HOUR_MS,
-        successAgeMs: 91 * 60 * 1000,
+        successAgeMs: 106 * 60 * 1000,
       }),
     ]);
 
@@ -645,14 +745,15 @@ describe("startSchedulerHeartbeat", () => {
   it("tolerance formula: min tolerance is 15 min regardless of a short interval", async () => {
     // A 20-minute-interval task has expectedMs/2 = 10 min, which is below the
     // 15-minute floor, so toleranceMs must be 15 min (not 10).
-    // Stale threshold = 20 min + 15 min = 35 min.
+    // Candidate threshold = 20 min + 15 min = 35 min; confirmed stale adds
+    // one 15-minute heartbeat interval, for a 50-minute alert threshold.
     const TWENTY_MIN_MS = 20 * 60 * 1000;
     const expectedTolerance = 15 * 60 * 1000; // floor kicks in (20/2 = 10 < 15)
     const staleThreshold = TWENTY_MIN_MS + expectedTolerance; // 35 min
 
-    // A task last successful 36 minutes ago must be reported stale.
-    const staleAgeMs = 36 * 60 * 1000; // just past 35-min threshold
-    expect(staleAgeMs).toBeGreaterThan(staleThreshold);
+    // A task last successful 51 minutes ago must be confirmed stale.
+    const staleAgeMs = 51 * 60 * 1000; // just past 50-min confirmed threshold
+    expect(staleAgeMs).toBeGreaterThan(staleThreshold + HEARTBEAT_INTERVAL_MS);
 
     setupHeartbeatMock([
       makeRow({
@@ -675,7 +776,8 @@ describe("startSchedulerHeartbeat", () => {
 
   it("tolerance formula: long-interval task tolerance scales to half the interval", async () => {
     // A 4-hour-interval task: toleranceMs = max(15 min, 2 hr) = 2 hr.
-    // Stale threshold = 4 hr + 2 hr = 6 hr.
+    // Candidate threshold = 4 hr + 2 hr = 6 hr; confirmed stale adds one
+    // 15-minute heartbeat interval.
     //
     // Note: vi.advanceTimersByTimeAsync advances Date.now() along with the
     // fake clock, so the heartbeat's `run()` sees now = NOW_MS + FIRST_CHECK_DELAY_MS.
@@ -683,7 +785,7 @@ describe("startSchedulerHeartbeat", () => {
     // classified even after that extra ~3-minute advance.
     //
     // Healthy: 5h 30m ago → ageMs (seen inside run) ≈ 5h 33m < 6h threshold.
-    // Stale:   6h 30m ago → ageMs (seen inside run) ≈ 6h 33m > 6h threshold.
+    // Stale:   6h 30m ago → ageMs (seen inside run) ≈ 6h 33m > 6h15m threshold.
     const healthyAgeMs = (5 * 60 + 30) * 60 * 1000; // 5h 30m
     const staleAgeMs = (6 * 60 + 30) * 60 * 1000; // 6h 30m
 
@@ -801,7 +903,7 @@ describe("startSchedulerHeartbeat", () => {
     // genuinely broken task forever. Once the claim itself is older than
     // STUCK_CLAIM_THRESHOLD_MS (10 min) without a success, the anchor falls
     // back to the stale last_success_at.
-    const successAgeMs = 91 * 60 * 1000;
+    const successAgeMs = 106 * 60 * 1000;
     const runAgeMs = 11 * 60 * 1000; // claim itself is older than the 10-min grace
 
     setupHeartbeatMock([
@@ -876,6 +978,77 @@ describe("startSchedulerHeartbeat", () => {
     // Second tick (after one more full interval)
     await vi.advanceTimersByTimeAsync(HEARTBEAT_INTERVAL_MS);
     expect(mockExecute.mock.calls.length).toBeGreaterThan(callsAfterFirst);
+  });
+
+  it("a borderline stale task that recovers before the next heartbeat never opens an incident", async () => {
+    const candidateRow = makeRow({
+      name: "recovering-task",
+      expectedIntervalMs: ONE_HOUR_MS,
+      successAgeMs: 91 * 60 * 1000,
+    });
+    const recoveredRow = makeRow({
+      name: "recovering-task",
+      expectedIntervalMs: ONE_HOUR_MS,
+      successAgeMs: 0,
+    });
+    mockExecute
+      .mockResolvedValueOnce({ rows: [candidateRow] })
+      .mockResolvedValueOnce({ rows: [recoveredRow] });
+
+    stopHeartbeat = startSchedulerHeartbeat();
+    await vi.advanceTimersByTimeAsync(FIRST_CHECK_DELAY_MS + 1);
+    await vi.advanceTimersByTimeAsync(HEARTBEAT_INTERVAL_MS);
+
+    const statuses = (
+      Sentry.captureCheckIn as ReturnType<typeof vi.fn>
+    ).mock.calls.map((args) => (args[0] as { status: string }).status);
+    expect(statuses.filter((status) => status === "ok")).toHaveLength(2);
+    expect(statuses).not.toContain("error");
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        staleCandidates: expect.arrayContaining([
+          expect.objectContaining({ name: "recovering-task" }),
+        ]),
+      }),
+      expect.stringContaining("awaiting one more heartbeat"),
+    );
+  });
+
+  it("a task still stale after one full recurring heartbeat opens an incident", async () => {
+    const candidateThresholdMs = STALE_THRESHOLD_ONE_HOUR_MS;
+    const ageOffsetAtFirstCheck = FIRST_CHECK_DELAY_MS;
+    const justOverCandidateAgeMs =
+      candidateThresholdMs - ageOffsetAtFirstCheck + 1_000;
+    const row = makeRow({
+      name: "persistently-stale-task",
+      expectedIntervalMs: ONE_HOUR_MS,
+      successAgeMs: justOverCandidateAgeMs,
+    });
+    mockExecute.mockResolvedValue({ rows: [row] });
+
+    stopHeartbeat = startSchedulerHeartbeat();
+    await vi.advanceTimersByTimeAsync(ageOffsetAtFirstCheck);
+
+    let statuses = (
+      Sentry.captureCheckIn as ReturnType<typeof vi.fn>
+    ).mock.calls.map((args) => (args[0] as { status: string }).status);
+    expect(statuses).toContain("ok");
+    expect(statuses).not.toContain("error");
+
+    await vi.advanceTimersByTimeAsync(HEARTBEAT_INTERVAL_MS);
+
+    statuses = (
+      Sentry.captureCheckIn as ReturnType<typeof vi.fn>
+    ).mock.calls.map((args) => (args[0] as { status: string }).status);
+    expect(statuses).toContain("error");
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stale: expect.arrayContaining([
+          expect.objectContaining({ name: "persistently-stale-task" }),
+        ]),
+      }),
+      expect.stringContaining("gone silent"),
+    );
   });
 
   // ── Error resilience ───────────────────────────────────────────────────────

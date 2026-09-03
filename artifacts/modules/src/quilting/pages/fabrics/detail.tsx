@@ -56,6 +56,8 @@ import {
   CollectionDetailField,
   CollectionDetailSkeleton,
   CollectionErrorState,
+  getPhotoRecognitionRefetchInterval,
+  PhotoRecognitionStatus,
   ReminderBellButton,
   useToggleLockedField,
   mergeSelectedCategoryNames,
@@ -94,6 +96,7 @@ type Fabric = {
     label: string | null;
     position: number;
   }>;
+  recognitionRefreshStatus?: "pending" | "complete" | null;
 };
 
 const AI_FIELDS: (keyof Fabric)[] = [
@@ -217,7 +220,20 @@ export default function FabricDetail() {
     motifs: "",
   });
 
-  const { data: fabric, isLoading, isError, refetch } = useGetFabric(fabricId);
+  const {
+    data: fabric,
+    isLoading,
+    isError,
+    refetch,
+  } = useGetFabric(fabricId, {
+    query: {
+      queryKey: getGetFabricQueryKey(fabricId),
+      refetchInterval: (query) =>
+        getPhotoRecognitionRefetchInterval(
+          query.state.data?.recognitionRefreshStatus,
+        ),
+    },
+  });
   const { data: allCategories } = useListQuiltingCategories();
 
   usePageAssistantContext(
@@ -799,6 +815,7 @@ export default function FabricDetail() {
               </div>
             )}
           </div>
+          <PhotoRecognitionStatus status={f.recognitionRefreshStatus} />
         </CollectionDetailHero>
 
         {/* Record information belongs below the hero at full width. Keeping

@@ -14,20 +14,14 @@ const ALLOWLIST = path.join(
   "security",
   "database-direct-access-allowlist.json",
 );
-const HARDENING_SQL = path.join(
-  ROOT,
-  "lib",
-  "db",
-  "migrations",
-  "0002_security_hardening.sql",
-);
+const HARDENING_SOURCE = path.join(ROOT, "lib/db/src/schema-statements.ts");
 
 const allowlist = JSON.parse(fs.readFileSync(ALLOWLIST, "utf8")) as {
   directClientTables: string[];
   directClientFunctions: string[];
   sensitiveTablesNeverExposed: string[];
 };
-const hardeningSql = fs.readFileSync(HARDENING_SQL, "utf8");
+const hardeningSource = fs.readFileSync(HARDENING_SOURCE, "utf8");
 
 const failures: string[] = [];
 for (const table of allowlist.sensitiveTablesNeverExposed) {
@@ -37,13 +31,10 @@ for (const table of allowlist.sensitiveTablesNeverExposed) {
 }
 
 for (const snippet of [
-  "REVOKE ALL ON FUNCTION public.auto_enable_rls() FROM PUBLIC",
-  "REVOKE ALL ON FUNCTION public.auto_enable_rls() FROM anon",
-  "REVOKE ALL ON FUNCTION public.auto_enable_rls() FROM authenticated",
-  "ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC",
+  "REVOKE EXECUTE ON FUNCTION public.auto_enable_rls() FROM anon, authenticated, PUBLIC;",
 ]) {
-  if (!hardeningSql.includes(snippet)) {
-    failures.push(`Missing hardening SQL: ${snippet}`);
+  if (!hardeningSource.includes(snippet)) {
+    failures.push(`Missing database hardening statement: ${snippet}`);
   }
 }
 

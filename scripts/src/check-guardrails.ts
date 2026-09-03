@@ -18,6 +18,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import {
+  getChangedDiff,
   getChangedFiles,
   git,
   readFileOrNull,
@@ -460,10 +461,7 @@ export function runGuardrailChecks(base: string): CheckResult[] {
   const resolvedBase = resolveBase(root, base);
   const changedFiles = getChangedFiles(root, resolvedBase);
 
-  const fullDiff = git(root, [
-    "diff",
-    `${resolvedBase}...HEAD`,
-    "--",
+  const fullDiff = getChangedDiff(root, resolvedBase, [
     ".",
     ":!.github/**",
     ":!scripts/src/check-guardrails.ts",
@@ -473,10 +471,7 @@ export function runGuardrailChecks(base: string): CheckResult[] {
     ":!*.txt",
   ]);
 
-  const schemaDiff = git(root, [
-    "diff",
-    `${resolvedBase}...HEAD`,
-    "--",
+  const schemaDiff = getChangedDiff(root, resolvedBase, [
     "lib/db/src/schema-statements.ts",
   ]);
 

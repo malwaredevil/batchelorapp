@@ -25,7 +25,7 @@ export default function StatsPage() {
 
   usePageAssistantContext(
     "ornaments-stats",
-    `Collection statistics page. Total items: ${stats?.totalItems || 0}, Total book value: ${formatCurrency(stats?.totalBookValue || 0)}.`,
+    `Collection statistics page. Total items: ${stats?.totalItems || 0}, estimated collection value: ${formatCurrency(stats?.totalEstimatedValue || 0)} across ${stats?.itemsWithEstimatedValue || 0} priced designs. Valuation policy: average a design's saved current-market signals (book value, eBay prices, and AI appraisal); if it has no market signal, use saved retail/MSRP instead. Values include quantity.`,
   );
 
   if (isLoading) {
@@ -96,15 +96,15 @@ export default function StatsPage() {
           </div>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-              Total Est. Value
+              Estimated Collection Value
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-4xl font-serif font-bold text-primary">
-              {formatCurrency(stats.totalBookValue)}
+              {formatCurrency(stats.totalEstimatedValue)}
             </div>
             <p className="text-sm text-muted-foreground mt-1">
-              based on secondary market
+              market signals first; retail/MSRP only as a fallback
             </p>
           </CardContent>
         </Card>
@@ -120,11 +120,11 @@ export default function StatsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-4xl font-serif font-bold text-foreground">
-              {stats.itemsWithBookValue.toLocaleString()}
+              {stats.itemsWithEstimatedValue.toLocaleString()}
             </div>
             <p className="text-sm text-muted-foreground mt-1">
               {Math.round(
-                (stats.itemsWithBookValue / stats.totalItems) * 100,
+                (stats.itemsWithEstimatedValue / stats.totalItems) * 100,
               ) || 0}
               % of unique collection
             </p>
@@ -132,10 +132,20 @@ export default function StatsPage() {
         </Card>
       </div>
 
+      <p className="rounded-lg border border-card-border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+        <strong className="text-foreground">How the estimate works:</strong>{" "}
+        each design uses the average of its saved current-market signals (book
+        value, eBay prices, and AI appraisal). When no market signal is saved,
+        its retail/MSRP value is used instead. Quantities are included in every
+        total and series bar.
+      </p>
+
       {seriesData.length > 0 && (
         <Card className="shadow-sm border-card-border">
           <CardHeader>
-            <CardTitle className="font-serif">Top Series by Value</CardTitle>
+            <CardTitle className="font-serif">
+              Top Series by Estimated Value
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="h-[350px] w-full mt-4">
@@ -173,7 +183,7 @@ export default function StatsPage() {
                     }}
                     formatter={(value: number) => [
                       formatCurrency(value),
-                      "Value",
+                      "Estimated value",
                     ]}
                   />
                   <Bar

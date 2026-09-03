@@ -50,6 +50,8 @@ export type {
   CategoryTagSelectorProps,
   CreateCategoryInput,
 } from "./category-tag-selector";
+export { SingleValueAutocomplete } from "./single-value-autocomplete";
+export type { SingleValueAutocompleteProps } from "./single-value-autocomplete";
 
 export { QuickEditSheetFrame } from "./quick-edit-sheet";
 export type { QuickEditSheetFrameProps } from "./quick-edit-sheet";
@@ -124,3 +126,10 @@ export {
   mergeSelectedCategoryNames,
 } from "./use-toggle-locked-field";
 export type { ToggleLockedFieldMessages } from "./use-toggle-locked-field";
+
+export {
+  getPhotoRecognitionRefetchInterval,
+  PhotoRecognitionStatus,
+  type PhotoRecognitionStatusProps,
+  type PhotoRecognitionStatusValue,
+} from "./photo-recognition-status";

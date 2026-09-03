@@ -256,9 +256,9 @@ export type InsertHouseholdActivityLog =
   typeof householdActivityLog.$inferInsert;
 
 // ── Daily comms check ─────────────────────────────────────────────────────────
-// One row per Stuttgart calendar day (check_date = YYYY-MM-DD, Europe/Berlin).
-// Tracks send + verification status for email, SMS, and Slack independently.
-// Status values: 'pending' | 'sent' | 'error' | 'verified'
+// One row per owner-local calendar day.
+// Tracks send + verification status for each channel independently.
+// Status values: 'pending' | 'sending' | 'sent' | 'error' | 'verified'
 export const commChecks = pgTable("comm_checks", {
   id: serial("id").primaryKey(),
   checkDate: text("check_date").notNull().unique(),

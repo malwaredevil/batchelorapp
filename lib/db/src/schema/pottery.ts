@@ -81,6 +81,30 @@ export const potteryItems = pgTable(
       "hnsw",
       table.zoneEmbedding.op("vector_cosine_ops"),
     ),
+    index("pottery_items_name_trgm_idx")
+      .using("gin", table.name.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
+    index("pottery_items_pattern_description_trgm_idx")
+      .using("gin", table.patternDescription.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
+    index("pottery_items_style_trgm_idx")
+      .using("gin", table.style.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
+    index("pottery_items_shape_trgm_idx")
+      .using("gin", table.shape.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
+    index("pottery_items_maker_trgm_idx")
+      .using("gin", table.maker.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
+    index("pottery_items_maker_info_trgm_idx")
+      .using("gin", table.makerInfo.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
+    index("pottery_items_notes_trgm_idx")
+      .using("gin", table.notes.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
+    index("pottery_items_ai_description_trgm_idx")
+      .using("gin", table.aiDescription.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
     index("pottery_items_user_id_idx").on(table.userId),
   ],
 ).enableRLS();

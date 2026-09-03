@@ -38,6 +38,10 @@ async function readinessResponse(res: Response): Promise<void> {
   res.json(data);
 }
 
+// The API artifact is mounted at /api, and the deployment uptime monitor has
+// historically probed that artifact root. Keep it a deliberate readiness
+// endpoint instead of allowing the root to fall through to a misleading 404.
+router.get("/", async (_req, res) => readinessResponse(res));
 router.get("/health/ready", async (_req, res) => readinessResponse(res));
 router.get("/healthz", async (_req, res) => readinessResponse(res));
 

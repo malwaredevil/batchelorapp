@@ -16,6 +16,10 @@ import {
   quiltFabricLinks,
   quiltPatternLinks,
 } from "@workspace/db";
+import {
+  getCompletePhotoScanStatus,
+  type CompletePhotoScanStatus,
+} from "./ai-scan-pipeline";
 
 type EntityType = "fabric" | "pattern" | "quilt" | "block" | "layout";
 
@@ -77,6 +81,7 @@ export interface SerializedFabric {
   imageUrl: string;
   tileImageUrl: string;
   hasEmbedding: boolean;
+  recognitionRefreshStatus: CompletePhotoScanStatus | null;
   createdAt: Date;
 }
 
@@ -100,6 +105,7 @@ export interface SerializedPattern {
   publicationName: string | null;
   publicationYear: string | null;
   hasEmbedding: boolean;
+  recognitionRefreshStatus: CompletePhotoScanStatus | null;
   createdAt: Date;
 }
 
@@ -128,6 +134,7 @@ export interface SerializedQuilt {
   linkedFabricIds: number[];
   linkedPatternIds: number[];
   linkedFabrics: QuiltFabricSummary[];
+  recognitionRefreshStatus: CompletePhotoScanStatus | null;
   createdAt: Date;
 }
 
@@ -257,6 +264,8 @@ function toFabric(
     imageUrl: `/api/quilting/fabrics/${row.id}/image?v=${pathCacheBuster(row.imagePath)}`,
     tileImageUrl: `/api/quilting/fabrics/${row.id}/tile-image`,
     hasEmbedding,
+    recognitionRefreshStatus:
+      getCompletePhotoScanStatus(`quilting:fabric:${row.id}`) ?? null,
     createdAt: row.createdAt,
   };
 }
@@ -329,6 +338,8 @@ function toPattern(
     publicationName: row.publicationName ?? null,
     publicationYear: row.publicationYear ?? null,
     hasEmbedding,
+    recognitionRefreshStatus:
+      getCompletePhotoScanStatus(`quilting:pattern:${row.id}`) ?? null,
     createdAt: row.createdAt,
   };
 }
@@ -469,6 +480,8 @@ function toQuilt(
     linkedFabrics: fabricIds
       .map((fid) => fabricSummaries.get(fid))
       .filter(Boolean) as QuiltFabricSummary[],
+    recognitionRefreshStatus:
+      getCompletePhotoScanStatus(`quilting:quilt:${row.id}`) ?? null,
     createdAt: row.createdAt,
   };
 }

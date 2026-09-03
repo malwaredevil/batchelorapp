@@ -13,15 +13,19 @@
  *
  * call shape: client.query(sql, paramsArray) → mock.calls[i] = [sql, params]
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // ── Hoisted mocks ─────────────────────────────────────────────────────────────
 
 const mockQuery = vi.hoisted(() => vi.fn());
 const mockRelease = vi.hoisted(() => vi.fn());
+const mockConnect = vi.hoisted(() => vi.fn());
 const mockListSentryIssues = vi.hoisted(() => vi.fn());
 const mockIsConfigured = vi.hoisted(() => vi.fn());
 const mockCallModel = vi.hoisted(() => vi.fn());
+const mockShouldRunScheduledTask = vi.hoisted(() => vi.fn());
+const mockRecordScheduledTaskSuccess = vi.hoisted(() => vi.fn());
+const mockRecordScheduledTaskFailure = vi.hoisted(() => vi.fn());
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
@@ -30,10 +34,7 @@ vi.mock("@workspace/db", async (importOriginal) => {
   return {
     ...real,
     pool: {
-      connect: vi.fn().mockResolvedValue({
-        query: mockQuery,
-        release: mockRelease,
-      }),
+      connect: mockConnect,
     },
     db: {
       select: vi.fn().mockReturnValue({
@@ -52,9 +53,9 @@ vi.mock("./logger", () => ({
 }));
 
 vi.mock("./scheduler-guard", () => ({
-  shouldRunScheduledTask: vi.fn().mockResolvedValue(true),
-  recordScheduledTaskSuccess: vi.fn().mockResolvedValue(undefined),
-  recordScheduledTaskFailure: vi.fn(),
+  shouldRunScheduledTask: mockShouldRunScheduledTask,
+  recordScheduledTaskSuccess: mockRecordScheduledTaskSuccess,
+  recordScheduledTaskFailure: mockRecordScheduledTaskFailure,
 }));
 
 vi.mock("./sentry-issues", () => ({
@@ -74,6 +75,7 @@ import {
   buildNudgeMessage,
   generateFixSuggestion,
   RESOLVED_RETENTION_DAYS,
+  startSentryErrorNudgeScheduler,
 } from "./sentry-error-nudges";
 import type { SentryIssue } from "./sentry-issues";
 
@@ -207,7 +209,13 @@ function ledgerUpsertCalls(): unknown[][] {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockConnect.mockResolvedValue({
+    query: mockQuery,
+    release: mockRelease,
+  });
   mockIsConfigured.mockReturnValue(true);
+  mockShouldRunScheduledTask.mockResolvedValue(true);
+  mockRecordScheduledTaskSuccess.mockResolvedValue(undefined);
   // Default: AI suggestion generation fails (rejects) — alerts must not block.
   mockCallModel.mockRejectedValue(new Error("model down"));
 });
@@ -354,6 +362,16 @@ describe("computeAndStoreSentryErrorNudges", () => {
     );
   });
 
+  it("propagates a failed DB connection so the scheduler can retry it", async () => {
+    mockConnect.mockRejectedValueOnce(
+      new Error("Connection terminated unexpectedly"),
+    );
+
+    await expect(computeAndStoreSentryErrorNudges()).rejects.toThrow(
+      "Connection terminated unexpectedly",
+    );
+  });
+
   it("includes the suggestion, labelled as unverified, when generation succeeds", async () => {
     mockCallModel.mockResolvedValue({
       choices: [{ message: { content: "Add a null check in mod55." } }],
@@ -391,5 +409,52 @@ describe("buildNudgeMessage", () => {
     const msg = buildNudgeMessage(many);
     expect(msg).toContain("8 new production errors");
     expect(msg).toContain("…and 3 more new issues.");
+  });
+});
+
+describe("startSentryErrorNudgeScheduler DB recovery", () => {
+  const STARTUP_DELAY_MS = 2 * 60 * 1000;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("records success after one transient pooler failure and retry", async () => {
+    setSentryLists([]);
+    setSeenLedger([]);
+    mockConnect
+      .mockRejectedValueOnce(new Error("Connection terminated unexpectedly"))
+      .mockResolvedValueOnce({
+        query: mockQuery,
+        release: mockRelease,
+      });
+
+    const stop = startSentryErrorNudgeScheduler();
+    await vi.advanceTimersByTimeAsync(STARTUP_DELAY_MS + 501);
+    stop();
+
+    expect(mockConnect).toHaveBeenCalledTimes(2);
+    expect(mockRecordScheduledTaskSuccess).toHaveBeenCalledOnce();
+    expect(mockRecordScheduledTaskFailure).not.toHaveBeenCalled();
+  });
+
+  it("leaves health unsuccessful after two sustained pooler failures", async () => {
+    mockConnect.mockRejectedValue(
+      new Error("Connection terminated unexpectedly"),
+    );
+
+    const stop = startSentryErrorNudgeScheduler();
+    await vi.advanceTimersByTimeAsync(STARTUP_DELAY_MS + 501);
+    stop();
+
+    expect(mockConnect).toHaveBeenCalledTimes(2);
+    expect(mockRecordScheduledTaskSuccess).not.toHaveBeenCalled();
+    expect(mockRecordScheduledTaskFailure).toHaveBeenCalledOnce();
   });
 });

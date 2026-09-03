@@ -410,7 +410,6 @@ vi.mock("../lib/pottery/ebay-market-value", () => ({
 
 vi.mock("../lib/ornaments/hallmark-search", () => ({
   searchHallmark: vi.fn().mockResolvedValue([]),
-  lookupHallmarkFromDb: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("../lib/ornaments/barcode", () => ({
@@ -458,6 +457,13 @@ vi.mock("../lib/elaine-tasks", () => ({
 }));
 
 vi.mock("../lib/storage-core", () => ({
+  buildStorageAdapter: vi.fn(() => ({
+    uploadImage: vi.fn(),
+    downloadImageBuffer: vi.fn(),
+    deleteImage: vi.fn(),
+    invalidateImageCache: vi.fn(),
+  })),
+  IMAGE_ONLY_POLICY: {},
   ensureBucketWithPolicy: vi.fn().mockResolvedValue(undefined),
   ELAINE_ATTACHMENTS_BUCKET_POLICY: {
     name: "elaine-attachments",

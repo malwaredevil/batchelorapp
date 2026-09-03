@@ -28,6 +28,7 @@ import {
   NotebookPen,
   Send,
   CalendarDays,
+  Magnet,
 } from "lucide-react";
 import {
   useGetCollectionStats,
@@ -41,15 +42,112 @@ import {
   useListNotes,
   useCreateNote,
   getListNotesQueryKey,
+  useListMagnets,
+  useListMagnetCategories,
   type OfficeNote,
 } from "@workspace/api-client-react";
 
 const base = crossAppBase();
 
+function WidgetLoading() {
+  return (
+    <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
+      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+      Loading…
+    </div>
+  );
+}
+
+function WidgetError() {
+  return (
+    <div className="flex items-center gap-1.5 py-2 text-xs text-destructive">
+      <AlertCircle className="w-3.5 h-3.5" />
+      Couldn’t load this widget. Try again shortly.
+    </div>
+  );
+}
+
+type StatsCard = {
+  v: string;
+  l: string;
+};
+
+type StatsCardGridLinkProps = {
+  items: StatsCard[];
+  columns: 3 | 4;
+  color: "violet" | "sky";
+  href: string;
+  linkLabel: string;
+};
+
+const statsCardColorClasses = {
+  violet: {
+    card: "bg-violet-50 dark:bg-violet-900/20",
+    value: "text-violet-700 dark:text-violet-300",
+    link: "text-violet-600 dark:text-violet-400",
+  },
+  sky: {
+    card: "bg-sky-50 dark:bg-sky-900/20",
+    value: "text-sky-700 dark:text-sky-300",
+    link: "text-sky-600 dark:text-sky-400",
+  },
+} as const;
+
+function StatsCardGridLink({
+  items,
+  columns,
+  color,
+  href,
+  linkLabel,
+}: StatsCardGridLinkProps) {
+  const classes = statsCardColorClasses[color];
+  return (
+    <div className="space-y-2">
+      <div
+        className={
+          columns === 3
+            ? "grid grid-cols-3 gap-1.5"
+            : "grid grid-cols-4 gap-1.5"
+        }
+      >
+        {items.map((s) => (
+          <div
+            key={s.l}
+            className={`${classes.card} rounded-lg p-2 text-center`}
+          >
+            <div className={`text-lg font-bold ${classes.value}`}>{s.v}</div>
+            <div className="text-[9px] font-medium text-muted-foreground uppercase tracking-wide leading-tight mt-0.5">
+              {s.l}
+            </div>
+          </div>
+        ))}
+      </div>
+      <a
+        href={href}
+        className={`flex items-center gap-1 text-xs font-medium ${classes.link} hover:underline`}
+      >
+        {linkLabel} <ArrowRight className="w-3 h-3" />
+      </a>
+    </div>
+  );
+}
+
 // ── Live: Pottery stats ──────────────────────────────────────────────────────
 export function PotteryStatsWidget() {
-  const { data: stats } = useGetCollectionStats();
-  const { data: cats } = useListPotteryCategories();
+  const {
+    data: stats,
+    isLoading: statsLoading,
+    isError: statsError,
+  } = useGetCollectionStats();
+  const {
+    data: cats,
+    isLoading: catsLoading,
+    isError: catsError,
+  } = useListPotteryCategories();
+  if (statsLoading || catsLoading) {
+    if (!stats && !cats) return <WidgetLoading />;
+  }
+  if ((statsError || catsError) && !stats && !cats) return <WidgetError />;
   const items = [
     {
       v: stats?.totalItems != null ? String(stats.totalItems) : "—",
@@ -90,7 +188,9 @@ export function PotteryStatsWidget() {
 
 // ── Live: Quilting stats ─────────────────────────────────────────────────────
 export function QuiltingStatsWidget() {
-  const { data: stats } = useGetStats();
+  const { data: stats, isLoading, isError } = useGetStats();
+  if (isLoading && !stats) return <WidgetLoading />;
+  if (isError && !stats) return <WidgetError />;
   const items = [
     {
       v: stats?.totalFabrics != null ? String(stats.totalFabrics) : "—",
@@ -106,35 +206,21 @@ export function QuiltingStatsWidget() {
     },
   ];
   return (
-    <div className="space-y-2">
-      <div className="grid grid-cols-3 gap-1.5">
-        {items.map((s) => (
-          <div
-            key={s.l}
-            className="bg-violet-50 dark:bg-violet-900/20 rounded-lg p-2 text-center"
-          >
-            <div className="text-lg font-bold text-violet-700 dark:text-violet-300">
-              {s.v}
-            </div>
-            <div className="text-[9px] font-medium text-muted-foreground uppercase tracking-wide leading-tight mt-0.5">
-              {s.l}
-            </div>
-          </div>
-        ))}
-      </div>
-      <a
-        href={`${base}modules/quilting/fabrics`}
-        className="flex items-center gap-1 text-xs font-medium text-violet-600 dark:text-violet-400 hover:underline"
-      >
-        Open quilting <ArrowRight className="w-3 h-3" />
-      </a>
-    </div>
+    <StatsCardGridLink
+      items={items}
+      columns={3}
+      color="violet"
+      href={`${base}modules/quilting/fabrics`}
+      linkLabel="Open quilting"
+    />
   );
 }
 
 // ── Live: Shopping list ──────────────────────────────────────────────────────
 export function ShoppingListWidget() {
-  const { data } = useListShoppingItems();
+  const { data, isLoading, isError } = useListShoppingItems();
+  if (isLoading && data === undefined) return <WidgetLoading />;
+  if (isError && data === undefined) return <WidgetError />;
   // Defensive: guard against the API returning a non-array (e.g. an HTML SPA
   // fallback page when the dev proxy is mis-routed). Without this, .slice()
   // would succeed on a string and produce a 4-char string whose .map throws.
@@ -170,8 +256,8 @@ export function ShoppingListWidget() {
 
 // ── Live: Random pottery piece ───────────────────────────────────────────────
 export function RandomPieceWidget() {
-  const { data: _pList } = useListPottery({});
-  const data = _pList?.items;
+  const { data: potteryList, isLoading, isError } = useListPottery({});
+  const data = potteryList?.items;
   const [idx, setIdx] = useState(0);
   const piece = data && data.length > 0 ? data[idx % data.length] : null;
 
@@ -179,6 +265,8 @@ export function RandomPieceWidget() {
     if (data) setIdx((i) => (i + 1) % data.length);
   }
 
+  if (isLoading && !potteryList) return <WidgetLoading />;
+  if (isError && !potteryList) return <WidgetError />;
   if (!piece) {
     return (
       <p className="text-xs text-muted-foreground italic">
@@ -258,7 +346,9 @@ export function MaintenanceWidget() {
 
 // ── Static: Fabric stash summary ─────────────────────────────────────────────
 export function FabricStashWidget() {
-  const { data: stats } = useGetStats();
+  const { data: stats, isLoading, isError } = useGetStats();
+  if (isLoading && !stats) return <WidgetLoading />;
+  if (isError && !stats) return <WidgetError />;
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-3">
@@ -294,7 +384,9 @@ export function FabricStashWidget() {
 
 // ── Static: Block designer ────────────────────────────────────────────────────
 export function BlockDesignerWidget() {
-  const { data: stats } = useGetStats();
+  const { data: stats, isLoading, isError } = useGetStats();
+  if (isLoading && !stats) return <WidgetLoading />;
+  if (isError && !stats) return <WidgetError />;
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-3">
@@ -328,7 +420,9 @@ export function BlockDesignerWidget() {
 
 // ── Static: Layouts ───────────────────────────────────────────────────────────
 export function LayoutsWidget() {
-  const { data: stats } = useGetStats();
+  const { data: stats, isLoading, isError } = useGetStats();
+  if (isLoading && !stats) return <WidgetLoading />;
+  if (isError && !stats) return <WidgetError />;
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-3">
@@ -437,7 +531,7 @@ function stripTags(html: string) {
 }
 
 export function NotesWidget() {
-  const { data: notes } = useListNotes();
+  const { data: notes, isLoading, isError } = useListNotes();
   const queryClient = useQueryClient();
   const [mode, setMode] = useState<"list" | "create" | "view">("list");
   const [pinnedNote, setPinnedNote] = useState<OfficeNote | null>(null);
@@ -458,6 +552,9 @@ export function NotesWidget() {
   });
 
   const recent = Array.isArray(notes) ? notes.slice(0, 4) : [];
+
+  if (isLoading && notes === undefined) return <WidgetLoading />;
+  if (isError && notes === undefined) return <WidgetError />;
 
   if (mode === "create") {
     return (
@@ -1225,7 +1322,9 @@ export function RssFeedWidget({
 
 // ── Live: Travel Stats ────────────────────────────────────────────────────────
 export function TravelStatsWidget() {
-  const { data: stats } = useGetTravelsStats();
+  const { data: stats, isLoading, isError } = useGetTravelsStats();
+  if (isLoading && !stats) return <WidgetLoading />;
+  if (isError && !stats) return <WidgetError />;
   const items = [
     {
       v: stats?.totalTrips != null ? String(stats.totalTrips) : "—",
@@ -1248,35 +1347,19 @@ export function TravelStatsWidget() {
     },
   ];
   return (
-    <div className="space-y-2">
-      <div className="grid grid-cols-4 gap-1.5">
-        {items.map((s) => (
-          <div
-            key={s.l}
-            className="bg-sky-50 dark:bg-sky-900/20 rounded-lg p-2 text-center"
-          >
-            <div className="text-lg font-bold text-sky-700 dark:text-sky-300">
-              {s.v}
-            </div>
-            <div className="text-[9px] font-medium text-muted-foreground uppercase tracking-wide leading-tight mt-0.5">
-              {s.l}
-            </div>
-          </div>
-        ))}
-      </div>
-      <a
-        href={`${base}modules/travels/`}
-        className="flex items-center gap-1 text-xs font-medium text-sky-600 dark:text-sky-400 hover:underline"
-      >
-        Open travels <ArrowRight className="w-3 h-3" />
-      </a>
-    </div>
+    <StatsCardGridLink
+      items={items}
+      columns={4}
+      color="sky"
+      href={`${base}modules/travels/`}
+      linkLabel="Open travels"
+    />
   );
 }
 
 // ── Live: Next Trip ───────────────────────────────────────────────────────────
 export function NextTripWidget() {
-  const { data: stats } = useGetTravelsStats();
+  const { data: stats, isLoading, isError } = useGetTravelsStats();
   const next = stats?.nextTrip ?? null;
 
   const daysAway = next?.startDate
@@ -1296,6 +1379,8 @@ export function NextTripWidget() {
       })
     : null;
 
+  if (isLoading && !stats) return <WidgetLoading />;
+  if (isError && !stats) return <WidgetError />;
   if (!next) {
     return (
       <div className="space-y-2">
@@ -1320,7 +1405,7 @@ export function NextTripWidget() {
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-sm font-semibold truncate">
-            {next.destination.split(",")[0]}
+            {(next.destination ?? "").split(",")[0] || "Unknown destination"}
           </div>
           <div className="text-[10px] text-muted-foreground">{dateLabel}</div>
         </div>
@@ -1349,7 +1434,9 @@ export function NextTripWidget() {
 
 // ── Live: Trip Reminders ──────────────────────────────────────────────────────
 export function TripRemindersWidget() {
-  const { data: remindersRaw } = useListAllReminders();
+  const { data: remindersRaw, isLoading, isError } = useListAllReminders();
+  if (isLoading && remindersRaw === undefined) return <WidgetLoading />;
+  if (isError && remindersRaw === undefined) return <WidgetError />;
   // Defensive: guard against non-array (e.g. HTML SPA fallback mis-routed by dev proxy).
   const reminders = Array.isArray(remindersRaw) ? remindersRaw : [];
 
@@ -1413,7 +1500,9 @@ export function TripRemindersWidget() {
 
 // ── Live: Travel Wishlist ─────────────────────────────────────────────────────
 export function TravelWishlistWidget() {
-  const { data: wishlistRaw } = useListWishlist();
+  const { data: wishlistRaw, isLoading, isError } = useListWishlist();
+  if (isLoading && wishlistRaw === undefined) return <WidgetLoading />;
+  if (isError && wishlistRaw === undefined) return <WidgetError />;
   // Defensive: guard against non-array (e.g. HTML SPA fallback mis-routed by dev proxy).
   const wishlist = Array.isArray(wishlistRaw) ? wishlistRaw : [];
   const pending = wishlist.filter((w) => !w.done).slice(0, 5);
@@ -1453,6 +1542,68 @@ export function TravelWishlistWidget() {
             +{wishlist.length - 5} more
           </span>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ── Live: Magnets stats ──────────────────────────────────────────────────────
+export function MagnetsStatsWidget() {
+  const {
+    data: list,
+    isLoading: listLoading,
+    isError: listError,
+  } = useListMagnets({ page: 1, pageSize: 1 });
+  const {
+    data: cats,
+    isLoading: catsLoading,
+    isError: catsError,
+  } = useListMagnetCategories();
+  if (listLoading || catsLoading) {
+    if (!list && !cats) return <WidgetLoading />;
+  }
+  if ((listError || catsError) && !list && !cats) return <WidgetError />;
+  const totalItems = list?.total;
+  const items = [
+    {
+      v: totalItems != null ? String(totalItems) : "—",
+      l: "Magnets",
+    },
+    {
+      v: Array.isArray(cats) ? String(cats.length) : "—",
+      l: "Categories",
+    },
+  ];
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-2 gap-1.5">
+        {items.map((s) => (
+          <div
+            key={s.l}
+            className="bg-cyan-50 dark:bg-cyan-900/20 rounded-lg p-2 text-center"
+          >
+            <div className="text-lg font-bold text-cyan-700 dark:text-cyan-300">
+              {s.v}
+            </div>
+            <div className="text-[9px] font-medium text-muted-foreground uppercase tracking-wide leading-tight mt-0.5">
+              {s.l}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <a
+          href={`${base}modules/magnets/`}
+          className="flex-1 text-center text-xs font-medium py-1.5 rounded-lg bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-100 dark:hover:bg-cyan-900/40 transition-colors"
+        >
+          Open collection
+        </a>
+        <a
+          href={`${base}modules/magnets/bulk-add`}
+          className="flex items-center justify-center gap-1 px-3 text-xs font-medium py-1.5 rounded-lg bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
+        >
+          <Plus className="w-3 h-3" /> Add
+        </a>
       </div>
     </div>
   );

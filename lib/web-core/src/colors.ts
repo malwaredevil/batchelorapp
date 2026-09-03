@@ -305,6 +305,24 @@ export function getCategoryPalette(name: string): {
 }
 
 /**
+ * Resolve a complete readable palette for a category. Existing user-selected
+ * values remain authoritative; legacy incomplete rows get the deterministic
+ * shared fallback until the server-side repair persists it.
+ */
+export function resolveCategoryPalette(category: {
+  name: string;
+  bgColor?: string | null;
+  textColor?: string | null;
+}): { bgColor: string; textColor: string } {
+  const fallback = getCategoryPalette(category.name);
+  const bgColor = category.bgColor?.trim() || fallback.bgColor;
+  return {
+    bgColor,
+    textColor: category.textColor?.trim() || autoTextColor(bgColor),
+  };
+}
+
+/**
  * Pick a deterministic-ish but varied background colour for a new category.
  * Uses the category count so successive new categories rotate through the palette.
  */

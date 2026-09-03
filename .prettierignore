@@ -1,4 +1,5 @@
 node_modules
+.pythonlibs
 dist
 build
 .pnpm-store

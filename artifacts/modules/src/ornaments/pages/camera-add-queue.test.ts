@@ -9,8 +9,11 @@
 
 import { describe, it, expect, vi } from "vitest";
 import {
+  createOrnamentFromEditedPhoto,
   createOrnamentPhotoQueue,
+  deriveCreatedOrnamentRoute,
   deriveHandleDoneRoute,
+  shouldEditFirstCameraCapture,
 } from "./camera-add-logic";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -245,6 +248,43 @@ describe("createOrnamentPhotoQueue — duplicate prevention", () => {
 });
 
 // ─── handleDone navigation (deriveHandleDoneRoute) ────────────────────────────
+
+describe("first camera capture editing", () => {
+  it("opens the editor only when no ornament photo exists yet", () => {
+    expect(shouldEditFirstCameraCapture(null, false)).toBe(true);
+    expect(shouldEditFirstCameraCapture(null, true)).toBe(false);
+    expect(shouldEditFirstCameraCapture(42, false)).toBe(false);
+  });
+
+  it("routes a successfully created edited photo to ornament edit mode", () => {
+    expect(deriveCreatedOrnamentRoute(42)).toBe(
+      "/ornaments/ornament/42?edit=1",
+    );
+  });
+
+  it("creates from the editor's file and returns the new ornament edit route", async () => {
+    const edited = makeFile("edited-photo.jpg");
+    const create = vi.fn().mockResolvedValue({ id: 42, name: "Snowflake" });
+
+    await expect(
+      createOrnamentFromEditedPhoto(create, edited),
+    ).resolves.toEqual({
+      id: 42,
+      to: "/ornaments/ornament/42?edit=1",
+    });
+
+    const formData = create.mock.calls[0][0] as FormData;
+    expect(formData.get("image")).toBe(edited);
+  });
+
+  it("leaves an editor save failure for the caller to handle", async () => {
+    const create = vi.fn().mockRejectedValue(new Error("AI unavailable"));
+
+    await expect(
+      createOrnamentFromEditedPhoto(create, makeFile("edited-photo.jpg")),
+    ).rejects.toThrow("AI unavailable");
+  });
+});
 
 describe("deriveHandleDoneRoute", () => {
   it("returns blocked when photos are still processing", () => {

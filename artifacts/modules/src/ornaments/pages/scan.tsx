@@ -16,7 +16,6 @@ import {
 import {
   useLookupBarcode,
   useExtractOrnamentBarcodePhoto,
-  useReportBarcodeCorrection,
 } from "@workspace/api-client-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -32,11 +31,7 @@ type ScanResult = {
   year?: number | null;
 };
 
-type ConfirmState =
-  | { step: "confirming" }
-  | { step: "confirmed" }
-  | { step: "correcting" }
-  | { step: "correction-submitted" };
+type ConfirmState = { step: "confirming" } | { step: "confirmed" };
 
 export default function ScanPage() {
   const [_, setLocation] = useLocation();
@@ -52,14 +47,6 @@ export default function ScanPage() {
   const [scannedCode, setScannedCode] = useState("");
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
-
-  // Correction form state
-  const [correctedName, setCorrectedName] = useState("");
-  const [correctedBrand, setCorrectedBrand] = useState("");
-  const [correctedSeriesOrCollection, setCorrectedSeriesOrCollection] =
-    useState("");
-  const [correctedYear, setCorrectedYear] = useState("");
-  const reportCorrection = useReportBarcodeCorrection();
 
   usePageAssistantContext(
     "ornaments-scan",
@@ -111,10 +98,6 @@ export default function ScanPage() {
     setConfirmState(null);
     setScannedCode("");
     setManualCode("");
-    setCorrectedName("");
-    setCorrectedBrand("");
-    setCorrectedSeriesOrCollection("");
-    setCorrectedYear("");
     void startScanning();
   };
 
@@ -158,32 +141,6 @@ export default function ScanPage() {
     } finally {
       setIsPhotoExtracting(false);
     }
-  };
-
-  // -------------------------------------------------------------------------
-  // Correction submission
-  // -------------------------------------------------------------------------
-  const handleSubmitCorrection = () => {
-    if (!scanResult || !scannedCode) return;
-    reportCorrection.mutate(
-      {
-        data: {
-          barcode: scannedCode,
-          wrongName: scanResult.name,
-          wrongBrand: scanResult.brand,
-          correctedName: correctedName.trim() || undefined,
-          correctedBrand: correctedBrand.trim() || undefined,
-          correctedSeriesOrCollection:
-            correctedSeriesOrCollection.trim() || undefined,
-          correctedYear: correctedYear ? Number(correctedYear) : undefined,
-        },
-      },
-      {
-        onSuccess: () => setConfirmState({ step: "correction-submitted" }),
-        onError: () =>
-          toast.error("Failed to submit correction. Please try again."),
-      },
-    );
   };
 
   const isAnyLoading = isLookingUp || isPhotoExtracting;
@@ -412,19 +369,9 @@ export default function ScanPage() {
                 <Button
                   variant="outline"
                   className="flex-1 text-destructive border-destructive/40 hover:bg-destructive/5"
-                  onClick={() => {
-                    setCorrectedName(scanResult.name ?? "");
-                    setCorrectedBrand(scanResult.brand ?? "");
-                    setCorrectedSeriesOrCollection(
-                      scanResult.seriesOrCollection ?? "",
-                    );
-                    setCorrectedYear(
-                      scanResult.year ? String(scanResult.year) : "",
-                    );
-                    setConfirmState({ step: "correcting" });
-                  }}
+                  onClick={handleScanAnother}
                 >
-                  No, this is wrong
+                  Scan again
                 </Button>
               </div>
             </div>
@@ -464,92 +411,6 @@ export default function ScanPage() {
               </div>
               <p className="text-xs text-muted-foreground pt-1">
                 Lookup only — no data is saved.
-              </p>
-            </div>
-          )}
-
-          {/* ----------------------------------------------------------------
-              FOUND — correction form
-          ---------------------------------------------------------------- */}
-          {scanResult.found && confirmState.step === "correcting" && (
-            <div className="bg-card rounded-2xl border border-border p-5 space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Sorry about that! Please fill in the correct details below.
-              </p>
-              <div className="space-y-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                    Name
-                  </label>
-                  <Input
-                    value={correctedName}
-                    onChange={(e) => setCorrectedName(e.target.value)}
-                    placeholder="Ornament name"
-                    disabled={reportCorrection.isPending}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                    Brand
-                  </label>
-                  <Input
-                    value={correctedBrand}
-                    onChange={(e) => setCorrectedBrand(e.target.value)}
-                    placeholder="e.g. Hallmark"
-                    disabled={reportCorrection.isPending}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                    Series / Collection
-                  </label>
-                  <Input
-                    value={correctedSeriesOrCollection}
-                    onChange={(e) =>
-                      setCorrectedSeriesOrCollection(e.target.value)
-                    }
-                    placeholder="e.g. Keepsake Ornaments"
-                    disabled={reportCorrection.isPending}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                    Year
-                  </label>
-                  <Input
-                    type="number"
-                    value={correctedYear}
-                    onChange={(e) => setCorrectedYear(e.target.value)}
-                    placeholder="e.g. 2023"
-                    disabled={reportCorrection.isPending}
-                  />
-                </div>
-              </div>
-              <Button
-                className="w-full"
-                onClick={handleSubmitCorrection}
-                disabled={reportCorrection.isPending}
-              >
-                {reportCorrection.isPending ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Submitting…
-                  </>
-                ) : (
-                  "Submit Correction"
-                )}
-              </Button>
-            </div>
-          )}
-
-          {/* ----------------------------------------------------------------
-              FOUND — correction submitted
-          ---------------------------------------------------------------- */}
-          {scanResult.found && confirmState.step === "correction-submitted" && (
-            <div className="bg-card rounded-2xl border border-border p-5 text-center space-y-2">
-              <CheckCircle2 className="h-8 w-8 text-green-500 mx-auto" />
-              <p className="text-sm font-medium">
-                Thank you — your correction has been recorded.
               </p>
             </div>
           )}

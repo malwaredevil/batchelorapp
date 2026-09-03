@@ -6,6 +6,7 @@ export * from "./elaine";
 export * from "./gmail";
 export * from "./agentphone";
 export * from "./ornaments";
+export * from "./hallmark";
 export * from "./office";
 export * from "./elaine-email";
 export * from "./app-config";
@@ -21,3 +22,6 @@ export * from "./slack";
 export * from "./webhook-side-effects";
 export * from "./reminders";
 // scaffold:anchor:schema-exports — scaffold-collection-module inserts exports below; do not remove
+// scaffold:begin:magnets
+export * from "./magnets";
+// scaffold:end:magnets

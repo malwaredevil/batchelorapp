@@ -106,6 +106,7 @@ const dbMock = {
   execute: vi.fn().mockResolvedValue({ rows: [] }),
   delete: vi.fn(() => ({ where: () => Promise.resolve(undefined) })),
 };
+const poolQuery = vi.fn();
 
 // ---------------------------------------------------------------------------
 // vi.mock() declarations — all hoisted to the top of the module by vitest.
@@ -139,7 +140,11 @@ vi.mock("../lib/env", () => ({
 
 vi.mock("@workspace/db", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@workspace/db")>();
-  return { ...actual, db: dbMock, pool: { connect: vi.fn(), query: vi.fn() } };
+  return {
+    ...actual,
+    db: dbMock,
+    pool: { connect: vi.fn(), query: poolQuery },
+  };
 });
 
 vi.mock("../middleware/auth", async (importOriginal) => {
@@ -258,7 +263,6 @@ vi.mock("../lib/pottery/ebay-market-value", () => ({
 
 vi.mock("../lib/ornaments/hallmark-search", () => ({
   searchHallmark: vi.fn(),
-  lookupHallmarkFromDb: vi.fn(),
 }));
 
 vi.mock("../lib/ornaments/barcode", () => ({
@@ -441,6 +445,13 @@ vi.mock("../lib/upload-limits", () => ({
 }));
 
 vi.mock("../lib/storage-core", () => ({
+  buildStorageAdapter: vi.fn(() => ({
+    uploadImage: vi.fn(),
+    downloadImageBuffer: vi.fn(),
+    deleteImage: vi.fn(),
+    invalidateImageCache: vi.fn(),
+  })),
+  IMAGE_ONLY_POLICY: {},
   ensureBucketWithPolicy: vi.fn().mockResolvedValue(undefined),
   ELAINE_ATTACHMENTS_BUCKET_POLICY: {},
 }));
@@ -965,5 +976,33 @@ describe("GET /api/elaine/conversations", () => {
     const app = buildApp({});
     const res = await request(app).get("/api/elaine/conversations");
     expect(res.status).toBe(401);
+  });
+});
+
+describe("Hub aggregate counts", () => {
+  it("returns every saved conversation count instead of the 30-row history page length", async () => {
+    selectQueue.push([{ total: "75" }]);
+
+    const app = buildApp({ userId: 1 });
+    const res = await request(app).get("/api/elaine/conversations/count");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ count: 75 });
+  });
+
+  it("returns every actionable task count instead of the 50-row task page length", async () => {
+    poolQuery.mockResolvedValueOnce({ rows: [{ open_count: "51" }] });
+
+    const app = buildApp({ userId: 1 });
+    const res = await request(app).get("/api/elaine/tasks/count");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ openCount: 51 });
+    expect(poolQuery).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "status IN ('queued', 'scheduled', 'retry_wait', 'running')",
+      ),
+      [1],
+    );
   });
 });

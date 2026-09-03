@@ -164,6 +164,7 @@ vi.mock("../lib/pottery/serialize", () => ({
     categories: [],
     images: [],
     imageUrl: "https://mock.supabase.co/pottery/mock.jpg",
+    recognitionRefreshStatus: null,
     createdAt: new Date("2026-01-01"),
   }),
   serializeItems: vi.fn().mockResolvedValue([]),

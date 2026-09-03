@@ -192,6 +192,7 @@ app.use(sessionMiddleware);
 app.use("/api", csrfGuard);
 app.use("/api", (req: Request, res: Response, next: NextFunction) => {
   if (
+    req.path === "/" ||
     req.path === "/healthz" ||
     req.path === "/health/live" ||
     req.path === "/health/ready"

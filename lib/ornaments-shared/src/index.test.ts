@@ -1,5 +1,26 @@
 import { describe, it, expect } from "vitest";
-import { parseAiAppraisalRange, computeConsensusValue } from "./index";
+import {
+  parseAiAppraisalRange,
+  computeConsensusValue,
+  computeOrnamentEstimatedValue,
+  ORNAMENT_MAINTENANCE_REASONS,
+  ornamentMaintenanceReasonLabels,
+} from "./index";
+
+describe("ornament maintenance reasons", () => {
+  it("defines the repair reasons and their display labels", () => {
+    expect(ORNAMENT_MAINTENANCE_REASONS).toEqual([
+      "embedding",
+      "seriesOrCollection",
+      "year",
+    ]);
+    expect(ornamentMaintenanceReasonLabels).toEqual({
+      embedding: "search embedding",
+      seriesOrCollection: "series or collection",
+      year: "release year",
+    });
+  });
+});
 
 describe("parseAiAppraisalRange", () => {
   it("parses a standard hyphen range", () => {
@@ -73,5 +94,52 @@ describe("computeConsensusValue", () => {
       aiAppraisal: "$10-$18",
     });
     expect(result).toBeCloseTo(16.333, 2);
+  });
+});
+
+describe("computeOrnamentEstimatedValue", () => {
+  it("averages all valid market signals before applying quantity elsewhere", () => {
+    expect(
+      computeOrnamentEstimatedValue({
+        bookValue: 20,
+        ebayPriceMinUsd: 10,
+        ebayPriceMaxUsd: 30,
+        ebayLastSoldPriceUsd: 25,
+        aiAppraisal: "$15-$25",
+        retailValueUsd: 10,
+      }),
+    ).toEqual({
+      value: 21.25,
+      source: "market_signals",
+      marketSignalCount: 4,
+    });
+  });
+
+  it("uses retail only when no current-market value exists", () => {
+    expect(
+      computeOrnamentEstimatedValue({
+        bookValue: null,
+        ebayPriceMinUsd: null,
+        ebayPriceMaxUsd: null,
+        aiAppraisal: null,
+        retailValueUsd: 18,
+      }),
+    ).toEqual({
+      value: 18,
+      source: "retail_fallback",
+      marketSignalCount: 0,
+    });
+  });
+
+  it("does not treat invalid values as a saved estimate", () => {
+    expect(
+      computeOrnamentEstimatedValue({
+        bookValue: Number.NaN,
+        ebayPriceMinUsd: -1,
+        ebayPriceMaxUsd: 10,
+        aiAppraisal: "No numeric range",
+        retailValueUsd: Number.NaN,
+      }),
+    ).toEqual({ value: null, source: null, marketSignalCount: 0 });
   });
 });

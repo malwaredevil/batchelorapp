@@ -13,7 +13,6 @@ import {
   Package,
   Tag,
   Calendar,
-  DollarSign,
 } from "lucide-react";
 import {
   useLookupBarcode,
@@ -145,10 +144,10 @@ export default function BarcodeLookupPage() {
           {scanResult.found ? (
             <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
               {/* Product image */}
-              {(scanResult.hallmarkImages?.[0] ?? scanResult.imageUrl) && (
+              {scanResult.imageUrl && (
                 <div className="aspect-[4/3] overflow-hidden bg-muted">
                   <img
-                    src={scanResult.hallmarkImages?.[0] ?? scanResult.imageUrl!}
+                    src={scanResult.imageUrl}
                     alt={scanResult.name ?? "Product"}
                     className="w-full h-full object-contain"
                   />
@@ -198,99 +197,6 @@ export default function BarcodeLookupPage() {
                   <Package className="h-3 w-3" />
                   <span>Barcode: {scannedCode}</span>
                 </div>
-
-                {/* Hallmark details */}
-                {scanResult.hallmarkSku && (
-                  <div className="border-t border-border pt-4 space-y-3">
-                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                      Hallmark Details
-                    </h3>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                      <div>
-                        <span className="text-muted-foreground text-xs">
-                          SKU
-                        </span>
-                        <p className="font-mono font-medium">
-                          {scanResult.hallmarkSku}
-                        </p>
-                      </div>
-                      {scanResult.hallmarkArtist && (
-                        <div>
-                          <span className="text-muted-foreground text-xs">
-                            Artist
-                          </span>
-                          <p className="font-medium">
-                            {scanResult.hallmarkArtist}
-                          </p>
-                        </div>
-                      )}
-                      {scanResult.hallmarkSeriesName && (
-                        <div className="col-span-2">
-                          <span className="text-muted-foreground text-xs">
-                            Collection
-                          </span>
-                          <p className="font-medium">
-                            {scanResult.hallmarkSeriesName}
-                          </p>
-                        </div>
-                      )}
-                      {scanResult.hallmarkRetailPriceUsd != null && (
-                        <div>
-                          <span className="text-muted-foreground text-xs">
-                            Original Retail
-                          </span>
-                          <div className="flex items-center gap-1">
-                            <DollarSign className="h-3 w-3 text-muted-foreground" />
-                            <p className="font-medium">
-                              {scanResult.hallmarkRetailPriceUsd.toFixed(2)}
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                      {scanResult.hallmarkCollectorPriceUsd != null && (
-                        <div>
-                          <span className="text-muted-foreground text-xs">
-                            Collector Value
-                          </span>
-                          <div className="flex items-center gap-1">
-                            <DollarSign className="h-3 w-3 text-muted-foreground" />
-                            <p className="font-medium">
-                              {scanResult.hallmarkCollectorPriceUsd.toFixed(2)}
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                      {scanResult.hallmarkInStock != null && (
-                        <div>
-                          <span className="text-muted-foreground text-xs">
-                            In Stock
-                          </span>
-                          <p
-                            className={
-                              scanResult.hallmarkInStock
-                                ? "font-medium text-green-600"
-                                : "font-medium text-muted-foreground"
-                            }
-                          >
-                            {scanResult.hallmarkInStock ? "Yes" : "No"}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-
-                    {scanResult.hallmarkProductUrl && (
-                      <a
-                        href={scanResult.hallmarkProductUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
-                      >
-                        View on Hallmark.com
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </a>
-                    )}
-                  </div>
-                )}
               </div>
             </div>
           ) : (
@@ -304,14 +210,14 @@ export default function BarcodeLookupPage() {
               <p className="text-sm text-muted-foreground mt-2">
                 No product information found for barcode{" "}
                 <span className="font-mono">{scannedCode}</span>. It may not be
-                in any database yet.
+                in the live eBay or AI lookup.
               </p>
             </div>
           )}
 
           {/* Action buttons */}
           <div className="flex flex-wrap gap-3">
-            {scanResult.found && scanResult.hallmarkSku && (
+            {scanResult.found && (
               <Button
                 className="flex-1"
                 onClick={() => {

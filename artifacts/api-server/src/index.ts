@@ -8,6 +8,7 @@ import { startIntegrationsHealthNudgeScheduler } from "./lib/integrations-health
 import { startSentryErrorNudgeScheduler } from "./lib/sentry-error-nudges";
 import { startCalendarTripScanScheduler } from "./lib/travels-calendar-scan";
 import { startGmailScanScheduler } from "./lib/gmail-scan";
+import { startHallmarkEventsSyncScheduler } from "./lib/ornaments/hallmark-events-sync";
 import { startErrorRateSummary } from "./lib/error-tracker";
 import { startBirthdayScheduler } from "./lib/birthday-scheduler";
 import { startMonitoringScheduler } from "./lib/monitoring-scheduler";
@@ -84,6 +85,7 @@ async function initializeRuntime(): Promise<void> {
     startNudgeScheduler(),
     startCalendarTripScanScheduler(),
     startGmailScanScheduler(),
+    startHallmarkEventsSyncScheduler(),
     startErrorRateSummary(),
     startBirthdayScheduler(),
     startMonitoringScheduler(),

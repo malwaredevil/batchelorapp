@@ -51,6 +51,8 @@ import {
   CollectionDetailPanelStack,
   CollectionDetailSection,
   CollectionDetailField,
+  getPhotoRecognitionRefetchInterval,
+  PhotoRecognitionStatus,
   CollectionDetailSkeleton,
   CollectionErrorState,
   ReminderBellButton,
@@ -68,6 +70,7 @@ type QuiltData = {
   notes?: string | null;
   lockedFields: string[];
   completionPercentage?: number | null;
+  recognitionRefreshStatus?: "pending" | "complete" | null;
   categories: Array<{
     id: number;
     name: string;
@@ -121,7 +124,20 @@ export default function QuiltDetail() {
     completionPercentage: 0,
   });
 
-  const { data: quilt, isLoading, isError, refetch } = useGetQuilt(quiltId);
+  const {
+    data: quilt,
+    isLoading,
+    isError,
+    refetch,
+  } = useGetQuilt(quiltId, {
+    query: {
+      queryKey: getGetQuiltQueryKey(quiltId),
+      refetchInterval: (query) =>
+        getPhotoRecognitionRefetchInterval(
+          query.state.data?.recognitionRefreshStatus,
+        ),
+    },
+  });
   const { data: allCategories } = useListQuiltingCategories();
 
   usePageAssistantContext(
@@ -573,6 +589,7 @@ export default function QuiltDetail() {
             </div>
           )}
         </div>
+        <PhotoRecognitionStatus status={q.recognitionRefreshStatus} />
       </CollectionDetailHero>
 
       <CollectionDetailPanelStack>

@@ -1,6 +1,7 @@
 /**
  * Idempotent schema bootstrap CLI for the merged Batchelor monorepo (pottery +
- * quilting). Safe, additive-only alternative to the banned force-push command.
+ * quilting). Safe, additive-only alternative to the banned force-push command,
+ * followed by explicitly reviewed destructive migrations.
  *
  * The actual DDL lives in `./schema-statements` (the single source of truth,
  * also consumed by the api-server startup self-healing migration). This file is
@@ -9,6 +10,7 @@
  * Run via `pnpm --filter @workspace/db run bootstrap` and from post-merge.sh.
  */
 import pg from "pg";
+import { DESTRUCTIVE_MIGRATIONS } from "./destructive-migrations";
 import { resolveDatabaseUrl, sslConfig } from "./resolve-url";
 import { STATEMENTS } from "./schema-statements";
 
@@ -30,8 +32,12 @@ async function main(): Promise<void> {
       console.log(`[bootstrap] ${preview}...`);
       await pool.query(statement);
     }
+    for (const migration of DESTRUCTIVE_MIGRATIONS) {
+      console.log(`[bootstrap] destructive migration: ${migration.name}...`);
+      await pool.query(migration.sql);
+    }
     console.log(
-      "[bootstrap] done — pottery + quilting schema ensured (no data touched)",
+      "[bootstrap] done — schema ensured and reviewed migrations applied",
     );
   } finally {
     await pool.end();

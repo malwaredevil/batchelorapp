@@ -32,6 +32,9 @@ import elaineCodeSuggestionsRouter from "./admin/elaine-code-suggestions";
 import richTextRouter from "./rich-text";
 import remindersRouter from "./reminders";
 // scaffold:anchor:module-route-imports — scaffold-collection-module inserts imports below; do not remove
+// scaffold:begin:magnets
+import magnetsRouter from "./magnets";
+// scaffold:end:magnets
 
 const router: IRouter = Router();
 
@@ -51,6 +54,9 @@ router.use("/pottery", potteryRouter);
 router.use("/quilting", quiltingRouter);
 router.use("/ornaments", ornamentsRouter);
 // scaffold:anchor:module-route-mounts — scaffold-collection-module inserts mounts below; do not remove
+// scaffold:begin:magnets
+router.use("/magnets", magnetsRouter);
+// scaffold:end:magnets
 router.use("/office", officeRouter);
 router.use("/travels", travelsRouter);
 router.use(recycleBinRouter);

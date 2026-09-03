@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
 import { DEFAULT_MULTER_FILE_BYTES } from "../../middleware/uploadSizeGuard";
-import { and, count, desc, eq, ilike, inArray, isNull, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { logActivity } from "../../lib/soft-delete";
 import {
   db,
@@ -37,7 +37,6 @@ import {
 } from "@workspace/api-zod";
 import { requireAuth } from "../../middleware/auth";
 import { aiLimiter, bulkAiLimiter } from "../../middleware/rateLimit";
-import { getElaineGlobalConfig } from "../../lib/elaine-config";
 import {
   createImageFileFilter,
   sniffAndValidateMime,
@@ -58,6 +57,12 @@ import {
 import { analyzeQuiltImage } from "../../lib/openai";
 import { serializeQuilt, serializeQuilts } from "../../lib/serialize";
 import { pathCacheBuster } from "../../lib/path-cache-buster";
+import {
+  runQuiltRecognition,
+  scheduleQuiltingRecognition,
+} from "../../lib/quilting/recognition";
+import { runQuiltingBulkReanalysis } from "../../lib/quilting/bulk-reanalyze";
+import { createCollectionTextSearch } from "../../lib/collection-text-search";
 
 const MAX_NAME = 200;
 const MAX_NOTES = 4000;
@@ -123,7 +128,13 @@ router.get("/quilts", async (req, res) => {
   );
   const offset = (page - 1) * pageSize;
 
-  const baseWhere = q ? ilike(finishedQuilts.name, `%${q}%`) : undefined;
+  const textSearch = q
+    ? createCollectionTextSearch(q, {
+        title: [finishedQuilts.name],
+        broad: [finishedQuilts.recipient, finishedQuilts.notes],
+      })
+    : null;
+  const baseWhere = textSearch?.where;
   const where = baseWhere
     ? and(baseWhere, isNull(finishedQuilts.deletedAt))
     : isNull(finishedQuilts.deletedAt);
@@ -137,7 +148,10 @@ router.get("/quilts", async (req, res) => {
     .select()
     .from(finishedQuilts)
     .where(where)
-    .orderBy(desc(finishedQuilts.createdAt))
+    .orderBy(
+      ...(textSearch?.relevance ? [textSearch.relevance] : []),
+      desc(finishedQuilts.createdAt),
+    )
     .limit(pageSize)
     .offset(offset);
 
@@ -374,65 +388,22 @@ router.patch("/quilts/:id", async (req, res) => {
 // Re-analyze with AI
 // ---------------------------------------------------------------------------
 
-const MAX_REANALYZE_IMAGES = 5;
-
 router.post("/quilts/:id/reanalyze", aiLimiter, async (req, res) => {
   const { id } = ReanalyzeQuiltParams.parse(req.params);
-  const [row] = await db
-    .select()
-    .from(finishedQuilts)
-    .where(eq(finishedQuilts.id, id))
-    .limit(1);
-  if (!row) {
-    res.status(404).json({ error: "Quilt not found." });
-    return;
+  let updated: FinishedQuiltRow;
+  try {
+    updated = await runQuiltRecognition(id);
+  } catch (error) {
+    const status = (error as { status?: number }).status;
+    if (status) {
+      res.status(status).json({
+        error:
+          error instanceof Error ? error.message : "Unable to analyse quilt.",
+      });
+      return;
+    }
+    throw error;
   }
-
-  const supplementalPaths = await db
-    .select({
-      storagePath: quiltingImages.storagePath,
-      position: quiltingImages.position,
-    })
-    .from(quiltingImages)
-    .where(sql`entity_type = 'quilt' AND entity_id = ${id}`)
-    .orderBy(quiltingImages.position);
-
-  const allPaths = [
-    row.imagePath,
-    ...supplementalPaths.map((i) => i.storagePath),
-  ].slice(0, MAX_REANALYZE_IMAGES);
-  const settled = await Promise.allSettled(
-    allPaths.map(downloadImageAsDataUrl),
-  );
-  const dataUrls = settled
-    .filter(
-      (s): s is PromiseFulfilledResult<string> => s.status === "fulfilled",
-    )
-    .map((s) => s.value);
-  if (dataUrls.length === 0) {
-    res.status(422).json({ error: "Could not load any image for this quilt." });
-    return;
-  }
-
-  const lockedFields = (row.lockedFields as string[]) ?? [];
-  const analysis = await analyzeQuiltImage(dataUrls, lockedFields, {
-    name: row.name,
-  });
-
-  await db
-    .update(finishedQuilts)
-    .set({
-      ...(lockedFields.includes("name") ? {} : { name: analysis.name }),
-      ...(lockedFields.includes("notes") ? {} : { notes: analysis.notes }),
-      dominantColors: analysis.dominantColors,
-    })
-    .where(eq(finishedQuilts.id, id));
-
-  const [updated] = await db
-    .select()
-    .from(finishedQuilts)
-    .where(eq(finishedQuilts.id, id))
-    .limit(1);
   res.json(ReanalyzeQuiltResponse.parse(await serializeQuilt(updated)));
 });
 
@@ -441,71 +412,7 @@ router.post("/quilts/:id/reanalyze", aiLimiter, async (req, res) => {
 export async function bulkReanalyzeQuilts(
   ids: number[],
 ): Promise<{ succeeded: number[]; failed: number[] }> {
-  const elaineConfig = await getElaineGlobalConfig();
-  const capped = [...new Set(ids)].slice(
-    0,
-    elaineConfig.thresholds.quiltingBulkReanalyzeLimit,
-  );
-  const succeeded: number[] = [];
-  const failed: number[] = [];
-
-  for (const id of capped) {
-    try {
-      const [row] = await db
-        .select()
-        .from(finishedQuilts)
-        .where(eq(finishedQuilts.id, id))
-        .limit(1);
-      if (!row) {
-        failed.push(id);
-        continue;
-      }
-
-      const supplementalPaths = await db
-        .select({ storagePath: quiltingImages.storagePath })
-        .from(quiltingImages)
-        .where(sql`entity_type = 'quilt' AND entity_id = ${id}`)
-        .orderBy(quiltingImages.position);
-
-      const allPaths = [
-        row.imagePath,
-        ...supplementalPaths.map((i) => i.storagePath),
-      ].slice(0, MAX_REANALYZE_IMAGES);
-      const settled = await Promise.allSettled(
-        allPaths.map(downloadImageAsDataUrl),
-      );
-      const dataUrls = settled
-        .filter(
-          (s): s is PromiseFulfilledResult<string> => s.status === "fulfilled",
-        )
-        .map((s) => s.value);
-      if (dataUrls.length === 0) {
-        failed.push(id);
-        continue;
-      }
-
-      const lockedFields = (row.lockedFields as string[]) ?? [];
-      const analysis = await analyzeQuiltImage(dataUrls, lockedFields, {
-        name: row.name,
-      });
-      await db
-        .update(finishedQuilts)
-        .set({
-          ...(lockedFields.includes("name") ? {} : { name: analysis.name }),
-          ...(lockedFields.includes("notes") ? {} : { notes: analysis.notes }),
-          dominantColors: analysis.dominantColors,
-        })
-        .where(eq(finishedQuilts.id, id));
-      succeeded.push(id);
-    } catch {
-      failed.push(id);
-    }
-    if (capped.indexOf(id) < capped.length - 1) {
-      await new Promise((resolve) => setTimeout(resolve, 300));
-    }
-  }
-
-  return { succeeded, failed };
+  return runQuiltingBulkReanalysis(ids, runQuiltRecognition);
 }
 
 router.post("/quilts/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
@@ -642,6 +549,7 @@ router.post("/quilts/:id/images", upload.single("image"), async (req, res) => {
     })
     .returning();
 
+  scheduleQuiltingRecognition("quilt", id);
   res.status(201).json({
     id: image.id,
     url: `/api/quilting/quilts/${id}/images/${image.id}`,
@@ -719,6 +627,7 @@ router.patch("/quilts/:id/images/:imageId", async (req, res) => {
     res.status(404).json({ error: "Image not found." });
     return;
   }
+  if (body.position !== undefined) scheduleQuiltingRecognition("quilt", id);
   res.json({
     id: image.id,
     url: `/api/quilting/quilts/${id}/images/${image.id}`,
@@ -753,6 +662,7 @@ router.delete("/quilts/:id/images/:imageId", async (req, res) => {
     res.status(404).json({ error: "Image not found." });
     return;
   }
+  scheduleQuiltingRecognition("quilt", id);
   res.status(200).json({ ok: true });
 });
 
@@ -834,6 +744,7 @@ router.post("/quilts/:id/images/:imageId/set-default", async (req, res) => {
     res.status(404).json({ error: "Quilt or image not found." });
     return;
   }
+  scheduleQuiltingRecognition("quilt", id);
 
   const [updated] = await db
     .select()

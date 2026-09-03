@@ -15,6 +15,12 @@ export interface GoogleCalendarListItem {
 export interface GoogleCalendarEvent {
   id: string;
   htmlLink?: string;
+  extendedProperties?: GoogleCalendarExtendedProperties;
+}
+
+export interface GoogleCalendarExtendedProperties {
+  private?: Record<string, string>;
+  shared?: Record<string, string>;
 }
 
 async function calendarApiJson<T>(
@@ -88,6 +94,7 @@ export interface CalendarEventInput {
   // Google's fixed per-event colorId ("1".."11"), or null/undefined to leave
   // the event using the calendar's default color.
   colorId?: string | null;
+  extendedProperties?: GoogleCalendarExtendedProperties;
 }
 
 export interface CalendarEvent {
@@ -100,6 +107,7 @@ export interface CalendarEvent {
   end: string;
   colorId: string | null;
   htmlLink?: string;
+  extendedProperties?: GoogleCalendarExtendedProperties;
 }
 
 interface RawGoogleEvent {
@@ -112,6 +120,7 @@ interface RawGoogleEvent {
   colorId?: string;
   start?: { date?: string; dateTime?: string };
   end?: { date?: string; dateTime?: string };
+  extendedProperties?: GoogleCalendarExtendedProperties;
 }
 
 // Google Calendar all-day events use an exclusive end date, so an event
@@ -128,6 +137,7 @@ function toGoogleEventBody(input: CalendarEventInput) {
     description: input.description ?? undefined,
     location: input.location ?? undefined,
     colorId: input.colorId ?? undefined,
+    extendedProperties: input.extendedProperties ?? undefined,
     start: input.allDay ? { date: input.start } : { dateTime: input.start },
     end: input.allDay
       ? { date: addDays(input.end, 1) }
@@ -151,6 +161,7 @@ function fromGoogleEvent(raw: RawGoogleEvent): CalendarEvent {
       : (raw.end?.dateTime ?? raw.start?.dateTime ?? ""),
     colorId: raw.colorId ?? null,
     htmlLink: raw.htmlLink,
+    extendedProperties: raw.extendedProperties,
   };
 }
 

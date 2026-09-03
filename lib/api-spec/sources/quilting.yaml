@@ -2916,6 +2916,7 @@ components:
           imageUrl,
           tileImageUrl,
           hasEmbedding,
+          recognitionRefreshStatus,
           createdAt,
         ]
       properties:
@@ -2995,6 +2996,11 @@ components:
             don't show a "puffy" embossed grid.
         hasEmbedding:
           type: boolean
+        recognitionRefreshStatus:
+          type: string
+          enum: [pending, complete]
+          nullable: true
+          description: Status of the automatic complete-photo recognition refresh.
         createdAt:
           type: string
           format: date-time
@@ -3103,6 +3109,7 @@ components:
           categories,
           images,
           hasEmbedding,
+          recognitionRefreshStatus,
           createdAt,
         ]
       properties:
@@ -3152,6 +3159,11 @@ components:
           nullable: true
         hasEmbedding:
           type: boolean
+        recognitionRefreshStatus:
+          type: string
+          enum: [pending, complete]
+          nullable: true
+          description: Status of the automatic complete-photo recognition refresh.
         createdAt:
           type: string
           format: date-time
@@ -3252,6 +3264,7 @@ components:
           linkedFabricIds,
           linkedPatternIds,
           linkedFabrics,
+          recognitionRefreshStatus,
           createdAt,
         ]
       properties:
@@ -3309,6 +3322,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/QuiltFabricSummary"
+        recognitionRefreshStatus:
+          type: ["string", "null"]
+          enum: [pending, complete, null]
+          description: Status of the automatic complete-photo recognition refresh.
         createdAt:
           type: string
           format: date-time

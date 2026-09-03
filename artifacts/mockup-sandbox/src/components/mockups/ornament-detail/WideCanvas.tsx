@@ -58,7 +58,6 @@ export function WideCanvas() {
               { label: "Brand", value: "Hallmark" },
               { label: "Year", value: "2016" },
               { label: "Series / Collection", value: "Sweet Decade" },
-              { label: "Condition", value: "Mint in Box" },
               { label: "Dimensions", value: "3.5 in" },
               { label: "Barcode / UPC", value: "661127022308", mono: true },
             ].map((field, i) => (

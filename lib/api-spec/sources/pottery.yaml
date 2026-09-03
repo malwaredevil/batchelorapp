@@ -1173,6 +1173,7 @@ components:
         - motifs
         - categories
         - images
+        - recognitionRefreshStatus
         - createdAt
       properties:
         id:
@@ -1228,6 +1229,10 @@ components:
             $ref: "#/components/schemas/PotteryImage"
         imageUrl:
           type: string
+        recognitionRefreshStatus:
+          type: ["string", "null"]
+          enum: [pending, complete, null]
+          description: Status of the automatic complete-photo recognition refresh.
         createdAt:
           type: string
           format: date-time

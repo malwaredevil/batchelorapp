@@ -1,4 +1,5 @@
 import { X } from "lucide-react";
+import { resolveCategoryPalette } from "@workspace/web-core/colors";
 import { cn } from "@workspace/web-core/utils";
 import type { CollectionCategory } from "./collection-card";
 
@@ -30,7 +31,7 @@ export function CategoryChipPicker({
     <div className={cn("flex flex-wrap gap-2", className)}>
       {categories.map((category) => {
         const selected = selectedIds.includes(category.id);
-        const hasColor = Boolean(category.bgColor);
+        const palette = resolveCategoryPalette(category);
 
         return (
           <button
@@ -44,24 +45,12 @@ export function CategoryChipPicker({
               size === "sm"
                 ? "gap-1 px-2.5 py-0.5 text-xs"
                 : "gap-1.5 px-3 py-1 text-sm",
-              !hasColor &&
-                (selected
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-card-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground"),
             )}
-            style={
-              hasColor
-                ? {
-                    backgroundColor: selected
-                      ? (category.bgColor ?? undefined)
-                      : "transparent",
-                    borderColor: category.bgColor ?? undefined,
-                    color: selected
-                      ? (category.textColor ?? "#fff")
-                      : (category.bgColor ?? undefined),
-                  }
-                : undefined
-            }
+            style={{
+              backgroundColor: selected ? palette.bgColor : "transparent",
+              borderColor: palette.bgColor,
+              color: selected ? palette.textColor : palette.bgColor,
+            }}
           >
             {category.name}
             {selected && showRemoveIcon && (

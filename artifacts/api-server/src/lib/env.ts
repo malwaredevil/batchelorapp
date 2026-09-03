@@ -71,10 +71,10 @@ export const env = {
   // Apify API token for the ingestion framework (#230). Optional — only
   // required when Apify-backed ingestion sources are configured.
   apifyApiToken: optional("APIFY_API_TOKEN"),
-  // Shared secret included in Apify ad-hoc webhook URLs so the webhook
-  // endpoint can reject forged/unsolicited POST requests. Optional — the
-  // webhook route returns 503 until this is set.
-  apifyWebhookSecret: optional("APIFY_WEBHOOK_SECRET"),
+  // Firecrawl API key for the deterministic Hallmark event page scraper.
+  // Optional at boot so the rest of the app remains usable when the scanner
+  // is not configured; scanner runs fail visibly until it is supplied.
+  firecrawlApiKey: optional("FIRECRAWL_API_KEY"),
   // Slack bot credentials for the Elaine Slack bridge (inbound DMs + reminder
   // DM notifications). Both are optional at the env layer — the webhook route
   // returns 401 until SLACK_SIGNING_SECRET is set, and any outbound call

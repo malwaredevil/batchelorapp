@@ -8,7 +8,7 @@ import {
   RefreshCw,
   Sparkles,
 } from "lucide-react";
-import { GalleryPaginator } from "@/components/GalleryPaginator";
+import { GalleryPaginationPair } from "@/components/GalleryPaginationPair";
 import { Button } from "@/components/ui/button";
 import { BulkActionBar } from "@workspace/collection-ui";
 import { Input } from "@/components/ui/input";
@@ -476,32 +476,19 @@ export function CollectionPageShell<T extends CollectionPageItem>({
         </div>
       )}
 
-      {/* Top pagination */}
-      {totalPages > 1 && paged && paged.length > 0 && (
-        <GalleryPaginator
-          page={page}
-          totalPages={totalPages}
-          onPageChange={(p) => setPage(p)}
-          className="mb-4"
-        />
-      )}
-
-      {/* Item grid */}
-      {paged && paged.length > 0 && (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-          {paged.map((item) => renderCard(item))}
-        </div>
-      )}
-
-      {/* Bottom pagination */}
-      {totalPages > 1 && paged && paged.length > 0 && (
-        <GalleryPaginator
-          page={page}
-          totalPages={totalPages}
-          onPageChange={(p) => setPage(p)}
-          className="mt-6"
-        />
-      )}
+      <GalleryPaginationPair
+        page={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        hasResults={Boolean(paged?.length)}
+      >
+        {/* Item grid */}
+        {paged && paged.length > 0 && (
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            {paged.map((item) => renderCard(item))}
+          </div>
+        )}
+      </GalleryPaginationPair>
 
       {/* Category edit dialog */}
       <CategoryEditDialog

@@ -12,8 +12,9 @@
  *   Pottery: pottery_categories, pottery_items (WITHOUT embedding/visual_embedding),
  *            pottery_images, pottery_item_categories
  *   Ornaments: ornaments_categories, ornaments_items (WITHOUT embedding/visual_embedding),
- *              ornaments_images, ornaments_item_categories, ornaments_barcode_cache,
- *              ornaments_hallmark_events, hallmark_ornaments, ornament_upc_corrections
+ *              ornaments_images, ornaments_item_categories, ornaments_hallmark_events
+ *   Magnets: magnets_categories, magnets_items, magnets_images,
+ *            magnets_item_categories
  *   Quilting: quilting_categories, quilting_fabrics (WITHOUT embedding/visual_embedding),
  *             quilting_patterns (WITHOUT embedding/visual_embedding),
  *             quilting_finished_quilts, quilting_fabric_links, quilting_pattern_links,
@@ -87,9 +88,6 @@ ALTER TABLE app_users ADD COLUMN IF NOT EXISTS phone_verified_at TIMESTAMPTZ;
 ALTER TABLE app_users ADD COLUMN IF NOT EXISTS sms_consent_at TIMESTAMPTZ;
 ALTER TABLE app_users ADD COLUMN IF NOT EXISTS sms_opted_out_at TIMESTAMPTZ;
 ALTER TABLE app_users ALTER COLUMN password_hash DROP NOT NULL;
-ALTER TABLE app_gmail_connections ALTER COLUMN refresh_token DROP NOT NULL;
-ALTER TABLE travels_google_calendar_connections ALTER COLUMN refresh_token DROP NOT NULL;
-ALTER TABLE travels_gmail_connections ALTER COLUMN refresh_token DROP NOT NULL;
 
 -- AgentPhone SMS/voice webhook
 CREATE TABLE IF NOT EXISTS agentphone_conversations (
@@ -124,6 +122,7 @@ CREATE TABLE IF NOT EXISTS app_gmail_connections (
   created_at              TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at              TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE app_gmail_connections ALTER COLUMN refresh_token DROP NOT NULL;
 
 -- Pottery
 CREATE TABLE IF NOT EXISTS pottery_categories (
@@ -221,7 +220,6 @@ CREATE TABLE IF NOT EXISTS ornaments_items (
   quantity              INTEGER NOT NULL DEFAULT 1,
   notes                 TEXT,
   dimensions            TEXT,
-  condition             TEXT,
   origin                TEXT,
   acquired_at           DATE,
   ai_description        TEXT,
@@ -250,52 +248,42 @@ CREATE TABLE IF NOT EXISTS ornaments_item_categories (
   PRIMARY KEY (item_id, category_id)
 );
 
-CREATE TABLE IF NOT EXISTS ornaments_barcode_cache (
-  barcode                     TEXT PRIMARY KEY,
-  found                       INTEGER NOT NULL DEFAULT 0,
-  name                        TEXT,
-  brand                       TEXT,
-  series_or_collection        TEXT,
-  year                        INTEGER,
-  description                 TEXT,
-  image_url                   TEXT,
-  created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  hallmark_sku                TEXT,
-  hallmark_series_name        TEXT,
-  hallmark_sequence_number    INTEGER,
-  hallmark_artist             TEXT,
-  hallmark_original_retail_price NUMERIC(10,2),
-  hallmark_product_url        TEXT,
-  hallmark_confidence         NUMERIC(4,3),
-  hallmark_enriched_at        TIMESTAMPTZ,
-  hallmark_collector_price_usd NUMERIC(10,2),
-  hallmark_in_stock           BOOLEAN,
-  hallmark_images             TEXT[]
+-- Magnets
+CREATE TABLE IF NOT EXISTS magnets_categories (
+  id         SERIAL PRIMARY KEY,
+  user_id    INTEGER NOT NULL,
+  name       TEXT NOT NULL UNIQUE,
+  bg_color   TEXT,
+  text_color TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS hallmark_ornaments (
-  id                     SERIAL PRIMARY KEY,
-  hallmark_sku           TEXT NOT NULL UNIQUE,
-  name                   TEXT NOT NULL,
-  description            TEXT,
-  series_name            TEXT,
-  sequence_number        INTEGER,
-  year                   INTEGER,
-  artist                 TEXT,
-  retail_price_usd       NUMERIC(10,2),
-  collector_price_usd    NUMERIC(10,2),
-  in_stock               BOOLEAN,
-  ornament_category      TEXT,
-  subcategory            TEXT,
-  images                 TEXT[],
-  product_url_hallmark   TEXT,
-  product_url_historical TEXT,
-  product_url_hooh       TEXT,
-  in_hallmark_catalog    BOOLEAN NOT NULL DEFAULT false,
-  in_historical_catalog  BOOLEAN NOT NULL DEFAULT false,
-  in_hooh_catalog        BOOLEAN NOT NULL DEFAULT false,
-  created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS magnets_items (
+  id            SERIAL PRIMARY KEY,
+  user_id       INTEGER NOT NULL,
+  name          TEXT NOT NULL,
+  notes         TEXT,
+  description   TEXT,
+  image_path    TEXT,
+  locked_fields TEXT[] NOT NULL DEFAULT '{}',
+  deleted_at    TIMESTAMPTZ,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS magnets_item_categories (
+  item_id     INTEGER NOT NULL REFERENCES magnets_items(id) ON DELETE CASCADE,
+  category_id INTEGER NOT NULL REFERENCES magnets_categories(id) ON DELETE CASCADE,
+  PRIMARY KEY (item_id, category_id)
+);
+
+CREATE TABLE IF NOT EXISTS magnets_images (
+  id           SERIAL PRIMARY KEY,
+  item_id      INTEGER NOT NULL REFERENCES magnets_items(id) ON DELETE CASCADE,
+  storage_path TEXT NOT NULL,
+  label        TEXT,
+  position     INTEGER NOT NULL DEFAULT 0,
+  deleted_at   TIMESTAMPTZ,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Office
@@ -363,20 +351,6 @@ CREATE TABLE IF NOT EXISTS ornaments_hallmark_events (
   created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
-CREATE TABLE IF NOT EXISTS ornament_upc_corrections (
-  id                            SERIAL PRIMARY KEY,
-  barcode                       TEXT NOT NULL,
-  corrected_name                TEXT,
-  corrected_brand               TEXT,
-  corrected_series_or_collection TEXT,
-  corrected_year                INTEGER,
-  wrong_name                    TEXT,
-  wrong_brand                   TEXT,
-  submitted_by                  INTEGER,
-  created_at                    TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_ornament_upc_corrections_barcode ON ornament_upc_corrections(barcode);
 
 -- Quilting
 CREATE TABLE IF NOT EXISTS quilting_categories (
@@ -709,6 +683,7 @@ CREATE TABLE IF NOT EXISTS travels_google_calendar_connections (
   created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE travels_google_calendar_connections ALTER COLUMN refresh_token DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS travels_connected_calendars (
   id                   SERIAL PRIMARY KEY,
@@ -943,6 +918,7 @@ CREATE TABLE IF NOT EXISTS travels_gmail_connections (
   created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE travels_gmail_connections ALTER COLUMN refresh_token DROP NOT NULL;
 
 CREATE TABLE IF NOT EXISTS travels_gmail_scan_decisions (
   id                 SERIAL PRIMARY KEY,
@@ -1111,18 +1087,6 @@ ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS timeouts JSONB NOT NUL
 ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS features JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS thresholds JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS runtime_budget JSONB NOT NULL DEFAULT '{}'::jsonb;
-
-ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_sku TEXT;
-ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_series_name TEXT;
-ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_sequence_number INTEGER;
-ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_artist TEXT;
-ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_original_retail_price NUMERIC(10,2);
-ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_product_url TEXT;
-ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_confidence NUMERIC(4,3);
-ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_enriched_at TIMESTAMPTZ;
-ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_collector_price_usd NUMERIC(10,2);
-ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_in_stock BOOLEAN;
-ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_images TEXT[];
 
 -- Phase 2: Operations (job queue + external cost tracking)
 CREATE TABLE IF NOT EXISTS app_schema_migrations (
@@ -2099,7 +2063,6 @@ async function main() {
       "quantity",
       "notes",
       "dimensions",
-      "condition",
       "origin",
       "acquired_at",
       "ai_description",
@@ -2137,62 +2100,50 @@ async function main() {
     columns: ["item_id", "category_id"],
   });
 
-  summary["ornaments_barcode_cache"] = await copyTable(source, dest, {
-    table: "ornaments_barcode_cache",
-    columns: [
-      "barcode",
-      "found",
-      "name",
-      "brand",
-      "series_or_collection",
-      "year",
-      "description",
-      "image_url",
-      "created_at",
-      "hallmark_sku",
-      "hallmark_series_name",
-      "hallmark_sequence_number",
-      "hallmark_artist",
-      "hallmark_original_retail_price",
-      "hallmark_product_url",
-      "hallmark_confidence",
-      "hallmark_enriched_at",
-      "hallmark_collector_price_usd",
-      "hallmark_in_stock",
-      "hallmark_images",
-    ],
-    orderBy: "barcode",
+  // ── Magnets ──────────────────────────────────────────────────────────────
+  summary["magnets_categories"] = await copyTable(source, dest, {
+    table: "magnets_categories",
+    columns: ["id", "user_id", "name", "bg_color", "text_color", "created_at"],
+    orderBy: "id",
   });
+  await resetSequence(dest, "magnets_categories", "id");
 
-  summary["hallmark_ornaments"] = await copyTable(source, dest, {
-    table: "hallmark_ornaments",
+  summary["magnets_items"] = await copyTable(source, dest, {
+    table: "magnets_items",
     columns: [
       "id",
-      "hallmark_sku",
+      "user_id",
       "name",
+      "notes",
       "description",
-      "series_name",
-      "sequence_number",
-      "year",
-      "artist",
-      "retail_price_usd",
-      "collector_price_usd",
-      "in_stock",
-      "ornament_category",
-      "subcategory",
-      "images",
-      "product_url_hallmark",
-      "product_url_historical",
-      "product_url_hooh",
-      "in_hallmark_catalog",
-      "in_historical_catalog",
-      "in_hooh_catalog",
+      "image_path",
+      "locked_fields",
+      "deleted_at",
       "created_at",
-      "updated_at",
     ],
     orderBy: "id",
   });
-  await resetSequence(dest, "hallmark_ornaments", "id");
+  await resetSequence(dest, "magnets_items", "id");
+
+  summary["magnets_images"] = await copyTable(source, dest, {
+    table: "magnets_images",
+    columns: [
+      "id",
+      "item_id",
+      "storage_path",
+      "label",
+      "position",
+      "deleted_at",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "magnets_images", "id");
+
+  summary["magnets_item_categories"] = await copyTable(source, dest, {
+    table: "magnets_item_categories",
+    columns: ["item_id", "category_id"],
+  });
 
   summary["ornaments_hallmark_events"] = await copyTable(source, dest, {
     table: "ornaments_hallmark_events",
@@ -2210,24 +2161,6 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "ornaments_hallmark_events", "id");
-
-  summary["ornament_upc_corrections"] = await copyTable(source, dest, {
-    table: "ornament_upc_corrections",
-    columns: [
-      "id",
-      "barcode",
-      "corrected_name",
-      "corrected_brand",
-      "corrected_series_or_collection",
-      "corrected_year",
-      "wrong_name",
-      "wrong_brand",
-      "submitted_by",
-      "created_at",
-    ],
-    orderBy: "id",
-  });
-  await resetSequence(dest, "ornament_upc_corrections", "id");
 
   // ── Office ────────────────────────────────────────────────────────────────
   summary["office_notes"] = await copyTable(source, dest, {

@@ -187,7 +187,7 @@ const SERVICES: ServiceEntry[] = [
     name: "Apify",
     purpose: "Web scraping and market-price lookup platform",
     usedFor:
-      "eBay sold-listing price lookups for pottery and ornaments (market value estimates), Etsy price suggestions for quilting shopping items, live flight price checks for the travels wishlist, Hallmark book-value lookups for ornaments (supplemental to UPCitemdb). Crawls the Hallmark historical and current catalogs via custom actors. Webhook callbacks auto-ingest crawl results on completion (APIFY_WEBHOOK_SECRET gates the inbound webhook). All outbound calls are gated by the APIFY_API_TOKEN secret.",
+      "eBay sold-listing price lookups for pottery and ornaments (market value estimates), Etsy price suggestions for quilting shopping items, live flight price checks for the travels wishlist, live Hallmark product research, and Hallmark book-value lookups for ornaments. All outbound calls are gated by the APIFY_API_TOKEN secret.",
     implementedIn: [
       "artifacts/api-server/src/lib/apify-client.ts",
       "artifacts/api-server/src/lib/pottery/market-value.ts",
@@ -195,28 +195,9 @@ const SERVICES: ServiceEntry[] = [
       "artifacts/api-server/src/lib/quilting/etsy-price.ts",
       "artifacts/api-server/src/lib/travels/flight-prices.ts",
       "artifacts/api-server/src/lib/ornaments/hallmark-book-value.ts",
-      "artifacts/api-server/src/routes/ornaments/apify-webhook.ts",
     ],
     modules: ["Pottery", "Quilting", "Ornaments", "Travels"],
-    env: ["APIFY_API_TOKEN", "APIFY_WEBHOOK_SECRET"],
-  },
-  {
-    name: "UPCitemdb",
-    purpose: "Barcode / UPC product lookup (primary)",
-    usedFor:
-      "Ornaments barcode scanner: looks up product name, series, and year from a UPC code. Results are permanently cached per UPC so repeat scans never re-hit the API. Open Food Facts is used as a no-key fallback when UPCitemdb returns no result.",
-    implementedIn: ["artifacts/api-server/src/lib/ornaments/barcode.ts"],
-    modules: ["Ornaments"],
-    env: [],
-  },
-  {
-    name: "Open Food Facts",
-    purpose: "Barcode / UPC product lookup (fallback)",
-    usedFor:
-      "Fallback for the ornaments barcode scanner when UPCitemdb returns no result. Public API, no key required. Same permanent per-UPC cache applies.",
-    implementedIn: ["artifacts/api-server/src/lib/ornaments/barcode.ts"],
-    modules: ["Ornaments"],
-    env: [],
+    env: ["APIFY_API_TOKEN"],
   },
   {
     name: "HookedOnHallmark.com (direct fetch)",

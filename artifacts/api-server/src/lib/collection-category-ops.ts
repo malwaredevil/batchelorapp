@@ -8,10 +8,20 @@
  * two tables and the entity-count column; each domain spreads the result
  * into its own `CategoryOps`.
  */
-import { and, asc, eq, count as sqlCount, notInArray } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  count as sqlCount,
+  isNull,
+  notInArray,
+  or,
+} from "drizzle-orm";
 import type { AnyPgColumn, PgTable } from "drizzle-orm/pg-core";
 import { db } from "@workspace/db";
+import { getCategoryPalette } from "@workspace/web-core/colors";
 import type { CategoryOps, CategoryRow } from "./category-router-factory";
+import { matchCategoryIds, type NamedCategory } from "./collection-parsing";
 
 type CategoriesTable = PgTable &
   Record<"id" | "name" | "bgColor" | "textColor", AnyPgColumn>;
@@ -31,6 +41,139 @@ export interface CategoryCountOpsOptions {
    * modules pass their categories table's userId column.
    */
   userColumn?: AnyPgColumn;
+}
+
+/**
+ * Fill missing legacy colours without replacing a color selected by a user.
+ * List routes call this idempotently so existing rows repair themselves as
+ * they are used, rather than requiring a risky one-off migration.
+ */
+export async function backfillMissingCategoryColors(
+  cats: CategoriesTable,
+): Promise<void> {
+  const rows = await db
+    .select({
+      id: cats.id,
+      name: cats.name,
+      bgColor: cats.bgColor,
+      textColor: cats.textColor,
+    })
+    .from(cats)
+    .where(or(isNull(cats.bgColor), isNull(cats.textColor)));
+
+  await Promise.all(
+    rows.flatMap((row) => {
+      const palette = getCategoryPalette(String(row.name));
+      const updates: Promise<unknown>[] = [];
+      if (row.bgColor == null) {
+        updates.push(
+          db
+            .update(cats)
+            .set({ bgColor: palette.bgColor })
+            .where(and(eq(cats.id, row.id), isNull(cats.bgColor))),
+        );
+      }
+      if (row.textColor == null) {
+        updates.push(
+          db
+            .update(cats)
+            .set({ textColor: palette.textColor })
+            .where(and(eq(cats.id, row.id), isNull(cats.textColor))),
+        );
+      }
+      return updates;
+    }),
+  );
+}
+
+export interface AdditiveCategoryAssignment {
+  entityId: number;
+  matchedCategoryIds: number[];
+  assignmentsCreated: number;
+  error?: string;
+}
+
+export interface AdditiveCategoryAssignmentResult {
+  total: number;
+  matched: number;
+  assignmentsCreated: number;
+  failed: number;
+  outcomes: AdditiveCategoryAssignment[];
+}
+
+/**
+ * Portable, additive assignment operation for collection categories.
+ *
+ * The adapter owns the collection's visibility rules, table shape, and pivot
+ * insert. This keeps household-shared and polymorphic collections from
+ * leaking authorization or entity-type assumptions into the matcher.
+ */
+export interface AdditiveCategoryAssignmentAdapter<
+  TEntity extends { id: number },
+> {
+  listCategories(): Promise<NamedCategory[]>;
+  listEntities(ids?: readonly number[]): Promise<TEntity[]>;
+  getMatchValues(entity: TEntity): unknown[];
+  getAssignedCategoryIds(entityId: number): Promise<number[]>;
+  addAssignments(
+    entityId: number,
+    categoryIds: readonly number[],
+  ): Promise<number>;
+}
+
+export async function applyExistingCategories<TEntity extends { id: number }>(
+  adapter: AdditiveCategoryAssignmentAdapter<TEntity>,
+  ids?: readonly number[],
+): Promise<AdditiveCategoryAssignmentResult> {
+  const [categories, entities] = await Promise.all([
+    adapter.listCategories(),
+    adapter.listEntities(ids),
+  ]);
+  const outcomes: AdditiveCategoryAssignment[] = [];
+  let assignmentsCreated = 0;
+
+  // Deliberately sequential: a maintenance request may cover the whole
+  // collection, so we bound DB pressure while still recording a failure for
+  // one entity and continuing with the rest.
+  for (const entity of entities) {
+    const matchedCategoryIds = matchCategoryIds(
+      categories,
+      adapter.getMatchValues(entity),
+    );
+    try {
+      const assigned = new Set(await adapter.getAssignedCategoryIds(entity.id));
+      const missing = matchedCategoryIds.filter((id) => !assigned.has(id));
+      const created =
+        missing.length > 0
+          ? await adapter.addAssignments(entity.id, missing)
+          : 0;
+      assignmentsCreated += created;
+      outcomes.push({
+        entityId: entity.id,
+        matchedCategoryIds,
+        assignmentsCreated: created,
+      });
+    } catch (error) {
+      outcomes.push({
+        entityId: entity.id,
+        matchedCategoryIds,
+        assignmentsCreated: 0,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Category assignment failed.",
+      });
+    }
+  }
+
+  return {
+    total: entities.length,
+    matched: outcomes.filter((outcome) => outcome.matchedCategoryIds.length > 0)
+      .length,
+    assignmentsCreated,
+    failed: outcomes.filter((outcome) => outcome.error).length,
+    outcomes,
+  };
 }
 
 export function createCategoryCountOps(
@@ -67,11 +210,13 @@ export function createCategoryCountOps(
   const groupCols = () => [cats.id, cats.name, cats.bgColor, cats.textColor];
 
   return {
-    listWithCounts: async (userId?: number) =>
-      (await withCounts()
+    listWithCounts: async (userId?: number) => {
+      await backfillMissingCategoryColors(cats);
+      return (await withCounts()
         .where(ownerWhere(userId))
         .groupBy(...groupCols())
-        .orderBy(asc(cats.name))) as unknown as CategoryRow[],
+        .orderBy(asc(cats.name))) as unknown as CategoryRow[];
+    },
 
     fetchWithCount: async (id, userId?: number) =>
       (

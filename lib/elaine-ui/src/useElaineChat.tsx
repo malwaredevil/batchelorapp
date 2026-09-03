@@ -1213,7 +1213,8 @@ export function useElaineChat({
     if (!pendingNavigate) return;
     const path = pendingNavigate.path;
     setPendingNavigate(null);
-    // Cross-SPA paths (start with /pottery, /quilting, /travels, /elaine) need
+    // Cross-SPA paths (start with /pottery, /quilting, /travels, /magnets,
+    // /elaine) need
     // a full page load because they belong to a different React bundle.
     // Using wouter's navigate() for these would just render a 404 within the
     // current SPA instead of loading the correct app.
@@ -1221,6 +1222,7 @@ export function useElaineChat({
       "/pottery",
       "/quilting",
       "/ornaments",
+      "/magnets",
       "/travels",
       "/elaine",
     ];
@@ -1230,7 +1232,7 @@ export function useElaineChat({
         path.startsWith(prefix + "/") ||
         path.startsWith(prefix + "?"),
     );
-    // Pottery/quilting/travels/ornaments are now merged under the "modules"
+    // Pottery/quilting/travels/ornaments/magnets are now merged under the "modules"
     // artifact, which mounts a single wouter Router at base "/modules" and
     // routes every merged app under its own literal "/pottery", "/quilting",
     // etc. prefix (e.g. "/travels/wishlist"). Elaine's tool contract still
@@ -1240,7 +1242,13 @@ export function useElaineChat({
     // modules host, same-app relative paths and old-style cross-app prefixes
     // both need the "/modules" segment (and same-app paths also need their
     // own app prefix) added before handing off to wouter/window.location.
-    const MERGED_APP_IDS = ["pottery", "quilting", "travels", "ornaments"];
+    const MERGED_APP_IDS = [
+      "pottery",
+      "quilting",
+      "travels",
+      "ornaments",
+      "magnets",
+    ];
     const envBaseUrl = (import.meta as { env?: { BASE_URL?: string } }).env
       ?.BASE_URL;
     const base = (envBaseUrl ?? "/").replace(/\/$/, "");

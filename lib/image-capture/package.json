@@ -6,7 +6,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./image-picker": "./src/image-picker.tsx",
-    "./image-editor": "./src/image-editor.tsx"
+    "./image-editor": "./src/image-editor.tsx",
+    "./image-capture-review": "./src/image-capture-review.tsx",
+    "./image-normalization": "./src/image-normalization.ts"
   },
   "dependencies": {
     "@workspace/ui": "workspace:*",

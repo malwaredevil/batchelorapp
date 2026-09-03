@@ -7,6 +7,7 @@
  */
 export const QUILT_REANALYZE_KEY_PREFIX = "quilt-reanalyze:";
 export const PATTERN_REANALYZE_KEY_PREFIX = "pattern-reanalyze:";
+export const FABRIC_REANALYZE_KEY_PREFIX = "fabric-reanalyze:";
 
 export function quiltReanalyzeKey(id: number): string {
   return `${QUILT_REANALYZE_KEY_PREFIX}${id}`;
@@ -14,4 +15,8 @@ export function quiltReanalyzeKey(id: number): string {
 
 export function patternReanalyzeKey(id: number): string {
   return `${PATTERN_REANALYZE_KEY_PREFIX}${id}`;
+}
+
+export function fabricReanalyzeKey(id: number): string {
+  return `${FABRIC_REANALYZE_KEY_PREFIX}${id}`;
 }

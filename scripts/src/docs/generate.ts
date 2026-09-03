@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { format } from "prettier";
 import {
   GENERATED_DIR,
@@ -169,23 +170,32 @@ function generateSchema(): void {
   );
 }
 
-generateDependencies();
-generateRoutes();
-generateJobs();
-generateProviders();
-generateStorage();
-generateModelSlots();
-generateSchema();
+export async function generateDocs(): Promise<void> {
+  generateDependencies();
+  generateRoutes();
+  generateJobs();
+  generateProviders();
+  generateStorage();
+  generateModelSlots();
+  generateSchema();
 
-for (const file of fs.readdirSync(GENERATED_DIR)) {
-  if (!file.endsWith(".md")) continue;
-  const full = path.join(GENERATED_DIR, file);
-  fs.writeFileSync(
-    full,
-    await format(fs.readFileSync(full, "utf8"), {
-      parser: "markdown",
-    }),
-  );
+  for (const file of fs.readdirSync(GENERATED_DIR)) {
+    if (!file.endsWith(".md")) continue;
+    const full = path.join(GENERATED_DIR, file);
+    fs.writeFileSync(
+      full,
+      await format(fs.readFileSync(full, "utf8"), {
+        parser: "markdown",
+      }),
+    );
+  }
+
+  console.log(`Generated docs in ${path.relative(ROOT, GENERATED_DIR)}`);
 }
 
-console.log(`Generated docs in ${path.relative(ROOT, GENERATED_DIR)}`);
+if (
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  await generateDocs();
+}

@@ -163,4 +163,58 @@ assert.equal(
   "allowlisted cluster start line must be skipped",
 );
 
+// Policy accounting needs the entire suppressed cluster, not just its first
+// allowlist line. Adding a third tunable field must change the suppressed
+// finding identity instead of remaining invisible behind the existing entry.
+const expandedBudgetFixture = budgetFixture.replace(
+  "maxToolCalls: 16,",
+  "maxToolCalls: 16,\n    maxQueuedJobs: 8,",
+);
+const expandedAllowlisted = checkHardcodedConfigFromFiles(
+  ["artifacts/api-server/src/elaine/index.ts"],
+  () => expandedBudgetFixture,
+  new Set(["artifacts/api-server/src/elaine/index.ts:4"]),
+  true,
+);
+assert.deepEqual(expandedAllowlisted[0]?.names, [
+  "maxModelRounds",
+  "maxToolCalls",
+  "maxQueuedJobs",
+  "maxReplans",
+  "maxElapsedMs",
+]);
+assert.equal(expandedAllowlisted[0]?.allowlisted, true);
+
+const sameNameClustersFixture = `
+function first() {
+  const firstBudget = {
+    maxRetries: 3,
+    maxTimeoutMs: 100,
+  };
+  return firstBudget;
+}
+function second() {
+  const secondBudget = {
+    maxRetries: 3,
+    maxTimeoutMs: 100,
+  };
+  return secondBudget;
+}
+`;
+const sameNameAllowlisted = checkHardcodedConfigFromFiles(
+  ["artifacts/api-server/src/elaine/index.ts"],
+  () => sameNameClustersFixture,
+  new Set([
+    "artifacts/api-server/src/elaine/index.ts:4",
+    "artifacts/api-server/src/elaine/index.ts:11",
+  ]),
+  true,
+);
+assert.equal(sameNameAllowlisted.length, 2);
+assert.notEqual(
+  sameNameAllowlisted[0]?.context,
+  sameNameAllowlisted[1]?.context,
+  "same-named clusters are distinguished by their local declaration context",
+);
+
 console.log("✓ check-hardcoded-config.test.ts passed");

@@ -10,22 +10,6 @@
       "metric": 0.8935185185185185
     },
     {
-      "id": "duplicate-code:artifacts/api-server/src/lib/collection-item-serializer.ts:buildCatsMap:artifacts/api-server/src/lib/magnets/serialize.ts:buildCatsMap",
-      "category": "duplicate-code",
-      "file": "artifacts/api-server/src/lib/collection-item-serializer.ts",
-      "symbol": "buildCatsMap",
-      "evidence": "artifacts/api-server/src/lib/magnets/serialize.ts:buildCatsMap",
-      "metric": 1
-    },
-    {
-      "id": "duplicate-code:artifacts/api-server/src/lib/collection-item-serializer.ts:buildImgsMap:artifacts/api-server/src/lib/magnets/serialize.ts:buildImagesMap",
-      "category": "duplicate-code",
-      "file": "artifacts/api-server/src/lib/collection-item-serializer.ts",
-      "symbol": "buildImgsMap",
-      "evidence": "artifacts/api-server/src/lib/magnets/serialize.ts:buildImagesMap",
-      "metric": 1
-    },
-    {
       "id": "duplicate-code:artifacts/api-server/src/lib/collection-search.ts:buildOrnamentSearchDocument:artifacts/api-server/src/lib/collection-search.ts:buildPotterySearchDocument",
       "category": "duplicate-code",
       "file": "artifacts/api-server/src/lib/collection-search.ts",
@@ -56,22 +40,6 @@
       "symbol": "getTravelCalendarConnection",
       "evidence": "artifacts/api-server/src/lib/google-calendar-tokens.ts:getHallmarkCalendarConnection",
       "metric": 1
-    },
-    {
-      "id": "duplicate-code:artifacts/api-server/src/lib/quilting/recognition.ts:loadPatternSnapshot:artifacts/api-server/src/lib/quilting/recognition.ts:loadQuiltSnapshot",
-      "category": "duplicate-code",
-      "file": "artifacts/api-server/src/lib/quilting/recognition.ts",
-      "symbol": "loadPatternSnapshot",
-      "evidence": "artifacts/api-server/src/lib/quilting/recognition.ts:loadQuiltSnapshot",
-      "metric": 0.8541666666666666
-    },
-    {
-      "id": "duplicate-code:artifacts/api-server/src/lib/quilting/recognition.ts:runPatternRecognition:artifacts/api-server/src/lib/quilting/recognition.ts:runQuiltRecognition",
-      "category": "duplicate-code",
-      "file": "artifacts/api-server/src/lib/quilting/recognition.ts",
-      "symbol": "runPatternRecognition",
-      "evidence": "artifacts/api-server/src/lib/quilting/recognition.ts:runQuiltRecognition",
-      "metric": 0.9297520661157025
     },
     {
       "id": "duplicate-code:artifacts/api-server/src/lib/serialize.ts:serializeFabric:artifacts/api-server/src/lib/serialize.ts:serializePattern",
@@ -111,14 +79,6 @@
       "file": "artifacts/api-server/src/lib/visual-embed.ts",
       "symbol": "_jinaClassify",
       "evidence": "artifacts/api-server/src/lib/visual-embed.ts:generateVisualEmbedding",
-      "metric": 1
-    },
-    {
-      "id": "duplicate-code:artifacts/api-server/src/routes/quilting/patterns.ts:bulkReanalyzePatterns:artifacts/api-server/src/routes/quilting/quilts.ts:bulkReanalyzeQuilts",
-      "category": "duplicate-code",
-      "file": "artifacts/api-server/src/routes/quilting/patterns.ts",
-      "symbol": "bulkReanalyzePatterns",
-      "evidence": "artifacts/api-server/src/routes/quilting/quilts.ts:bulkReanalyzeQuilts",
       "metric": 1
     },
     {
@@ -423,7 +383,7 @@
       "file": "artifacts/web/src/components/widgets.tsx",
       "symbol": "QuiltingStatsWidget",
       "evidence": "artifacts/web/src/components/widgets.tsx:TravelStatsWidget",
-      "metric": 0.9801324503311258
+      "metric": 0.9696969696969697
     },
     {
       "id": "duplicate-code:artifacts/web/src/hooks/use-toast.ts:reducer:artifacts/elaine/src/hooks/use-toast.ts:reducer",
@@ -471,14 +431,6 @@
       "file": "lib/api-client-react/src/elaine.ts",
       "symbol": "useGetElaineNudgesUnseenCount",
       "evidence": "lib/api-client-react/src/elaine.ts:useGetElaineConversation",
-      "metric": 1
-    },
-    {
-      "id": "duplicate-code:lib/api-client-react/src/elaine.ts:useGetElaineTaskCounts:lib/api-client-react/src/elaine.ts:useGetElaineConversationCount",
-      "category": "duplicate-code",
-      "file": "lib/api-client-react/src/elaine.ts",
-      "symbol": "useGetElaineTaskCounts",
-      "evidence": "lib/api-client-react/src/elaine.ts:useGetElaineConversationCount",
       "metric": 1
     },
     {
@@ -591,174 +543,6 @@
       "file": "lib/api-client-react/src/travels.ts",
       "symbol": "useListReminders",
       "evidence": "lib/api-client-react/src/travels.ts:useListAllReminders",
-      "metric": 1
-    },
-    {
-      "id": "hardcoded-config:artifacts/api-server/src/elaine/index.ts:constant:constant:MAX_PHONE_CODE_ATTEMPTS:const MAX_PHONE_CODE_ATTEMPTS = 5;",
-      "category": "hardcoded-config",
-      "file": "artifacts/api-server/src/elaine/index.ts",
-      "symbol": "constant",
-      "evidence": "constant:MAX_PHONE_CODE_ATTEMPTS:const MAX_PHONE_CODE_ATTEMPTS = 5;",
-      "metric": 1
-    },
-    {
-      "id": "hardcoded-config:artifacts/api-server/src/elaine/index.ts:constant:constant:MAX_ROUNDS:const MAX_ROUNDS = 3;",
-      "category": "hardcoded-config",
-      "file": "artifacts/api-server/src/elaine/index.ts",
-      "symbol": "constant",
-      "evidence": "constant:MAX_ROUNDS:const MAX_ROUNDS = 3;",
-      "metric": 1
-    },
-    {
-      "id": "hardcoded-config:artifacts/api-server/src/lib/comm-check-scheduler.ts:constant:constant:CHANNEL_DELIVERY_TIMEOUT_MS:const CHANNEL_DELIVERY_TIMEOUT_MS = 60_000;",
-      "category": "hardcoded-config",
-      "file": "artifacts/api-server/src/lib/comm-check-scheduler.ts",
-      "symbol": "constant",
-      "evidence": "constant:CHANNEL_DELIVERY_TIMEOUT_MS:const CHANNEL_DELIVERY_TIMEOUT_MS = 60_000;",
-      "metric": 1
-    },
-    {
-      "id": "hardcoded-config:artifacts/api-server/src/routes/magnets/magnets.ts:constant:constant:MAX_REANALYZE_IMAGES:const MAX_REANALYZE_IMAGES = 5;",
-      "category": "hardcoded-config",
-      "file": "artifacts/api-server/src/routes/magnets/magnets.ts",
-      "symbol": "constant",
-      "evidence": "constant:MAX_REANALYZE_IMAGES:const MAX_REANALYZE_IMAGES = 5;",
-      "metric": 1
-    },
-    {
-      "id": "hardcoded-config:artifacts/api-server/src/routes/pottery/pottery.ts:constant:constant:MAX_LABEL:const MAX_LABEL = 100;",
-      "category": "hardcoded-config",
-      "file": "artifacts/api-server/src/routes/pottery/pottery.ts",
-      "symbol": "constant",
-      "evidence": "constant:MAX_LABEL:const MAX_LABEL = 100;",
-      "metric": 1
-    },
-    {
-      "id": "hardcoded-config:artifacts/api-server/src/routes/pottery/pottery.ts:constant:constant:MAX_NAME:const MAX_NAME = 200;",
-      "category": "hardcoded-config",
-      "file": "artifacts/api-server/src/routes/pottery/pottery.ts",
-      "symbol": "constant",
-      "evidence": "constant:MAX_NAME:const MAX_NAME = 200;",
-      "metric": 1
-    },
-    {
-      "id": "hardcoded-config:artifacts/api-server/src/routes/pottery/pottery.ts:constant:constant:MAX_SUPPLEMENTAL_IMAGES:const MAX_SUPPLEMENTAL_IMAGES = 20;",
-      "category": "hardcoded-config",
-      "file": "artifacts/api-server/src/routes/pottery/pottery.ts",
-      "symbol": "constant",
-      "evidence": "constant:MAX_SUPPLEMENTAL_IMAGES:const MAX_SUPPLEMENTAL_IMAGES = 20;",
-      "metric": 1
-    },
-    {
-      "id": "hardcoded-config:artifacts/api-server/src/routes/pottery/pottery.ts:constant:constant:MAX_TEXT:const MAX_TEXT = 500;",
-      "category": "hardcoded-config",
-      "file": "artifacts/api-server/src/routes/pottery/pottery.ts",
-      "symbol": "constant",
-      "evidence": "constant:MAX_TEXT:const MAX_TEXT = 500;",
-      "metric": 1
-    },
-    {
-      "id": "hardcoded-config:artifacts/api-server/src/routes/quilting/category-helpers.ts:constant:constant:MAX_CATEGORY_NAME_LEN:export const MAX_CATEGORY_NAME_LEN = 100;",
-      "category": "hardcoded-config",
-      "file": "artifacts/api-server/src/routes/quilting/category-helpers.ts",
-      "symbol": "constant",
-      "evidence": "constant:MAX_CATEGORY_NAME_LEN:export const MAX_CATEGORY_NAME_LEN = 100;",
-      "metric": 1
-    },
-    {
-      "id": "hardcoded-config:artifacts/api-server/src/routes/quilting/fabrics.ts:constant:constant:MAX_FIELD:const MAX_FIELD = 200;",
-      "category": "hardcoded-config",
-      "file": "artifacts/api-server/src/routes/quilting/fabrics.ts",
-      "symbol": "constant",
-      "evidence": "constant:MAX_FIELD:const MAX_FIELD = 200;",
-      "metric": 1
-    },
-    {
-      "id": "hardcoded-config:artifacts/api-server/src/routes/quilting/fabrics.ts:constant:constant:MAX_REANALYZE_IMAGES:const MAX_REANALYZE_IMAGES = 5;",
-      "category": "hardcoded-config",
-      "file": "artifacts/api-server/src/routes/quilting/fabrics.ts",
-      "symbol": "constant",
-      "evidence": "constant:MAX_REANALYZE_IMAGES:const MAX_REANALYZE_IMAGES = 5;",
-      "metric": 1
-    },
-    {
-      "id": "hardcoded-config:artifacts/api-server/src/routes/quilting/fabrics.ts:constant:constant:MAX_SUPPLEMENTAL_IMAGES:const MAX_SUPPLEMENTAL_IMAGES = 10;",
-      "category": "hardcoded-config",
-      "file": "artifacts/api-server/src/routes/quilting/fabrics.ts",
-      "symbol": "constant",
-      "evidence": "constant:MAX_SUPPLEMENTAL_IMAGES:const MAX_SUPPLEMENTAL_IMAGES = 10;",
-      "metric": 1
-    },
-    {
-      "id": "hardcoded-config:artifacts/api-server/src/routes/quilting/patterns.ts:constant:constant:MAX_FIELD:const MAX_FIELD = 200;",
-      "category": "hardcoded-config",
-      "file": "artifacts/api-server/src/routes/quilting/patterns.ts",
-      "symbol": "constant",
-      "evidence": "constant:MAX_FIELD:const MAX_FIELD = 200;",
-      "metric": 1
-    },
-    {
-      "id": "hardcoded-config:artifacts/api-server/src/routes/quilting/patterns.ts:constant:constant:MAX_LABEL:const MAX_LABEL = 100;",
-      "category": "hardcoded-config",
-      "file": "artifacts/api-server/src/routes/quilting/patterns.ts",
-      "symbol": "constant",
-      "evidence": "constant:MAX_LABEL:const MAX_LABEL = 100;",
-      "metric": 1
-    },
-    {
-      "id": "hardcoded-config:artifacts/api-server/src/routes/quilting/patterns.ts:constant:constant:MAX_NAME:const MAX_NAME = 200;",
-      "category": "hardcoded-config",
-      "file": "artifacts/api-server/src/routes/quilting/patterns.ts",
-      "symbol": "constant",
-      "evidence": "constant:MAX_NAME:const MAX_NAME = 200;",
-      "metric": 1
-    },
-    {
-      "id": "hardcoded-config:artifacts/api-server/src/routes/quilting/patterns.ts:constant:constant:MAX_NOTES:const MAX_NOTES = 4000;",
-      "category": "hardcoded-config",
-      "file": "artifacts/api-server/src/routes/quilting/patterns.ts",
-      "symbol": "constant",
-      "evidence": "constant:MAX_NOTES:const MAX_NOTES = 4000;",
-      "metric": 1
-    },
-    {
-      "id": "hardcoded-config:artifacts/api-server/src/routes/quilting/patterns.ts:constant:constant:MAX_REANALYZE_IMAGES:const MAX_REANALYZE_IMAGES = 5;",
-      "category": "hardcoded-config",
-      "file": "artifacts/api-server/src/routes/quilting/patterns.ts",
-      "symbol": "constant",
-      "evidence": "constant:MAX_REANALYZE_IMAGES:const MAX_REANALYZE_IMAGES = 5;",
-      "metric": 1
-    },
-    {
-      "id": "hardcoded-config:artifacts/api-server/src/routes/quilting/quilts.ts:constant:constant:MAX_LABEL:const MAX_LABEL = 100;",
-      "category": "hardcoded-config",
-      "file": "artifacts/api-server/src/routes/quilting/quilts.ts",
-      "symbol": "constant",
-      "evidence": "constant:MAX_LABEL:const MAX_LABEL = 100;",
-      "metric": 1
-    },
-    {
-      "id": "hardcoded-config:artifacts/api-server/src/routes/quilting/quilts.ts:constant:constant:MAX_NAME:const MAX_NAME = 200;",
-      "category": "hardcoded-config",
-      "file": "artifacts/api-server/src/routes/quilting/quilts.ts",
-      "symbol": "constant",
-      "evidence": "constant:MAX_NAME:const MAX_NAME = 200;",
-      "metric": 1
-    },
-    {
-      "id": "hardcoded-config:artifacts/api-server/src/routes/quilting/quilts.ts:constant:constant:MAX_NOTES:const MAX_NOTES = 4000;",
-      "category": "hardcoded-config",
-      "file": "artifacts/api-server/src/routes/quilting/quilts.ts",
-      "symbol": "constant",
-      "evidence": "constant:MAX_NOTES:const MAX_NOTES = 4000;",
-      "metric": 1
-    },
-    {
-      "id": "hardcoded-config:artifacts/modules/src/ornaments/pages/hallmark-events.tsx:constant:constant:GCAL_QUERY_TIMEOUT_MS:const GCAL_QUERY_TIMEOUT_MS = 10_000;",
-      "category": "hardcoded-config",
-      "file": "artifacts/modules/src/ornaments/pages/hallmark-events.tsx",
-      "symbol": "constant",
-      "evidence": "constant:GCAL_QUERY_TIMEOUT_MS:const GCAL_QUERY_TIMEOUT_MS = 10_000;",
       "metric": 1
     }
   ],

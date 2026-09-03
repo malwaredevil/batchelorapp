@@ -28,6 +28,7 @@ export type ElaineAppId =
   | "pottery"
   | "quilting"
   | "ornaments"
+  | "magnets"
   | "hub"
   | "elaine";
 
@@ -624,6 +625,7 @@ export interface PageContext {
     | "quilting"
     | "travels"
     | "ornaments"
+    | "magnets"
     | "hub"
     | "elaine"
     | "office";
@@ -1072,6 +1074,57 @@ export function useListElaineTasks<
   return { ...query, queryKey: queryOpts.queryKey };
 }
 
+export interface ElaineTaskCounts {
+  openCount: number;
+}
+
+function useElaineCountQuery<
+  TQueryFnData,
+  TData = TQueryFnData,
+  TError = unknown,
+>(
+  defaultQueryKey: QueryKey,
+  request: (options?: RequestInit) => Promise<TQueryFnData>,
+  options?: {
+    query?: UseQueryOptions<TQueryFnData, TError, TData>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? defaultQueryKey;
+  const queryFn: QueryFunction<TQueryFnData> = ({ signal }) =>
+    request({ signal });
+  const queryOpts = { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    TQueryFnData,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+const getElaineTaskCountsFn = (
+  options?: RequestInit,
+): Promise<ElaineTaskCounts> =>
+  customFetch<ElaineTaskCounts>("/api/elaine/tasks/count", {
+    ...options,
+    method: "GET",
+  });
+
+export function useGetElaineTaskCounts<
+  TData = ElaineTaskCounts,
+  TError = unknown,
+>(options?: {
+  query?: UseQueryOptions<ElaineTaskCounts, TError, TData>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  return useElaineCountQuery<
+    ElaineTaskCounts,
+    TData,
+    TError
+  >(["/api/elaine/tasks/count"], getElaineTaskCountsFn, options);
+}
+
 const cancelElaineTaskFn = (
   taskId: number,
 ): Promise<{ taskId: number; state: "cancelled" }> =>
@@ -1133,6 +1186,31 @@ export interface ConversationSummaryPage {
   conversations: ConversationSummary[];
   /** True when more conversations exist before the oldest one returned. */
   hasMore: boolean;
+}
+
+export interface ElaineConversationCount {
+  count: number;
+}
+
+const getElaineConversationCountFn = (
+  options?: RequestInit,
+): Promise<ElaineConversationCount> =>
+  customFetch<ElaineConversationCount>("/api/elaine/conversations/count", {
+    ...options,
+    method: "GET",
+  });
+
+export function useGetElaineConversationCount<
+  TData = ElaineConversationCount,
+  TError = unknown,
+>(options?: {
+  query?: UseQueryOptions<ElaineConversationCount, TError, TData>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  return useElaineCountQuery<
+    ElaineConversationCount,
+    TData,
+    TError
+  >(["/api/elaine/conversations/count"], getElaineConversationCountFn, options);
 }
 
 const listElaineConversationsFn = async (

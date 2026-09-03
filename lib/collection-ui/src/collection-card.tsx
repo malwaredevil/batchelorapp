@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@workspace/web-core/utils";
+import { resolveCategoryPalette } from "@workspace/web-core/colors";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -305,26 +306,22 @@ export function CollectionCard({
             <div className="flex flex-wrap gap-1">
               {[...categories]
                 .sort((a, b) => a.name.localeCompare(b.name))
-                .map((cat) => (
-                  <span
-                    key={cat.id}
-                    className={cn(
-                      "inline-flex items-center rounded-full border px-1.5 py-0 text-[10px] font-semibold",
-                      !cat.bgColor && "border-border text-muted-foreground",
-                    )}
-                    style={
-                      cat.bgColor
-                        ? {
-                            backgroundColor: cat.bgColor,
-                            color: cat.textColor ?? "#fff",
-                            borderColor: "transparent",
-                          }
-                        : undefined
-                    }
-                  >
-                    {cat.name}
-                  </span>
-                ))}
+                .map((cat) => {
+                  const palette = resolveCategoryPalette(cat);
+                  return (
+                    <span
+                      key={cat.id}
+                      className="inline-flex items-center rounded-full border px-1.5 py-0 text-[10px] font-semibold"
+                      style={{
+                        backgroundColor: palette.bgColor,
+                        color: palette.textColor,
+                        borderColor: "transparent",
+                      }}
+                    >
+                      {cat.name}
+                    </span>
+                  );
+                })}
             </div>
           ) : (
             <span className="inline-flex items-center rounded-full border border-dashed border-border px-1.5 py-0 text-[10px] text-muted-foreground/70">

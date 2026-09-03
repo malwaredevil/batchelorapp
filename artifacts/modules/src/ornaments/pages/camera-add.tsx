@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { ImageCaptureReview, ImageEditor } from "@workspace/image-capture";
 import {
   createOrnamentFromImage,
   uploadOrnamentImage,
@@ -29,8 +30,10 @@ import {
 import { useBarcodeCamera } from "@/ornaments/components/use-barcode-camera";
 import { CameraModal } from "@/ornaments/components/image-picker";
 import {
+  createOrnamentFromEditedPhoto,
   createOrnamentPhotoQueue,
   deriveHandleDoneRoute,
+  shouldEditFirstCameraCapture,
 } from "./camera-add-logic";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -73,6 +76,11 @@ export default function CameraAddOrnament() {
   const [items, setItems] = useState<QueueItem[]>([]);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [reviewingCameraPhoto, setReviewingCameraPhoto] = useState<File | null>(
+    null,
+  );
+  const [editingFirstPhoto, setEditingFirstPhoto] = useState<File | null>(null);
+  const [cameraCreatePending, setCameraCreatePending] = useState(false);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
 
@@ -91,7 +99,7 @@ export default function CameraAddOrnament() {
 
   usePageAssistantContext(
     "ornaments-camera-add",
-    `Camera Add Ornament: take photos or scan barcodes to add a new ornament. First photo creates the ornament and AI identifies it automatically. Subsequent photos are added as supplemental images. ${items.length} item(s) captured this session.`,
+    `Camera Add Ornament: take photos or scan barcodes to add a new ornament. The first camera photo opens an editor first; saving its edited image creates the ornament and AI identifies it automatically, then opens the ornament edit screen. Subsequent photos are added as supplemental images. ${items.length} item(s) captured this session.`,
   );
 
   // ── Barcode camera ────────────────────────────────────────────────────────
@@ -295,8 +303,58 @@ export default function CameraAddOrnament() {
   }
 
   function handleCameraCapture(file: File) {
-    // Stay open so the user can keep snapping — this is a bulk-add flow.
+    const validation = validateClientUpload(file, STANDARD_IMAGE_UPLOAD);
+    if (!validation.ok) {
+      toast.error(validation.message);
+      return;
+    }
+    setCameraOpen(false);
+    setReviewingCameraPhoto(file);
+  }
+
+  function handleCameraReviewRetry() {
+    setReviewingCameraPhoto(null);
+    window.setTimeout(() => setCameraOpen(true), 0);
+  }
+
+  function handleCameraReviewConfirm(file: File) {
+    const hasPhoto = items.some((item) => item.kind === "photo");
+    setReviewingCameraPhoto(null);
+    if (
+      shouldEditFirstCameraCapture(queueRef.current.getOrnamentId(), hasPhoto)
+    ) {
+      setEditingFirstPhoto(file);
+      return;
+    }
+
     enqueuePhotoFile(file);
+    // Reopen after the review overlay unmounts so subsequent captures stay fast.
+    window.setTimeout(() => setCameraOpen(true), 0);
+  }
+
+  async function handleFirstPhotoSave(edited: File) {
+    setCameraCreatePending(true);
+    try {
+      const result = await createOrnamentFromEditedPhoto(
+        createOrnamentFromImage,
+        edited,
+      );
+
+      queryClient.invalidateQueries({ queryKey: getListOrnamentsQueryKey() });
+      queryClient.invalidateQueries({
+        queryKey: getGetOrnamentStatsQueryKey(),
+      });
+      setEditingFirstPhoto(null);
+      navigate(result.to);
+    } catch (err) {
+      const errorMsg =
+        err instanceof Error ? err.message : "Could not create ornament";
+      setErrorBanner(errorMsg);
+      Sentry.captureException(err);
+      toast.error("Could not save ornament — try again.", { duration: 5000 });
+    } finally {
+      setCameraCreatePending(false);
+    }
   }
 
   // ── Navigation ────────────────────────────────────────────────────────────
@@ -348,6 +406,27 @@ export default function CameraAddOrnament() {
 
   return (
     <>
+      {editingFirstPhoto && (
+        <ImageEditor
+          file={editingFirstPhoto}
+          onSave={handleFirstPhotoSave}
+          onCancel={() => setEditingFirstPhoto(null)}
+          onRetake={() => {
+            setEditingFirstPhoto(null);
+            setCameraOpen(true);
+          }}
+          retakeLabel="Retake Image"
+          isSaving={cameraCreatePending}
+        />
+      )}
+      {reviewingCameraPhoto && (
+        <ImageCaptureReview
+          file={reviewingCameraPhoto}
+          onConfirm={handleCameraReviewConfirm}
+          onRetry={handleCameraReviewRetry}
+          enableEditing
+        />
+      )}
       {cameraOpen && (
         <CameraModal
           onCapture={handleCameraCapture}
@@ -484,19 +563,15 @@ export default function CameraAddOrnament() {
                     Is this the right ornament?
                   </p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    We found a catalog match for barcode{" "}
+                    We found a live match for barcode{" "}
                     <span className="font-mono">{activeConfirmation.code}</span>
                   </p>
                 </div>
 
                 <div className="flex gap-3 px-4 py-3">
-                  {(activeConfirmation.result.hallmarkImages?.[0] ??
-                    activeConfirmation.result.imageUrl) && (
+                  {activeConfirmation.result.imageUrl && (
                     <img
-                      src={
-                        activeConfirmation.result.hallmarkImages?.[0] ??
-                        activeConfirmation.result.imageUrl!
-                      }
+                      src={activeConfirmation.result.imageUrl}
                       alt={activeConfirmation.result.name ?? "Product"}
                       className="h-16 w-16 shrink-0 rounded-lg object-cover"
                     />

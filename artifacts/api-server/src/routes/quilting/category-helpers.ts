@@ -12,6 +12,7 @@ import {
   fetchCategoriesForEntities,
   type CategoryResult,
 } from "../../lib/serialize";
+import { getCategoryPalette } from "@workspace/web-core/colors";
 
 export const MAX_CATEGORY_NAMES = 20;
 export const MAX_CATEGORY_NAME_LEN = 100;
@@ -48,7 +49,7 @@ export async function resolveOrCreateCategories(
       try {
         const [created] = await db
           .insert(categories)
-          .values({ name })
+          .values({ name, ...getCategoryPalette(name) })
           .returning({ id: categories.id });
         if (created) ids.push(created.id);
       } catch (err) {

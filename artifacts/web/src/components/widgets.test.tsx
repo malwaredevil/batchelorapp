@@ -14,6 +14,9 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { WIDGETS } from "@/config/apps";
+import { parseWidgetSlots } from "@/hooks/use-widgets";
+import { getElaineHubStats } from "./AppLauncher";
 
 // ── Guard logic extracted from widgets.tsx (line 459) ────────────────────────
 //
@@ -82,5 +85,88 @@ describe("Office Notes page — Array.isArray guard", () => {
   it("passes through a valid array unchanged", () => {
     const data = [{ id: 1 }, { id: 2 }];
     expect(applyPageNotesGuard(data)).toBe(data);
+  });
+});
+
+describe("widget catalog and saved-layout compatibility", () => {
+  it("contains only intentional catalog entries and gives each one a render source", () => {
+    expect(WIDGETS.map((widget) => widget.id)).not.toEqual(
+      expect.arrayContaining([
+        "activity",
+        "maintenance",
+        "photo-of-day",
+        "countdown",
+        "goals",
+        "maker-links",
+      ]),
+    );
+    for (const widget of WIDGETS) {
+      expect(widget.id.trim()).not.toBe("");
+      expect(widget.title.trim()).not.toBe("");
+      expect(widget.description.trim()).not.toBe("");
+      expect(widget.multi || widget.body).toBeTruthy();
+    }
+  });
+
+  it("keeps unknown legacy IDs so a retired slot can be removed without data loss", () => {
+    expect(
+      parseWidgetSlots(["pottery-stats", "removed-widget", "quilting-stats"]),
+    ).toEqual([
+      { t: "s", id: "pottery-stats" },
+      { t: "s", id: "removed-widget" },
+      { t: "s", id: "quilting-stats" },
+    ]);
+  });
+
+  it("filters malformed slots while preserving valid unknown new-format slots", () => {
+    expect(
+      parseWidgetSlots([
+        { t: "s", id: "retired-widget" },
+        { t: "s", id: "" },
+        {
+          t: "r",
+          iid: "rss-1",
+          title: "News",
+          url: "https://example.com/feed",
+        },
+        { t: "r", iid: "missing-url" },
+        null,
+      ]),
+    ).toEqual([
+      { t: "s", id: "retired-widget" },
+      {
+        t: "r",
+        iid: "rss-1",
+        title: "News",
+        url: "https://example.com/feed",
+      },
+    ]);
+  });
+});
+
+describe("Elaine Hub card metrics", () => {
+  it("uses live actionable task and saved-chat counts", () => {
+    const stats = getElaineHubStats(4, 75);
+
+    expect(stats).toEqual([
+      expect.objectContaining({ value: "4", label: "Open tasks" }),
+      expect.objectContaining({ value: "75", label: "Saved chats" }),
+    ]);
+    expect(stats.every((stat) => stat.href.endsWith("/elaine/"))).toBe(true);
+  });
+
+  it("shows zero for empty live results and a loading placeholder before they arrive", () => {
+    expect(getElaineHubStats(0, 0)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ value: "0", label: "Open tasks" }),
+        expect.objectContaining({ value: "0", label: "Saved chats" }),
+      ]),
+    );
+    expect(getElaineHubStats(undefined, undefined)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ value: "—", label: "Open tasks" }),
+        expect.objectContaining({ value: "—", label: "Saved chats" }),
+      ]),
+    );
   });
 });

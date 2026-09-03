@@ -25,6 +25,7 @@ import { sql } from "drizzle-orm";
 import * as Sentry from "@sentry/node";
 import { db } from "@workspace/db";
 import { logger } from "./logger";
+import { withRetry } from "./retry";
 
 /**
  * Sentry Cron Monitoring: Sentry's free/Developer plan allows exactly ONE
@@ -103,11 +104,18 @@ export async function recordScheduledTaskSuccess(
   taskName: string,
 ): Promise<void> {
   try {
-    await db.execute(sql`
-      UPDATE scheduler_runs
-      SET last_success_at = now()
-      WHERE name = ${taskName}
-    `);
+    await withRetry(
+      () =>
+        db.execute(sql`
+          UPDATE scheduler_runs
+          SET last_success_at = now()
+          WHERE name = ${taskName}
+        `),
+      {
+        maxAttempts: 2,
+        label: `scheduler-guard: record success (${taskName})`,
+      },
+    );
   } catch (err) {
     logger.warn(
       { err, taskName },
@@ -348,6 +356,7 @@ type SchedulerRunRow = {
 export const KNOWN_SCHEDULER_NAMES = new Set([
   "birthday-emails",
   "gmail-scan",
+  "hallmark-events-sync",
   "integrations-health-nudges",
   "monitoring-scheduler",
   "reminders-scheduler",
@@ -452,15 +461,21 @@ export async function reconcileSchedulerRuns(): Promise<void> {
  * cadence and inspects every row in scheduler_runs to decide whether ANY
  * task has gone quiet for longer than its own expected interval allows.
  *
- * A task counts as stale once `now - anchor` exceeds `expected_interval_ms +
- * tolerance` (tolerance = the larger of 15 minutes or half the task's own
- * interval). `anchor` is last_success_at, EXCEPT when last_run_at is both
- * more recent (a claim with no matching success yet) and younger than
+ * A task becomes a stale candidate once `now - anchor` exceeds
+ * `expected_interval_ms + tolerance` (tolerance = the larger of 15 minutes or
+ * half the task's own interval). It is only confirmed stale after one
+ * additional HEARTBEAT_INTERVAL_MS. That extra full observation window keeps
+ * a task that crosses the tolerance boundary by a few seconds from opening a
+ * short-lived Sentry incident, while a task that remains stopped is still
+ * reported on the next heartbeat.
+ *
+ * `anchor` is last_success_at, EXCEPT when last_run_at is both more recent (a
+ * claim with no matching success yet) and younger than
  * STUCK_CLAIM_THRESHOLD_MS — that combination means a run is genuinely in
- * progress (or brand-new, when last_success_at is null), so last_run_at is
- * used instead to give it room to finish before being flagged. See the
- * anchor computation below for why this matters for real production
- * incidents, not just brand-new tasks.
+ * progress (or brand-new, when last_success_at is null), so last_run_at is used
+ * instead to give it room to finish before being flagged. See the anchor
+ * computation below for why this matters for real production incidents, not
+ * just brand-new tasks.
  *
  * Per-task detail (which task, how overdue) goes to a structured
  * logger.error/info line — already flowing into Sentry Logs via the pino
@@ -468,7 +483,9 @@ export async function reconcileSchedulerRuns(): Promise<void> {
  * ok/error check-in for the whole subsystem.
  */
 export function startSchedulerHeartbeat(): () => void {
+  let stopped = false;
   let startupTimeout: ReturnType<typeof setTimeout> | null = null;
+  let interval: ReturnType<typeof setInterval> | null = null;
   const run = async (): Promise<void> => {
     const checkInId = Sentry.captureCheckIn(
       { monitorSlug: HEARTBEAT_MONITOR_SLUG, status: "in_progress" },
@@ -520,6 +537,11 @@ export function startSchedulerHeartbeat(): () => void {
       }
 
       const now = Date.now();
+      const staleCandidates: Array<{
+        name: string;
+        overdueMs: number;
+        remainingConfirmationMs: number;
+      }> = [];
       const stale: Array<{ name: string; overdueMs: number }> = [];
       for (const row of result.rows) {
         const expectedMs = row.expected_interval_ms;
@@ -560,9 +582,25 @@ export function startSchedulerHeartbeat(): () => void {
           : (successMs ?? runMs);
         const toleranceMs = Math.max(15 * 60 * 1000, expectedMs / 2);
         const ageMs = now - anchorMs;
-        if (ageMs > expectedMs + toleranceMs) {
+        const candidateThresholdMs = expectedMs + toleranceMs;
+        const confirmedThresholdMs =
+          candidateThresholdMs + HEARTBEAT_INTERVAL_MS;
+        if (ageMs > confirmedThresholdMs) {
           stale.push({ name: row.name, overdueMs: ageMs - expectedMs });
+        } else if (ageMs > candidateThresholdMs) {
+          staleCandidates.push({
+            name: row.name,
+            overdueMs: ageMs - expectedMs,
+            remainingConfirmationMs: confirmedThresholdMs - ageMs,
+          });
         }
+      }
+
+      if (staleCandidates.length > 0) {
+        logger.warn(
+          { staleCandidates },
+          "scheduler-heartbeat: scheduled tasks are beyond tolerance but awaiting one more heartbeat before alerting",
+        );
       }
 
       if (stale.length > 0) {
@@ -604,17 +642,26 @@ export function startSchedulerHeartbeat(): () => void {
   );
   startupTimeout = setTimeout(() => {
     startupTimeout = null;
+    if (stopped) return;
     void run();
+    // Start the recurring cadence from the first real observation, not from
+    // process startup. FIRST_CHECK_DELAY_MS is shorter than the heartbeat
+    // interval; anchoring setInterval at startup would make the next check
+    // arrive only 12 minutes after the three-minute startup check, violating
+    // the full confirmation window used by the staleness threshold above.
+    interval = setInterval(() => void run(), HEARTBEAT_INTERVAL_MS);
+    interval.unref();
   }, FIRST_CHECK_DELAY_MS);
 
-  const interval = setInterval(() => void run(), HEARTBEAT_INTERVAL_MS);
-  interval.unref();
-
   return () => {
+    stopped = true;
     if (startupTimeout !== null) {
       clearTimeout(startupTimeout);
       startupTimeout = null;
     }
-    clearInterval(interval);
+    if (interval !== null) {
+      clearInterval(interval);
+      interval = null;
+    }
   };
 }

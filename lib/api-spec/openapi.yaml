@@ -4603,7 +4603,7 @@ paths:
       operationId: getOrnamentStragglers
       tags:
         - ornaments
-      summary: List ornaments missing an embedding or core attributes
+      summary: List ornaments missing an embedding, series/collection, or year
       responses:
         "200":
           description: Stragglers needing re-analysis
@@ -4724,6 +4724,31 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OrnamentsOrnamentItem"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /ornaments/items/{id}/identity-refresh:
+    post:
+      operationId: refreshOrnamentIdentity
+      tags:
+        - ornaments
+      summary: Refresh only missing, unlocked ornament identity evidence from its photos
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated ornament and its remaining maintenance fields
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrnamentsIdentityRefreshResult"
         "404":
           description: Not found
           content:
@@ -4865,37 +4890,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-  /ornaments/items/{id}/lookup-barcode:
-    post:
-      operationId: lookupOrnamentBarcode
-      tags:
-        - ornaments
-      summary: Look up a barcode via UPCitemdb and return candidate fields (does not save)
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: integer
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/OrnamentsBarcodeLookupInput"
-      responses:
-        "200":
-          description: Lookup result
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/OrnamentsBarcodeLookupResult"
   /ornaments/items/lookup-barcode:
     post:
       operationId: lookupBarcode
       tags:
         - ornaments
-      summary: Look up a barcode via UPCitemdb for the add-item form (does not save)
+      summary: Identify an ornament barcode using live eBay data with an AI fallback (does not save)
       requestBody:
         required: true
         content:
@@ -4909,25 +4909,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OrnamentsBarcodeLookupResult"
-  /ornaments/items/report-barcode-correction:
-    post:
-      operationId: reportBarcodeCorrection
-      tags:
-        - ornaments
-      summary: Submit a correction when a barcode lookup returned wrong information
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/OrnamentsBarcodeCorrectionInput"
-      responses:
-        "200":
-          description: Correction recorded
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/OrnamentsBarcodeCorrectionResult"
   /ornaments/barcode-photo-lookup:
     post:
       operationId: extractOrnamentBarcodePhoto
@@ -5351,6 +5332,19 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/OrnamentsCreateAndBackfillCategoriesResult"
+  /ornaments/categories/apply-existing:
+    post:
+      operationId: applyExistingOrnamentCategories
+      tags:
+        - ornaments
+      summary: Apply matching existing categories to every active ornament without creating or removing categories
+      responses:
+        "200":
+          description: Per-ornament additive category assignment results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrnamentsApplyExistingCategoriesResult"
   /office/notes:
     get:
       operationId: listNotes
@@ -6392,6 +6386,519 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /magnets/items:
+    get:
+      operationId: listMagnets
+      tags:
+        - magnets
+      summary: List magnets (paginated)
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: categoryId
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: categoryIds
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: integer
+        - name: uncategorized
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - newest
+              - oldest
+              - name-asc
+              - name-desc
+            default: newest
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 60
+      responses:
+        "200":
+          description: Paginated list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MagnetsMagnetListResponse"
+    post:
+      operationId: createMagnet
+      tags:
+        - magnets
+      summary: Create a magnet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MagnetsMagnetCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MagnetsMagnetItem"
+  /magnets/items/{id}:
+    get:
+      operationId: getMagnet
+      tags:
+        - magnets
+      summary: Get a magnet
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The magnet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MagnetsMagnetItem"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    patch:
+      operationId: updateMagnet
+      tags:
+        - magnets
+      summary: Update a magnet
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MagnetsMagnetUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MagnetsMagnetItem"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      operationId: deleteMagnet
+      tags:
+        - magnets
+      summary: Soft-delete a magnet
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /magnets/items/{id}/reanalyze:
+    post:
+      operationId: reanalyzeMagnet
+      tags:
+        - magnets
+      summary: Re-analyse a magnet with AI vision
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Updated magnet item
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MagnetsMagnetItem"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: No primary image available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /magnets/items/{id}/images:
+    post:
+      operationId: addMagnetImage
+      tags:
+        - magnets
+      summary: Upload a photo for a magnet
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - image
+              properties:
+                image:
+                  type: string
+                  format: binary
+                label:
+                  type: string
+      responses:
+        "201":
+          description: Uploaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MagnetsMagnetImage"
+        "400":
+          description: Invalid or unsupported file
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Item not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /magnets/items/{id}/images/{imageId}:
+    patch:
+      operationId: updateMagnetImage
+      tags:
+        - magnets
+      summary: Update a supplemental image's label
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: imageId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MagnetsMagnetImageUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MagnetsMagnetImage"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      operationId: deleteMagnetImage
+      tags:
+        - magnets
+      summary: Delete a photo
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: imageId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /magnets/items/{id}/images/{imageId}/primary:
+    post:
+      operationId: setMagnetPrimaryImage
+      tags:
+        - magnets
+      summary: Promote an image to primary (gallery cover)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: imageId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Primary image updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - id
+                  - imagePath
+                properties:
+                  id:
+                    type: integer
+                  imagePath:
+                    type:
+                      - string
+                      - "null"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /magnets/categories:
+    get:
+      operationId: listMagnetCategories
+      tags:
+        - magnets
+      summary: List categories
+      responses:
+        "200":
+          description: Category list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MagnetsCategory"
+    post:
+      operationId: createMagnetCategory
+      tags:
+        - magnets
+      summary: Create a category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MagnetsCategoryInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MagnetsCategory"
+        "409":
+          description: Name already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /magnets/categories/unused:
+    delete:
+      operationId: deleteMagnetUnusedCategories
+      tags:
+        - magnets
+      summary: Delete all categories with no items assigned
+      responses:
+        "200":
+          description: Number of categories deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - deleted
+                properties:
+                  deleted:
+                    type: integer
+  /magnets/categories/{id}:
+    patch:
+      operationId: renameMagnetCategory
+      tags:
+        - magnets
+      summary: Rename a category
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MagnetsCategoryInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MagnetsCategory"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Name already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      operationId: deleteMagnetCategory
+      tags:
+        - magnets
+      summary: Delete a category
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /magnets/categories/{id}/colors:
+    put:
+      operationId: updateMagnetCategoryColors
+      tags:
+        - magnets
+      summary: Update a category's colours
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MagnetsCategoryColorInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MagnetsCategory"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /magnets/categories/{id}/merge:
+    post:
+      operationId: mergeMagnetCategory
+      tags:
+        - magnets
+      summary: Merge a category into another (reassigns items, deletes source)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MagnetsMergeCategoryInput"
+      responses:
+        "204":
+          description: Merged and deleted
+        "400":
+          description: Cannot merge a category into itself
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Source or target not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 components:
   schemas:
     HealthStatus:
@@ -6844,6 +7351,7 @@ components:
         - motifs
         - categories
         - images
+        - recognitionRefreshStatus
         - createdAt
       properties:
         id:
@@ -6921,6 +7429,15 @@ components:
             $ref: "#/components/schemas/PotteryPotteryImage"
         imageUrl:
           type: string
+        recognitionRefreshStatus:
+          type:
+            - string
+            - "null"
+          enum:
+            - pending
+            - complete
+            - null
+          description: Status of the automatic complete-photo recognition refresh.
         createdAt:
           type: string
           format: date-time
@@ -7347,6 +7864,7 @@ components:
         - imageUrl
         - tileImageUrl
         - hasEmbedding
+        - recognitionRefreshStatus
         - createdAt
       properties:
         id:
@@ -7421,6 +7939,13 @@ components:
           description: Flat-field-corrected, tileable crop of the fabric photo. Use this (not imageUrl) for SVG pattern-fill rendering — it removes the source photo's natural lighting/vignette falloff so tiled squares don't show a "puffy" embossed grid.
         hasEmbedding:
           type: boolean
+        recognitionRefreshStatus:
+          type: string
+          enum:
+            - pending
+            - complete
+          nullable: true
+          description: Status of the automatic complete-photo recognition refresh.
         createdAt:
           type: string
           format: date-time
@@ -7525,6 +8050,7 @@ components:
         - categories
         - images
         - hasEmbedding
+        - recognitionRefreshStatus
         - createdAt
       properties:
         id:
@@ -7573,6 +8099,13 @@ components:
           nullable: true
         hasEmbedding:
           type: boolean
+        recognitionRefreshStatus:
+          type: string
+          enum:
+            - pending
+            - complete
+          nullable: true
+          description: Status of the automatic complete-photo recognition refresh.
         createdAt:
           type: string
           format: date-time
@@ -7672,6 +8205,7 @@ components:
         - linkedFabricIds
         - linkedPatternIds
         - linkedFabrics
+        - recognitionRefreshStatus
         - createdAt
       properties:
         id:
@@ -7728,6 +8262,15 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/QuiltingQuiltFabricSummary"
+        recognitionRefreshStatus:
+          type:
+            - string
+            - "null"
+          enum:
+            - pending
+            - complete
+            - null
+          description: Status of the automatic complete-photo recognition refresh.
         createdAt:
           type: string
           format: date-time
@@ -10386,6 +10929,8 @@ components:
       required:
         - categoryCount
         - brandCount
+        - estimatedValueTotal
+        - itemsWithEstimatedValue
         - aiAppraisalLowTotal
         - aiAppraisalHighTotal
         - itemsWithAiAppraisal
@@ -10406,6 +10951,12 @@ components:
           type:
             - integer
             - "null"
+        estimatedValueTotal:
+          type: number
+          description: "Collection estimate: each item's available current-market signals (book value, eBay prices, and AI appraisal) are averaged; when none are saved, retail/MSRP is used as the fallback. Each estimate is multiplied by quantity."
+        itemsWithEstimatedValue:
+          type: integer
+          description: How many matching items had at least one valid market or retail value.
         aiAppraisalLowTotal:
           type: number
           description: Sum of each matching item's parsed AI-appraisal low estimate × quantity.
@@ -10471,10 +11022,6 @@ components:
             - string
             - "null"
         dimensions:
-          type:
-            - string
-            - "null"
-        condition:
           type:
             - string
             - "null"
@@ -10591,6 +11138,7 @@ components:
           format: date-time
     OrnamentsOrnamentUpdate:
       type: object
+      additionalProperties: false
       properties:
         name:
           type: string
@@ -10627,10 +11175,6 @@ components:
             - string
             - "null"
         dimensions:
-          type:
-            - string
-            - "null"
-        condition:
           type:
             - string
             - "null"
@@ -10683,7 +11227,14 @@ components:
             type: string
             enum:
               - embedding
-              - attributes
+              - seriesOrCollection
+              - year
+        status:
+          type: string
+          enum:
+            - pending_refresh
+        recommendation:
+          type: string
     OrnamentsStragglers:
       type: object
       required:
@@ -10693,6 +11244,27 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/OrnamentsStragglerItem"
+    OrnamentsIdentityRefreshResult:
+      type: object
+      required:
+        - item
+        - unresolvedFields
+        - recommendation
+      properties:
+        item:
+          $ref: "#/components/schemas/OrnamentsOrnamentItem"
+        unresolvedFields:
+          type: array
+          items:
+            type: string
+            enum:
+              - embedding
+              - seriesOrCollection
+              - year
+        recommendation:
+          type:
+            - string
+            - "null"
     OrnamentsBulkReanalyzeInput:
       type: object
       required:
@@ -10706,13 +11278,10 @@ components:
     OrnamentsBulkReanalyzeResult:
       type: object
       required:
-        - total
         - succeeded
         - failed
-        - errors
+        - outcomes
       properties:
-        total:
-          type: integer
         succeeded:
           type: array
           items:
@@ -10721,18 +11290,76 @@ components:
           type: array
           items:
             type: integer
-        errors:
+        outcomes:
           type: array
           items:
             type: object
             required:
               - id
-              - error
+              - status
+              - unresolvedFields
+              - recommendation
             properties:
               id:
                 type: integer
+              status:
+                type: string
+                enum:
+                  - refreshed
+                  - needs_evidence
+                  - failed
+              unresolvedFields:
+                type: array
+                items:
+                  type: string
+                  enum:
+                    - embedding
+                    - seriesOrCollection
+                    - year
+              recommendation:
+                type:
+                  - string
+                  - "null"
               error:
                 type: string
+    OrnamentsCategoryAssignmentOutcome:
+      type: object
+      required:
+        - entityId
+        - matchedCategoryIds
+        - assignmentsCreated
+      properties:
+        entityId:
+          type: integer
+        matchedCategoryIds:
+          type: array
+          items:
+            type: integer
+        assignmentsCreated:
+          type: integer
+        error:
+          type: string
+    OrnamentsApplyExistingCategoriesResult:
+      type: object
+      required:
+        - total
+        - matched
+        - assignmentsCreated
+        - failed
+        - outcomes
+      properties:
+        total:
+          type: integer
+        matched:
+          type: integer
+        assignmentsCreated:
+          type: integer
+        failed:
+          type: integer
+        outcomes:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrnamentsCategoryAssignmentOutcome"
     OrnamentsBarcodeLookupInput:
       type: object
       required:
@@ -10773,78 +11400,6 @@ components:
           type:
             - string
             - "null"
-        hallmarkSku:
-          type:
-            - string
-            - "null"
-        hallmarkArtist:
-          type:
-            - string
-            - "null"
-        hallmarkSeriesName:
-          type:
-            - string
-            - "null"
-        hallmarkSequenceNumber:
-          type:
-            - integer
-            - "null"
-        hallmarkRetailPriceUsd:
-          type:
-            - number
-            - "null"
-        hallmarkCollectorPriceUsd:
-          type:
-            - number
-            - "null"
-        hallmarkInStock:
-          type:
-            - boolean
-            - "null"
-        hallmarkImages:
-          type:
-            - array
-            - "null"
-          items:
-            type: string
-        hallmarkProductUrl:
-          type:
-            - string
-            - "null"
-    OrnamentsBarcodeCorrectionInput:
-      type: object
-      required:
-        - barcode
-      properties:
-        barcode:
-          type: string
-          minLength: 1
-          maxLength: 30
-        wrongName:
-          type: string
-          nullable: true
-        wrongBrand:
-          type: string
-          nullable: true
-        correctedName:
-          type: string
-          nullable: true
-        correctedBrand:
-          type: string
-          nullable: true
-        correctedSeriesOrCollection:
-          type: string
-          nullable: true
-        correctedYear:
-          type: integer
-          nullable: true
-    OrnamentsBarcodeCorrectionResult:
-      type: object
-      required:
-        - success
-      properties:
-        success:
-          type: boolean
     OrnamentsBarcodePhotoInput:
       type: object
       required:
@@ -10891,18 +11446,26 @@ components:
       required:
         - totalItems
         - totalQuantity
-        - totalBookValue
-        - itemsWithBookValue
+        - totalEstimatedValue
+        - itemsWithEstimatedValue
+        - valuationPolicy
         - bySeriesOrCollection
       properties:
         totalItems:
           type: integer
         totalQuantity:
           type: integer
-        totalBookValue:
+        totalEstimatedValue:
           type: number
-        itemsWithBookValue:
+          description: "Collection estimate: average each item's saved current-market signals (book value, eBay price, AI appraisal); use retail/MSRP only when no market signal exists. Includes quantity."
+        itemsWithEstimatedValue:
           type: integer
+          description: Number of unique ornament designs with at least one valid market or retail value.
+        valuationPolicy:
+          type: string
+          enum:
+            - market_signals_then_retail_fallback
+          description: The policy used for the total and every series breakdown.
         bySeriesOrCollection:
           type: array
           items:
@@ -11791,6 +12354,194 @@ components:
           items:
             $ref: "#/components/schemas/NotificationsPreferenceEntry"
           maxItems: 50
+    MagnetsMagnetItem:
+      type: object
+      required:
+        - id
+        - name
+        - lockedFields
+        - createdAt
+        - categories
+        - images
+        - imageUrl
+        - primaryImageId
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        notes:
+          type:
+            - string
+            - "null"
+        description:
+          type:
+            - string
+            - "null"
+        lockedFields:
+          type: array
+          items:
+            type: string
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/MagnetsCategory"
+        images:
+          type: array
+          items:
+            $ref: "#/components/schemas/MagnetsMagnetImage"
+        imageUrl:
+          type:
+            - string
+            - "null"
+        primaryImageId:
+          type:
+            - integer
+            - "null"
+        createdAt:
+          type: string
+    MagnetsMagnetCreate:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+        notes:
+          type:
+            - string
+            - "null"
+        description:
+          type:
+            - string
+            - "null"
+        categoryIds:
+          type: array
+          items:
+            type: integer
+    MagnetsMagnetUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+        notes:
+          type:
+            - string
+            - "null"
+        description:
+          type:
+            - string
+            - "null"
+        lockedFields:
+          type: array
+          items:
+            type: string
+        categoryIds:
+          type: array
+          items:
+            type: integer
+    MagnetsMagnetListResponse:
+      type: object
+      required:
+        - items
+        - total
+        - page
+        - pageSize
+        - totalPages
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/MagnetsMagnetItem"
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        totalPages:
+          type: integer
+    MagnetsMagnetImage:
+      type: object
+      required:
+        - id
+        - url
+        - position
+      properties:
+        id:
+          type: integer
+        url:
+          type: string
+        label:
+          type:
+            - string
+            - "null"
+        position:
+          type: integer
+    MagnetsMagnetImageUpdate:
+      type: object
+      properties:
+        label:
+          type:
+            - string
+            - "null"
+    MagnetsCategory:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        bgColor:
+          type:
+            - string
+            - "null"
+        textColor:
+          type:
+            - string
+            - "null"
+        count:
+          type: integer
+    MagnetsCategoryInput:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+        bgColor:
+          type:
+            - string
+            - "null"
+        textColor:
+          type:
+            - string
+            - "null"
+    MagnetsCategoryColorInput:
+      type: object
+      properties:
+        bgColor:
+          type:
+            - string
+            - "null"
+        textColor:
+          type:
+            - string
+            - "null"
+    MagnetsMergeCategoryInput:
+      type: object
+      required:
+        - intoId
+      properties:
+        intoId:
+          type: integer
   parameters:
     IdParam:
       name: id

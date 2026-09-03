@@ -121,7 +121,6 @@ export function InlineFields() {
               <Field label="Brand" value="Hallmark" locked />
               <Field label="Year" value="2016" locked />
               <Field label="Series / Collection" value="Sweet Decade" locked />
-              <Field label="Condition" value="Mint in Box" />
               <Field label="Dimensions" value="3.5 in" />
               <Field label="Barcode / UPC" value="661127022308" />
 

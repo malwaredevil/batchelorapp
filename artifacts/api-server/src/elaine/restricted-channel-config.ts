@@ -209,13 +209,15 @@ export const RESTRICTED_EXCLUDED_ACTION_TYPES_SOURCE: readonly string[] = [
   // execute_app_operation: high-risk automation; requires the owner to be
   // looking at the Control Panel and explicitly choosing the operation.
   "execute_app_operation",
-  // add_photo_to_pottery / add_photo_to_quilting / add_photo_to_ornaments:
+  // add_photo_to_pottery / add_photo_to_quilting / add_photo_to_ornaments /
+  // add_photo_to_magnets:
   // require an image attachment from the current message; restricted channels
   // (SMS, voice, email, Slack) do not carry image attachments into Elaine's
   // context so these actions are meaningless outside the web UI.
   "add_photo_to_pottery",
   "add_photo_to_quilting",
   "add_photo_to_ornaments",
+  "add_photo_to_magnets",
   // ornament_ebay_price_lookup: requires the item's numeric id to be visible
   // on screen (page context), and force:true can trigger a paid Apify
   // scraper run. Web-only so users must consciously initiate it from the
@@ -344,6 +346,18 @@ export const RESTRICTED_ALLOWED_ACTION_TYPES_SOURCE: readonly string[] = [
   "promote_ornament_photo",
   "bulk_reanalyze_ornaments",
   "suggest_and_create_ornament_categories",
+  // ── Magnets ──────────────────────────────────────────────────────────────
+  "update_magnet_item",
+  "delete_magnet_item",
+  "lock_magnet_field",
+  "update_magnet_item_categories",
+  "create_magnet_category",
+  "delete_magnet_category",
+  "rename_magnet_category",
+  "merge_magnet_categories",
+  "delete_magnet_photo",
+  "promote_magnet_photo",
+  "reanalyze_magnet",
   // ── Universal ────────────────────────────────────────────────────────────
   // update_notification_state / bulk_update_notifications /
   // update_notification_preferences are excluded (in-app settings UI required).

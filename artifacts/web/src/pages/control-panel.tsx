@@ -32,7 +32,6 @@ const MODULE_LABELS: Record<string, string> = {
   email: "Email",
   web_search: "Web Search",
   openrouter: "OpenRouter",
-  ornaments: "Ornaments",
   quilting: "Quilting",
   travels: "Travels",
   comm_check: "Comm Check",

@@ -20,8 +20,6 @@ const STORAGE_KEY = "batchelor-widgets-v2";
 const LEGACY_KEY = "batchelor-widgets";
 const CARD_ORDER_STORAGE_KEY = "batchelor-app-card-order-v1";
 
-const ALL_STATIC_IDS = new Set(WIDGETS.map((w) => w.id));
-
 const DEFAULT_SLOTS: WidgetSlot[] = [
   { t: "s", id: "pottery-stats" },
   { t: "s", id: "quilting-stats" },
@@ -34,6 +32,7 @@ export const DEFAULT_APP_CARD_ORDER = [
   "quilting",
   "travels",
   "ornaments",
+  "magnets",
   "elaine",
   "office",
 ] as const;
@@ -41,20 +40,27 @@ export const DEFAULT_APP_CARD_ORDER = [
 const VALID_APP_IDS = new Set<string>(DEFAULT_APP_CARD_ORDER);
 
 // ── Parsing helpers ───────────────────────────────────────────────────────────
-function parseSlots(raw: unknown): WidgetSlot[] | null {
+/**
+ * Parse persisted slots without deleting unknown static IDs. Unknown IDs are
+ * intentionally retained so removing a catalog entry never reorders or
+ * silently rewrites a household's saved layout; the launcher renders them as
+ * removable retired-widget cards.
+ */
+export function parseWidgetSlots(raw: unknown): WidgetSlot[] | null {
   if (!Array.isArray(raw)) return null;
   if (raw.length === 0) return [];
   // Legacy: string[]
   if (typeof raw[0] === "string") {
     return (raw as string[])
-      .filter((id) => ALL_STATIC_IDS.has(id))
+      .filter((id) => typeof id === "string" && id.trim().length > 0)
       .map((id) => ({ t: "s" as const, id }));
   }
   // New: WidgetSlot[]
   return raw.filter((item): item is WidgetSlot => {
     if (typeof item !== "object" || item === null) return false;
     const s = item as Record<string, unknown>;
-    if (s["t"] === "s") return typeof s["id"] === "string";
+    if (s["t"] === "s")
+      return typeof s["id"] === "string" && s["id"].trim().length > 0;
     if (s["t"] === "r")
       return typeof s["iid"] === "string" && typeof s["url"] === "string";
     return false;
@@ -79,12 +85,12 @@ function readLocalStorage(): WidgetSlot[] | null {
   try {
     const v2 = window.localStorage.getItem(STORAGE_KEY);
     if (v2) {
-      const p = parseSlots(JSON.parse(v2) as unknown);
+      const p = parseWidgetSlots(JSON.parse(v2) as unknown);
       if (p) return p;
     }
     const legacy = window.localStorage.getItem(LEGACY_KEY);
     if (legacy) {
-      const p = parseSlots(JSON.parse(legacy) as unknown);
+      const p = parseWidgetSlots(JSON.parse(legacy) as unknown);
       if (p) return p;
     }
     return null;
@@ -130,7 +136,7 @@ async function fetchServerPrefs(): Promise<ServerPrefs> {
   try {
     const data = await getPreferences();
     return {
-      slots: data.slots !== undefined ? parseSlots(data.slots) : null,
+      slots: data.slots !== undefined ? parseWidgetSlots(data.slots) : null,
       appCardOrder:
         data.appCardOrder !== undefined && data.appCardOrder !== null
           ? parseAppCardOrder(data.appCardOrder)

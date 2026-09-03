@@ -17,10 +17,69 @@ import {
   listAllCalendarEvents,
 } from "../../lib/google-calendar";
 import { requireAuth } from "../../middleware/auth";
+import { requireOwner } from "../../middleware/owner";
+import { adminLimiter } from "../../middleware/rateLimit";
 import { logger } from "../../lib/logger";
+import {
+  getHallmarkEventSyncStatus,
+  HallmarkSyncPreviewStaleError,
+  runHallmarkEventsSync,
+} from "../../lib/ornaments/hallmark-events-sync";
 
 const router: IRouter = Router();
 router.use(requireAuth);
+
+const SyncBody = z.object({
+  dryRun: z.boolean().optional().default(false),
+  sourceFingerprint: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional(),
+});
+
+// Protected operational visibility and manual control for the scanner. The
+// route is owner-only because a dry-run still calls the paid retrieval API.
+router.get(
+  "/hallmark-events/admin/sync",
+  adminLimiter,
+  requireOwner,
+  async (_req, res) => {
+    try {
+      res.json(await getHallmarkEventSyncStatus());
+    } catch (err) {
+      logger.error({ err }, "hallmark-events-sync: status failed");
+      res.status(502).json({ error: "Could not read Hallmark sync status." });
+    }
+  },
+);
+
+router.post(
+  "/hallmark-events/admin/sync",
+  adminLimiter,
+  requireOwner,
+  async (req, res) => {
+    try {
+      const { dryRun, sourceFingerprint } = SyncBody.parse(req.body ?? {});
+      const result = await runHallmarkEventsSync(
+        dryRun ? "dry-run" : "apply",
+        sourceFingerprint,
+      );
+      res.json(result);
+    } catch (err) {
+      if (err instanceof HallmarkSyncPreviewStaleError) {
+        res.status(409).json({
+          code: "STALE_PREVIEW",
+          error: err.message,
+          expectedSourceFingerprint: err.expectedSourceFingerprint,
+          actualSourceFingerprint: err.actualSourceFingerprint,
+        });
+        return;
+      }
+      logger.error({ err }, "hallmark-events-sync: manual run failed");
+      res.status(502).json({ error: "Hallmark event sync failed." });
+    }
+  },
+);
 
 // Event titles matching any of these patterns are permanently blocked from
 // being created or updated in the Hallmark calendar — they are never useful

@@ -7,6 +7,7 @@ import {
   useDeleteOrnament,
   useListOrnamentCategories,
   getListOrnamentsQueryKey,
+  getListOrnamentSeriesQueryKey,
   getGetOrnamentQueryKey,
 } from "@workspace/api-client-react";
 import type { OrnamentsOrnamentItem } from "@workspace/api-client-react";
@@ -18,6 +19,7 @@ import {
   CategoryChipPicker,
   QuickEditSheetFrame,
 } from "@workspace/collection-ui";
+import { SeriesAutocomplete } from "@/ornaments/components/series-autocomplete";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -52,7 +54,6 @@ export function QuickEditOrnamentSheet({
   const [year, setYear] = useState(
     ornament.year != null ? String(ornament.year) : "",
   );
-  const [condition, setCondition] = useState(ornament.condition ?? "");
   const [notes, setNotes] = useState(ornament.notes ?? "");
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>(
     ornament.categories.map((c) => c.id),
@@ -63,7 +64,6 @@ export function QuickEditOrnamentSheet({
     setBrand(ornament.brand);
     setSeriesOrCollection(ornament.seriesOrCollection ?? "");
     setYear(ornament.year != null ? String(ornament.year) : "");
-    setCondition(ornament.condition ?? "");
     setNotes(ornament.notes ?? "");
     setSelectedCategoryIds(ornament.categories.map((c) => c.id));
   }, [ornament]);
@@ -79,6 +79,9 @@ export function QuickEditOrnamentSheet({
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListOrnamentsQueryKey() });
         queryClient.invalidateQueries({
+          queryKey: getListOrnamentSeriesQueryKey(),
+        });
+        queryClient.invalidateQueries({
           queryKey: getGetOrnamentQueryKey(ornament.id),
         });
         toast.success("Saved.");
@@ -92,6 +95,9 @@ export function QuickEditOrnamentSheet({
     mutation: {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListOrnamentsQueryKey() });
+        queryClient.invalidateQueries({
+          queryKey: getListOrnamentSeriesQueryKey(),
+        });
         toast.success("Ornament removed.");
         onDeleted();
       },
@@ -111,7 +117,6 @@ export function QuickEditOrnamentSheet({
         brand: brand.trim() || ornament.brand,
         seriesOrCollection: seriesOrCollection.trim() || null,
         year: year !== "" ? Number(year) : null,
-        condition: condition.trim() || null,
         notes: notes.trim() || null,
         categoryIds: selectedCategoryIds,
       },
@@ -185,10 +190,10 @@ export function QuickEditOrnamentSheet({
 
       <div className="space-y-1.5">
         <Label htmlFor="qeo-series">Series / Collection</Label>
-        <Input
+        <SeriesAutocomplete
           id="qeo-series"
           value={seriesOrCollection}
-          onChange={(e) => setSeriesOrCollection(e.target.value)}
+          onValueChange={setSeriesOrCollection}
           disabled={busy}
         />
       </div>
@@ -203,16 +208,6 @@ export function QuickEditOrnamentSheet({
             onChange={(e) => setYear(e.target.value)}
             disabled={busy}
             placeholder="e.g. 1995"
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="qeo-condition">Condition</Label>
-          <Input
-            id="qeo-condition"
-            value={condition}
-            onChange={(e) => setCondition(e.target.value)}
-            disabled={busy}
-            placeholder="e.g. Mint, Good, Fair"
           />
         </div>
       </div>

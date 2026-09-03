@@ -4,25 +4,20 @@ import {
   Package,
   Shirt,
   ShoppingBag,
-  Activity,
   FlaskConical,
   Scissors,
   Layers,
   Zap,
   Camera,
   FileText,
-  Clock,
-  Target,
   Star,
-  Image,
   BookOpen,
-  Link,
   Rss,
   Globe,
   Plane,
   Bell,
   MapPin,
-  Briefcase,
+  Magnet,
   type LucideIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -32,25 +27,20 @@ import {
   QuiltingStatsWidget,
   ShoppingListWidget,
   RandomPieceWidget,
-  MaintenanceWidget,
   FabricStashWidget,
   BlockDesignerWidget,
   LayoutsWidget,
   QuickAddWidget,
   AiSearchWidget,
   NotesWidget,
-  CountdownWidget,
   GlazeTipWidget,
   PatternIdeaWidget,
-  ActivityWidget,
-  GoalsWidget,
   InspirationWidget,
-  PhotoOfDayWidget,
-  MakerLinksWidget,
   TravelStatsWidget,
   NextTripWidget,
   TripRemindersWidget,
   TravelWishlistWidget,
+  MagnetsStatsWidget,
 } from "@/components/widgets";
 
 const base = crossAppBase();
@@ -162,15 +152,28 @@ export const APPS: AppEntry[] = [
     href: `${base}elaine/`,
     image: `${base}images/elaine-collection.png`,
     updated: "Your AI assistant",
-    stats: [
-      { value: "—", label: "Nudges" },
-      { value: "—", label: "Memory" },
-    ],
+    stats: [],
     description:
       "Chat with your household's AI assistant — full context on pottery, quilting, and travels, with viewable, editable settings.",
     cta: "Chat with Elaine",
   },
   // scaffold:anchor:hub-cards — scaffold-collection-module inserts hub card stubs below; do not remove
+  // scaffold:begin:magnets
+  {
+    id: "magnets",
+    name: "Magnets",
+    href: `${base}modules/magnets/`,
+    image: `${base}images/magnets-collection.png`,
+    updated: "Your magnet collection",
+    stats: [
+      { value: "—", label: "Magnets" },
+      { value: "—", label: "Categories" },
+    ],
+    description:
+      "Track your fridge magnet collection — add photos, organize by category, and browse your full collection with AI analysis.",
+    cta: "Open collection",
+  },
+  // scaffold:end:magnets
 ];
 
 /* ── Widget catalogue ──────────────────────────────────────────────────────── *
@@ -205,6 +208,16 @@ export const WIDGETS: WidgetEntry[] = [
     icon: ShoppingBag,
     category: "collections",
     body: <ShoppingListWidget />,
+  },
+
+  {
+    id: "magnets-stats",
+    title: "Magnets Stats",
+    description:
+      "Live magnet count and category breakdown from your magnets collection.",
+    icon: Magnet,
+    category: "collections",
+    body: <MagnetsStatsWidget />,
   },
 
   // ── Travels ────────────────────────────────────────────────────────────────
@@ -244,29 +257,12 @@ export const WIDGETS: WidgetEntry[] = [
     body: <TravelWishlistWidget />,
   },
   {
-    id: "activity",
-    title: "Recent Activity",
-    description:
-      "Latest additions and edits across both your pottery and quilting collections.",
-    icon: Activity,
-    category: "collections",
-    body: <ActivityWidget />,
-  },
-  {
     id: "random-piece",
     title: "Random Piece",
     description: "A surprise item from your pottery collection each visit.",
     icon: Star,
     category: "collections",
     body: <RandomPieceWidget />,
-  },
-  {
-    id: "maintenance",
-    title: "Maintenance Log",
-    description: "Upcoming and recent care tasks for your ceramics.",
-    icon: FlaskConical,
-    category: "collections",
-    body: <MaintenanceWidget />,
   },
   {
     id: "fabric-stash",
@@ -294,15 +290,6 @@ export const WIDGETS: WidgetEntry[] = [
     icon: Layers,
     category: "collections",
     body: <LayoutsWidget />,
-  },
-  {
-    id: "photo-of-day",
-    title: "Photo of the Day",
-    description:
-      "A random piece from your pottery collection as daily inspiration.",
-    icon: Image,
-    category: "collections",
-    body: <PhotoOfDayWidget />,
   },
 
   // ── Tools ──────────────────────────────────────────────────────────────────
@@ -333,32 +320,6 @@ export const WIDGETS: WidgetEntry[] = [
     category: "tools",
     body: <NotesWidget />,
   },
-  {
-    id: "countdown",
-    title: "Countdown",
-    description: "Count down to an upcoming craft fair or project deadline.",
-    icon: Clock,
-    category: "tools",
-    body: <CountdownWidget />,
-  },
-  {
-    id: "goals",
-    title: "Goals",
-    description:
-      "Track personal goals — items to add, yardage to use, layouts to complete.",
-    icon: Target,
-    category: "tools",
-    body: <GoalsWidget />,
-  },
-  {
-    id: "maker-links",
-    title: "Maker Links",
-    description:
-      "A pinned list of your favourite craft websites, suppliers, and references.",
-    icon: Link,
-    category: "tools",
-    body: <MakerLinksWidget />,
-  },
 
   // ── Media ──────────────────────────────────────────────────────────────────
   {
@@ -386,7 +347,7 @@ export const WIDGETS: WidgetEntry[] = [
     id: "glaze-tip",
     title: "Glaze Tip",
     description:
-      "A rotating ceramic technique tip from a curated library — something new each visit.",
+      "A rotating ceramic technique tip from a curated offline library — something new each visit.",
     icon: FlaskConical,
     category: "inspiration",
     body: <GlazeTipWidget />,
@@ -395,7 +356,7 @@ export const WIDGETS: WidgetEntry[] = [
     id: "pattern-idea",
     title: "Pattern Idea",
     description:
-      "A curated quilt pattern suggestion — with difficulty level and a link to try it.",
+      "A curated offline quilt pattern suggestion — with difficulty level and a link to try it.",
     icon: Scissors,
     category: "inspiration",
     body: <PatternIdeaWidget />,
@@ -404,7 +365,7 @@ export const WIDGETS: WidgetEntry[] = [
     id: "inspiration",
     title: "Daily Inspiration",
     description:
-      "A short rotating quote about pottery and quilting craft to start your session.",
+      "A short rotating line from a curated offline library about pottery and quilting craft.",
     icon: BookOpen,
     category: "inspiration",
     body: <InspirationWidget />,

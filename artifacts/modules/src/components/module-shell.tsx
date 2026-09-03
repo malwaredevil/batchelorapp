@@ -26,6 +26,7 @@ import {
   MessageSquare,
   Menu,
   Bell,
+  Tags,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -95,6 +96,11 @@ const GROUP_META: Record<
     reminders: { label: "Reminders", icon: Bell },
     messenger: { label: "Messenger", icon: MessageSquare },
   },
+  magnets: {
+    collection: { label: "Collection", icon: LayoutGrid },
+    add: { label: "Add Magnets", icon: Camera },
+    settings: { label: "Categories", icon: Tags },
+  },
 };
 
 const GROUP_ORDER: Record<string, string[]> = {
@@ -103,6 +109,7 @@ const GROUP_ORDER: Record<string, string[]> = {
   office: ["inbox", "calendar", "notes", "reminders", "messenger"],
   ornaments: ["collection", "add", "scan", "hallmark-events", "settings"],
   travels: ["home", "trips", "discover", "plan", "settings"],
+  magnets: ["collection", "add", "settings"],
 };
 
 // Each module gets its own favicon so the browser tab is visually
@@ -113,6 +120,7 @@ const MODULE_FAVICONS: Record<string, string> = {
   ornaments: "/favicons/ornaments.svg",
   travels: "/favicons/travels.svg",
   office: "/favicons/office.svg",
+  magnets: "/favicon.svg",
 };
 const DEFAULT_FAVICON = "/favicon.svg";
 
@@ -138,6 +146,7 @@ const MODULE_TITLES: Record<string, string> = {
   ornaments: "Ornaments",
   travels: "Travels",
   office: "Office",
+  magnets: "Magnets",
 };
 const DEFAULT_TITLE = "Modules";
 

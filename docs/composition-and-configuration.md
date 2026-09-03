@@ -168,6 +168,71 @@ The automated check is intentionally a boundary check, not a complete design
 review. Passing it does not permit copy/paste architecture that the review
 questions would reject.
 
+## No-net-new-debt policy
+
+`pnpm --filter @workspace/scripts run check-architecture-policy -- --base origin/main`
+is the umbrella report for focused architecture guards. It does not replace
+their actionable messages: it compares their deterministic audit findings at
+the merge base and working tree, then classifies the result.
+
+### Guard inventory
+
+| Guard / contract                                                   | Policy treatment                    | Why                                                                                                                                                            |
+| ------------------------------------------------------------------ | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `check-domain-composition` (including feature registry boundaries) | Blocking contract check             | Enforces shared imports, required exports, and approved structure in every source tree                                                                         |
+| `check-duplicate-code`                                             | Baseline-tracked debt category      | Its whole-repo structural audit identifies pre-existing copy/paste debt; its diff guard remains a direct fast failure                                          |
+| `check-hardcoded-config`                                           | Baseline-tracked debt category      | Audits owner-configurable literals while preserving the focused diff guard                                                                                     |
+| `check-app-shell`                                                  | Blocking contract check             | Keeps global chrome and auth composition in the shared application shell                                                                                       |
+| `check-guardrails` scaffold contracts                              | Blocking contract check             | Enforces scaffold output and required Elaine action-tool contract markers rather than proving a generator command ran                                          |
+| `elaine:capability-parity` and `elaine:operation-catalog`          | Blocking contract checks            | Keep every web operation explicitly mapped, excluded, or documented for Elaine                                                                                 |
+| CI `codegen-drift`                                                 | Blocking CI contract check          | Runs the generator and rejects stale generated API/spec output without mutating a local validation run                                                         |
+| Raw-fetch / scheduler / workflow guards                            | Focused independent blocking checks | Important architecture-adjacent policies with their own precise failure messages; future baseline candidates only if they gain deterministic whole-repo audits |
+
+| Classification          | Meaning                                                         | Validation result                                    |
+| ----------------------- | --------------------------------------------------------------- | ---------------------------------------------------- |
+| New                     | Present now, absent at the merge base                           | Fails                                                |
+| Worsened                | Same stable finding identity, but its detector metric increased | Fails                                                |
+| Unchanged legacy        | Present at the merge base and in the reviewed baseline          | Reported                                             |
+| Related legacy          | Unchanged legacy finding in a file touched by this change       | Reported; explain any deferred cleanup at completion |
+| Removed                 | Present at the merge base, absent now                           | Reported; remove the baseline entry                  |
+| Undocumented historical | Present at both snapshots but absent from the baseline          | Fails until a baseline-maintenance review records it |
+| Exception               | A narrowly scoped reviewed detector exception with a reason     | Reported separately from debt                        |
+
+### Reviewed baseline and exceptions
+
+`docs/architecture-policy-baseline.json` is the reviewed debt ledger. A
+finding identity includes its rule, candidate file, symbol, and matching
+evidence—not its line number—so formatting or moving code cannot make old debt
+look new. The policy rejects a baseline expansion that appears with
+implementation changes, and always rejects an entry that matches a new finding.
+Add historical findings only in a separately reviewable baseline-maintenance
+change; remove entries when their cleanup lands.
+
+Exceptions are not legacy debt. Each must name one stable finding and file and
+include a reason explaining why a shared abstraction would be incorrect.
+Wildcards, directories, and whole rule families are invalid. Duplicate-code
+exceptions use the candidate/match symbol pair (not a line number), with
+matching per-exception rationale metadata. Hardcoded-config source entries use
+the full detected cluster/constant identity (kind plus every guarded name)
+rather than their detector line number; adding a value to an allowlisted
+cluster therefore creates a new, reviewable exception. The policy baseline
+makes both categories visible in one report.
+
+### What the policy enforces
+
+The policy uses focused checks for the resulting contract: shared composition
+imports/exports and registry rules, duplicate code, hardcoded configuration,
+the shared app shell, and Elaine capability/operation parity. Generated API
+freshness remains enforced by CI's non-mutating `codegen-drift` job, which runs
+the generator and fails on an output diff. The policy deliberately does not
+try to prove that a scaffolder command was executed; it checks the contract the
+scaffold is expected to leave behind.
+
+Run `architecture-policy:report` to refresh the deterministic audit report.
+When its related-legacy section is outside the task's safe scope, keep the
+current work focused and propose a concrete cleanup task rather than editing
+unrelated files.
+
 ### Section 3 — Heuristic duplicate-code detection
 
 `scripts/src/check-duplicate-code.ts` is diff-scoped (only inspects files

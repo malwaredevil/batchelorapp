@@ -6,7 +6,12 @@
 import { useMemo } from "react";
 import {
   useMutation,
+  useQuery,
+  type QueryFunction,
+  type QueryKey,
   type UseMutationOptions,
+  type UseQueryOptions,
+  type UseQueryResult,
 } from "@tanstack/react-query";
 import { customFetch } from "./custom-fetch";
 import {
@@ -228,6 +233,124 @@ export function useDeleteHallmarkGCalEvent(
   return useMutation({
     mutationFn: (gcalId: string) =>
       customFetch<void>(`${BASE}/${gcalId}`, { method: "DELETE" }),
+    ...options,
+  });
+}
+
+// ── Owner-only scanner health and manual sync ────────────────────────────────
+
+export interface HallmarkSyncCandidate {
+  sourceKey: string;
+  title: string;
+  startDate: string;
+  endDate: string;
+  details: string | null;
+  sourceUrl: string;
+  year: number;
+}
+
+export interface HallmarkSyncRejected {
+  sourceKey?: string;
+  title?: string;
+  reason: string;
+}
+
+export interface HallmarkSyncAction {
+  action: "create" | "update" | "delete" | "unchanged";
+  sourceKey?: string;
+  eventId?: string;
+  title?: string;
+  startDate?: string;
+  endDate?: string;
+}
+
+export interface HallmarkSyncStatus {
+  id: number;
+  sourceUrl: string;
+  sourceFetchedAt: string | null;
+  sourceFingerprint: string | null;
+  lastRunAt: string | null;
+  lastSuccessAt: string | null;
+  lastStatus: string;
+  lastError: string | null;
+  candidateCount: number;
+  rejectedCount: number;
+  candidates: HallmarkSyncCandidate[];
+  rejected: HallmarkSyncRejected[];
+  updatedAt: string;
+}
+
+export interface HallmarkSyncResult {
+  mode: "dry-run" | "apply";
+  status: "success" | "dry_run";
+  sourceUrl: string;
+  sourceFingerprint: string;
+  fetchedAt: string;
+  candidateCount: number;
+  rejectedCount: number;
+  candidates: HallmarkSyncCandidate[];
+  rejected: HallmarkSyncRejected[];
+  actions: HallmarkSyncAction[];
+}
+
+const HALLMARK_SYNC_BASE = "/api/ornaments/hallmark-events/admin/sync";
+
+export const getHallmarkEventSyncStatusQueryKey = () =>
+  [HALLMARK_SYNC_BASE] as const;
+
+const getHallmarkEventSyncStatusFn = (
+  options?: RequestInit,
+): Promise<HallmarkSyncStatus | null> =>
+  customFetch<HallmarkSyncStatus | null>(HALLMARK_SYNC_BASE, {
+    ...options,
+    method: "GET",
+  });
+
+export function useGetHallmarkEventSyncStatus<
+  TData = HallmarkSyncStatus | null,
+  TError = unknown,
+>(options?: {
+  query?: UseQueryOptions<HallmarkSyncStatus | null, TError, TData>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const { query: queryOptions } = options ?? {};
+  const queryKey =
+    queryOptions?.queryKey ?? getHallmarkEventSyncStatusQueryKey();
+  const queryFn: QueryFunction<HallmarkSyncStatus | null> = ({ signal }) =>
+    getHallmarkEventSyncStatusFn({ signal });
+  const queryOpts = {
+    queryKey,
+    queryFn,
+    ...queryOptions,
+  } as UseQueryOptions<HallmarkSyncStatus | null, TError, TData> & {
+    queryKey: QueryKey;
+  };
+  const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+  return { ...query, queryKey: queryOpts.queryKey };
+}
+
+export interface RunHallmarkEventSyncInput {
+  dryRun: boolean;
+  sourceFingerprint?: string;
+}
+
+export function useRunHallmarkEventSync(
+  options?: Partial<
+    UseMutationOptions<
+      HallmarkSyncResult,
+      unknown,
+      RunHallmarkEventSyncInput
+    >
+  >,
+) {
+  return useMutation({
+    mutationFn: (data: RunHallmarkEventSyncInput) =>
+      customFetch<HallmarkSyncResult>(HALLMARK_SYNC_BASE, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      }),
     ...options,
   });
 }

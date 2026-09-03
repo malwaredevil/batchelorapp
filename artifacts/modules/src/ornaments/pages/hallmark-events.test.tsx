@@ -29,6 +29,7 @@ vi.mock("lucide-react", () => ({
   Pencil: () => null,
   Trash2: () => null,
   ExternalLink: () => null,
+  RefreshCw: () => null,
   ChevronLeft: () => null,
   ChevronRight: () => null,
 }));
@@ -238,6 +239,8 @@ const mockUseListConnectedCalendarEvents = vi.fn();
 const mockUseCreateHallmarkGCalEvent = vi.fn();
 const mockUseUpdateHallmarkGCalEvent = vi.fn();
 const mockUseDeleteHallmarkGCalEvent = vi.fn();
+const mockUseGetHallmarkEventSyncStatus = vi.fn();
+const mockUseRunHallmarkEventSync = vi.fn();
 // Used only by NextHallmarkEventCard in the hero-card integration tests.
 const mockUseUpcomingHallmarkEventsForCard = vi.fn();
 
@@ -252,6 +255,11 @@ vi.mock("@workspace/api-client-react", () => ({
     mockUseUpdateHallmarkGCalEvent(...args),
   useDeleteHallmarkGCalEvent: (...args: unknown[]) =>
     mockUseDeleteHallmarkGCalEvent(...args),
+  useGetHallmarkEventSyncStatus: (...args: unknown[]) =>
+    mockUseGetHallmarkEventSyncStatus(...args),
+  useRunHallmarkEventSync: (...args: unknown[]) =>
+    mockUseRunHallmarkEventSync(...args),
+  getHallmarkEventSyncStatusQueryKey: () => ["/sync"],
   getListConnectedCalendarEventsQueryKey: (...args: unknown[]) => args,
   useUpcomingHallmarkEvents: (...args: unknown[]) =>
     mockUseUpcomingHallmarkEventsForCard(...args),
@@ -339,6 +347,13 @@ beforeEach(() => {
   mockUseCreateHallmarkGCalEvent.mockReturnValue(stubMutation());
   mockUseUpdateHallmarkGCalEvent.mockReturnValue(stubMutation());
   mockUseDeleteHallmarkGCalEvent.mockReturnValue(stubMutation());
+  mockUseGetHallmarkEventSyncStatus.mockReturnValue({
+    data: null,
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  });
+  mockUseRunHallmarkEventSync.mockReturnValue(stubMutation());
 
   // Default: card hook returns no events (overridden in integration tests).
   mockUseUpcomingHallmarkEventsForCard.mockReturnValue({

@@ -5,10 +5,10 @@ import {
   useListOrnaments,
   useListOrnamentCategories,
   useReanalyzeOrnament,
-  useBulkReanalyzeOrnaments,
   useDeleteOrnament,
   useUpdateOrnament,
   getListOrnamentsQueryKey,
+  getListOrnamentCategoriesQueryKey,
   type OrnamentsOrnamentItem,
 } from "@workspace/api-client-react";
 import { CategoryEditDialog } from "@/quilting/components/CategoryEditDialog";
@@ -50,7 +50,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { CollectionErrorState } from "@workspace/collection-ui";
 import { DominantColorDots } from "@/components/collection/DominantColorDots";
-import { colorToHex } from "@workspace/web-core/colors";
+import { colorToHex, resolveCategoryPalette } from "@workspace/web-core/colors";
 import {
   CollectionCard,
   CollectionGrid,
@@ -72,7 +72,7 @@ import {
   type CompareItem,
 } from "@workspace/collection-ui";
 import { GitCompare, RefreshCw as RefreshCwIcon } from "lucide-react";
-import { GalleryPaginator } from "@/components/GalleryPaginator";
+import { GalleryPaginationPair } from "@/components/GalleryPaginationPair";
 import { cn } from "@/lib/utils";
 import {
   ornamentReanalyzeKey,
@@ -168,9 +168,14 @@ export default function Collection() {
     trackAsyncAction(
       key,
       reanalyze.mutateAsync({ id: itemId }).then(() =>
-        queryClient.invalidateQueries({
-          queryKey: getListOrnamentsQueryKey(),
-        }),
+        Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: getListOrnamentsQueryKey(),
+          }),
+          queryClient.invalidateQueries({
+            queryKey: getListOrnamentCategoriesQueryKey(),
+          }),
+        ]),
       ),
     );
   }
@@ -181,15 +186,19 @@ export default function Collection() {
 
   // Select (bulk) mode — bulkMode owns the selection (shared hook, unchanged
   // by this migration); useBulkReanalyzeRun owns the shared run/dismiss/
-  // per-card status lifecycle (also used by Quilting's quilts/patterns).
+  // per-card status lifecycle (also used by Pottery and Quilting galleries).
   const bulkMode = useMultiSelectMode(20);
   const [bulkStatus, setBulkStatus] = useState<string | null>(null);
-  const bulkReanalyze = useBulkReanalyzeOrnaments();
   const bulkRun = useBulkReanalyzeRun({
-    mutateAsync: bulkReanalyze.mutateAsync,
+    runItem: (id) => reanalyze.mutateAsync({ id }),
     keyFor: ornamentReanalyzeKey,
     invalidate: () =>
-      queryClient.invalidateQueries({ queryKey: getListOrnamentsQueryKey() }),
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: getListOrnamentsQueryKey() }),
+        queryClient.invalidateQueries({
+          queryKey: getListOrnamentCategoriesQueryKey(),
+        }),
+      ]),
     onSettled: ({ succeeded, failed }) => {
       // Stay in Select mode (selection cleared) so the per-card check/X
       // outcome icons stay visible until the user presses "Done"
@@ -309,35 +318,17 @@ export default function Collection() {
     return [
       { value: data?.total ?? 0, label: "Matching ornaments" },
       { value: data?.stats.categoryCount ?? 0, label: "Categories" },
-      { value: data?.stats.brandCount ?? 0, label: "Brands" },
-      { value: yearRange, label: "Year range" },
       {
-        value: formatCurrency(data?.stats.aiAppraisalLowTotal ?? 0),
-        label: "AI Appraisal (Low)",
+        value: formatCurrency(data?.stats.estimatedValueTotal ?? 0),
+        label: "Est. value",
         sub:
-          data && data.stats.itemsWithAiAppraisal > 0
-            ? `${data.stats.itemsWithAiAppraisal} appraised item${data.stats.itemsWithAiAppraisal === 1 ? "" : "s"}`
+          data && data.stats.itemsWithEstimatedValue > 0
+            ? `${data.stats.itemsWithEstimatedValue} design${data.stats.itemsWithEstimatedValue === 1 ? "" : "s"} priced`
             : undefined,
       },
       {
-        value: formatCurrency(data?.stats.aiAppraisalHighTotal ?? 0),
-        label: "AI Appraisal (High)",
-      },
-      {
-        value: formatCurrency(data?.stats.consensusValueTotal ?? 0),
-        label: "Consensus Value",
-        sub:
-          data && data.stats.itemsWithConsensusValue > 0
-            ? `${data.stats.itemsWithConsensusValue} item${data.stats.itemsWithConsensusValue === 1 ? "" : "s"} priced`
-            : undefined,
-      },
-      {
-        value: formatCurrency(data?.stats.retailValueTotal ?? 0),
-        label: "Retail Value",
-        sub:
-          data && data.stats.itemsWithRetailValue > 0
-            ? `${data.stats.itemsWithRetailValue} item${data.stats.itemsWithRetailValue === 1 ? "" : "s"} on file`
-            : undefined,
+        value: yearRange,
+        label: "Year range",
       },
     ];
   }, [data]);
@@ -556,181 +547,178 @@ export default function Collection() {
 
       {/* Grid View */}
       {viewMode === "grid" && (
-        <CollectionGrid>
-          {pagedItems.map((item) => (
-            <OrnamentCard
-              key={item.id}
-              id={item.id}
-              name={item.name}
-              imageUrl={item.imageUrl}
-              href={`/ornaments/ornament/${item.id}`}
-              subtitle={[
-                item.brand,
-                item.year ? String(item.year) : null,
-                item.seriesOrCollection,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-              categories={(item.categories ?? []).map((c) => ({
-                id: c.id,
-                name: c.name,
-                bgColor: c.bgColor ?? null,
-                textColor: c.textColor ?? null,
-              }))}
-              colorDots={
-                (item.dominantColors ?? []).length > 0 ? (
-                  <DominantColorDots
-                    colors={item.dominantColors ?? []}
-                    toHex={colorToHex}
-                    className="mt-1.5"
-                  />
-                ) : undefined
-              }
-              quantityBadge={
-                item.quantity > 1 ? (
-                  <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-                    ×{item.quantity}
-                  </span>
-                ) : undefined
-              }
-              onQuickEdit={() =>
-                setQuickEditItem(item as unknown as OrnamentsOrnamentItem)
-              }
-              onSetCategories={() => setCategoryEditItem(item)}
-              onReanalyze={() => triggerReanalyze(item.id)}
-              onDelete={() => setDeleteConfirmId(item.id)}
-              extraMenuItems={
-                <DropdownMenuItem asChild>
-                  <Link href={`/ornaments/ornament/${item.id}?edit=1`}>
-                    <Pencil className="mr-2 h-3.5 w-3.5" />
-                    Edit
-                  </Link>
-                </DropdownMenuItem>
-              }
-              selecting={isSelecting}
-              selected={
-                compareMode.active
-                  ? compareMode.selectedIds.includes(item.id)
-                  : bulkMode.selectedIds.includes(item.id)
-              }
-              onToggleSelect={
-                compareMode.active ? compareMode.toggle : bulkMode.toggle
-              }
-              LinkComponent={Link}
-            />
-          ))}
-        </CollectionGrid>
-      )}
-      {viewMode === "grid" && totalPages > 1 && (
-        <GalleryPaginator
-          page={currentPage}
-          totalPages={totalPages}
-          onPageChange={setCurrentPage}
-          className="mt-4"
-        />
+        <>
+          <GalleryPaginationPair
+            page={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            hasResults={pagedItems.length > 0}
+          >
+            <CollectionGrid>
+              {pagedItems.map((item) => (
+                <OrnamentCard
+                  key={item.id}
+                  id={item.id}
+                  name={item.name}
+                  imageUrl={item.imageUrl}
+                  href={`/ornaments/ornament/${item.id}`}
+                  subtitle={[
+                    item.brand,
+                    item.year ? String(item.year) : null,
+                    item.seriesOrCollection,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                  categories={(item.categories ?? []).map((c) => ({
+                    id: c.id,
+                    name: c.name,
+                    bgColor: c.bgColor ?? null,
+                    textColor: c.textColor ?? null,
+                  }))}
+                  colorDots={
+                    (item.dominantColors ?? []).length > 0 ? (
+                      <DominantColorDots
+                        colors={item.dominantColors ?? []}
+                        toHex={colorToHex}
+                        className="mt-1.5"
+                      />
+                    ) : undefined
+                  }
+                  quantityBadge={
+                    item.quantity > 1 ? (
+                      <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                        ×{item.quantity}
+                      </span>
+                    ) : undefined
+                  }
+                  onQuickEdit={() =>
+                    setQuickEditItem(item as unknown as OrnamentsOrnamentItem)
+                  }
+                  onSetCategories={() => setCategoryEditItem(item)}
+                  onReanalyze={() => triggerReanalyze(item.id)}
+                  onDelete={() => setDeleteConfirmId(item.id)}
+                  extraMenuItems={
+                    <DropdownMenuItem asChild>
+                      <Link href={`/ornaments/ornament/${item.id}?edit=1`}>
+                        <Pencil className="mr-2 h-3.5 w-3.5" />
+                        Edit
+                      </Link>
+                    </DropdownMenuItem>
+                  }
+                  selecting={isSelecting}
+                  selected={
+                    compareMode.active
+                      ? compareMode.selectedIds.includes(item.id)
+                      : bulkMode.selectedIds.includes(item.id)
+                  }
+                  onToggleSelect={
+                    compareMode.active ? compareMode.toggle : bulkMode.toggle
+                  }
+                  LinkComponent={Link}
+                />
+              ))}
+            </CollectionGrid>
+          </GalleryPaginationPair>
+        </>
       )}
 
       {/* List View */}
       {viewMode === "list" && (
-        <CollectionList>
-          {pagedItems.map((item) => (
-            <OrnamentListRow
-              key={item.id}
-              id={item.id}
-              name={item.name}
-              imageUrl={item.imageUrl}
-              href={`/ornaments/ornament/${item.id}`}
-              subtitle={
-                <span>
-                  {item.brand}
-                  {item.year ? ` · ${item.year}` : ""}
-                </span>
-              }
-              detail={
-                item.seriesOrCollection ? (
-                  <span className="italic">{item.seriesOrCollection}</span>
-                ) : undefined
-              }
-              categoryBadges={
-                item.categories.length > 0 ? (
-                  <>
-                    {[...item.categories]
-                      .sort((a, b) => a.name.localeCompare(b.name))
-                      .map((cat) => (
-                        <span
-                          key={cat.id}
-                          className={cn(
-                            "inline-flex items-center rounded-full border px-1.5 py-0 text-[10px] font-semibold",
-                            !cat.bgColor &&
-                              "border-border text-muted-foreground",
-                          )}
-                          style={
-                            cat.bgColor
-                              ? {
-                                  backgroundColor: cat.bgColor,
-                                  color: cat.textColor ?? "#fff",
+        <>
+          <GalleryPaginationPair
+            page={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            hasResults={pagedItems.length > 0}
+          >
+            <CollectionList>
+              {pagedItems.map((item) => (
+                <OrnamentListRow
+                  key={item.id}
+                  id={item.id}
+                  name={item.name}
+                  imageUrl={item.imageUrl}
+                  href={`/ornaments/ornament/${item.id}`}
+                  subtitle={
+                    <span>
+                      {item.brand}
+                      {item.year ? ` · ${item.year}` : ""}
+                    </span>
+                  }
+                  detail={
+                    item.seriesOrCollection ? (
+                      <span className="italic">{item.seriesOrCollection}</span>
+                    ) : undefined
+                  }
+                  categoryBadges={
+                    item.categories.length > 0 ? (
+                      <>
+                        {[...item.categories]
+                          .sort((a, b) => a.name.localeCompare(b.name))
+                          .map((cat) => {
+                            const palette = resolveCategoryPalette(cat);
+                            return (
+                              <span
+                                key={cat.id}
+                                className="inline-flex items-center rounded-full border px-1.5 py-0 text-[10px] font-semibold"
+                                style={{
+                                  backgroundColor: palette.bgColor,
+                                  color: palette.textColor,
                                   borderColor: "transparent",
-                                }
-                              : undefined
-                          }
-                        >
-                          {cat.name}
-                        </span>
-                      ))}
-                  </>
-                ) : undefined
-              }
-              colorDots={
-                (item.dominantColors ?? []).length > 0 ? (
-                  <DominantColorDots
-                    colors={item.dominantColors ?? []}
-                    toHex={colorToHex}
-                    className="mt-1"
-                  />
-                ) : undefined
-              }
-              valueDisplay={
-                item.bookValue != null ? (
-                  <span className="font-medium text-primary/80">
-                    ${item.bookValue.toFixed(0)}
-                  </span>
-                ) : undefined
-              }
-              onQuickEdit={() =>
-                setQuickEditItem(item as unknown as OrnamentsOrnamentItem)
-              }
-              onSetCategories={() => setCategoryEditItem(item)}
-              onReanalyze={() => triggerReanalyze(item.id)}
-              onDelete={() => setDeleteConfirmId(item.id)}
-              extraMenuItems={
-                <DropdownMenuItem asChild>
-                  <Link href={`/ornaments/ornament/${item.id}?edit=1`}>
-                    <Pencil className="mr-2 h-3.5 w-3.5" />
-                    Edit
-                  </Link>
-                </DropdownMenuItem>
-              }
-              selecting={isSelecting}
-              selected={
-                compareMode.active
-                  ? compareMode.selectedIds.includes(item.id)
-                  : bulkMode.selectedIds.includes(item.id)
-              }
-              onToggleSelect={
-                compareMode.active ? compareMode.toggle : bulkMode.toggle
-              }
-              LinkComponent={Link}
-            />
-          ))}
-        </CollectionList>
-      )}
-      {viewMode === "list" && totalPages > 1 && (
-        <GalleryPaginator
-          page={currentPage}
-          totalPages={totalPages}
-          onPageChange={setCurrentPage}
-          className="mt-4"
-        />
+                                }}
+                              >
+                                {cat.name}
+                              </span>
+                            );
+                          })}
+                      </>
+                    ) : undefined
+                  }
+                  colorDots={
+                    (item.dominantColors ?? []).length > 0 ? (
+                      <DominantColorDots
+                        colors={item.dominantColors ?? []}
+                        toHex={colorToHex}
+                        className="mt-1"
+                      />
+                    ) : undefined
+                  }
+                  valueDisplay={
+                    item.bookValue != null ? (
+                      <span className="font-medium text-primary/80">
+                        ${item.bookValue.toFixed(0)}
+                      </span>
+                    ) : undefined
+                  }
+                  onQuickEdit={() =>
+                    setQuickEditItem(item as unknown as OrnamentsOrnamentItem)
+                  }
+                  onSetCategories={() => setCategoryEditItem(item)}
+                  onReanalyze={() => triggerReanalyze(item.id)}
+                  onDelete={() => setDeleteConfirmId(item.id)}
+                  extraMenuItems={
+                    <DropdownMenuItem asChild>
+                      <Link href={`/ornaments/ornament/${item.id}?edit=1`}>
+                        <Pencil className="mr-2 h-3.5 w-3.5" />
+                        Edit
+                      </Link>
+                    </DropdownMenuItem>
+                  }
+                  selecting={isSelecting}
+                  selected={
+                    compareMode.active
+                      ? compareMode.selectedIds.includes(item.id)
+                      : bulkMode.selectedIds.includes(item.id)
+                  }
+                  onToggleSelect={
+                    compareMode.active ? compareMode.toggle : bulkMode.toggle
+                  }
+                  LinkComponent={Link}
+                />
+              ))}
+            </CollectionList>
+          </GalleryPaginationPair>
+        </>
       )}
 
       {/* Compare floating bar */}

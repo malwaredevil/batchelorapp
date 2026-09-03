@@ -1388,6 +1388,7 @@ export const ELAINE_IMPORTED_TOOL_FILES: readonly string[] = [
   "artifacts/api-server/src/elaine/pottery-actions.ts",
   "artifacts/api-server/src/elaine/quilting-actions.ts",
   "artifacts/api-server/src/elaine/ornaments-actions.ts",
+  "artifacts/api-server/src/elaine/magnets-actions.ts",
   "artifacts/api-server/src/elaine/universal-actions.ts",
   "artifacts/api-server/src/elaine/adaptive-actions.ts",
   "artifacts/api-server/src/elaine/app-operation-tools.ts",
@@ -2688,6 +2689,7 @@ export const KNOWN_EXECUTOR_PREFIXES: ReadonlySet<string> = new Set([
   "potteryAction", // potteryActionExecutors
   "quiltingAction", // quiltingActionExecutors
   "ornamentAction", // ornamentActionExecutors
+  "magnetAction", // magnetActionExecutors
   "communicationAction", // communicationActionExecutors
   "reminderAction", // reminderActionExecutors
   "memoryAction", // universalActionExecutors (correct_memory, forget_memory)
@@ -2742,6 +2744,7 @@ export const ACTION_CLASS_EXECUTOR_MAP: ReadonlyMap<string, string> = new Map([
   ["potteryAction", "potteryActionExecutors"],
   ["quiltingAction", "quiltingActionExecutors"],
   ["ornamentAction", "ornamentActionExecutors"],
+  ["magnetAction", "magnetActionExecutors"],
   ["communicationAction", "communicationActionExecutors"],
   ["reminderAction", "reminderActionExecutors"],
   // memoryAction routes through universalActionExecutors (correct_memory, forget_memory)

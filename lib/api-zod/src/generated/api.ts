@@ -237,6 +237,7 @@ export const ListPotteryResponse = zod.object({
   "position": zod.number()
 })),
   "imageUrl": zod.string(),
+  "recognitionRefreshStatus": zod.union([zod.literal('pending'),zod.literal('complete'),zod.literal(null)]).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 })),
   "total": zod.number().describe('Total number of items matching the query (before pagination)'),
@@ -285,6 +286,7 @@ export const CreatePotteryResponse = zod.object({
   "position": zod.number()
 })),
   "imageUrl": zod.string(),
+  "recognitionRefreshStatus": zod.union([zod.literal('pending'),zod.literal('complete'),zod.literal(null)]).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 })
 
@@ -345,6 +347,7 @@ export const GetPotteryResponse = zod.object({
   "position": zod.number()
 })),
   "imageUrl": zod.string(),
+  "recognitionRefreshStatus": zod.union([zod.literal('pending'),zod.literal('complete'),zod.literal(null)]).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 })
 
@@ -410,6 +413,7 @@ export const UpdatePotteryResponse = zod.object({
   "position": zod.number()
 })),
   "imageUrl": zod.string(),
+  "recognitionRefreshStatus": zod.union([zod.literal('pending'),zod.literal('complete'),zod.literal(null)]).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 })
 
@@ -515,6 +519,7 @@ export const ReanalyzePotteryResponse = zod.object({
   "position": zod.number()
 })),
   "imageUrl": zod.string(),
+  "recognitionRefreshStatus": zod.union([zod.literal('pending'),zod.literal('complete'),zod.literal(null)]).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 })
 
@@ -589,6 +594,7 @@ export const SetPrimaryImageResponse = zod.object({
   "position": zod.number()
 })),
   "imageUrl": zod.string(),
+  "recognitionRefreshStatus": zod.union([zod.literal('pending'),zod.literal('complete'),zod.literal(null)]).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 })
 
@@ -916,6 +922,7 @@ export const ComparePotteryResponse = zod.object({
   "position": zod.number()
 })),
   "imageUrl": zod.string(),
+  "recognitionRefreshStatus": zod.union([zod.literal('pending'),zod.literal('complete'),zod.literal(null)]).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 }),
   "similarity": zod.number(),
@@ -998,6 +1005,7 @@ export const ListFabricsResponse = zod.object({
   "imageUrl": zod.string(),
   "tileImageUrl": zod.string().describe('Flat-field-corrected, tileable crop of the fabric photo. Use this (not imageUrl) for SVG pattern-fill rendering — it removes the source photo\'s natural lighting\/vignette falloff so tiled squares don\'t show a \"puffy\" embossed grid.'),
   "hasEmbedding": zod.boolean(),
+  "recognitionRefreshStatus": zod.enum(['pending', 'complete']).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 })),
   "total": zod.number(),
@@ -1062,6 +1070,7 @@ export const CreateFabricResponse = zod.object({
   "imageUrl": zod.string(),
   "tileImageUrl": zod.string().describe('Flat-field-corrected, tileable crop of the fabric photo. Use this (not imageUrl) for SVG pattern-fill rendering — it removes the source photo\'s natural lighting\/vignette falloff so tiled squares don\'t show a \"puffy\" embossed grid.'),
   "hasEmbedding": zod.boolean(),
+  "recognitionRefreshStatus": zod.enum(['pending', 'complete']).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 })
 
@@ -1108,6 +1117,7 @@ export const GetFabricResponse = zod.object({
   "imageUrl": zod.string(),
   "tileImageUrl": zod.string().describe('Flat-field-corrected, tileable crop of the fabric photo. Use this (not imageUrl) for SVG pattern-fill rendering — it removes the source photo\'s natural lighting\/vignette falloff so tiled squares don\'t show a \"puffy\" embossed grid.'),
   "hasEmbedding": zod.boolean(),
+  "recognitionRefreshStatus": zod.enum(['pending', 'complete']).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 })
 
@@ -1174,6 +1184,7 @@ export const UpdateFabricResponse = zod.object({
   "imageUrl": zod.string(),
   "tileImageUrl": zod.string().describe('Flat-field-corrected, tileable crop of the fabric photo. Use this (not imageUrl) for SVG pattern-fill rendering — it removes the source photo\'s natural lighting\/vignette falloff so tiled squares don\'t show a \"puffy\" embossed grid.'),
   "hasEmbedding": zod.boolean(),
+  "recognitionRefreshStatus": zod.enum(['pending', 'complete']).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 })
 
@@ -1240,6 +1251,7 @@ export const ReanalyzeFabricResponse = zod.object({
   "imageUrl": zod.string(),
   "tileImageUrl": zod.string().describe('Flat-field-corrected, tileable crop of the fabric photo. Use this (not imageUrl) for SVG pattern-fill rendering — it removes the source photo\'s natural lighting\/vignette falloff so tiled squares don\'t show a \"puffy\" embossed grid.'),
   "hasEmbedding": zod.boolean(),
+  "recognitionRefreshStatus": zod.enum(['pending', 'complete']).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 })
 
@@ -1286,6 +1298,7 @@ export const GetFabricPairingsResponseItem = zod.object({
   "imageUrl": zod.string(),
   "tileImageUrl": zod.string().describe('Flat-field-corrected, tileable crop of the fabric photo. Use this (not imageUrl) for SVG pattern-fill rendering — it removes the source photo\'s natural lighting\/vignette falloff so tiled squares don\'t show a \"puffy\" embossed grid.'),
   "hasEmbedding": zod.boolean(),
+  "recognitionRefreshStatus": zod.enum(['pending', 'complete']).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 })
 export const GetFabricPairingsResponse = zod.array(GetFabricPairingsResponseItem)
@@ -1427,6 +1440,7 @@ export const SetFabricImageDefaultResponse = zod.object({
   "imageUrl": zod.string(),
   "tileImageUrl": zod.string().describe('Flat-field-corrected, tileable crop of the fabric photo. Use this (not imageUrl) for SVG pattern-fill rendering — it removes the source photo\'s natural lighting\/vignette falloff so tiled squares don\'t show a \"puffy\" embossed grid.'),
   "hasEmbedding": zod.boolean(),
+  "recognitionRefreshStatus": zod.enum(['pending', 'complete']).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 })
 
@@ -1474,6 +1488,7 @@ export const ListPatternsResponse = zod.object({
 })),
   "imageUrl": zod.string().nullish(),
   "hasEmbedding": zod.boolean(),
+  "recognitionRefreshStatus": zod.enum(['pending', 'complete']).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 })),
   "total": zod.number(),
@@ -1524,6 +1539,7 @@ export const CreatePatternResponse = zod.object({
 })),
   "imageUrl": zod.string().nullish(),
   "hasEmbedding": zod.boolean(),
+  "recognitionRefreshStatus": zod.enum(['pending', 'complete']).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 })
 
@@ -1561,6 +1577,7 @@ export const GetPatternResponse = zod.object({
 })),
   "imageUrl": zod.string().nullish(),
   "hasEmbedding": zod.boolean(),
+  "recognitionRefreshStatus": zod.enum(['pending', 'complete']).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 })
 
@@ -1617,6 +1634,7 @@ export const UpdatePatternResponse = zod.object({
 })),
   "imageUrl": zod.string().nullish(),
   "hasEmbedding": zod.boolean(),
+  "recognitionRefreshStatus": zod.enum(['pending', 'complete']).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 })
 
@@ -1674,6 +1692,7 @@ export const ReanalyzePatternResponse = zod.object({
 })),
   "imageUrl": zod.string().nullish(),
   "hasEmbedding": zod.boolean(),
+  "recognitionRefreshStatus": zod.enum(['pending', 'complete']).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 })
 
@@ -1711,6 +1730,7 @@ export const EnrichPatternResponse = zod.object({
 })),
   "imageUrl": zod.string().nullish(),
   "hasEmbedding": zod.boolean(),
+  "recognitionRefreshStatus": zod.enum(['pending', 'complete']).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 })
 
@@ -1857,6 +1877,7 @@ export const SetPatternImageDefaultResponse = zod.object({
 })),
   "imageUrl": zod.string().nullish(),
   "hasEmbedding": zod.boolean(),
+  "recognitionRefreshStatus": zod.enum(['pending', 'complete']).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 })
 
@@ -1916,6 +1937,7 @@ export const ListQuiltsResponse = zod.object({
   "imageUrl": zod.string(),
   "dominantColors": zod.array(zod.string())
 })),
+  "recognitionRefreshStatus": zod.union([zod.literal('pending'),zod.literal('complete'),zod.literal(null)]).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 })),
   "total": zod.number(),
@@ -1978,6 +2000,7 @@ export const CreateQuiltResponse = zod.object({
   "imageUrl": zod.string(),
   "dominantColors": zod.array(zod.string())
 })),
+  "recognitionRefreshStatus": zod.union([zod.literal('pending'),zod.literal('complete'),zod.literal(null)]).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 })
 
@@ -2027,6 +2050,7 @@ export const GetQuiltResponse = zod.object({
   "imageUrl": zod.string(),
   "dominantColors": zod.array(zod.string())
 })),
+  "recognitionRefreshStatus": zod.union([zod.literal('pending'),zod.literal('complete'),zod.literal(null)]).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 })
 
@@ -2099,6 +2123,7 @@ export const UpdateQuiltResponse = zod.object({
   "imageUrl": zod.string(),
   "dominantColors": zod.array(zod.string())
 })),
+  "recognitionRefreshStatus": zod.union([zod.literal('pending'),zod.literal('complete'),zod.literal(null)]).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 })
 
@@ -2168,6 +2193,7 @@ export const ReanalyzeQuiltResponse = zod.object({
   "imageUrl": zod.string(),
   "dominantColors": zod.array(zod.string())
 })),
+  "recognitionRefreshStatus": zod.union([zod.literal('pending'),zod.literal('complete'),zod.literal(null)]).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 })
 
@@ -2312,6 +2338,7 @@ export const SetQuiltImageDefaultResponse = zod.object({
   "imageUrl": zod.string(),
   "dominantColors": zod.array(zod.string())
 })),
+  "recognitionRefreshStatus": zod.union([zod.literal('pending'),zod.literal('complete'),zod.literal(null)]).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 })
 
@@ -2363,6 +2390,7 @@ export const CompareFabricResponse = zod.object({
   "imageUrl": zod.string(),
   "tileImageUrl": zod.string().describe('Flat-field-corrected, tileable crop of the fabric photo. Use this (not imageUrl) for SVG pattern-fill rendering — it removes the source photo\'s natural lighting\/vignette falloff so tiled squares don\'t show a \"puffy\" embossed grid.'),
   "hasEmbedding": zod.boolean(),
+  "recognitionRefreshStatus": zod.enum(['pending', 'complete']).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 }),
   "similarity": zod.number(),
@@ -2418,6 +2446,7 @@ export const PaletteMatchFabricsResponse = zod.object({
   "imageUrl": zod.string(),
   "tileImageUrl": zod.string().describe('Flat-field-corrected, tileable crop of the fabric photo. Use this (not imageUrl) for SVG pattern-fill rendering — it removes the source photo\'s natural lighting\/vignette falloff so tiled squares don\'t show a \"puffy\" embossed grid.'),
   "hasEmbedding": zod.boolean(),
+  "recognitionRefreshStatus": zod.enum(['pending', 'complete']).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 }).optional(),
   "score": zod.number(),
@@ -2462,6 +2491,7 @@ export const PaletteMatchPatternsResponse = zod.object({
 })),
   "imageUrl": zod.string().nullish(),
   "hasEmbedding": zod.boolean(),
+  "recognitionRefreshStatus": zod.enum(['pending', 'complete']).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 }).optional(),
   "score": zod.number(),
@@ -2518,6 +2548,7 @@ export const PaletteMatchQuiltsResponse = zod.object({
   "imageUrl": zod.string(),
   "dominantColors": zod.array(zod.string())
 })),
+  "recognitionRefreshStatus": zod.union([zod.literal('pending'),zod.literal('complete'),zod.literal(null)]).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 }).optional(),
   "score": zod.number(),
@@ -4009,6 +4040,7 @@ export const ApplyFabricIdentityResearchResponse = zod.object({
   "imageUrl": zod.string(),
   "tileImageUrl": zod.string().describe('Flat-field-corrected, tileable crop of the fabric photo. Use this (not imageUrl) for SVG pattern-fill rendering — it removes the source photo\'s natural lighting\/vignette falloff so tiled squares don\'t show a \"puffy\" embossed grid.'),
   "hasEmbedding": zod.boolean(),
+  "recognitionRefreshStatus": zod.enum(['pending', 'complete']).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 })
 
@@ -5409,7 +5441,6 @@ export const ListOrnamentsResponse = zod.object({
   "lockedFields": zod.array(zod.string()),
   "notes": zod.string().nullish(),
   "dimensions": zod.string().nullish(),
-  "condition": zod.string().nullish(),
   "origin": zod.string().nullish(),
   "aiDescription": zod.string().nullish(),
   "description": zod.string().nullish().describe('Verbatim text transcribed from the printed description on the back of the ornament\'s box (distinct from aiDescription, which is AI-authored). When no legible box-back text was found, the AI writes a stand-in instead — see descriptionGenerated.'),
@@ -5460,6 +5491,8 @@ export const ListOrnamentsResponse = zod.object({
   "brandCount": zod.number(),
   "minYear": zod.number().nullish(),
   "maxYear": zod.number().nullish(),
+  "estimatedValueTotal": zod.number().describe('Collection estimate: each item\'s available current-market signals (book value, eBay prices, and AI appraisal) are averaged; when none are saved, retail\/MSRP is used as the fallback. Each estimate is multiplied by quantity.'),
+  "itemsWithEstimatedValue": zod.number().describe('How many matching items had at least one valid market or retail value.'),
   "aiAppraisalLowTotal": zod.number().describe('Sum of each matching item\'s parsed AI-appraisal low estimate × quantity.'),
   "aiAppraisalHighTotal": zod.number().describe('Sum of each matching item\'s parsed AI-appraisal high estimate × quantity.'),
   "itemsWithAiAppraisal": zod.number().describe('How many matching items contributed a parseable AI appraisal range.'),
@@ -5488,7 +5521,6 @@ export const CreateOrnamentResponse = zod.object({
   "lockedFields": zod.array(zod.string()),
   "notes": zod.string().nullish(),
   "dimensions": zod.string().nullish(),
-  "condition": zod.string().nullish(),
   "origin": zod.string().nullish(),
   "aiDescription": zod.string().nullish(),
   "description": zod.string().nullish().describe('Verbatim text transcribed from the printed description on the back of the ornament\'s box (distinct from aiDescription, which is AI-authored). When no legible box-back text was found, the AI writes a stand-in instead — see descriptionGenerated.'),
@@ -5529,12 +5561,14 @@ export const CreateOrnamentResponse = zod.object({
 
 
 /**
- * @summary List ornaments missing an embedding or core attributes
+ * @summary List ornaments missing an embedding, series/collection, or year
  */
 export const GetOrnamentStragglersResponse = zod.object({
   "items": zod.array(zod.object({
   "id": zod.number(),
-  "reasons": zod.array(zod.enum(['embedding', 'attributes']))
+  "reasons": zod.array(zod.enum(['embedding', 'seriesOrCollection', 'year'])),
+  "status": zod.enum(['pending_refresh']).optional(),
+  "recommendation": zod.string().optional()
 }))
 })
 
@@ -5551,12 +5585,14 @@ export const BulkReanalyzeOrnamentsBody = zod.object({
 })
 
 export const BulkReanalyzeOrnamentsResponse = zod.object({
-  "total": zod.number(),
   "succeeded": zod.array(zod.number()),
   "failed": zod.array(zod.number()),
-  "errors": zod.array(zod.object({
+  "outcomes": zod.array(zod.object({
   "id": zod.number(),
-  "error": zod.string()
+  "status": zod.enum(['refreshed', 'needs_evidence', 'failed']),
+  "unresolvedFields": zod.array(zod.enum(['embedding', 'seriesOrCollection', 'year'])),
+  "recommendation": zod.string().nullable(),
+  "error": zod.string().optional()
 }))
 })
 
@@ -5582,7 +5618,6 @@ export const GetOrnamentResponse = zod.object({
   "lockedFields": zod.array(zod.string()),
   "notes": zod.string().nullish(),
   "dimensions": zod.string().nullish(),
-  "condition": zod.string().nullish(),
   "origin": zod.string().nullish(),
   "aiDescription": zod.string().nullish(),
   "description": zod.string().nullish().describe('Verbatim text transcribed from the printed description on the back of the ornament\'s box (distinct from aiDescription, which is AI-authored). When no legible box-back text was found, the AI writes a stand-in instead — see descriptionGenerated.'),
@@ -5645,7 +5680,6 @@ export const UpdateOrnamentBody = zod.object({
   "aiDescription": zod.string().nullish(),
   "description": zod.string().nullish(),
   "dimensions": zod.string().nullish(),
-  "condition": zod.string().nullish(),
   "origin": zod.string().nullish(),
   "quantity": zod.number().min(1).optional(),
   "lockedFields": zod.array(zod.string()).optional(),
@@ -5671,7 +5705,6 @@ export const UpdateOrnamentResponse = zod.object({
   "lockedFields": zod.array(zod.string()),
   "notes": zod.string().nullish(),
   "dimensions": zod.string().nullish(),
-  "condition": zod.string().nullish(),
   "origin": zod.string().nullish(),
   "aiDescription": zod.string().nullish(),
   "description": zod.string().nullish().describe('Verbatim text transcribed from the printed description on the back of the ornament\'s box (distinct from aiDescription, which is AI-authored). When no legible box-back text was found, the AI writes a stand-in instead — see descriptionGenerated.'),
@@ -5742,7 +5775,6 @@ export const ReanalyzeOrnamentResponse = zod.object({
   "lockedFields": zod.array(zod.string()),
   "notes": zod.string().nullish(),
   "dimensions": zod.string().nullish(),
-  "condition": zod.string().nullish(),
   "origin": zod.string().nullish(),
   "aiDescription": zod.string().nullish(),
   "description": zod.string().nullish().describe('Verbatim text transcribed from the printed description on the back of the ornament\'s box (distinct from aiDescription, which is AI-authored). When no legible box-back text was found, the AI writes a stand-in instead — see descriptionGenerated.'),
@@ -5783,6 +5815,70 @@ export const ReanalyzeOrnamentResponse = zod.object({
 
 
 /**
+ * @summary Refresh only missing, unlocked ornament identity evidence from its photos
+ */
+export const RefreshOrnamentIdentityParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+
+
+export const RefreshOrnamentIdentityResponse = zod.object({
+  "item": zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "brand": zod.string(),
+  "seriesOrCollection": zod.string().nullish(),
+  "year": zod.number().nullish().describe('Release\/edition year printed on the ornament'),
+  "barcodeValue": zod.string().nullish(),
+  "quantity": zod.number().min(1),
+  "lockedFields": zod.array(zod.string()),
+  "notes": zod.string().nullish(),
+  "dimensions": zod.string().nullish(),
+  "origin": zod.string().nullish(),
+  "aiDescription": zod.string().nullish(),
+  "description": zod.string().nullish().describe('Verbatim text transcribed from the printed description on the back of the ornament\'s box (distinct from aiDescription, which is AI-authored). When no legible box-back text was found, the AI writes a stand-in instead — see descriptionGenerated.'),
+  "descriptionGenerated": zod.boolean().optional().describe('True when description above is an AI-generated stand-in because no legible box-back text was found (false for manual, verbatim, or catalog text).'),
+  "acquiredAt": zod.string().nullish(),
+  "dominantColors": zod.array(zod.string()).optional(),
+  "motifs": zod.array(zod.string()).optional(),
+  "bookValue": zod.number().nullish(),
+  "bookValueSource": zod.string().nullish().describe('Which site the value came from: hallmarkornaments.com or hookedonhallmark.com'),
+  "bookValueUpdatedAt": zod.coerce.date().nullish(),
+  "retailValueUsd": zod.number().nullish().describe('Original retail\/MSRP value (distinct from bookValue, the collector\/secondary-market value)'),
+  "retailValueProductUrl": zod.string().nullish().describe('Link to the ornament\'s official product page, when one was found'),
+  "retailValueSource": zod.string().nullish().describe('Domain the retail value was attributed to (e.g. hallmark.com), or \"web search\"'),
+  "retailValueUpdatedAt": zod.coerce.date().nullish(),
+  "ebayPriceMinUsd": zod.number().nullish().describe('Current active eBay listing minimum price USD (for-sale)'),
+  "ebayPriceMaxUsd": zod.number().nullish().describe('Current active eBay listing maximum price USD (for-sale)'),
+  "ebayLastSoldPriceUsd": zod.number().nullish().describe('Most recent sold price on eBay (past 2 years)'),
+  "ebayLastSoldDate": zod.coerce.date().nullish(),
+  "ebayPriceCachedAt": zod.coerce.date().nullish().describe('When the eBay data was last refreshed'),
+  "aiAppraisal": zod.string().nullish().describe('AI-generated collector appraisal text including estimated value range'),
+  "aiAppraisalUpdatedAt": zod.coerce.date().nullish(),
+  "categories": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "bgColor": zod.string().nullish(),
+  "textColor": zod.string().nullish(),
+  "count": zod.number().optional().describe('Number of ornaments assigned this category (only present on the category-list endpoint)')
+})),
+  "images": zod.array(zod.object({
+  "id": zod.number(),
+  "url": zod.string(),
+  "label": zod.string().nullish(),
+  "position": zod.number()
+})),
+  "imageUrl": zod.string(),
+  "createdAt": zod.coerce.date()
+}),
+  "unresolvedFields": zod.array(zod.enum(['embedding', 'seriesOrCollection', 'year'])),
+  "recommendation": zod.string().nullable()
+})
+
+
+/**
  * @summary Promote a supplemental image to primary and re-analyse
  */
 export const SetOrnamentPrimaryImageParams = zod.object({
@@ -5807,7 +5903,6 @@ export const SetOrnamentPrimaryImageResponse = zod.object({
   "lockedFields": zod.array(zod.string()),
   "notes": zod.string().nullish(),
   "dimensions": zod.string().nullish(),
-  "condition": zod.string().nullish(),
   "origin": zod.string().nullish(),
   "aiDescription": zod.string().nullish(),
   "description": zod.string().nullish().describe('Verbatim text transcribed from the printed description on the back of the ornament\'s box (distinct from aiDescription, which is AI-authored). When no legible box-back text was found, the AI writes a stand-in instead — see descriptionGenerated.'),
@@ -5895,43 +5990,7 @@ export const DeleteOrnamentImageResponse = zod.void()
 
 
 /**
- * @summary Look up a barcode via UPCitemdb and return candidate fields (does not save)
- */
-export const LookupOrnamentBarcodeParams = zod.object({
-  "id": zod.coerce.number()
-})
-
-export const lookupOrnamentBarcodeBodyBarcodeMin = 4;
-export const lookupOrnamentBarcodeBodyBarcodeMax = 32;
-
-
-
-export const LookupOrnamentBarcodeBody = zod.object({
-  "barcode": zod.string().min(lookupOrnamentBarcodeBodyBarcodeMin).max(lookupOrnamentBarcodeBodyBarcodeMax)
-})
-
-export const LookupOrnamentBarcodeResponse = zod.object({
-  "found": zod.boolean(),
-  "name": zod.string().nullish(),
-  "brand": zod.string().nullish(),
-  "seriesOrCollection": zod.string().nullish(),
-  "year": zod.number().nullish(),
-  "description": zod.string().nullish(),
-  "imageUrl": zod.string().nullish(),
-  "hallmarkSku": zod.string().nullish(),
-  "hallmarkArtist": zod.string().nullish(),
-  "hallmarkSeriesName": zod.string().nullish(),
-  "hallmarkSequenceNumber": zod.number().nullish(),
-  "hallmarkRetailPriceUsd": zod.number().nullish(),
-  "hallmarkCollectorPriceUsd": zod.number().nullish(),
-  "hallmarkInStock": zod.boolean().nullish(),
-  "hallmarkImages": zod.array(zod.string()).nullish(),
-  "hallmarkProductUrl": zod.string().nullish()
-})
-
-
-/**
- * @summary Look up a barcode via UPCitemdb for the add-item form (does not save)
+ * @summary Identify an ornament barcode using live eBay data with an AI fallback (does not save)
  */
 export const lookupBarcodeBodyBarcodeMin = 4;
 export const lookupBarcodeBodyBarcodeMax = 32;
@@ -5949,38 +6008,7 @@ export const LookupBarcodeResponse = zod.object({
   "seriesOrCollection": zod.string().nullish(),
   "year": zod.number().nullish(),
   "description": zod.string().nullish(),
-  "imageUrl": zod.string().nullish(),
-  "hallmarkSku": zod.string().nullish(),
-  "hallmarkArtist": zod.string().nullish(),
-  "hallmarkSeriesName": zod.string().nullish(),
-  "hallmarkSequenceNumber": zod.number().nullish(),
-  "hallmarkRetailPriceUsd": zod.number().nullish(),
-  "hallmarkCollectorPriceUsd": zod.number().nullish(),
-  "hallmarkInStock": zod.boolean().nullish(),
-  "hallmarkImages": zod.array(zod.string()).nullish(),
-  "hallmarkProductUrl": zod.string().nullish()
-})
-
-
-/**
- * @summary Submit a correction when a barcode lookup returned wrong information
- */
-export const reportBarcodeCorrectionBodyBarcodeMax = 30;
-
-
-
-export const ReportBarcodeCorrectionBody = zod.object({
-  "barcode": zod.string().min(1).max(reportBarcodeCorrectionBodyBarcodeMax),
-  "wrongName": zod.string().nullish(),
-  "wrongBrand": zod.string().nullish(),
-  "correctedName": zod.string().nullish(),
-  "correctedBrand": zod.string().nullish(),
-  "correctedSeriesOrCollection": zod.string().nullish(),
-  "correctedYear": zod.number().nullish()
-})
-
-export const ReportBarcodeCorrectionResponse = zod.object({
-  "success": zod.boolean()
+  "imageUrl": zod.string().nullish()
 })
 
 
@@ -6017,7 +6045,6 @@ export const RefreshAllOrnamentDataResponse = zod.object({
   "lockedFields": zod.array(zod.string()),
   "notes": zod.string().nullish(),
   "dimensions": zod.string().nullish(),
-  "condition": zod.string().nullish(),
   "origin": zod.string().nullish(),
   "aiDescription": zod.string().nullish(),
   "description": zod.string().nullish().describe('Verbatim text transcribed from the printed description on the back of the ornament\'s box (distinct from aiDescription, which is AI-authored). When no legible box-back text was found, the AI writes a stand-in instead — see descriptionGenerated.'),
@@ -6078,7 +6105,6 @@ export const RunOrnamentAiAppraisalResponse = zod.object({
   "lockedFields": zod.array(zod.string()),
   "notes": zod.string().nullish(),
   "dimensions": zod.string().nullish(),
-  "condition": zod.string().nullish(),
   "origin": zod.string().nullish(),
   "aiDescription": zod.string().nullish(),
   "description": zod.string().nullish().describe('Verbatim text transcribed from the printed description on the back of the ornament\'s box (distinct from aiDescription, which is AI-authored). When no legible box-back text was found, the AI writes a stand-in instead — see descriptionGenerated.'),
@@ -6175,7 +6201,6 @@ export const LookupOrnamentBookValueResponse = zod.object({
   "lockedFields": zod.array(zod.string()),
   "notes": zod.string().nullish(),
   "dimensions": zod.string().nullish(),
-  "condition": zod.string().nullish(),
   "origin": zod.string().nullish(),
   "aiDescription": zod.string().nullish(),
   "description": zod.string().nullish().describe('Verbatim text transcribed from the printed description on the back of the ornament\'s box (distinct from aiDescription, which is AI-authored). When no legible box-back text was found, the AI writes a stand-in instead — see descriptionGenerated.'),
@@ -6236,7 +6261,6 @@ export const LookupOrnamentRetailValueResponse = zod.object({
   "lockedFields": zod.array(zod.string()),
   "notes": zod.string().nullish(),
   "dimensions": zod.string().nullish(),
-  "condition": zod.string().nullish(),
   "origin": zod.string().nullish(),
   "aiDescription": zod.string().nullish(),
   "description": zod.string().nullish().describe('Verbatim text transcribed from the printed description on the back of the ornament\'s box (distinct from aiDescription, which is AI-authored). When no legible box-back text was found, the AI writes a stand-in instead — see descriptionGenerated.'),
@@ -6292,8 +6316,9 @@ export const ListOrnamentSeriesResponse = zod.array(ListOrnamentSeriesResponseIt
 export const GetOrnamentStatsResponse = zod.object({
   "totalItems": zod.number(),
   "totalQuantity": zod.number(),
-  "totalBookValue": zod.number(),
-  "itemsWithBookValue": zod.number(),
+  "totalEstimatedValue": zod.number().describe('Collection estimate: average each item\'s saved current-market signals (book value, eBay price, AI appraisal); use retail\/MSRP only when no market signal exists. Includes quantity.'),
+  "itemsWithEstimatedValue": zod.number().describe('Number of unique ornament designs with at least one valid market or retail value.'),
+  "valuationPolicy": zod.enum(['market_signals_then_retail_fallback']).describe('The policy used for the total and every series breakdown.'),
   "bySeriesOrCollection": zod.array(zod.object({
   "seriesOrCollection": zod.string(),
   "count": zod.number(),
@@ -6447,6 +6472,23 @@ export const CreateAndBackfillOrnamentCategoriesResponse = zod.object({
 })),
   "createdCount": zod.number().describe('Number of new categories actually created (existing-name matches are skipped)'),
   "assignmentsCreated": zod.number().describe('Number of new item-category assignments made during backfill')
+})
+
+
+/**
+ * @summary Apply matching existing categories to every active ornament without creating or removing categories
+ */
+export const ApplyExistingOrnamentCategoriesResponse = zod.object({
+  "total": zod.number(),
+  "matched": zod.number(),
+  "assignmentsCreated": zod.number(),
+  "failed": zod.number(),
+  "outcomes": zod.array(zod.object({
+  "entityId": zod.number(),
+  "matchedCategoryIds": zod.array(zod.number()),
+  "assignmentsCreated": zod.number(),
+  "error": zod.string().optional()
+}))
 })
 
 
@@ -7444,3 +7486,390 @@ export const UpdateStateResponse = zod.object({
   "dismissedAt": zod.coerce.date().nullish(),
   "snoozedUntil": zod.coerce.date().nullish()
 })
+
+
+/**
+ * @summary List magnets (paginated)
+ */
+export const listMagnetsQueryUncategorizedDefault = false;
+export const listMagnetsQuerySortDefault = `newest`;
+export const listMagnetsQueryPageDefault = 1;
+
+export const listMagnetsQueryPageSizeDefault = 60;
+export const listMagnetsQueryPageSizeMax = 200;
+
+
+
+export const ListMagnetsQueryParams = zod.object({
+  "q": zod.coerce.string().optional(),
+  "categoryId": zod.coerce.number().optional(),
+  "categoryIds": zod.array(zod.coerce.number()).optional(),
+  "uncategorized": zod.coerce.boolean().default(listMagnetsQueryUncategorizedDefault),
+  "sort": zod.enum(['newest', 'oldest', 'name-asc', 'name-desc']).default(listMagnetsQuerySortDefault),
+  "page": zod.coerce.number().min(1).default(listMagnetsQueryPageDefault),
+  "pageSize": zod.coerce.number().min(1).max(listMagnetsQueryPageSizeMax).default(listMagnetsQueryPageSizeDefault)
+})
+
+export const ListMagnetsResponse = zod.object({
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "notes": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "lockedFields": zod.array(zod.string()),
+  "categories": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "bgColor": zod.string().nullish(),
+  "textColor": zod.string().nullish(),
+  "count": zod.number().optional()
+})),
+  "images": zod.array(zod.object({
+  "id": zod.number(),
+  "url": zod.string(),
+  "label": zod.string().nullish(),
+  "position": zod.number()
+})),
+  "imageUrl": zod.string().nullable(),
+  "primaryImageId": zod.number().nullable(),
+  "createdAt": zod.string()
+})),
+  "total": zod.number(),
+  "page": zod.number(),
+  "pageSize": zod.number(),
+  "totalPages": zod.number()
+})
+
+
+/**
+ * @summary Create a magnet
+ */
+
+
+
+export const CreateMagnetBody = zod.object({
+  "name": zod.string().min(1),
+  "notes": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "categoryIds": zod.array(zod.number()).optional()
+})
+
+export const CreateMagnetResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "notes": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "lockedFields": zod.array(zod.string()),
+  "categories": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "bgColor": zod.string().nullish(),
+  "textColor": zod.string().nullish(),
+  "count": zod.number().optional()
+})),
+  "images": zod.array(zod.object({
+  "id": zod.number(),
+  "url": zod.string(),
+  "label": zod.string().nullish(),
+  "position": zod.number()
+})),
+  "imageUrl": zod.string().nullable(),
+  "primaryImageId": zod.number().nullable(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Get a magnet
+ */
+export const GetMagnetParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetMagnetResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "notes": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "lockedFields": zod.array(zod.string()),
+  "categories": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "bgColor": zod.string().nullish(),
+  "textColor": zod.string().nullish(),
+  "count": zod.number().optional()
+})),
+  "images": zod.array(zod.object({
+  "id": zod.number(),
+  "url": zod.string(),
+  "label": zod.string().nullish(),
+  "position": zod.number()
+})),
+  "imageUrl": zod.string().nullable(),
+  "primaryImageId": zod.number().nullable(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Update a magnet
+ */
+export const UpdateMagnetParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+
+
+export const UpdateMagnetBody = zod.object({
+  "name": zod.string().min(1).optional(),
+  "notes": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "lockedFields": zod.array(zod.string()).optional(),
+  "categoryIds": zod.array(zod.number()).optional()
+})
+
+export const UpdateMagnetResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "notes": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "lockedFields": zod.array(zod.string()),
+  "categories": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "bgColor": zod.string().nullish(),
+  "textColor": zod.string().nullish(),
+  "count": zod.number().optional()
+})),
+  "images": zod.array(zod.object({
+  "id": zod.number(),
+  "url": zod.string(),
+  "label": zod.string().nullish(),
+  "position": zod.number()
+})),
+  "imageUrl": zod.string().nullable(),
+  "primaryImageId": zod.number().nullable(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Soft-delete a magnet
+ */
+export const DeleteMagnetParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteMagnetResponse = zod.void()
+
+
+/**
+ * @summary Re-analyse a magnet with AI vision
+ */
+export const ReanalyzeMagnetParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ReanalyzeMagnetResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "notes": zod.string().nullish(),
+  "description": zod.string().nullish(),
+  "lockedFields": zod.array(zod.string()),
+  "categories": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "bgColor": zod.string().nullish(),
+  "textColor": zod.string().nullish(),
+  "count": zod.number().optional()
+})),
+  "images": zod.array(zod.object({
+  "id": zod.number(),
+  "url": zod.string(),
+  "label": zod.string().nullish(),
+  "position": zod.number()
+})),
+  "imageUrl": zod.string().nullable(),
+  "primaryImageId": zod.number().nullable(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Upload a photo for a magnet
+ */
+export const AddMagnetImageParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const AddMagnetImageBody = zod.object({
+  "image": zod.instanceof(File),
+  "label": zod.string().optional()
+})
+
+export const AddMagnetImageResponse = zod.object({
+  "id": zod.number(),
+  "url": zod.string(),
+  "label": zod.string().nullish(),
+  "position": zod.number()
+})
+
+
+/**
+ * @summary Update a supplemental image's label
+ */
+export const UpdateMagnetImageParams = zod.object({
+  "id": zod.coerce.number(),
+  "imageId": zod.coerce.number()
+})
+
+export const UpdateMagnetImageBody = zod.object({
+  "label": zod.string().nullish()
+})
+
+export const UpdateMagnetImageResponse = zod.object({
+  "id": zod.number(),
+  "url": zod.string(),
+  "label": zod.string().nullish(),
+  "position": zod.number()
+})
+
+
+/**
+ * @summary Delete a photo
+ */
+export const DeleteMagnetImageParams = zod.object({
+  "id": zod.coerce.number(),
+  "imageId": zod.coerce.number()
+})
+
+export const DeleteMagnetImageResponse = zod.void()
+
+
+/**
+ * @summary Promote an image to primary (gallery cover)
+ */
+export const SetMagnetPrimaryImageParams = zod.object({
+  "id": zod.coerce.number(),
+  "imageId": zod.coerce.number()
+})
+
+export const SetMagnetPrimaryImageResponse = zod.object({
+  "id": zod.number(),
+  "imagePath": zod.string().nullable()
+})
+
+
+/**
+ * @summary List categories
+ */
+export const ListMagnetCategoriesResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "bgColor": zod.string().nullish(),
+  "textColor": zod.string().nullish(),
+  "count": zod.number().optional()
+})
+export const ListMagnetCategoriesResponse = zod.array(ListMagnetCategoriesResponseItem)
+
+
+/**
+ * @summary Create a category
+ */
+export const createMagnetCategoryBodyNameMax = 50;
+
+
+
+export const CreateMagnetCategoryBody = zod.object({
+  "name": zod.string().min(1).max(createMagnetCategoryBodyNameMax),
+  "bgColor": zod.string().nullish(),
+  "textColor": zod.string().nullish()
+})
+
+export const CreateMagnetCategoryResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "bgColor": zod.string().nullish(),
+  "textColor": zod.string().nullish(),
+  "count": zod.number().optional()
+})
+
+
+/**
+ * @summary Delete all categories with no items assigned
+ */
+export const DeleteMagnetUnusedCategoriesResponse = zod.object({
+  "deleted": zod.number()
+})
+
+
+/**
+ * @summary Rename a category
+ */
+export const RenameMagnetCategoryParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const renameMagnetCategoryBodyNameMax = 50;
+
+
+
+export const RenameMagnetCategoryBody = zod.object({
+  "name": zod.string().min(1).max(renameMagnetCategoryBodyNameMax),
+  "bgColor": zod.string().nullish(),
+  "textColor": zod.string().nullish()
+})
+
+export const RenameMagnetCategoryResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "bgColor": zod.string().nullish(),
+  "textColor": zod.string().nullish(),
+  "count": zod.number().optional()
+})
+
+
+/**
+ * @summary Delete a category
+ */
+export const DeleteMagnetCategoryParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteMagnetCategoryResponse = zod.void()
+
+
+/**
+ * @summary Update a category's colours
+ */
+export const UpdateMagnetCategoryColorsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateMagnetCategoryColorsBody = zod.object({
+  "bgColor": zod.string().nullish(),
+  "textColor": zod.string().nullish()
+})
+
+export const UpdateMagnetCategoryColorsResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "bgColor": zod.string().nullish(),
+  "textColor": zod.string().nullish(),
+  "count": zod.number().optional()
+})
+
+
+/**
+ * @summary Merge a category into another (reassigns items, deletes source)
+ */
+export const MergeMagnetCategoryParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const MergeMagnetCategoryBody = zod.object({
+  "intoId": zod.number()
+})
+
+export const MergeMagnetCategoryResponse = zod.void()

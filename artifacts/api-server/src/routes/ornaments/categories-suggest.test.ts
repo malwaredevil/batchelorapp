@@ -205,9 +205,10 @@ describe("POST /ornaments/categories/create-and-backfill", () => {
         motifs: [],
       },
     ]);
-    // 3rd select: existing item→category assignments (item 101 already
-    // assigned to category 1 — must NOT be re-inserted).
-    selectQueue.push([{ itemId: 101, categoryId: 1 }]);
+    // The portable additive operation reads assignments per item. Item 100
+    // has none; item 101 already has category 1 and must not be duplicated.
+    selectQueue.push([]);
+    selectQueue.push([{ categoryId: 1 }]);
 
     // matchCategoryIds is called once per item; drive it by item id via the
     // call-order (item 100 first, then 101).
@@ -218,14 +219,23 @@ describe("POST /ornaments/categories/create-and-backfill", () => {
     // insert(joinTable).values(...).onConflictDoNothing().returning() → 1 new assignment
     insertReturnQueue.push([{ itemId: 100 }]);
 
+    // The list route repairs only incomplete legacy rows before returning
+    // counts. This empty result means no repair query writes are needed.
+    selectQueue.push([]);
     // Final select: ops.listWithCounts() result returned in the response body.
     selectQueue.push([
-      { id: 1, name: "Star Wars", bgColor: null, textColor: null, count: 1 },
+      {
+        id: 1,
+        name: "Star Wars",
+        bgColor: "#0f172a",
+        textColor: "#ffffff",
+        count: 1,
+      },
       {
         id: 10,
         name: "Frosty Friends",
-        bgColor: null,
-        textColor: null,
+        bgColor: "#4f46e5",
+        textColor: "#ffffff",
         count: 1,
       },
     ]);
@@ -245,10 +255,11 @@ describe("POST /ornaments/categories/create-and-backfill", () => {
   });
 
   it("skips insert entirely when every proposed name is blank/whitespace", async () => {
-    // No categories/items/assignments exist yet.
+    // No categories/items/assignments exist yet. The final two selects are
+    // the missing-color check and category-count result.
     selectQueue.push([]); // allCats
     selectQueue.push([]); // items
-    selectQueue.push([]); // existing assignments
+    selectQueue.push([]); // missing legacy colors
     selectQueue.push([]); // final listWithCounts
 
     const router = await getRouter();

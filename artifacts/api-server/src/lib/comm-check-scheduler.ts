@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { eq } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import { db, pool, appUsers } from "@workspace/db";
 import { sendSms } from "./sms";
 import { openDmChannel, postSlackMessage, slackConfigured } from "./slack";
@@ -35,18 +36,11 @@ import {
 // ── Timezone / date / time helpers ──────────────────────────────────────────
 
 const DEFAULT_TIMEZONE = "Europe/Berlin";
-const TIMEZONE_CACHE_MS = 5 * 60 * 1000;
-
-let _tzCache: { value: string; expiresAt: number } | null = null;
 
 // Resolves the timezone the comm-check schedule should run in: the owner
 // account's `timezone` field if set and valid, otherwise DEFAULT_TIMEZONE.
-// Cached briefly since this is called on every inbound webhook message via
-// markCommCheckVerified, not just the 5-minute scheduler tick.
+// Read it fresh so an owner timezone change takes effect on the next poll.
 export async function getEffectiveTimezone(): Promise<string> {
-  if (_tzCache && _tzCache.expiresAt > Date.now()) {
-    return _tzCache.value;
-  }
   const [owner] = await db
     .select({ timezone: appUsers.timezone })
     .from(appUsers)
@@ -56,7 +50,6 @@ export async function getEffectiveTimezone(): Promise<string> {
     owner?.timezone && isValidIanaTimeZone(owner.timezone)
       ? owner.timezone
       : DEFAULT_TIMEZONE;
-  _tzCache = { value: tz, expiresAt: Date.now() + TIMEZONE_CACHE_MS };
   return tz;
 }
 
@@ -77,7 +70,7 @@ function getMinuteOfDayInTz(tz: string, now: Date = new Date()): number {
     timeZone: tz,
     hour: "numeric",
     minute: "2-digit",
-    hour12: false,
+    hourCycle: "h23",
   }).formatToParts(now);
   const hour = parseInt(parts.find((p) => p.type === "hour")?.value ?? "0", 10);
   const minute = parseInt(
@@ -123,6 +116,41 @@ function parseDayList(csv: string): Set<string> {
       .map((p) => p.trim().toLowerCase())
       .filter((p) => p.length > 0),
   );
+}
+
+export interface CommCheckSchedule {
+  dailyTime: string;
+  dailyDays: string;
+  phoneTime: string;
+  phoneDays: string;
+}
+
+export interface CommCheckScheduleDecision {
+  date: string;
+  weekday: DayListCode;
+  minuteOfDay: number;
+  dailyDue: boolean;
+  phoneDue: boolean;
+}
+
+export function getCommCheckScheduleDecision(
+  now: Date,
+  timezone: string,
+  schedule: CommCheckSchedule,
+): CommCheckScheduleDecision {
+  const weekday = getWeekdayCodeInTz(timezone, now);
+  const minuteOfDay = getMinuteOfDayInTz(timezone, now);
+  return {
+    date: getDateStringInTz(timezone, now),
+    weekday,
+    minuteOfDay,
+    dailyDue:
+      parseDayList(schedule.dailyDays).has(weekday) &&
+      minuteOfDay >= parseTimeToMinutes(schedule.dailyTime),
+    phoneDue:
+      parseDayList(schedule.phoneDays).has(weekday) &&
+      minuteOfDay >= parseTimeToMinutes(schedule.phoneTime),
+  };
 }
 
 // Resolves today's date string using the effective (owner) timezone.
@@ -260,11 +288,9 @@ async function sendCommCheckPhone(
   });
 }
 
-// ── Core run function (email / SMS / Slack — fires at 00:01) ─────────────────
-// Attempts to atomically INSERT a new row for today (Stuttgart date).
-// If the row already exists the INSERT is a no-op and nothing is sent.
-// If newly inserted, sends all three channels independently and records each
-// channel's outcome.
+// ── Core run function (email / SMS / Slack) ──────────────────────────────────
+// The date row is only a ledger. Each channel claims and records its own state,
+// so a phone attempt or successful sibling channel cannot consume the day.
 
 export interface CommCheckResult {
   alreadyRan: boolean;
@@ -274,137 +300,144 @@ export interface CommCheckResult {
   slack: string;
 }
 
+type DailyChannel = "email" | "sms" | "slack";
+const STALE_CHANNEL_ATTEMPT_MINUTES = 15;
+const CHANNEL_DELIVERY_TIMEOUT_MS = 60_000;
+
+async function withDeliveryTimeout<T>(
+  operation: Promise<T>,
+  channel: string,
+): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(
+          () =>
+            reject(
+              new Error(
+                `${channel} delivery timed out after ${CHANNEL_DELIVERY_TIMEOUT_MS / 1_000} seconds`,
+              ),
+            ),
+          CHANNEL_DELIVERY_TIMEOUT_MS,
+        );
+        timeout.unref();
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
+async function runDailyChannel(
+  channel: DailyChannel,
+  today: string,
+  owner: OwnerInfo | null,
+): Promise<{ attempted: boolean; result: string }> {
+  const statusCol = `${channel}_status`;
+  const sentAtCol = `${channel}_sent_at`;
+  const errorCol = `${channel}_error`;
+  const attemptId = randomUUID();
+  const claim = await pool.query<{ check_date: string }>(
+    `UPDATE comm_checks
+     SET ${statusCol} = 'sending', ${sentAtCol} = NOW(), ${errorCol} = $2
+     WHERE check_date = $1
+       AND (
+         ${statusCol} IN ('pending', 'error')
+         OR (
+           ${statusCol} = 'sending'
+           AND (${sentAtCol} IS NULL OR ${sentAtCol} < NOW() - INTERVAL '${STALE_CHANNEL_ATTEMPT_MINUTES} minutes')
+         )
+       )
+     RETURNING check_date`,
+    [today, attemptId],
+  );
+  if ((claim.rowCount ?? 0) === 0) {
+    return { attempted: false, result: "already sent" };
+  }
+
+  try {
+    if (!owner) throw new Error("No owner account");
+    if (channel === "email") {
+      if (!owner.email) throw new Error("No email on owner account");
+      await withDeliveryTimeout(
+        sendCommCheckEmail(owner.email, today),
+        channel,
+      );
+    } else if (channel === "sms") {
+      if (!owner.phoneNumber)
+        throw new Error("No phone number on owner account");
+      await withDeliveryTimeout(
+        sendCommCheckSms(owner.phoneNumber, today),
+        channel,
+      );
+    } else {
+      if (!owner.slackUserId)
+        throw new Error("No Slack user ID on owner account");
+      await withDeliveryTimeout(
+        sendCommCheckSlack(owner.slackUserId, today),
+        channel,
+      );
+    }
+    await pool.query(
+      `UPDATE comm_checks
+       SET ${statusCol} = 'sent', ${sentAtCol} = NOW(), ${errorCol} = NULL
+       WHERE check_date = $1
+         AND ${statusCol} = 'sending'
+         AND ${errorCol} = $2`,
+      [today, attemptId],
+    );
+    logger.info({ date: today, channel }, "comm-check: channel sent");
+    return { attempted: true, result: "sent" };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await pool.query(
+      `UPDATE comm_checks
+       SET ${statusCol} = 'error', ${sentAtCol} = NULL, ${errorCol} = $2
+       WHERE check_date = $1
+         AND ${statusCol} = 'sending'
+         AND ${errorCol} = $3`,
+      [today, msg, attemptId],
+    );
+    logger.error(
+      { err, date: today, channel },
+      "comm-check: channel send failed",
+    );
+    return { attempted: true, result: `error: ${msg}` };
+  }
+}
+
 export async function runDailyCommCheck(): Promise<CommCheckResult> {
   const today = await getEffectiveDateString();
 
-  const claimResult = await pool.query<{ check_date: string }>(
+  await pool.query(
     `INSERT INTO comm_checks (check_date)
      VALUES ($1)
-     ON CONFLICT (check_date) DO NOTHING
-     RETURNING check_date`,
+     ON CONFLICT (check_date) DO NOTHING`,
     [today],
   );
-
-  if ((claimResult.rowCount ?? 0) === 0) {
-    return {
-      alreadyRan: true,
-      date: today,
-      email: "n/a",
-      sms: "n/a",
-      slack: "n/a",
-    };
-  }
 
   const owner = await getOwner();
   if (!owner) {
     logger.warn("comm-check: no owner account found, cannot send checks");
-    await pool.query(
-      `UPDATE comm_checks
-       SET email_status = 'error', email_error = 'No owner account',
-           sms_status   = 'error', sms_error   = 'No owner account',
-           slack_status = 'error', slack_error = 'No owner account'
-       WHERE check_date = $1`,
-      [today],
-    );
-    return {
-      alreadyRan: false,
-      date: today,
-      email: "error: no owner",
-      sms: "error: no owner",
-      slack: "error: no owner",
-    };
   }
 
-  const results = { email: "skipped", sms: "skipped", slack: "skipped" };
-
-  // --- Email ---
-  if (owner.email) {
-    try {
-      await sendCommCheckEmail(owner.email, today);
-      await pool.query(
-        `UPDATE comm_checks SET email_status = 'sent', email_sent_at = NOW() WHERE check_date = $1`,
-        [today],
-      );
-      results.email = "sent";
-      logger.info({ date: today }, "comm-check: email sent");
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      await pool.query(
-        `UPDATE comm_checks SET email_status = 'error', email_error = $2 WHERE check_date = $1`,
-        [today, msg],
-      );
-      results.email = `error: ${msg}`;
-      logger.error({ err, date: today }, "comm-check: email send failed");
-    }
-  } else {
-    await pool.query(
-      `UPDATE comm_checks SET email_status = 'error', email_error = 'No email on owner account' WHERE check_date = $1`,
-      [today],
-    );
-    results.email = "error: no owner email";
-  }
-
-  // --- SMS ---
-  if (owner.phoneNumber) {
-    try {
-      await sendCommCheckSms(owner.phoneNumber, today);
-      await pool.query(
-        `UPDATE comm_checks SET sms_status = 'sent', sms_sent_at = NOW() WHERE check_date = $1`,
-        [today],
-      );
-      results.sms = "sent";
-      logger.info({ date: today }, "comm-check: SMS sent");
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      await pool.query(
-        `UPDATE comm_checks SET sms_status = 'error', sms_error = $2 WHERE check_date = $1`,
-        [today, msg],
-      );
-      results.sms = `error: ${msg}`;
-      logger.error({ err, date: today }, "comm-check: SMS send failed");
-    }
-  } else {
-    await pool.query(
-      `UPDATE comm_checks SET sms_status = 'error', sms_error = 'No phone number on owner account' WHERE check_date = $1`,
-      [today],
-    );
-    results.sms = "error: no owner phone";
-  }
-
-  // --- Slack ---
-  if (owner.slackUserId) {
-    try {
-      await sendCommCheckSlack(owner.slackUserId, today);
-      await pool.query(
-        `UPDATE comm_checks SET slack_status = 'sent', slack_sent_at = NOW() WHERE check_date = $1`,
-        [today],
-      );
-      results.slack = "sent";
-      logger.info({ date: today }, "comm-check: Slack DM sent");
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      await pool.query(
-        `UPDATE comm_checks SET slack_status = 'error', slack_error = $2 WHERE check_date = $1`,
-        [today, msg],
-      );
-      results.slack = `error: ${msg}`;
-      logger.error({ err, date: today }, "comm-check: Slack send failed");
-    }
-  } else {
-    await pool.query(
-      `UPDATE comm_checks SET slack_status = 'error', slack_error = 'No Slack user ID on owner account' WHERE check_date = $1`,
-      [today],
-    );
-    results.slack = "error: no owner slack ID";
-  }
-
-  return { alreadyRan: false, date: today, ...results };
+  const email = await runDailyChannel("email", today, owner);
+  const sms = await runDailyChannel("sms", today, owner);
+  const slack = await runDailyChannel("slack", today, owner);
+  return {
+    alreadyRan: !email.attempted && !sms.attempted && !slack.attempted,
+    date: today,
+    email: email.result,
+    sms: sms.result,
+    slack: slack.result,
+  };
 }
 
 // ── Phone-only run function (fires at 19:00) ──────────────────────────────────
-// Ensures today's row exists, then atomically claims the phone slot by
-// updating from 'pending' → 'sent' (or records an error). Safe to call
-// repeatedly — returns alreadySent: true if the row was already claimed.
+// Ensures today's row exists, then atomically claims the phone slot. Failed or
+// stale in-progress attempts are retryable; confirmed sent attempts are not.
 
 export interface PhoneCheckResult {
   alreadySent: boolean;
@@ -421,32 +454,20 @@ export async function runPhoneCommCheck(): Promise<PhoneCheckResult> {
     [today],
   );
 
-  const owner = await getOwner();
-  if (!owner || !owner.phoneNumber) {
-    const msg = owner ? "No phone number on owner account" : "No owner account";
-    await pool.query(
-      `UPDATE comm_checks SET phone_status = 'error', phone_error = $2 WHERE check_date = $1`,
-      [today, msg],
-    );
-    logger.warn({ date: today }, `comm-check: phone skipped — ${msg}`);
-    return { alreadySent: false, date: today, phone: `error: ${msg}` };
-  }
-
-  // Atomic two-phase claim:
-  //   1. Optimistically flip pending → sent in a single UPDATE (the idempotency
-  //      guard). If 0 rows touched, another process already claimed this slot.
-  //   2. If the outbound call subsequently fails, overwrite to error.
-  //
-  // This avoids any intermediate "calling" state that could stick forever on
-  // crash or network hang. In the rare case of a crash between steps 1 and 2
-  // the row remains "sent" (a false positive); that is preferable to a broken
-  // state that blocks every future scheduler tick.
+  const attemptId = randomUUID();
   const claim = await pool.query<{ check_date: string }>(
     `UPDATE comm_checks
-     SET phone_status = 'sent', phone_sent_at = NOW(), phone_error = NULL
-     WHERE check_date = $1 AND phone_status = 'pending'
+     SET phone_status = 'sending', phone_sent_at = NOW(), phone_error = $2
+     WHERE check_date = $1
+       AND (
+         phone_status IN ('pending', 'error')
+         OR (
+           phone_status = 'sending'
+           AND (phone_sent_at IS NULL OR phone_sent_at < NOW() - INTERVAL '${STALE_CHANNEL_ATTEMPT_MINUTES} minutes')
+         )
+       )
      RETURNING check_date`,
-    [today],
+    [today, attemptId],
   );
 
   if ((claim.rowCount ?? 0) === 0) {
@@ -454,7 +475,16 @@ export async function runPhoneCommCheck(): Promise<PhoneCheckResult> {
   }
 
   try {
-    const { callId } = await sendCommCheckPhone(owner.phoneNumber, today);
+    const owner = await getOwner();
+    if (!owner || !owner.phoneNumber) {
+      throw new Error(
+        owner ? "No phone number on owner account" : "No owner account",
+      );
+    }
+    const { callId } = await withDeliveryTimeout(
+      sendCommCheckPhone(owner.phoneNumber, today),
+      "phone",
+    );
     // Confirm the call actually connected (AgentPhone marks blocked/screened
     // calls as "completed" with durationSeconds: 0). If no-answer, roll the
     // status back to error so the scheduler catches it on the next daily run.
@@ -465,14 +495,25 @@ export async function runPhoneCommCheck(): Promise<PhoneCheckResult> {
           "Add Elaine's number to your contacts to allow it through.",
       );
     }
+    await pool.query(
+      `UPDATE comm_checks
+       SET phone_status = 'sent', phone_sent_at = NOW(), phone_error = NULL
+       WHERE check_date = $1
+         AND phone_status = 'sending'
+         AND phone_error = $2`,
+      [today, attemptId],
+    );
     logger.info({ date: today }, "comm-check: phone call placed");
     return { alreadySent: false, date: today, phone: "sent" };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    // Roll the status back to error — the row is no longer "sent".
     await pool.query(
-      `UPDATE comm_checks SET phone_status = 'error', phone_sent_at = NULL, phone_error = $2 WHERE check_date = $1`,
-      [today, msg],
+      `UPDATE comm_checks
+       SET phone_status = 'error', phone_sent_at = NULL, phone_error = $2
+       WHERE check_date = $1
+         AND phone_status = 'sending'
+         AND phone_error = $3`,
+      [today, msg, attemptId],
     );
     logger.error({ err, date: today }, "comm-check: phone call failed");
     return { alreadySent: false, date: today, phone: `error: ${msg}` };
@@ -600,62 +641,59 @@ export async function runChannelCheck(
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000;
 
+export async function runCommCheckSchedulerTick(
+  now: Date = new Date(),
+): Promise<CommCheckScheduleDecision> {
+  const tz = await getEffectiveTimezone();
+  const schedule: CommCheckSchedule = {
+    dailyTime: await getConfig("comm_check", "daily_time", "00:01"),
+    dailyDays: await getConfig(
+      "comm_check",
+      "daily_days",
+      "sun,mon,tue,wed,thu,fri,sat",
+    ),
+    phoneTime: await getConfig("comm_check", "phone_time", "19:00"),
+    phoneDays: await getConfig(
+      "comm_check",
+      "phone_days",
+      "sun,mon,tue,wed,thu,fri,sat",
+    ),
+  };
+  const decision = getCommCheckScheduleDecision(now, tz, schedule);
+
+  if (decision.dailyDue) {
+    const result = await runDailyCommCheck();
+    logger.info(
+      {
+        date: result.date,
+        email: result.email,
+        sms: result.sms,
+        slack: result.slack,
+        alreadyComplete: result.alreadyRan,
+      },
+      "comm-check: daily scheduled check evaluated",
+    );
+  }
+
+  if (decision.phoneDue) {
+    const phoneResult = await runPhoneCommCheck();
+    logger.info(
+      {
+        date: phoneResult.date,
+        phone: phoneResult.phone,
+        alreadyComplete: phoneResult.alreadySent,
+      },
+      "comm-check: phone scheduled check evaluated",
+    );
+  }
+
+  return decision;
+}
+
 export function startCommCheckScheduler(): () => void {
   const tick = async (): Promise<void> => {
     try {
-      const tz = await getEffectiveTimezone();
-      const minuteOfDay = getMinuteOfDayInTz(tz);
-      const weekday = getWeekdayCodeInTz(tz);
-
-      // Fallbacks below mirror the APP_CONFIG_DEFAULTS values in app-config.ts
-      // (kept as inline literals, not named constants, so the app-config
-      // drift guard can statically verify their JS type against the
-      // declared "time"/"day-list" config type).
-      const dailyTime = await getConfig("comm_check", "daily_time", "00:01");
-      const dailyDays = await getConfig(
-        "comm_check",
-        "daily_days",
-        "sun,mon,tue,wed,thu,fri,sat",
-      );
-      const phoneTime = await getConfig("comm_check", "phone_time", "19:00");
-      const phoneDays = await getConfig(
-        "comm_check",
-        "phone_days",
-        "sun,mon,tue,wed,thu,fri,sat",
-      );
-
-      // Email / SMS / Slack
-      if (
-        parseDayList(dailyDays).has(weekday) &&
-        minuteOfDay >= parseTimeToMinutes(dailyTime)
-      ) {
-        const result = await runDailyCommCheck();
-        if (!result.alreadyRan) {
-          logger.info(
-            {
-              date: result.date,
-              email: result.email,
-              sms: result.sms,
-              slack: result.slack,
-            },
-            "comm-check: daily check completed",
-          );
-        }
-      }
-
-      // Phone call
-      if (
-        parseDayList(phoneDays).has(weekday) &&
-        minuteOfDay >= parseTimeToMinutes(phoneTime)
-      ) {
-        const phoneResult = await runPhoneCommCheck();
-        if (!phoneResult.alreadySent) {
-          logger.info(
-            { date: phoneResult.date, phone: phoneResult.phone },
-            "comm-check: phone check completed",
-          );
-        }
-      }
+      await runCommCheckSchedulerTick();
     } catch (err) {
       logger.error({ err }, "comm-check: scheduler tick failed");
     }

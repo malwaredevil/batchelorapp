@@ -27,6 +27,8 @@ import {
   Tag,
   Sparkle,
   GripVertical,
+  Magnet,
+  AlertCircle,
 } from "lucide-react";
 import { ApplicationHeader } from "@workspace/app-shell";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
@@ -63,8 +65,10 @@ import {
   useListConnectedCalendars,
   useListAllConnectedCalendarEvents,
   getListAllConnectedCalendarEventsQueryKey,
-  useGetElaineNudgesUnseenCount,
-  useListElaineMemory,
+  useGetElaineTaskCounts,
+  useGetElaineConversationCount,
+  useListMagnets,
+  useListMagnetCategories,
 } from "@workspace/api-client-react";
 import { usePageAssistantContext } from "@/lib/assistant-context";
 import {
@@ -80,6 +84,7 @@ const ADD_ACTIONS = [
   { label: "Pattern", href: `${base}modules/quilting/patterns/add` },
   { label: "Quilt", href: `${base}modules/quilting/quilts/add` },
   { label: "Ornament", href: `${base}modules/ornaments/camera-add` },
+  { label: "Magnet", href: `${base}modules/magnets/add` },
   { label: "Note", href: `${base}modules/office/notes?new=1` },
 ];
 
@@ -122,6 +127,16 @@ const ELAINE_QUICK_LINKS = [
 
 const OFFICE_QUICK_LINKS = [
   { label: "Open Office", icon: Activity, href: `${base}modules/office/` },
+];
+
+const MAGNETS_QUICK_LINKS = [
+  { label: "Collection", icon: Magnet, href: `${base}modules/magnets/` },
+  { label: "Add magnet", icon: Plus, href: `${base}modules/magnets/add` },
+  {
+    label: "Categories",
+    icon: Tag,
+    href: `${base}modules/magnets/categories`,
+  },
 ];
 
 const CATEGORY_LABELS: { id: "all" | WidgetCategory; label: string }[] = [
@@ -534,6 +549,58 @@ class SilentErrorBoundary extends Component<
 // Keep the old alias so the stat-tile usage below doesn't need changing.
 const StatTileErrorBoundary = SilentErrorBoundary;
 
+export function getElaineHubStats(
+  openTaskCount: number | undefined,
+  savedChatCount: number | undefined,
+): { value: string; label: string; href: string; hint: string }[] {
+  return [
+    {
+      value: openTaskCount != null ? String(openTaskCount) : "—",
+      label: "Open tasks",
+      href: `${base}elaine/`,
+      hint: "Research tasks Elaine is still working on or waiting for you to answer. Open Elaine to review them.",
+    },
+    {
+      value: savedChatCount != null ? String(savedChatCount) : "—",
+      label: "Saved chats",
+      href: `${base}elaine/`,
+      hint: "Saved Elaine conversations available in the history panel. Open Elaine to continue one.",
+    },
+  ];
+}
+
+function RetiredWidgetCard({
+  id,
+  customizing,
+  onRemove,
+}: {
+  id: string;
+  customizing: boolean;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="relative rounded-xl border border-dashed border-border bg-muted/30 p-4 space-y-3">
+      {customizing && (
+        <button
+          onClick={onRemove}
+          aria-label={`Remove retired widget ${id}`}
+          className="absolute -top-2 -right-2 z-10 w-6 h-6 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center shadow hover:scale-110 transition-transform"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      )}
+      <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+        <AlertCircle className="w-4 h-4" />
+        Retired widget
+      </div>
+      <p className="text-xs text-muted-foreground leading-relaxed">
+        This widget is no longer available, but your saved layout is intact.
+        Turn on Customize to remove it.
+      </p>
+    </div>
+  );
+}
+
 // Extracted into its own file for testability; re-used here unchanged.
 import { HallmarkEventStatTile } from "@/components/HallmarkEventStatTile";
 
@@ -579,8 +646,10 @@ export function AppLauncher() {
   const { data: notesData } = useListNotes();
   const { data: messengerUnreadData } = useGetUnreadCount();
   const { data: connectedCalendarsData } = useListConnectedCalendars();
-  const { data: elaineNudgesData } = useGetElaineNudgesUnseenCount();
-  const { data: elaineMemoryData } = useListElaineMemory();
+  const { data: elaineTaskCountsData } = useGetElaineTaskCounts();
+  const { data: elaineConversationCountData } = useGetElaineConversationCount();
+  const { data: magnetsData } = useListMagnets({ page: 1, pageSize: 1 });
+  const { data: magnetsCategoriesData } = useListMagnetCategories();
 
   // Don't poll all-events when the token is known to be expired — the endpoint
   // will just return 502 on every poll until the user reconnects.
@@ -736,22 +805,24 @@ export function AppLauncher() {
       ];
     }
     if (appId === "elaine") {
+      return getElaineHubStats(
+        elaineTaskCountsData?.openCount,
+        elaineConversationCountData?.count,
+      );
+    }
+    if (appId === "magnets") {
       return [
         {
-          value:
-            elaineNudgesData?.count != null
-              ? String(elaineNudgesData.count)
-              : "—",
-          label: "Nudges",
-          href: `${base}elaine/`,
-          hint: "Unread heads-up alerts Elaine has for you — e.g. an upcoming trip with no packing list, bad air quality before you travel, or a connected service that needs attention. Open Elaine to see and clear them.",
+          value: magnetsData?.total != null ? String(magnetsData.total) : "—",
+          label: "Magnets",
+          href: `${base}modules/magnets/`,
         },
         {
-          value: Array.isArray(elaineMemoryData)
-            ? String(elaineMemoryData.length)
+          value: Array.isArray(magnetsCategoriesData)
+            ? String(magnetsCategoriesData.length)
             : "—",
-          label: "Memory",
-          href: `${base}elaine/`,
+          label: "Categories",
+          href: `${base}modules/magnets/categories`,
         },
       ];
     }
@@ -824,6 +895,12 @@ export function AppLauncher() {
       accentBorderColor: "border-slate-200/60 dark:border-slate-700/40",
       accentSectionBg: "bg-slate-50/60 dark:bg-slate-900/10",
       accentIconColor: "text-slate-600 dark:text-slate-400",
+    },
+    magnets: {
+      quickLinks: MAGNETS_QUICK_LINKS,
+      accentBorderColor: "border-cyan-200/60 dark:border-cyan-800/40",
+      accentSectionBg: "bg-cyan-50/60 dark:bg-cyan-900/10",
+      accentIconColor: "text-cyan-600 dark:text-cyan-400",
     },
   };
 
@@ -1228,7 +1305,17 @@ export function AppLauncher() {
 
                   // ── Static catalogue widget ──────────────────────────────
                   const w = byId.get(slot.id);
-                  if (!w) return null;
+                  if (!w) {
+                    return (
+                      <SilentErrorBoundary key={slot.id}>
+                        <RetiredWidgetCard
+                          id={slot.id}
+                          customizing={customizing}
+                          onRemove={() => removeSlot(slot.id)}
+                        />
+                      </SilentErrorBoundary>
+                    );
+                  }
                   const Icon = w.icon;
                   return (
                     <div

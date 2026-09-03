@@ -5,6 +5,7 @@ import {
   buildShingles,
   extractBlocks,
   checkDuplicateCode,
+  checkDuplicateCodeAudit,
 } from "./check-duplicate-code.js";
 
 // --- isScannableFile ---
@@ -21,6 +22,11 @@ assert.equal(
 assert.equal(
   isScannableFile("lib/api-zod/src/generated/pottery.generated.ts"),
   false,
+);
+assert.equal(
+  isScannableFile("lib/api-client-react/src/generated/api.ts"),
+  false,
+  "generated client source",
 );
 assert.equal(
   isScannableFile("scripts/src/check-duplicate-code.ts"),
@@ -153,6 +159,51 @@ assert.equal(
   noViolations.length,
   0,
   "a structurally unrelated function is not flagged",
+);
+
+// The whole-repository audit must ignore a candidate's own corpus entry before
+// choosing its best match. This pair is deliberately near (not exact): one
+// comparison operator differs while a long repeated structure keeps the
+// Jaccard similarity above the threshold.
+const nearFiller = `for (const extra of items) {
+  if (extra.value > threshold) {
+    potteryTotal += extra.value;
+    potteryResults.push({ id: extra.id, value: extra.value, flag: true });
+  }
+}
+`.repeat(10);
+const nearBaseSource = `
+export function summarizeNearBatch(items: { id: string; value: number }[], threshold: number) {
+  let potteryTotal = 0;
+  const potteryResults: { id: string; value: number; flag: boolean }[] = [];
+  ${nearFiller}
+  return { total: potteryTotal, results: potteryResults };
+}
+`;
+const nearSource = nearBaseSource.replace(
+  "extra.value > threshold",
+  "extra.value >= threshold",
+);
+const auditViolations = checkDuplicateCodeAudit(
+  [
+    "artifacts/api-server/src/pottery.ts",
+    "artifacts/api-server/src/near.ts",
+    "artifacts/api-server/src/near-copy.ts",
+  ],
+  (file) =>
+    ({
+      "artifacts/api-server/src/pottery.ts": potterySource,
+      "artifacts/api-server/src/near.ts": nearBaseSource,
+      "artifacts/api-server/src/near-copy.ts": nearSource,
+    })[file] ?? null,
+);
+assert.ok(
+  auditViolations.some(
+    (violation) =>
+      violation.file === "artifacts/api-server/src/near.ts" &&
+      violation.kind === "near",
+  ),
+  "audit reports a real non-exact match instead of discarding a self match",
 );
 
 console.log("check-duplicate-code.test.ts passed");

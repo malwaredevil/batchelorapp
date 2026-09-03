@@ -17,6 +17,7 @@ import {
   useCreateOrnament,
   useListOrnamentCategories,
   getListOrnamentsQueryKey,
+  getListOrnamentSeriesQueryKey,
   getGetOrnamentStatsQueryKey,
   getUploadErrorMessage,
   uploadOrnamentImage,
@@ -38,6 +39,7 @@ import {
 import { ImagePicker, CameraModal } from "@/ornaments/components/image-picker";
 import { DEFAULT_LABEL_SUGGESTIONS as LABEL_SUGGESTIONS } from "@workspace/image-capture";
 import { TagSelector } from "@/ornaments/components/tag-selector";
+import { SeriesAutocomplete } from "@/ornaments/components/series-autocomplete";
 import { usePageAssistantContext } from "@/ornaments/lib/assistant-context";
 import { useAppConfigSummary } from "@workspace/elaine-ui";
 import { cn } from "@/lib/utils";
@@ -62,7 +64,6 @@ const addSchema = z.object({
   notes: z.string().nullable(),
   description: z.string().nullable(),
   dimensions: z.string().nullable(),
-  condition: z.string().nullable(),
   origin: z.string().nullable(),
   acquiredAt: z.string().nullable(), // YYYY-MM-DD
   categories: z.array(z.number()),
@@ -79,6 +80,7 @@ export default function AddOrnament() {
   const [suppPhotos, setSuppPhotos] = useState<SuppPhoto[]>([]);
   const [showSuppCamera, setShowSuppCamera] = useState(false);
   const suppFileInputRef = useRef<HTMLInputElement>(null);
+  const [cameraCreatePending, setCameraCreatePending] = useState(false);
 
   function addSuppPhoto(f: File) {
     const validation = validateClientUpload(f, STANDARD_IMAGE_UPLOAD);
@@ -155,13 +157,67 @@ export default function AddOrnament() {
       notes: "",
       description: prefill?.description || "",
       dimensions: "",
-      condition: "Excellent",
       origin: "",
       acquiredAt: new Date().toISOString().split("T")[0],
       categories: [],
       image: null,
     },
   });
+
+  type AddFormValues = z.infer<typeof addSchema>;
+
+  function appendFormValues(formData: FormData, values: AddFormValues) {
+    formData.append("name", values.name);
+    formData.append("brand", values.brand);
+    formData.append("quantity", String(values.quantity));
+
+    if (values.seriesOrCollection)
+      formData.append("seriesOrCollection", values.seriesOrCollection);
+    if (values.year) formData.append("year", values.year);
+    if (values.barcodeValue)
+      formData.append("barcodeValue", values.barcodeValue);
+    if (values.notes) formData.append("notes", values.notes);
+    if (values.description) formData.append("description", values.description);
+    if (values.dimensions) formData.append("dimensions", values.dimensions);
+    if (values.origin) formData.append("origin", values.origin);
+    if (values.acquiredAt) formData.append("acquiredAt", values.acquiredAt);
+
+    if (values.categories.length > 0) {
+      formData.append("categories", values.categories.join(","));
+    }
+  }
+
+  async function handleCameraSave(editedFile: File) {
+    setCameraCreatePending(true);
+    try {
+      const formData = new FormData();
+      appendFormValues(formData, form.getValues());
+      formData.append(
+        "image",
+        editedFile,
+        editedFile.name || "ornament-photo.jpg",
+      );
+
+      // @ts-ignore - FormData bypasses type checks in orval but works
+      const result = await createOrnament.mutateAsync({ data: formData });
+
+      queryClient.invalidateQueries({ queryKey: getListOrnamentsQueryKey() });
+      queryClient.invalidateQueries({
+        queryKey: getListOrnamentSeriesQueryKey(),
+      });
+      queryClient.invalidateQueries({
+        queryKey: getGetOrnamentStatsQueryKey(),
+      });
+
+      toast.success("Ornament added — AI analysis complete.");
+      setLocation(`/ornaments/ornament/${result.id}?edit=1`);
+    } catch (err) {
+      toast.error(getUploadErrorMessage(err, "Failed to add ornament"));
+      throw err;
+    } finally {
+      setCameraCreatePending(false);
+    }
+  }
 
   // Clear prefill on mount
   useEffect(() => {
@@ -171,26 +227,7 @@ export default function AddOrnament() {
   const onSubmit = async (values: z.infer<typeof addSchema>) => {
     try {
       const formData = new FormData();
-      formData.append("name", values.name);
-      formData.append("brand", values.brand);
-      formData.append("quantity", String(values.quantity));
-
-      if (values.seriesOrCollection)
-        formData.append("seriesOrCollection", values.seriesOrCollection);
-      if (values.year) formData.append("year", values.year);
-      if (values.barcodeValue)
-        formData.append("barcodeValue", values.barcodeValue);
-      if (values.notes) formData.append("notes", values.notes);
-      if (values.description)
-        formData.append("description", values.description);
-      if (values.dimensions) formData.append("dimensions", values.dimensions);
-      if (values.condition) formData.append("condition", values.condition);
-      if (values.origin) formData.append("origin", values.origin);
-      if (values.acquiredAt) formData.append("acquiredAt", values.acquiredAt);
-
-      if (values.categories.length > 0) {
-        formData.append("categories", values.categories.join(","));
-      }
+      appendFormValues(formData, values);
 
       if (values.image instanceof File || values.image instanceof Blob) {
         formData.append("image", values.image);
@@ -209,6 +246,9 @@ export default function AddOrnament() {
       }
 
       queryClient.invalidateQueries({ queryKey: getListOrnamentsQueryKey() });
+      queryClient.invalidateQueries({
+        queryKey: getListOrnamentSeriesQueryKey(),
+      });
       queryClient.invalidateQueries({
         queryKey: getGetOrnamentStatsQueryKey(),
       });
@@ -296,6 +336,7 @@ export default function AddOrnament() {
                             }
                             field.onChange(file);
                           }}
+                          onCameraSave={handleCameraSave}
                           className="w-full max-w-[240px] mx-auto md:mx-0"
                         />
                       </FormControl>
@@ -470,11 +511,11 @@ export default function AddOrnament() {
                       <FormItem>
                         <FormLabel>Series / Collection</FormLabel>
                         <FormControl>
-                          <Input
+                          <SeriesAutocomplete
+                            value={field.value || ""}
+                            onValueChange={field.onChange}
                             placeholder="e.g. Star Wars, Nostalgic Houses"
                             className="bg-background"
-                            {...field}
-                            value={field.value || ""}
                           />
                         </FormControl>
                         <FormMessage />
@@ -536,24 +577,6 @@ export default function AddOrnament() {
               </h3>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="condition"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Condition</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="e.g. Excellent, Missing Box"
-                          className="bg-background"
-                          {...field}
-                          value={field.value || ""}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
                 <FormField
                   control={form.control}
                   name="barcodeValue"
@@ -691,6 +714,21 @@ export default function AddOrnament() {
           </form>
         </Form>
       </div>
+      {cameraCreatePending && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-background/80 px-6 backdrop-blur-sm"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex max-w-sm flex-col items-center gap-3 rounded-2xl border border-border bg-card px-8 py-7 text-center shadow-xl">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="font-medium">Scanning your ornament with AI…</p>
+            <p className="text-sm text-muted-foreground">
+              We&apos;re creating the ornament and preparing it for you to edit.
+            </p>
+          </div>
+        </div>
+      )}
     </>
   );
 }

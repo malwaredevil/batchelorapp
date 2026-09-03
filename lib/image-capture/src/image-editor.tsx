@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   X,
+  Camera,
   RotateCcw,
   RotateCw,
   FlipHorizontal,
@@ -21,9 +22,12 @@ interface ImageEditorProps {
   file: File;
   onSave: (edited: File) => void;
   onCancel: () => void;
+  onRetake?: () => void;
+  retakeLabel?: string;
+  isSaving?: boolean;
 }
 
-type HandleId = "tl" | "tc" | "tr" | "ml" | "mr" | "bl" | "bc" | "br";
+export type HandleId = "tl" | "tc" | "tr" | "ml" | "mr" | "bl" | "bc" | "br";
 
 interface CropRect {
   x: number;
@@ -100,8 +104,111 @@ function viewport(iw: number, ih: number, z: number, px: number, py: number) {
   return { sx, sy, sw, sh };
 }
 
-/** Image-normalised (0-1) → canvas pixel, respecting the fit rect. */
-function normToCanvas(
+function quarterTurns(rotation: number) {
+  return ((rotation % 4) + 4) % 4;
+}
+
+/** Rotate a point inside the unit square by clockwise quarter turns. */
+function rotateUnitPoint(
+  x: number,
+  y: number,
+  rotation: number,
+): { x: number; y: number } {
+  switch (quarterTurns(rotation)) {
+    case 1:
+      return { x: 1 - y, y: x };
+    case 2:
+      return { x: 1 - x, y: 1 - y };
+    case 3:
+      return { x: y, y: 1 - x };
+    default:
+      return { x, y };
+  }
+}
+
+/** Rotate a displacement vector, without the translation a point needs. */
+function rotateUnitVector(
+  x: number,
+  y: number,
+  rotation: number,
+): { x: number; y: number } {
+  switch (quarterTurns(rotation)) {
+    case 1:
+      return { x: -y, y: x };
+    case 2:
+      return { x: -x, y: -y };
+    case 3:
+      return { x: y, y: -x };
+    default:
+      return { x, y };
+  }
+}
+
+const HANDLE_GRID: Record<HandleId, { x: number; y: number }> = {
+  tl: { x: 0, y: 0 },
+  tc: { x: 0.5, y: 0 },
+  tr: { x: 1, y: 0 },
+  ml: { x: 0, y: 0.5 },
+  mr: { x: 1, y: 0.5 },
+  bl: { x: 0, y: 1 },
+  bc: { x: 0.5, y: 1 },
+  br: { x: 1, y: 1 },
+};
+
+/**
+ * Resolves a visible crop-handle label to the matching source-image edge.
+ * Rotation and mirroring change where a source handle is drawn, but crop
+ * mutations must always target the original source-image coordinates.
+ */
+export function sourceHandleForPreviewHandle(
+  visibleHandle: HandleId,
+  rotation: number,
+  flipH: boolean,
+): HandleId {
+  const visible = HANDLE_GRID[visibleHandle];
+  // The canvas mirrors the final display horizontally after rotating. Undo
+  // that display-space mirror before mapping the handle back to source space.
+  const source = rotateUnitPoint(
+    flipH ? 1 - visible.x : visible.x,
+    visible.y,
+    -rotation,
+  );
+  return (
+    (Object.entries(HANDLE_GRID).find(
+      ([, point]) => point.x === source.x && point.y === source.y,
+    )?.[0] as HandleId | undefined) ?? visibleHandle
+  );
+}
+
+/**
+ * Converts a finger movement over the transformed preview into the matching
+ * source-image viewport movement. The caller subtracts this from pan because
+ * dragging content right moves the viewport left.
+ */
+export function sourcePanDeltaForPreviewDrag(
+  canvasDx: number,
+  canvasDy: number,
+  displayWidth: number,
+  displayHeight: number,
+  zoom: number,
+  rotation: number,
+  flipH: boolean,
+) {
+  // Mirror the display vector before undoing rotation. This matches the
+  // canvas transform: rotate first, then flip the visible horizontal axis.
+  const unrotated = rotateUnitVector(
+    (flipH ? -canvasDx : canvasDx) / displayWidth / zoom,
+    canvasDy / displayHeight / zoom,
+    -rotation,
+  );
+  return {
+    x: Object.is(unrotated.x, -0) ? 0 : unrotated.x,
+    y: Object.is(unrotated.y, -0) ? 0 : unrotated.y,
+  };
+}
+
+/** Image-normalised (0-1) → canvas pixel, respecting preview transforms. */
+function sourceToCanvas(
   nx: number,
   ny: number,
   dx: number,
@@ -114,15 +221,21 @@ function normToCanvas(
   sy: number,
   sw: number,
   sh: number,
+  rotation: number,
+  flipH: boolean,
 ) {
+  const sourceX = (nx * iw - sx) / sw;
+  const sourceY = (ny * ih - sy) / sh;
+  const point = rotateUnitPoint(sourceX, sourceY, rotation);
+  if (flipH) point.x = 1 - point.x;
   return {
-    cx: dx + ((nx * iw - sx) / sw) * dw,
-    cy: dy + ((ny * ih - sy) / sh) * dh,
+    cx: dx + point.x * dw,
+    cy: dy + point.y * dh,
   };
 }
 
-/** Canvas pixel → image-normalised (0-1), respecting the fit rect. */
-function canvasToNorm(
+/** Canvas pixel → image-normalised (0-1), respecting preview transforms. */
+function canvasToSourceNorm(
   cx: number,
   cy: number,
   dx: number,
@@ -135,10 +248,17 @@ function canvasToNorm(
   sy: number,
   sw: number,
   sh: number,
+  rotation: number,
+  flipH: boolean,
 ) {
+  const point = rotateUnitPoint(
+    flipH ? 1 - (cx - dx) / dw : (cx - dx) / dw,
+    (cy - dy) / dh,
+    -rotation,
+  );
   return {
-    nx: (((cx - dx) / dw) * sw + sx) / iw,
-    ny: (((cy - dy) / dh) * sh + sy) / ih,
+    nx: (point.x * sw + sx) / iw,
+    ny: (point.y * sh + sy) / ih,
   };
 }
 
@@ -239,7 +359,14 @@ function applySharpen(
 // Component
 // ---------------------------------------------------------------------------
 
-export function ImageEditor({ file, onSave, onCancel }: ImageEditorProps) {
+export function ImageEditor({
+  file,
+  onSave,
+  onCancel,
+  onRetake,
+  retakeLabel = "Retake photo",
+  isSaving = false,
+}: ImageEditorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgRef = useRef<ImageBitmap | null>(null);
   const dragRef = useRef<DragState | null>(null);
@@ -405,6 +532,8 @@ export function ImageEditor({ file, onSave, onCancel }: ImageEditorProps) {
       panY: py,
       crop: c,
       cropMode: cm,
+      rotation: rotationValue,
+      flipH: fh,
       brightness: br,
       contrast: co,
     } = live.current;
@@ -413,9 +542,15 @@ export function ImageEditor({ file, onSave, onCancel }: ImageEditorProps) {
     const ch = canvas.height;
     const iw = img.width;
     const ih = img.height;
+    const r = quarterTurns(rotationValue);
 
     const { sx, sy, sw, sh } = viewport(iw, ih, z, px, py);
-    const { dx, dy, dw, dh } = fitRect(cw, ch, iw, ih);
+    const { dx, dy, dw, dh } = fitRect(
+      cw,
+      ch,
+      r % 2 === 0 ? iw : ih,
+      r % 2 === 0 ? ih : iw,
+    );
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
@@ -424,15 +559,32 @@ export function ImageEditor({ file, onSave, onCancel }: ImageEditorProps) {
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, cw, ch);
 
-    // Image — drawn into the fit rect only, preserving aspect ratio
+    // Image — preserve aspect ratio, then rotate around the preview centre.
+    // A 90° turn swaps the visible fit rectangle, while the source rectangle
+    // keeps its native proportions before the canvas transform is applied.
     ctx.filter = `brightness(${br}%) contrast(${co}%)`;
-    ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
+    ctx.save();
+    ctx.translate(dx + dw / 2, dy + dh / 2);
+    ctx.rotate((r * Math.PI) / 2);
+    if (fh) ctx.scale(r % 2 === 0 ? -1 : 1, r % 2 !== 0 ? -1 : 1);
+    ctx.drawImage(
+      img,
+      sx,
+      sy,
+      sw,
+      sh,
+      -(r % 2 === 0 ? dw : dh) / 2,
+      -(r % 2 === 0 ? dh : dw) / 2,
+      r % 2 === 0 ? dw : dh,
+      r % 2 === 0 ? dh : dw,
+    );
+    ctx.restore();
     ctx.filter = "none";
 
     // Crop overlay — only rendered when crop mode is active
     if (!cm) return;
 
-    const { cx: cl, cy: ct } = normToCanvas(
+    const start = sourceToCanvas(
       c.x,
       c.y,
       dx,
@@ -445,8 +597,10 @@ export function ImageEditor({ file, onSave, onCancel }: ImageEditorProps) {
       sy,
       sw,
       sh,
+      r,
+      fh,
     );
-    const { cx: cr, cy: cb } = normToCanvas(
+    const end = sourceToCanvas(
       c.x + c.w,
       c.y + c.h,
       dx,
@@ -459,7 +613,13 @@ export function ImageEditor({ file, onSave, onCancel }: ImageEditorProps) {
       sy,
       sw,
       sh,
+      r,
+      fh,
     );
+    const cl = Math.min(start.cx, end.cx);
+    const cr = Math.max(start.cx, end.cx);
+    const ct = Math.min(start.cy, end.cy);
+    const cb = Math.max(start.cy, end.cy);
     const rw = cr - cl;
     const rh = cb - ct;
 
@@ -501,7 +661,19 @@ export function ImageEditor({ file, onSave, onCancel }: ImageEditorProps) {
 
   useEffect(() => {
     if (loaded) draw();
-  }, [loaded, zoom, panX, panY, crop, cropMode, brightness, contrast, draw]);
+  }, [
+    loaded,
+    zoom,
+    panX,
+    panY,
+    crop,
+    cropMode,
+    rotation,
+    flipH,
+    brightness,
+    contrast,
+    draw,
+  ]);
 
   // Keep canvas pixel size = CSS size (crisp render, handles device resize)
   useEffect(() => {
@@ -529,8 +701,29 @@ export function ImageEditor({ file, onSave, onCancel }: ImageEditorProps) {
     const iw = img.width;
     const ih = img.height;
     const { sx, sy, sw, sh } = viewport(iw, ih, z, px, py);
-    const { dx, dy, dw, dh } = fitRect(canvas.width, canvas.height, iw, ih);
-    const norm = canvasToNorm(cx, cy, dx, dy, dw, dh, iw, ih, sx, sy, sw, sh);
+    const r = quarterTurns(live.current.rotation);
+    const { dx, dy, dw, dh } = fitRect(
+      canvas.width,
+      canvas.height,
+      r % 2 === 0 ? iw : ih,
+      r % 2 === 0 ? ih : iw,
+    );
+    const norm = canvasToSourceNorm(
+      cx,
+      cy,
+      dx,
+      dy,
+      dw,
+      dh,
+      iw,
+      ih,
+      sx,
+      sy,
+      sw,
+      sh,
+      r,
+      live.current.flipH,
+    );
     return { cx, cy, ...norm };
   }
 
@@ -545,8 +738,29 @@ export function ImageEditor({ file, onSave, onCancel }: ImageEditorProps) {
     const iw = img.width;
     const ih = img.height;
     const { sx, sy, sw, sh } = viewport(iw, ih, z, px, py);
-    const { dx, dy, dw, dh } = fitRect(canvas.width, canvas.height, iw, ih);
-    return canvasToNorm(cx, cy, dx, dy, dw, dh, iw, ih, sx, sy, sw, sh);
+    const r = quarterTurns(live.current.rotation);
+    const { dx, dy, dw, dh } = fitRect(
+      canvas.width,
+      canvas.height,
+      r % 2 === 0 ? iw : ih,
+      r % 2 === 0 ? ih : iw,
+    );
+    return canvasToSourceNorm(
+      cx,
+      cy,
+      dx,
+      dy,
+      dw,
+      dh,
+      iw,
+      ih,
+      sx,
+      sy,
+      sw,
+      sh,
+      r,
+      live.current.flipH,
+    );
   }
 
   function onPointerDown(e: React.PointerEvent) {
@@ -580,23 +794,72 @@ export function ImageEditor({ file, onSave, onCancel }: ImageEditorProps) {
     const { cx, cy, nx, ny } = pointerNorm(e);
     const canvas = canvasRef.current!;
     const img = imgRef.current!;
-    const { zoom: z, panX: px, panY: py, crop: c, cropMode: cm } = live.current;
+    const {
+      zoom: z,
+      panX: px,
+      panY: py,
+      crop: c,
+      cropMode: cm,
+      rotation: rotationValue,
+      flipH: fh,
+    } = live.current;
     const iw = img.width;
     const ih = img.height;
     const { sx, sy, sw, sh } = viewport(iw, ih, z, px, py);
-    const { dx, dy, dw, dh } = fitRect(canvas.width, canvas.height, iw, ih);
+    const r = quarterTurns(rotationValue);
+    const { dx, dy, dw, dh } = fitRect(
+      canvas.width,
+      canvas.height,
+      r % 2 === 0 ? iw : ih,
+      r % 2 === 0 ? ih : iw,
+    );
 
     if (cm) {
       // In crop mode: try handles first, then move interior, then pan
-      const cl = dx + ((c.x * iw - sx) / sw) * dw;
-      const ct = dy + ((c.y * ih - sy) / sh) * dh;
-      const cr = dx + (((c.x + c.w) * iw - sx) / sw) * dw;
-      const cb = dy + (((c.y + c.h) * ih - sy) / sh) * dh;
+      const start = sourceToCanvas(
+        c.x,
+        c.y,
+        dx,
+        dy,
+        dw,
+        dh,
+        iw,
+        ih,
+        sx,
+        sy,
+        sw,
+        sh,
+        r,
+        fh,
+      );
+      const end = sourceToCanvas(
+        c.x + c.w,
+        c.y + c.h,
+        dx,
+        dy,
+        dw,
+        dh,
+        iw,
+        ih,
+        sx,
+        sy,
+        sw,
+        sh,
+        r,
+        fh,
+      );
+      const cl = Math.min(start.cx, end.cx);
+      const ct = Math.min(start.cy, end.cy);
+      const cr = Math.max(start.cx, end.cx);
+      const cb = Math.max(start.cy, end.cy);
 
       for (const h of handlePoints(cl, ct, cr - cl, cb - ct)) {
         if (Math.hypot(cx - h.x, cy - h.y) <= HANDLE_HIT) {
           dragRef.current = {
-            type: { kind: "handle", id: h.id },
+            type: {
+              kind: "handle",
+              id: sourceHandleForPreviewHandle(h.id, r, fh),
+            },
             startNx: nx,
             startNy: ny,
             startCx: cx,
@@ -693,18 +956,26 @@ export function ImageEditor({ file, onSave, onCancel }: ImageEditorProps) {
       // Convert canvas-pixel delta → normalised image delta.
       // dw canvas pixels spans (iw/z) source pixels = 1/z of the image width.
       const z = live.current.zoom;
+      const r = quarterTurns(live.current.rotation);
       const { dw, dh } = fitRect(
         canvas.width,
         canvas.height,
-        img.width,
-        img.height,
+        r % 2 === 0 ? img.width : img.height,
+        r % 2 === 0 ? img.height : img.width,
       );
-      const dnx = dcx / dw / z;
-      const dny = dcy / dh / z;
+      const sourceDelta = sourcePanDeltaForPreviewDrag(
+        dcx,
+        dcy,
+        dw,
+        dh,
+        z,
+        r,
+        live.current.flipH,
+      );
       const half = 1 / (2 * z);
       // Subtract: dragging right (+dcx) pans left (image follows finger)
-      setPanX(clamp(drag.startPanX - dnx, half, 1 - half));
-      setPanY(clamp(drag.startPanY - dny, half, 1 - half));
+      setPanX(clamp(drag.startPanX - sourceDelta.x, half, 1 - half));
+      setPanY(clamp(drag.startPanY - sourceDelta.y, half, 1 - half));
       return;
     }
 
@@ -817,23 +1088,46 @@ export function ImageEditor({ file, onSave, onCancel }: ImageEditorProps) {
     >
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border bg-white px-4 py-3">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="grid h-9 w-9 place-items-center rounded-full bg-muted text-foreground transition hover:bg-muted/70"
-        >
-          <X className="h-5 w-5" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={isSaving}
+            className="grid h-9 w-9 place-items-center rounded-full bg-muted text-foreground transition hover:bg-muted/70 disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="Cancel editing"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          {onRetake && (
+            <button
+              type="button"
+              onClick={onRetake}
+              disabled={isSaving}
+              data-testid="button-retake-photo"
+              className="flex items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-2 text-xs font-medium text-foreground transition hover:bg-muted/70 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Camera className="h-4 w-4" />
+              {retakeLabel}
+            </button>
+          )}
+        </div>
         <span className="text-sm font-semibold text-foreground">
           Edit photo
         </span>
         <button
           type="button"
           onClick={handleSave}
-          className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90"
+          disabled={isSaving}
+          className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          <Check className="h-4 w-4" />
-          Done
+          {isSaving ? (
+            "Saving…"
+          ) : (
+            <>
+              <Check className="h-4 w-4" />
+              Done
+            </>
+          )}
         </button>
       </div>
 

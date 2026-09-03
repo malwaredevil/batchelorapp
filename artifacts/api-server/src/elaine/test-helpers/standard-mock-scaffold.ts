@@ -278,7 +278,6 @@ export function ebayMarketValueMockFactory() {
 export function hallmarkSearchMockFactory() {
   return {
     searchHallmark: vi.fn().mockResolvedValue([]),
-    lookupHallmarkFromDb: vi.fn().mockResolvedValue(null),
   };
 }
 

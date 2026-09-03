@@ -4,11 +4,11 @@ Generated from the committed OpenAPI specification and the reviewed operation in
 
 ## Summary
 
-- Website operations inventoried: 273
-- Direct Elaine mappings: 89
-- Universal authenticated operation bridge: 127
-- Covered by general read tools: 27
-- Attachment/camera prerequisites: 19
+- Website operations inventoried: 290
+- Direct Elaine mappings: 97
+- Universal authenticated operation bridge: 136
+- Covered by general read tools: 26
+- Attachment/camera prerequisites: 20
 - Interactive authentication: 10
 - Owner/admin operations: 0
 - Background/system operations: 0
@@ -31,6 +31,7 @@ Generated from the committed OpenAPI specification and the reviewed operation in
 | jobs            |                  5 |                       5 |            0 |
 | lab             |                  4 |                       4 |            0 |
 | layouts         |                  5 |                       5 |            0 |
+| magnets         |                 17 |                      16 |            0 |
 | messenger       |                 18 |                      15 |            0 |
 | notifications   |                  6 |                       6 |            0 |
 | office          |                  4 |                       4 |            0 |
@@ -53,6 +54,7 @@ Every exclusion has a precise disposition and reason in `website-operation-inven
 | Operation                     | Endpoint                                       | Domain    | Disposition          | Reason                                                                                                                                                                                                                       |
 | ----------------------------- | ---------------------------------------------- | --------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `addFabricImage`              | POST `/quilting/fabrics/{id}/images`           | fabrics   | attachment_or_camera | This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it. |
+| `addMagnetImage`              | POST `/magnets/items/{id}/images`              | magnets   | attachment_or_camera | This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it. |
 | `addOrnamentImage`            | POST `/ornaments/items/{id}/images`            | ornaments | attachment_or_camera | This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it. |
 | `addPatternImage`             | POST `/quilting/patterns/{id}/images`          | patterns  | attachment_or_camera | This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it. |
 | `addPotteryImage`             | POST `/pottery/items/{id}/images`              | pottery   | attachment_or_camera | This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it. |

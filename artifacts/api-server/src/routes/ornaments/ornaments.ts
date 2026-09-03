@@ -9,8 +9,6 @@ import {
   desc,
   eq,
   getTableColumns,
-  ilike,
-  inArray,
   isNull,
   or,
   sql,
@@ -42,17 +40,13 @@ import {
   DeleteOrnamentImageParams,
   GetOrnamentStragglersResponse,
   BulkReanalyzeOrnamentsBody,
-  LookupOrnamentBarcodeParams,
-  LookupOrnamentBarcodeBody,
-  LookupOrnamentBarcodeResponse,
   LookupBarcodeBody,
   LookupBarcodeResponse,
   LookupOrnamentBookValueParams,
   LookupOrnamentBookValueResponse,
   LookupOrnamentRetailValueParams,
   LookupOrnamentRetailValueResponse,
-  ReportBarcodeCorrectionBody,
-  ReportBarcodeCorrectionResponse,
+  RefreshOrnamentIdentityResponse,
 } from "@workspace/api-zod";
 import { requireAuth } from "../../middleware/auth";
 import {
@@ -74,10 +68,7 @@ import {
   downloadImageBuffer,
 } from "../../lib/ornaments/storage";
 import {
-  analyzeOrnamentImage,
   appraiseOrnamentImage,
-  buildEmbeddingText,
-  embedText,
   extractBarcodeFromPhoto,
 } from "../../lib/ornaments/openai";
 import { lookupBarcode } from "../../lib/ornaments/barcode";
@@ -92,23 +83,29 @@ import { env } from "../../lib/env";
 import { serializeItem, serializeItems } from "../../lib/ornaments/serialize";
 import { logger } from "../../lib/logger";
 import pLimit from "p-limit";
-import {
-  semanticCollectionSearch,
-  buildOrnamentSearchDocument,
-} from "../../lib/collection-search";
-import { getModels } from "../../lib/ai-client";
+import { createCollectionTextSearch } from "../../lib/collection-text-search";
 import {
   assignGenerationRunTarget,
   runAnalysisWithEvidence,
-  runAnalysisWithEvidenceTrace,
 } from "../../lib/ai-provenance";
+import { getModels } from "../../lib/ai-client";
 import {
-  matchCategoryIds,
   mergeExistingCategoryIds,
   parsePositiveIntegerArray,
 } from "../../lib/collection-parsing";
 import { computeOrnamentValuationTotals } from "../../lib/ornaments/valuation-aggregate";
 import { getElaineGlobalConfig } from "../../lib/elaine-config";
+import {
+  getMissingOrnamentMaintenanceFields,
+  getOrnamentMaintenanceRecommendation,
+  type OrnamentMaintenanceReason,
+} from "../../lib/ornaments/maintenance";
+import {
+  recognizeOrnamentPhotos,
+  runOrnamentRecognition,
+  scheduleOrnamentRecognition,
+} from "../../lib/ornaments/recognition";
+import { applyExistingOrnamentCategories } from "../../lib/ornaments/category-assignment";
 
 // Excludes the embedding + visualEmbedding vectors from list/detail queries —
 // they're large and only needed internally, never surfaced via the API.
@@ -124,8 +121,6 @@ const MAX_TEXT = 500;
 const MAX_LABEL = 100;
 
 const MAX_SUPPLEMENTAL_IMAGES = 20;
-const MAX_AI_SUPPLEMENTAL = 5;
-
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 const upload = multer({
@@ -288,81 +283,20 @@ router.get("/items", async (req, res) => {
     conditions.push(or(...(categoryClauses as [SQL, ...SQL[]]))!);
   }
 
-  const baseWhere = and(...(conditions as [SQL, ...SQL[]]))!;
   const offset = (page - 1) * pageSize;
-
-  if (q && q.trim()) {
-    try {
-      const rankedIds = await semanticCollectionSearch({
-        query: q.trim(),
-        table: ornamentsItems,
-        textEmbeddingCol: "embedding",
-        visualEmbeddingCol: "visual_embedding",
-        limit: 500,
-        db,
-        visibilityWhere: baseWhere,
-        fetchDocuments: async (ids) => {
-          const rows = await db
-            .select(itemColumns)
-            .from(ornamentsItems)
-            .where(and(inArray(ornamentsItems.id, ids), baseWhere));
-          return rows.map((row) => ({
-            id: row.id,
-            text: buildOrnamentSearchDocument(row),
-          }));
-        },
-      });
-      if (rankedIds.length > 0) {
-        const total = rankedIds.length;
-        const pageIds = rankedIds.slice(offset, offset + pageSize);
-        const rows = pageIds.length
-          ? await db
-              .select(itemColumns)
-              .from(ornamentsItems)
-              .where(and(inArray(ornamentsItems.id, pageIds), baseWhere))
-          : [];
-        const byId = new Map(rows.map((row) => [row.id, row]));
-        const orderedRows = pageIds.flatMap((id) => {
-          const row = byId.get(id);
-          return row ? [row] : [];
-        });
-        const items = await serializeItems(orderedRows);
-        const metaWhere = rankedIds.length
-          ? and(inArray(ornamentsItems.id, rankedIds), baseWhere)!
-          : baseWhere;
-        const meta = await ornamentListMeta(metaWhere, total, pageSize);
-        res.json(
-          ListOrnamentsResponse.parse({
-            items,
-            total,
-            page,
-            pageSize,
-            totalPages: total === 0 ? 1 : Math.ceil(total / pageSize),
-            searchMode: "semantic",
-            facets: meta.facets,
-            stats: meta.stats,
-          }),
-        );
-        return;
-      }
-    } catch (err) {
-      logger.warn(
-        { err },
-        "ornaments: semantic search unavailable; using keyword search",
-      );
-    }
-
-    const term = `%${q.trim()}%`;
-    conditions.push(
-      or(
-        ilike(ornamentsItems.name, term),
-        ilike(ornamentsItems.seriesOrCollection, term),
-        ilike(ornamentsItems.brand, term),
-        ilike(ornamentsItems.notes, term),
-        ilike(ornamentsItems.description, term),
-      )!,
-    );
-  }
+  const textSearch = q
+    ? createCollectionTextSearch(q, {
+        title: [ornamentsItems.name],
+        collection: [ornamentsItems.seriesOrCollection],
+        broad: [
+          ornamentsItems.brand,
+          ornamentsItems.notes,
+          ornamentsItems.description,
+          ornamentsItems.aiDescription,
+        ],
+      })
+    : null;
+  if (textSearch?.where) conditions.push(textSearch.where);
 
   const where = and(...(conditions as [SQL, ...SQL[]]))!;
   const [{ value: total }] = await db
@@ -373,7 +307,10 @@ router.get("/items", async (req, res) => {
     .select(itemColumns)
     .from(ornamentsItems)
     .where(where)
-    .orderBy(...ornamentOrder(sort as OrnamentSort))
+    .orderBy(
+      ...(textSearch?.relevance ? [textSearch.relevance] : []),
+      ...ornamentOrder(sort as OrnamentSort),
+    )
     .limit(pageSize)
     .offset(offset);
   const [items, meta] = await Promise.all([
@@ -400,29 +337,26 @@ router.get("/items/stragglers", async (_req, res) => {
   const rows = await db
     .select({
       id: ornamentsItems.id,
-      missingEmbedding: sql<boolean>`${ornamentsItems.embedding} is null`,
-      missingAttributes: sql<boolean>`(${ornamentsItems.seriesOrCollection} is null and ${ornamentsItems.year} is null)`,
+      embedding: ornamentsItems.embedding,
+      seriesOrCollection: ornamentsItems.seriesOrCollection,
+      year: ornamentsItems.year,
     })
     .from(ornamentsItems)
-    .where(
-      and(
-        isNull(ornamentsItems.deletedAt),
-        or(
-          isNull(ornamentsItems.embedding),
-          and(
-            isNull(ornamentsItems.seriesOrCollection),
-            isNull(ornamentsItems.year),
-          ),
-        ),
-      ),
-    )
+    .where(isNull(ornamentsItems.deletedAt))
     .orderBy(desc(ornamentsItems.createdAt));
 
-  const items = rows.map((row) => {
-    const reasons: ("embedding" | "attributes")[] = [];
-    if (row.missingEmbedding) reasons.push("embedding");
-    if (row.missingAttributes) reasons.push("attributes");
-    return { id: row.id, reasons };
+  const items = rows.flatMap((row) => {
+    const reasons = getMissingOrnamentMaintenanceFields(row);
+    return reasons.length > 0
+      ? [
+          {
+            id: row.id,
+            reasons,
+            status: "pending_refresh" as const,
+            recommendation: getOrnamentMaintenanceRecommendation(reasons),
+          },
+        ]
+      : [];
   });
 
   res.json(GetOrnamentStragglersResponse.parse({ items }));
@@ -443,42 +377,9 @@ router.post("/items/lookup-barcode", async (req, res) => {
       year: result.year,
       description: result.description,
       imageUrl: result.imageUrl,
-      hallmarkSku: result.hallmarkSku,
-      hallmarkArtist: result.hallmarkArtist,
-      hallmarkSeriesName: result.hallmarkSeriesName,
-      hallmarkSequenceNumber: result.hallmarkSequenceNumber,
-      hallmarkRetailPriceUsd: result.hallmarkRetailPriceUsd,
-      hallmarkCollectorPriceUsd: result.hallmarkCollectorPriceUsd,
-      hallmarkInStock: result.hallmarkInStock,
-      hallmarkImages: result.hallmarkImages,
-      hallmarkProductUrl: result.hallmarkProductUrl,
     }),
   );
 });
-
-// User-submitted correction when a barcode lookup returned wrong data.
-// Stored in ornament_upc_corrections for future lookup prioritisation.
-// Registered before /items/:id/* routes to avoid path ambiguity.
-router.post(
-  "/items/report-barcode-correction",
-  requireAuth,
-  async (req, res) => {
-    const { ReportBarcodeCorrectionBody, ReportBarcodeCorrectionResponse } =
-      await import("@workspace/api-zod");
-    const body = ReportBarcodeCorrectionBody.parse(req.body);
-    await db.execute(sql`
-    INSERT INTO ornament_upc_corrections
-      (barcode, wrong_name, wrong_brand, corrected_name, corrected_brand,
-       corrected_series_or_collection, corrected_year, submitted_by)
-    VALUES
-      (${body.barcode}, ${body.wrongName ?? null}, ${body.wrongBrand ?? null},
-       ${body.correctedName ?? null}, ${body.correctedBrand ?? null},
-       ${body.correctedSeriesOrCollection ?? null}, ${body.correctedYear ?? null},
-       ${req.session.userId})
-  `);
-    res.json(ReportBarcodeCorrectionResponse.parse({ success: true }));
-  },
-);
 
 // AI-powered barcode extraction from a user-supplied photo.
 // Used as an escape hatch when the native BarcodeDetector API and ZXing
@@ -526,8 +427,31 @@ router.get("/items/:id", async (req, res) => {
   res.json(GetOrnamentResponse.parse(await serializeItem(row)));
 });
 
+const CREATE_ORNAMENT_BODY_FIELDS = new Set([
+  "acquiredAt",
+  "barcodeValue",
+  "brand",
+  "categories",
+  "categoryIds",
+  "description",
+  "dimensions",
+  "name",
+  "notes",
+  "origin",
+  "quantity",
+  "seriesOrCollection",
+  "year",
+]);
+
 router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
   const userId = req.session.userId!;
+  const unsupportedFields = Object.keys(req.body ?? {}).filter(
+    (field) => !CREATE_ORNAMENT_BODY_FIELDS.has(field),
+  );
+  if (unsupportedFields.length > 0) {
+    res.status(400).json({ error: "Unsupported ornament form field." });
+    return;
+  }
   const file = req.file;
   if (!file) {
     res.status(400).json({ error: "An image file is required." });
@@ -554,62 +478,57 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
   const manualCategoryIds = parsePositiveIntegerArray(req.body?.categoryIds);
 
   const userDimensions = clampField(req.body?.dimensions, MAX_TEXT);
-  const dataUrl = toDataUrl(cleanBuffer, contentType);
-  const { result: analysis, runId: analysisRunId } =
-    await runAnalysisWithEvidenceTrace(
-      {
-        module: "ornaments",
-        feature: "catalogue-image",
-        targetType: "ornament_item",
-        userId,
-        model: (await getModels()).fastVision,
-      },
-      () =>
-        analyzeOrnamentImage([dataUrl], {
-          resolveDimensions: userDimensions === null,
-        }),
-    );
-  const embedding = await embedText(buildEmbeddingText(analysis));
-
   const nameField = clampField(req.body?.name, MAX_NAME);
   const notesField = clampField(req.body?.notes, MAX_NOTES);
   const descriptionField = clampField(req.body?.description, MAX_NOTES);
   const brandField = clampField(req.body?.brand, MAX_TEXT);
-  const conditionField = clampField(req.body?.condition, MAX_TEXT);
   const originField = clampField(req.body?.origin, MAX_TEXT);
-  const barcodeField =
-    clampField(req.body?.barcodeValue, MAX_TEXT) ??
-    clampField(analysis.upc, MAX_TEXT);
+  const seriesField = clampField(req.body?.seriesOrCollection, MAX_TEXT);
+  const yearField =
+    typeof req.body?.year === "string" && /^\d{4}$/.test(req.body.year)
+      ? Number(req.body.year)
+      : null;
+  const barcodeInput = clampField(req.body?.barcodeValue, MAX_TEXT);
+  const dataUrl = toDataUrl(cleanBuffer, contentType);
+  const recognition = await recognizeOrnamentPhotos(
+    [{ order: 0, sourceId: "initial", dataUrl }],
+    {
+      name: nameField,
+      brand: brandField ?? "Hallmark",
+      seriesOrCollection: seriesField,
+      year: yearField,
+      barcodeValue: barcodeInput,
+      dimensions: userDimensions,
+      description: descriptionField,
+      descriptionGenerated: false,
+      aiDescription: null,
+      dominantColors: [],
+      motifs: [],
+      notes: notesField,
+    },
+    [],
+    { userId, feature: "catalogue-image" },
+  );
+  const analysis = recognition.analysis;
+  const barcodeField = recognition.identity.barcodeValue;
   const quantityField = Math.max(
     1,
     parseInt(req.body?.quantity ?? "1", 10) || 1,
   );
 
-  // If the vision analysis detected a barcode on the packaging, auto-enrich
-  // with UPC lookup data (name/brand/series/year) — user-supplied and
-  // AI-vision fields still take priority over the barcode lookup.
-  let barcodeLookup: Awaited<ReturnType<typeof lookupBarcode>> | null = null;
-  if (barcodeField) {
-    try {
-      barcodeLookup = await lookupBarcode(barcodeField);
-    } catch (err) {
-      logger.warn(
-        { err, barcode: barcodeField },
-        "Auto barcode lookup failed during ornament create",
-      );
-    }
-  }
+  const barcodeLookup = recognition.barcodeLookup;
 
   // Build the effective item name for eBay lookup before the image upload
   // so we can run both in parallel.
   const effectiveName =
     nameField ??
-    analysis.name ??
-    (barcodeLookup?.found ? barcodeLookup.name : null);
+    barcodeLookup?.name ??
+    recognition.identity.name ??
+    analysis.name;
   const effectiveBrand =
-    brandField ?? (barcodeLookup?.found ? barcodeLookup.brand : null);
+    brandField ?? barcodeLookup?.brand ?? recognition.identity.brand;
   const effectiveYear =
-    analysis.year ?? (barcodeLookup?.found ? barcodeLookup.year : null);
+    yearField ?? barcodeLookup?.year ?? recognition.identity.year;
 
   // If we have a name, try to get eBay sold-price data in parallel with the
   // image upload. Use this to pre-populate bookValue when no Hallmark price
@@ -660,37 +579,30 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
         name: effectiveName,
         brand: effectiveBrand ?? "Hallmark",
         seriesOrCollection:
-          analysis.seriesOrCollection ??
-          (barcodeLookup?.found
-            ? (barcodeLookup.hallmarkSeriesName ??
-              barcodeLookup.seriesOrCollection)
-            : null),
+          seriesField ??
+          barcodeLookup?.seriesOrCollection ??
+          recognition.identity.seriesOrCollection,
         year: effectiveYear,
         barcodeValue: barcodeField,
         quantity: quantityField,
         notes: notesField,
-        // Priority: Hallmark collector price > eBay *sold* median > null.
         // Only use the eBay median as a book-value seed when it comes from real
         // completed/sold listings (sourceType "sold"). Active-listing fallback
         // prices are asking prices, not realized values — don't store them as
         // book value or they'll mislead collectors.
         bookValue:
-          barcodeLookup?.hallmarkCollectorPriceUsd != null
-            ? String(barcodeLookup.hallmarkCollectorPriceUsd)
-            : ebayCreationLookup?.priceMedianUsd != null &&
-                ebayCreationLookup.sourceType === "sold"
-              ? String(ebayCreationLookup.priceMedianUsd)
-              : null,
-        bookValueSource: barcodeLookup?.hallmarkCollectorPriceUsd
-          ? "hallmarkornaments.com"
-          : ebayCreationLookup?.priceMedianUsd != null &&
-              ebayCreationLookup.sourceType === "sold"
+          ebayCreationLookup?.priceMedianUsd != null &&
+          ebayCreationLookup.sourceType === "sold"
+            ? String(ebayCreationLookup.priceMedianUsd)
+            : null,
+        bookValueSource:
+          ebayCreationLookup?.priceMedianUsd != null &&
+          ebayCreationLookup.sourceType === "sold"
             ? "ebay"
             : null,
         bookValueUpdatedAt:
-          barcodeLookup?.hallmarkCollectorPriceUsd != null ||
-          (ebayCreationLookup?.priceMedianUsd != null &&
-            ebayCreationLookup.sourceType === "sold")
+          ebayCreationLookup?.priceMedianUsd != null &&
+          ebayCreationLookup.sourceType === "sold"
             ? new Date()
             : null,
         retailValueUsd:
@@ -702,7 +614,6 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
         retailValueUpdatedAt:
           retailValueCreationLookup != null ? new Date() : null,
         dimensions: userDimensions ?? analysis.dimensions,
-        condition: conditionField,
         origin: originField,
         aiDescription: analysis.aiDescription,
         // Verbatim box-back text: user-typed entry wins, then AI vision's
@@ -711,7 +622,8 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
         description:
           descriptionField ??
           analysis.boxDescription ??
-          (barcodeLookup?.found ? barcodeLookup.description : null),
+          barcodeLookup?.description ??
+          null,
         // Only true when the stored description came from the AI-generated
         // fallback (no real box text) — never for manual or looked-up text.
         descriptionGenerated:
@@ -722,35 +634,32 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
         motifs: analysis.motifs,
         acquiredAt: today,
         imagePath,
-        embedding,
+        embedding: recognition.embedding,
+        visualEmbedding: recognition.visualEmbedding,
       })
       .returning();
 
-    await assignGenerationRunTarget(analysisRunId, row.id);
+    await assignGenerationRunTarget(recognition.generationRunId, row.id);
 
-    // Categories are a shared household set — auto-match plus manual picks.
+    // Manual picks are validated and inserted first; automatic matching runs
+    // through the shared post-recognition operation below and never removes
+    // those user selections.
     const allCats = await db
       .select({ id: categories.id, name: categories.name })
       .from(categories);
-    const autoCategoryIds = matchCategoryIds(allCats, [
-      analysis.name,
-      analysis.seriesOrCollection,
-      analysis.dimensions,
-      analysis.motifs,
-    ]);
-    const allCategoryIds = mergeExistingCategoryIds(
-      allCats,
-      autoCategoryIds,
-      manualCategoryIds,
-    );
+    const allCategoryIds = mergeExistingCategoryIds(allCats, manualCategoryIds);
     if (allCategoryIds.length > 0) {
-      await db.insert(itemCategories).values(
-        allCategoryIds.map((catId) => ({
-          itemId: row.id,
-          categoryId: catId,
-        })),
-      );
+      await db
+        .insert(itemCategories)
+        .values(
+          allCategoryIds.map((catId) => ({
+            itemId: row.id,
+            categoryId: catId,
+          })),
+        )
+        .onConflictDoNothing();
     }
+    await applyExistingOrnamentCategories([row.id]);
 
     res.status(201).json(GetOrnamentResponse.parse(await serializeItem(row)));
   } catch (err) {
@@ -761,7 +670,7 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
 
 router.patch("/items/:id", async (req, res) => {
   const { id } = UpdateOrnamentParams.parse(req.params);
-  const body = UpdateOrnamentBody.parse(req.body);
+  const body = UpdateOrnamentBody.strict().parse(req.body);
 
   const fieldUpdates: Partial<typeof ornamentsItems.$inferInsert> = {};
   if (body.name !== undefined)
@@ -792,8 +701,6 @@ router.patch("/items/:id", async (req, res) => {
   }
   if (body.dimensions !== undefined)
     fieldUpdates.dimensions = clampField(body.dimensions, MAX_TEXT);
-  if (body.condition !== undefined)
-    fieldUpdates.condition = clampField(body.condition, MAX_TEXT);
   if (body.origin !== undefined)
     fieldUpdates.origin = clampField(body.origin, MAX_TEXT);
   if (body.bookValue !== undefined)
@@ -1039,6 +946,7 @@ router.post(
         .values({ itemId: id, storagePath, label, position: maxPos + 1 })
         .returning();
 
+      scheduleOrnamentRecognition(id);
       res.status(201).json({
         id: newImg.id,
         url: `/api/ornaments/items/${id}/images/${newImg.id}`,
@@ -1095,6 +1003,7 @@ router.patch("/items/:id/images/:imageId", async (req, res) => {
           .returning()
       : [existing];
 
+  if (body.position !== undefined) scheduleOrnamentRecognition(id);
   res.json({
     id: updated.id,
     url: `/api/ornaments/items/${id}/images/${updated.id}`,
@@ -1138,6 +1047,7 @@ router.delete("/items/:id/images/:imageId", async (req, res) => {
     .update(ornamentsImages)
     .set({ deletedAt: new Date() })
     .where(eq(ornamentsImages.id, imageId));
+  scheduleOrnamentRecognition(id);
   res.status(200).json({ ok: true });
 });
 
@@ -1187,13 +1097,8 @@ router.put(
         .update(ornamentsItems)
         .set({ imagePath: newPath })
         .where(eq(ornamentsItems.id, id));
-      await db
-        .update(ornamentsImages)
-        .set({ storagePath: newPath })
-        .where(
-          and(eq(ornamentsImages.itemId, id), eq(ornamentsImages.position, 0)),
-        );
       if (oldPath) await deleteImage(oldPath).catch(() => {});
+      scheduleOrnamentRecognition(id);
       const [updated] = await db
         .select()
         .from(ornamentsItems)
@@ -1268,6 +1173,7 @@ router.put(
         .set({ storagePath: newPath })
         .where(eq(ornamentsImages.id, imageId));
       await deleteImage(oldPath).catch(() => {});
+      scheduleOrnamentRecognition(id);
       const [updated] = await db
         .select()
         .from(ornamentsItems)
@@ -1280,47 +1186,6 @@ router.put(
     }
   },
 );
-
-// ---------------------------------------------------------------------------
-// Barcode lookup, scoped to an existing item (does not save — caller PATCHes)
-// ---------------------------------------------------------------------------
-
-router.post("/items/:id/lookup-barcode", async (req, res) => {
-  const { id } = LookupOrnamentBarcodeParams.parse(req.params);
-  const { barcode } = LookupOrnamentBarcodeBody.parse(req.body);
-
-  const [item] = await db
-    .select({ id: ornamentsItems.id })
-    .from(ornamentsItems)
-    .where(eq(ornamentsItems.id, id))
-    .limit(1);
-  if (!item) {
-    res.status(404).json({ error: "Ornament not found." });
-    return;
-  }
-
-  const result = await lookupBarcode(barcode);
-  res.json(
-    LookupOrnamentBarcodeResponse.parse({
-      found: result.found,
-      name: result.name,
-      brand: result.brand,
-      seriesOrCollection: result.seriesOrCollection,
-      year: result.year,
-      description: result.description,
-      imageUrl: result.imageUrl,
-      hallmarkSku: result.hallmarkSku,
-      hallmarkArtist: result.hallmarkArtist,
-      hallmarkSeriesName: result.hallmarkSeriesName,
-      hallmarkSequenceNumber: result.hallmarkSequenceNumber,
-      hallmarkRetailPriceUsd: result.hallmarkRetailPriceUsd,
-      hallmarkCollectorPriceUsd: result.hallmarkCollectorPriceUsd,
-      hallmarkInStock: result.hallmarkInStock,
-      hallmarkImages: result.hallmarkImages,
-      hallmarkProductUrl: result.hallmarkProductUrl,
-    }),
-  );
-});
 
 // ---------------------------------------------------------------------------
 // Book value lookup — fetches from hallmarkornaments.com /
@@ -1340,37 +1205,11 @@ router.post("/items/:id/book-value-lookup", aiLimiter, async (req, res) => {
     return;
   }
 
-  // If the item has a stored UPC, check the barcode cache first — lookupBarcode
-  // already fetched hallmarkCollectorPriceUsd (the HooH collector price) and
-  // cached it. Using it directly is faster and more precise than scraping.
-  let result: {
-    value: number;
-    source: "hallmarkornaments.com" | "hookedonhallmark.com";
-  } | null = null;
-  if (item.barcodeValue) {
-    try {
-      const cached = await lookupBarcode(item.barcodeValue);
-      if (cached.found && cached.hallmarkCollectorPriceUsd) {
-        const v = parseFloat(cached.hallmarkCollectorPriceUsd);
-        if (Number.isFinite(v) && v > 0) {
-          result = { value: v, source: "hookedonhallmark.com" };
-        }
-      }
-    } catch (err) {
-      req.log.warn(
-        { err },
-        "book-value: barcode cache lookup failed, falling through to scrape",
-      );
-    }
-  }
-
-  if (!result) {
-    result = await lookupBookValue({
-      name: item.name,
-      seriesOrCollection: item.seriesOrCollection,
-      year: item.year,
-    });
-  }
+  const result = await lookupBookValue({
+    name: item.name,
+    seriesOrCollection: item.seriesOrCollection,
+    year: item.year,
+  });
 
   if (!result) {
     res.status(422).json({
@@ -1442,136 +1281,32 @@ router.post("/items/:id/retail-value-lookup", aiLimiter, async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// Shared AI analysis pipeline — used by both reanalyze and set-primary-image
+// Shared AI analysis pipeline — used by every Ornament recognition trigger.
 // ---------------------------------------------------------------------------
 
-export async function runItemAnalysis(id: number): Promise<unknown> {
-  const [item] = await db
-    .select(itemColumns)
-    .from(ornamentsItems)
-    .where(eq(ornamentsItems.id, id))
-    .limit(1);
-  if (!item)
-    throw Object.assign(new Error("Ornament not found."), { status: 404 });
+export interface OrnamentReanalysisMaintenance {
+  unresolvedFields: OrnamentMaintenanceReason[];
+  recommendation: string | null;
+}
 
-  const suppRows = (
-    await db
-      .select({ storagePath: ornamentsImages.storagePath })
-      .from(ornamentsImages)
-      .where(eq(ornamentsImages.itemId, id))
-      .orderBy(asc(ornamentsImages.position))
-  ).slice(0, MAX_AI_SUPPLEMENTAL);
-
-  const [primaryResult, ...suppResults] = await Promise.all([
-    downloadImageBuffer(item.imagePath),
-    ...suppRows.map((r) => downloadImageBuffer(r.storagePath)),
-  ]);
-
-  const primaryContentType =
-    sniffImageType(primaryResult.buffer) ?? "image/jpeg";
-  const dataUrls = [
-    toDataUrl(primaryResult.buffer, primaryContentType),
-    ...suppResults.map((r) =>
-      toDataUrl(r.buffer, sniffImageType(r.buffer) ?? "image/jpeg"),
+async function runItemAnalysisWithMaintenance(
+  id: number,
+  options: { identityOnly?: boolean } = {},
+): Promise<{ item: unknown; maintenance: OrnamentReanalysisMaintenance }> {
+  const result = await runOrnamentRecognition(id, {
+    identityOnly: options.identityOnly,
+    feature: options.identityOnly ? "identity-refresh" : "reanalyze-item",
+  });
+  return {
+    item: GetOrnamentResponse.parse(
+      await serializeItem(result.item as OrnamentItemRow),
     ),
-  ];
-
-  const locked = new Set(item.lockedFields ?? []);
-  const analysis = await runAnalysisWithEvidence(
-    {
-      module: "ornaments",
-      feature: "reanalyze-item",
-      targetType: "ornament_item",
-      targetId: id,
-      userId: item.userId ?? undefined,
-      model: (await getModels()).fastVision,
-    },
-    () =>
-      analyzeOrnamentImage(dataUrls, {
-        resolveDimensions: !locked.has("dimensions"),
-      }),
-  );
-  const embedding = await embedText(buildEmbeddingText(analysis));
-
-  const keep = <T>(field: string, aiVal: T, existing: T): T =>
-    locked.has(field) ? existing : (aiVal ?? existing);
-
-  const merged = {
-    name: keep("name", analysis.name, item.name),
-    seriesOrCollection: keep(
-      "seriesOrCollection",
-      analysis.seriesOrCollection,
-      item.seriesOrCollection,
-    ),
-    year: keep("year", analysis.year, item.year),
-    dimensions: keep("dimensions", analysis.dimensions, item.dimensions),
-    dominantColors: locked.has("dominantColors")
-      ? item.dominantColors
-      : analysis.dominantColors.length
-        ? analysis.dominantColors
-        : item.dominantColors,
-    motifs: locked.has("motifs")
-      ? item.motifs
-      : analysis.motifs.length
-        ? analysis.motifs
-        : item.motifs,
-    aiDescription: keep(
-      "aiDescription",
-      analysis.aiDescription,
-      item.aiDescription,
-    ),
-    description: keep("description", analysis.boxDescription, item.description),
-    // Tied to the "description" lock: only trust the new generated-flag when
-    // we're actually taking the new box description text above.
-    descriptionGenerated: locked.has("description")
-      ? item.descriptionGenerated
-      : analysis.boxDescription != null
-        ? analysis.boxDescriptionGenerated
-        : item.descriptionGenerated,
-    barcodeValue: keep("barcodeValue", analysis.upc, item.barcodeValue),
-    embedding,
+    maintenance: result.maintenance,
   };
+}
 
-  const [updated] = await db
-    .update(ornamentsItems)
-    .set(merged)
-    .where(eq(ornamentsItems.id, id))
-    .returning(itemColumns);
-
-  // Re-run category auto-matching (union-only — never removes existing assignments).
-  const allCats = await db
-    .select({ id: categories.id, name: categories.name })
-    .from(categories);
-  const autoCategoryIds = matchCategoryIds(allCats, [
-    merged.name,
-    merged.seriesOrCollection,
-    merged.dimensions,
-    merged.motifs,
-  ]);
-  const existingCatRows = await db
-    .select({ categoryId: itemCategories.categoryId })
-    .from(itemCategories)
-    .where(eq(itemCategories.itemId, id));
-  const existingCatIds = new Set(existingCatRows.map((r) => r.categoryId));
-
-  const newCatIds = autoCategoryIds.filter(
-    (catId) => !existingCatIds.has(catId),
-  );
-
-  if (newCatIds.length > 0) {
-    await db
-      .insert(itemCategories)
-      .values(newCatIds.map((catId) => ({ itemId: id, categoryId: catId })));
-  }
-
-  // If we now have a barcode value (either newly detected by AI or already stored),
-  // fire the barcode enrichment pipeline in the background so Hallmark catalog
-  // data (series, artist, collector price, SKU) is back-patched onto the item.
-  if (merged.barcodeValue) {
-    void lookupBarcode(merged.barcodeValue);
-  }
-
-  return GetOrnamentResponse.parse(await serializeItem(updated));
+export async function runItemAnalysis(id: number): Promise<unknown> {
+  return (await runItemAnalysisWithMaintenance(id)).item;
 }
 
 // ---------------------------------------------------------------------------
@@ -1743,6 +1478,26 @@ router.post("/items/:id/reanalyze", aiLimiter, async (req, res) => {
   }
 });
 
+router.post("/items/:id/identity-refresh", aiLimiter, async (req, res) => {
+  const { id } = GetOrnamentParams.parse(req.params);
+  try {
+    const result = await runItemAnalysisWithMaintenance(id, {
+      identityOnly: true,
+    });
+    res.json(
+      RefreshOrnamentIdentityResponse.parse({
+        item: result.item,
+        unresolvedFields: result.maintenance.unresolvedFields,
+        recommendation: result.maintenance.recommendation,
+      }),
+    );
+  } catch (err: unknown) {
+    const status = (err as { status?: number }).status ?? 500;
+    const message = err instanceof Error ? err.message : "Unknown error.";
+    res.status(status).json({ error: message });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // AI appraisal — sends photos + metadata to AI for a collector value estimate
 // ---------------------------------------------------------------------------
@@ -1756,13 +1511,11 @@ async function runItemAppraisal(id: number): Promise<void> {
   if (!item)
     throw Object.assign(new Error("Ornament not found."), { status: 404 });
 
-  const suppRows = (
-    await db
-      .select({ storagePath: ornamentsImages.storagePath })
-      .from(ornamentsImages)
-      .where(eq(ornamentsImages.itemId, id))
-      .orderBy(asc(ornamentsImages.position))
-  ).slice(0, MAX_AI_SUPPLEMENTAL);
+  const suppRows = await db
+    .select({ storagePath: ornamentsImages.storagePath })
+    .from(ornamentsImages)
+    .where(eq(ornamentsImages.itemId, id))
+    .orderBy(asc(ornamentsImages.position));
 
   const [primaryResult, ...suppResults] = await Promise.all([
     downloadImageBuffer(item.imagePath),
@@ -1778,16 +1531,30 @@ async function runItemAppraisal(id: number): Promise<void> {
     ),
   ];
 
-  const appraisal = await appraiseOrnamentImage(dataUrls, {
-    name: item.name,
-    brand: item.brand,
-    seriesOrCollection: item.seriesOrCollection,
-    year: item.year,
-    condition: item.condition,
-    aiDescription: item.aiDescription,
-    description: item.description,
-    barcodeValue: item.barcodeValue,
-  });
+  const models = await getModels();
+  const { appraisal } = await runAnalysisWithEvidence(
+    {
+      module: "ornaments",
+      feature: "ai-appraisal",
+      targetType: "ornament_item",
+      targetId: id,
+      userId: item.userId ?? undefined,
+      model: models.fastVision,
+      promptTemplateId: "ornament-appraisal-v1",
+      inputArtifactHashes: dataUrls,
+    },
+    async () => ({
+      appraisal: await appraiseOrnamentImage(dataUrls, {
+        name: item.name,
+        brand: item.brand,
+        seriesOrCollection: item.seriesOrCollection,
+        year: item.year,
+        aiDescription: item.aiDescription,
+        description: item.description,
+        barcodeValue: item.barcodeValue,
+      }),
+    }),
+  );
 
   await db
     .update(ornamentsItems)
@@ -1829,7 +1596,7 @@ router.post("/items/:id/ai-appraisal", aiLimiter, async (req, res) => {
 export async function refreshOrnamentItemAllData(
   id: number,
   log: { warn: (obj: unknown, msg: string) => void },
-): Promise<void> {
+): Promise<OrnamentReanalysisMaintenance> {
   const [item] = await db
     .select(itemColumns)
     .from(ornamentsItems)
@@ -1845,39 +1612,17 @@ export async function refreshOrnamentItemAllData(
   // whole item refresh as failed (matching the bulk endpoint's semantics).
   const [analysisResult] = await Promise.allSettled([
     // 1. AI vision reanalysis (description, colors, motifs, name, barcode)
-    runItemAnalysis(id),
-    // 2. Book value — barcode cache first (hallmarkCollectorPriceUsd), then scrape
+    runItemAnalysisWithMaintenance(id),
+    // 2. Book value — live lookup
     (async () => {
-      let result: {
-        value: number;
-        source: "hallmarkornaments.com" | "hookedonhallmark.com";
-      } | null = null;
-      if (item.barcodeValue) {
-        try {
-          const cached = await lookupBarcode(item.barcodeValue);
-          if (cached.found && cached.hallmarkCollectorPriceUsd) {
-            const v = parseFloat(cached.hallmarkCollectorPriceUsd);
-            if (Number.isFinite(v) && v > 0) {
-              result = { value: v, source: "hookedonhallmark.com" };
-            }
-          }
-        } catch (err) {
-          log.warn(
-            { err },
-            "refresh-all: barcode cache lookup failed, falling through to scrape",
-          );
-        }
-      }
-      if (!result) {
-        result = await lookupBookValue({
-          name: item.name,
-          seriesOrCollection: item.seriesOrCollection,
-          year: item.year,
-        }).catch((err) => {
-          log.warn({ err }, "refresh-all: book-value lookup failed");
-          return null;
-        });
-      }
+      const result = await lookupBookValue({
+        name: item.name,
+        seriesOrCollection: item.seriesOrCollection,
+        year: item.year,
+      }).catch((err) => {
+        log.warn({ err }, "refresh-all: book-value lookup failed");
+        return null;
+      });
       if (result) {
         await db
           .update(ornamentsItems)
@@ -1964,6 +1709,7 @@ export async function refreshOrnamentItemAllData(
   if (analysisResult.status === "rejected") {
     throw analysisResult.reason;
   }
+  return analysisResult.value.maintenance;
 }
 
 router.post("/items/:id/refresh-all", aiLimiter, async (req, res) => {
@@ -1989,9 +1735,17 @@ router.post("/items/:id/refresh-all", aiLimiter, async (req, res) => {
   res.json(GetOrnamentResponse.parse(await serializeItem(final)));
 });
 
-export async function bulkReanalyzeOrnamentItems(
-  ids: number[],
-): Promise<{ succeeded: number[]; failed: number[] }> {
+export async function bulkReanalyzeOrnamentItems(ids: number[]): Promise<{
+  succeeded: number[];
+  failed: number[];
+  outcomes: Array<{
+    id: number;
+    status: "refreshed" | "needs_evidence" | "failed";
+    unresolvedFields: OrnamentMaintenanceReason[];
+    recommendation: string | null;
+    error?: string;
+  }>;
+}> {
   const elaineConfig = await getElaineGlobalConfig();
   const capped = [...new Set(ids)].slice(
     0,
@@ -1999,6 +1753,13 @@ export async function bulkReanalyzeOrnamentItems(
   );
   const succeeded: number[] = [];
   const failed: number[] = [];
+  const outcomes: Array<{
+    id: number;
+    status: "refreshed" | "needs_evidence" | "failed";
+    unresolvedFields: OrnamentMaintenanceReason[];
+    recommendation: string | null;
+    error?: string;
+  }> = [];
 
   // Each item runs the same full refresh pipeline as the detail page's
   // "Refresh All" (AI reanalysis + book value + retail value + cache-aware
@@ -2008,17 +1769,33 @@ export async function bulkReanalyzeOrnamentItems(
     capped.map((id) =>
       limit(async () => {
         try {
-          await refreshOrnamentItemAllData(id, logger);
+          const maintenance = await refreshOrnamentItemAllData(id, logger);
           succeeded.push(id);
+          outcomes.push({
+            id,
+            status:
+              maintenance.unresolvedFields.length > 0
+                ? "needs_evidence"
+                : "refreshed",
+            unresolvedFields: maintenance.unresolvedFields,
+            recommendation: maintenance.recommendation,
+          });
         } catch (err) {
           logger.error({ itemId: id, err }, "bulk-reanalyze: item failed");
           failed.push(id);
+          outcomes.push({
+            id,
+            status: "failed",
+            unresolvedFields: [],
+            recommendation: null,
+            error: err instanceof Error ? err.message : "Analysis failed.",
+          });
         }
       }),
     ),
   );
 
-  return { succeeded, failed };
+  return { succeeded, failed, outcomes };
 }
 
 router.post("/items/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
@@ -2104,38 +1881,34 @@ export async function createOrnamentItemFromBuffer(
   const cleanBuffer = await stripMetadata(buffer, contentType);
   const dataUrl = toDataUrl(cleanBuffer, contentType);
 
-  const { result: analysis, runId: analysisRunId } =
-    await runAnalysisWithEvidenceTrace(
-      {
-        module: "ornaments",
-        feature: "catalogue-image",
-        targetType: "ornament_item",
-        userId,
-        model: (await getModels()).fastVision,
-      },
-      () => analyzeOrnamentImage([dataUrl]),
-    );
-  const embedding = await embedText(buildEmbeddingText(analysis));
-
-  const barcodeField = analysis.upc ? analysis.upc.slice(0, MAX_TEXT) : null;
-
-  let barcodeLookup: Awaited<ReturnType<typeof lookupBarcode>> | null = null;
-  if (barcodeField) {
-    try {
-      barcodeLookup = await lookupBarcode(barcodeField);
-    } catch (err) {
-      logger.warn(
-        { err, barcode: barcodeField },
-        "Auto barcode lookup during Elaine ornament create failed (non-fatal)",
-      );
-    }
-  }
+  const recognition = await recognizeOrnamentPhotos(
+    [{ order: 0, sourceId: "elaine-initial", dataUrl }],
+    {
+      name: null,
+      brand: "Hallmark",
+      seriesOrCollection: null,
+      year: null,
+      barcodeValue: null,
+      dimensions: null,
+      description: null,
+      descriptionGenerated: false,
+      aiDescription: null,
+      dominantColors: [],
+      motifs: [],
+      notes: null,
+    },
+    [],
+    { userId, feature: "elaine-catalogue-image" },
+  );
+  const analysis = recognition.analysis;
+  const barcodeField =
+    recognition.identity.barcodeValue?.slice(0, MAX_TEXT) ?? null;
+  const barcodeLookup = recognition.barcodeLookup;
 
   const effectiveName =
-    analysis.name ?? (barcodeLookup?.found ? barcodeLookup.name : null);
-  const effectiveYear =
-    analysis.year ?? (barcodeLookup?.found ? barcodeLookup.year : null);
-  const effectiveBrand = barcodeLookup?.found ? barcodeLookup.brand : null;
+    barcodeLookup?.name ?? recognition.identity.name ?? analysis.name;
+  const effectiveYear = barcodeLookup?.year ?? recognition.identity.year;
+  const effectiveBrand = barcodeLookup?.brand ?? recognition.identity.brand;
 
   const [imagePath, ebayCreationLookup, retailValueCreationLookup] =
     await Promise.all([
@@ -2180,11 +1953,8 @@ export async function createOrnamentItemFromBuffer(
         name: effectiveName,
         brand: effectiveBrand ?? "Hallmark",
         seriesOrCollection:
-          analysis.seriesOrCollection ??
-          (barcodeLookup?.found
-            ? (barcodeLookup.hallmarkSeriesName ??
-              barcodeLookup.seriesOrCollection)
-            : null),
+          barcodeLookup?.seriesOrCollection ??
+          recognition.identity.seriesOrCollection,
         year: effectiveYear,
         barcodeValue: barcodeField,
         quantity: 1,
@@ -2193,22 +1963,18 @@ export async function createOrnamentItemFromBuffer(
         // (sourceType "sold"). Active-listing asking prices must not be stored
         // as book value because they mislead collectors about realised values.
         bookValue:
-          barcodeLookup?.hallmarkCollectorPriceUsd != null
-            ? String(barcodeLookup.hallmarkCollectorPriceUsd)
-            : ebayCreationLookup?.priceMedianUsd != null &&
-                ebayCreationLookup.sourceType === "sold"
-              ? String(ebayCreationLookup.priceMedianUsd)
-              : null,
-        bookValueSource: barcodeLookup?.hallmarkCollectorPriceUsd
-          ? "hallmarkornaments.com"
-          : ebayCreationLookup?.priceMedianUsd != null &&
-              ebayCreationLookup.sourceType === "sold"
+          ebayCreationLookup?.priceMedianUsd != null &&
+          ebayCreationLookup.sourceType === "sold"
+            ? String(ebayCreationLookup.priceMedianUsd)
+            : null,
+        bookValueSource:
+          ebayCreationLookup?.priceMedianUsd != null &&
+          ebayCreationLookup.sourceType === "sold"
             ? "ebay"
             : null,
         bookValueUpdatedAt:
-          barcodeLookup?.hallmarkCollectorPriceUsd != null ||
-          (ebayCreationLookup?.priceMedianUsd != null &&
-            ebayCreationLookup.sourceType === "sold")
+          ebayCreationLookup?.priceMedianUsd != null &&
+          ebayCreationLookup.sourceType === "sold"
             ? new Date()
             : null,
         retailValueUsd:
@@ -2222,42 +1988,21 @@ export async function createOrnamentItemFromBuffer(
         dimensions: analysis.dimensions,
         aiDescription: analysis.aiDescription,
         description:
-          analysis.boxDescription ??
-          (barcodeLookup?.found ? barcodeLookup.description : null),
+          analysis.boxDescription ?? barcodeLookup?.description ?? null,
         descriptionGenerated:
           analysis.boxDescription != null && analysis.boxDescriptionGenerated,
         dominantColors: analysis.dominantColors,
         motifs: analysis.motifs,
         acquiredAt: today,
         imagePath,
-        embedding,
+        embedding: recognition.embedding,
+        visualEmbedding: recognition.visualEmbedding,
       })
       .returning();
 
-    await assignGenerationRunTarget(analysisRunId, row.id);
+    await assignGenerationRunTarget(recognition.generationRunId, row.id);
 
-    const allCats = await db
-      .select({ id: categories.id, name: categories.name })
-      .from(categories);
-    const autoCategoryIds = matchCategoryIds(allCats, [
-      analysis.name,
-      analysis.seriesOrCollection,
-      analysis.dimensions,
-      analysis.motifs,
-    ]);
-    const allCategoryIds = mergeExistingCategoryIds(
-      allCats,
-      autoCategoryIds,
-      [],
-    );
-    if (allCategoryIds.length > 0) {
-      await db.insert(itemCategories).values(
-        allCategoryIds.map((catId) => ({
-          itemId: row.id,
-          categoryId: catId,
-        })),
-      );
-    }
+    await applyExistingOrnamentCategories([row.id]);
 
     return { id: row.id, name: row.name };
   } catch (err) {

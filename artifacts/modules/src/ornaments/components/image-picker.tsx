@@ -13,6 +13,7 @@ interface ImagePickerProps {
   value?: Blob | string | null;
   onChange: (file: Blob | null) => void;
   className?: string;
+  onCameraSave?: (file: File) => void | Promise<void>;
 }
 
 /**
@@ -20,7 +21,12 @@ interface ImagePickerProps {
  * its existing form value contract while all collection apps share the same
  * capture, preview, replace, remove, accessibility, and upload-policy UI.
  */
-export function ImagePicker({ value, onChange, className }: ImagePickerProps) {
+export function ImagePicker({
+  value,
+  onChange,
+  className,
+  onCameraSave,
+}: ImagePickerProps) {
   const file = useMemo(() => {
     if (value instanceof File) return value;
     if (value instanceof Blob) {
@@ -46,7 +52,12 @@ export function ImagePicker({ value, onChange, className }: ImagePickerProps) {
 
   return (
     <div className={cn("w-full", className)}>
-      <SharedImagePicker file={file} onSelect={handleSelect} />
+      <SharedImagePicker
+        file={file}
+        onSelect={handleSelect}
+        editCameraCaptures={!!onCameraSave}
+        onCameraSave={onCameraSave}
+      />
     </div>
   );
 }

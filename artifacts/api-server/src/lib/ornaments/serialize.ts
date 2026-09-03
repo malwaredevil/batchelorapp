@@ -33,7 +33,6 @@ export interface SerializedItem {
   lockedFields: string[];
   notes: string | null;
   dimensions: string | null;
-  condition: string | null;
   origin: string | null;
   aiDescription: string | null;
   description: string | null;
@@ -80,7 +79,6 @@ const { serializeItem, serializeItems } = createCollectionSerializer<
       lockedFields: row.lockedFields ?? [],
       notes: row.notes,
       dimensions: row.dimensions,
-      condition: row.condition,
       origin: row.origin,
       aiDescription: row.aiDescription,
       description: row.description,

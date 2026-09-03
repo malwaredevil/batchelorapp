@@ -6,6 +6,7 @@ export type ElaineCapabilityDomain =
   | "pottery"
   | "quilting"
   | "ornaments"
+  | "magnets"
   | "office"
   | "notifications"
   | "hub"
@@ -264,6 +265,34 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
     ...ACTION_DEFAULTS,
     domain: "ornaments",
     executorPrefix: "ornamentAction",
+    channels: ["web"],
+  }),
+  ...policies(
+    [
+      "update_magnet_item",
+      "delete_magnet_item",
+      "create_magnet_category",
+      "delete_magnet_category",
+      "rename_magnet_category",
+      "merge_magnet_categories",
+      "lock_magnet_field",
+      "update_magnet_item_categories",
+      "reanalyze_magnet",
+      "delete_magnet_photo",
+      "promote_magnet_photo",
+    ],
+    {
+      ...ACTION_DEFAULTS,
+      domain: "magnets",
+      executorPrefix: "magnetAction",
+    },
+  ),
+  // Photos are attachment-based and are therefore browser-only. Camera Bulk
+  // Add remains an explicit browser interaction, never a chat action.
+  ...policies(["add_photo_to_magnets"], {
+    ...ACTION_DEFAULTS,
+    domain: "magnets",
+    executorPrefix: "magnetAction",
     channels: ["web"],
   }),
   // ornament_ebay_price_lookup: web-only because it requires the item's

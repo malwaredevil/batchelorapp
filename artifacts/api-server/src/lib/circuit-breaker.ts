@@ -191,7 +191,7 @@ export class CircuitOpenError extends Error {
 
 /**
  * Shared singleton used by the AI client and external fetches.
- * Per-provider keys: "openrouter", "jina", "voyage", "apify", "upcitemdb", etc.
+ * Per-provider keys: "openrouter", "jina", "voyage", "apify", etc.
  */
 export const circuitBreaker = new CircuitBreaker({
   failureThreshold: 5,

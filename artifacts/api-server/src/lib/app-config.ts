@@ -82,34 +82,6 @@ export const APP_CONFIG_DEFAULTS: AppConfigDefault[] = [
       "How long to keep the OpenRouter model catalogue in-memory (default 1 h).",
   },
 
-  // ── ornaments ─────────────────────────────────────────────────────────────
-  {
-    module: "ornaments",
-    key: "barcode_fetch_timeout_ms",
-    value: "8000",
-    type: "integer",
-    label: "Barcode lookup fetch timeout (ms)",
-    description: "AbortController timeout for UPCitemdb barcode lookup calls.",
-  },
-  {
-    module: "ornaments",
-    key: "upcitemdb_trial_url",
-    value: "https://api.upcitemdb.com/prod/trial/lookup",
-    type: "string",
-    label: "UPCitemdb trial endpoint URL",
-    description:
-      "UPCitemdb free-tier lookup endpoint used when UPCITEMDB_USER_KEY is not set. Override to swap providers.",
-  },
-  {
-    module: "ornaments",
-    key: "upcitemdb_paid_url",
-    value: "https://api.upcitemdb.com/prod/v1/lookup",
-    type: "string",
-    label: "UPCitemdb paid endpoint URL",
-    description:
-      "UPCitemdb paid/pro lookup endpoint used when UPCITEMDB_USER_KEY is set.",
-  },
-
   // ── quilting ─────────────────────────────────────────────────────────────
   {
     module: "quilting",

@@ -10,13 +10,14 @@ Do not edit by hand.
 | @workspace/e2e                 |            artifacts/e2e/package.json |   0.0.0 |            0 |        2 |
 | @workspace/elaine              |         artifacts/elaine/package.json |   0.0.0 |            0 |       71 |
 | @workspace/mockup-sandbox      | artifacts/mockup-sandbox/package.json |   0.0.0 |            0 |       61 |
-| @workspace/modules             |        artifacts/modules/package.json |   0.0.0 |           18 |       80 |
-| @workspace/web                 |            artifacts/web/package.json |   0.0.0 |            0 |       77 |
+| @workspace/modules             |        artifacts/modules/package.json |   0.0.0 |           17 |       81 |
+| @workspace/web                 |            artifacts/web/package.json |   0.0.0 |            0 |       78 |
 | @workspace/ai-actions          |           lib/ai-actions/package.json |   0.0.0 |            1 |        1 |
 | @workspace/api-client-react    |     lib/api-client-react/package.json |   0.0.0 |            1 |        4 |
 | @workspace/api-spec            |             lib/api-spec/package.json |   0.0.0 |            0 |        3 |
 | @workspace/api-zod             |              lib/api-zod/package.json |   0.0.0 |            1 |        0 |
 | @workspace/app-shell           |            lib/app-shell/package.json |   0.0.0 |            6 |       10 |
+| @workspace/barcode-scanner     |      lib/barcode-scanner/package.json |   0.0.0 |            1 |        3 |
 | @workspace/collection-ui       |        lib/collection-ui/package.json |   0.0.0 |            3 |        5 |
 | @workspace/db                  |                   lib/db/package.json |   0.0.0 |            4 |        5 |
 | @workspace/elaine-ui           |            lib/elaine-ui/package.json |   0.0.0 |           14 |        8 |

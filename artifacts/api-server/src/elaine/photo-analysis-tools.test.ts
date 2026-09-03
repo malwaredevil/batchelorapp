@@ -324,7 +324,6 @@ vi.mock("../lib/pottery/ebay-market-value", () => ({
 
 vi.mock("../lib/ornaments/hallmark-search", () => ({
   searchHallmark: vi.fn().mockResolvedValue([]),
-  lookupHallmarkFromDb: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("../lib/ornaments/barcode", () => ({
@@ -561,6 +560,13 @@ vi.mock("../lib/upload-limits", () => ({
 }));
 
 vi.mock("../lib/storage-core", () => ({
+  buildStorageAdapter: vi.fn(() => ({
+    uploadImage: vi.fn(),
+    downloadImageBuffer: vi.fn(),
+    deleteImage: vi.fn(),
+    invalidateImageCache: vi.fn(),
+  })),
+  IMAGE_ONLY_POLICY: {},
   ensureBucketWithPolicy: vi.fn().mockResolvedValue(undefined),
   ELAINE_ATTACHMENTS_BUCKET_POLICY: {
     name: "elaine-attachments",
@@ -923,34 +929,38 @@ afterEach(() => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("POST /api/elaine/chat — grounded photo/lookup tools (task 858)", () => {
-  it("analyze_ornament_photo: calls the real ornament vision pipeline and feeds its structured result back to the model", async () => {
+  it("lookup_book_value: forwards the model-supplied identifying fields to the real lookup", async () => {
     primeDbForFreshChat();
-    const photoUrl = "http://example.com/snoopy-skating.jpg";
     const getCapturedBodies = setUpToolCallThenCapture(
-      "analyze_ornament_photo",
-      JSON.stringify({ photoUrl }),
+      "lookup_book_value",
+      JSON.stringify({
+        name: "Snoopy and Woodstock Skating",
+        seriesOrCollection: "Peanuts",
+        year: 1999,
+      }),
     );
 
     const res = await request(buildApp())
       .post("/api/elaine/chat")
       .send({
-        message: "What ornament is this?",
+        message: "What's the book value of my Snoopy and Woodstock ornament?",
         appId: "ornaments",
-        attachmentUrls: [photoUrl],
       })
       .buffer(true);
 
     expect(res.status).toBe(200);
 
-    // The real ornament vision pipeline was called with the attachment URL array.
-    expect(mockAnalyzeOrnamentPhoto).toHaveBeenCalledWith([photoUrl]);
+    // The real two-source lookup was called with the model-supplied args —
+    // not the separate search_hallmark catalog/Apify path.
+    expect(mockLookupBookValue).toHaveBeenCalledWith({
+      name: "Snoopy and Woodstock Skating",
+      seriesOrCollection: "Peanuts",
+      year: 1999,
+    });
 
-    // The tool result fed back to the model must contain the distinctive fixture
-    // fields returned by the mocked pipeline — proving the executor invoked the
-    // real pipeline and passed its output to the model, not a general-knowledge guess.
     const toolResult = findToolResultContent(getCapturedBodies());
-    expect(toolResult).toContain("Peanuts");
-    expect(toolResult).toContain("071277123456");
+    expect(toolResult).toContain("42.5");
+    expect(toolResult).toContain("hookedonhallmark.com");
   }, 15_000);
 
   it("lookup_book_value: calls the real two-source book-value lookup, not search_hallmark, and reports its exact value/source", async () => {

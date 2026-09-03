@@ -24,6 +24,7 @@ import {
   createAndBackfillOrnamentCategories,
 } from "../routes/ornaments/categories";
 import { deleteImage } from "../lib/ornaments/storage";
+import { scheduleOrnamentRecognition } from "../lib/ornaments/recognition";
 import {
   lookupOrnamentEbayData,
   buildEbayQuery,
@@ -31,6 +32,7 @@ import {
 import { logActivity } from "../lib/soft-delete";
 import { env } from "../lib/env";
 import { consumeAiRateLimit } from "../middleware/rateLimit";
+import { getCategoryPalette } from "@workspace/web-core/colors";
 
 // Elaine's write-actions for the Ornaments app. Creating a brand-new item
 // isn't offered here since every ornament requires an uploaded photo
@@ -64,7 +66,6 @@ export const UpdateOrnamentItemActionPayload = z
     seriesOrCollection: z.string().max(200).optional(),
     year: z.number().int().min(1800).max(2100).optional(),
     brand: z.string().max(200).optional(),
-    condition: z.string().max(200).optional(),
     origin: z.string().max(200).optional(),
     dimensions: z.string().max(200).optional(),
   })
@@ -76,7 +77,6 @@ export const UpdateOrnamentItemActionPayload = z
       v.seriesOrCollection !== undefined ||
       v.year !== undefined ||
       v.brand !== undefined ||
-      v.condition !== undefined ||
       v.origin !== undefined ||
       v.dimensions !== undefined,
     { message: "At least one field to update must be provided" },
@@ -246,7 +246,6 @@ export const ornamentActionExecutors: Record<
       updates.seriesOrCollection = payload.seriesOrCollection;
     if (payload.year !== undefined) updates.year = payload.year;
     if (payload.brand !== undefined) updates.brand = payload.brand;
-    if (payload.condition !== undefined) updates.condition = payload.condition;
     if (payload.origin !== undefined) updates.origin = payload.origin;
     if (payload.dimensions !== undefined)
       updates.dimensions = payload.dimensions;
@@ -306,7 +305,11 @@ export const ornamentActionExecutors: Record<
   ) => {
     const [row] = await db
       .insert(ornamentsCategories)
-      .values({ name: payload.name, userId })
+      .values({
+        name: payload.name,
+        userId,
+        ...getCategoryPalette(payload.name),
+      })
       .returning();
     return {
       status: 201,
@@ -404,7 +407,12 @@ export const ornamentActionExecutors: Record<
       return r ?? null;
     },
     deleteDbImage: async (imageId) => {
+      const [image] = await db
+        .select({ itemId: ornamentsImages.itemId })
+        .from(ornamentsImages)
+        .where(eq(ornamentsImages.id, imageId));
       await db.delete(ornamentsImages).where(eq(ornamentsImages.id, imageId));
+      if (image) scheduleOrnamentRecognition(image.itemId);
     },
     deleteStorageImage: deleteImage,
     actionType: "delete_ornament_photo",
@@ -896,7 +904,7 @@ export const ornamentActionTools: OpenAI.Chat.Completions.ChatCompletionTool[] =
       function: {
         name: "update_ornament_item",
         description:
-          'Propose editing an EXISTING ornament in the user\'s collection, e.g. "rename that ornament" or "note that it has a chip" — also use this right after an upload to fill in metadata like seriesOrCollection, year, brand, condition, origin, or dimensions if the user tells you those details in chat. Only call this if the item\'s numeric id is visible on screen (look for "itemId: <number>"); never guess an id. Include only the field(s) that actually change.',
+          'Propose editing an EXISTING ornament in the user\'s collection, e.g. "rename that ornament" or "note that it has a chip" — also use this right after an upload to fill in metadata like seriesOrCollection, year, brand, origin, or dimensions if the user tells you those details in chat. Only call this if the item\'s numeric id is visible on screen (look for "itemId: <number>"); never guess an id. Include only the field(s) that actually change.',
         parameters: {
           type: "object",
           properties: {
@@ -907,7 +915,6 @@ export const ornamentActionTools: OpenAI.Chat.Completions.ChatCompletionTool[] =
             seriesOrCollection: { type: "string" },
             year: { type: "integer" },
             brand: { type: "string" },
-            condition: { type: "string" },
             origin: { type: "string" },
             dimensions: { type: "string" },
           },

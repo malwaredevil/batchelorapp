@@ -1,7 +1,9 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useRoute, useLocation, useSearch } from "wouter";
 import {
   Loader2,
+  AlertCircle,
+  Camera,
   Trash2,
   RefreshCcw,
   Download,
@@ -14,7 +16,10 @@ import {
   ScanBarcode,
 } from "lucide-react";
 import { ImageLightbox } from "@/quilting/components/image-lightbox";
-import { ItemImageGallery } from "@workspace/image-capture";
+import {
+  ItemImageGallery,
+  type ItemImageGalleryHandle,
+} from "@workspace/image-capture";
 import {
   useGetOrnament,
   useUpdateOrnament,
@@ -24,10 +29,14 @@ import {
   useLookupOrnamentRetailValue,
   useListOrnamentCategories,
   getGetOrnamentQueryKey,
+  getGetOrnamentStragglersQueryKey,
   getListOrnamentsQueryKey,
+  getListOrnamentCategoriesQueryKey,
+  getListOrnamentSeriesQueryKey,
   useSetOrnamentPrimaryImage,
   useDeleteOrnamentImage,
   useUploadOrnamentImage,
+  useRefreshOrnamentIdentity,
   useUpdateOrnamentImage,
   getUploadErrorMessage,
 } from "@workspace/api-client-react";
@@ -44,6 +53,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { TagSelector } from "@/ornaments/components/tag-selector";
+import { SeriesAutocomplete } from "@/ornaments/components/series-autocomplete";
 import { BarcodeScannerDialog } from "@/ornaments/components/barcode-scanner-dialog";
 import { generateInsurancePdf } from "@/ornaments/lib/pdf-export";
 import {
@@ -69,10 +79,15 @@ import {
 } from "@workspace/collection-ui";
 import { OrnamentEbayPriceSection } from "@/ornaments/components/OrnamentEbayPriceSection";
 import { ornamentReanalyzeKey } from "@/ornaments/lib/reanalyze-status";
+import { resolveCategoryPalette } from "@workspace/web-core/colors";
 import {
   parseAiAppraisalRange,
   computeConsensusValue,
 } from "@workspace/ornaments-shared";
+import {
+  ornamentMaintenanceReasonLabels,
+  parseOrnamentMaintenanceReasons,
+} from "@/ornaments/lib/maintenance-repair";
 
 function formatCurrency(amount: number | string | null | undefined): string {
   if (amount == null) return "—";
@@ -104,11 +119,43 @@ export default function OrnamentDetail() {
   });
   const { data: allCategories = [] } = useListOrnamentCategories();
 
-  const [isEditing, setIsEditing] = useState(false);
   const search = useSearch();
+  const searchParams = new URLSearchParams(search);
+  const editRequested = searchParams.get("edit") === "1";
+  const repairPhoto = searchParams.get("repair") === "photo";
+  const focusField = searchParams.get("focus");
+  const repairFields = parseOrnamentMaintenanceReasons(search);
+  const [isEditing, setIsEditing] = useState(false);
+  const repairInitializationRef = useRef<string | null>(null);
   useEffect(() => {
-    if (new URLSearchParams(search).get("edit") === "1") setIsEditing(true);
-  }, []);
+    if (!editRequested && !focusField) {
+      repairInitializationRef.current = null;
+      return;
+    }
+    if (!ornament) {
+      return;
+    }
+    const repairEntryKey = `${id}:${editRequested}:${focusField ?? ""}`;
+    if (repairInitializationRef.current === repairEntryKey) {
+      return;
+    }
+    repairInitializationRef.current = repairEntryKey;
+    setDraft({
+      name: ornament.name || "",
+      brand: ornament.brand || "Hallmark",
+      series: ornament.seriesOrCollection || "",
+      year: ornament.year ? String(ornament.year) : "",
+      notes: ornament.notes || "",
+      aiDesc: ornament.aiDescription || "",
+      boxDescription: ornament.description || "",
+      dimensions: ornament.dimensions || "",
+      barcode: ornament.barcodeValue || "",
+    });
+    setSelectedCategoryIds(
+      ornament.categories?.map((category) => category.id) || [],
+    );
+    setIsEditing(true);
+  }, [editRequested, focusField, id, ornament]);
   const [draft, setDraft] = useState({
     name: "",
     brand: "",
@@ -118,13 +165,13 @@ export default function OrnamentDetail() {
     aiDesc: "",
     boxDescription: "",
     dimensions: "",
-    condition: "",
     barcode: "",
   });
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>([]);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [barcodeScannerOpen, setBarcodeScannerOpen] = useState(false);
+  const galleryRef = useRef<ItemImageGalleryHandle>(null);
 
   const configSummary = useAppConfigSummary();
 
@@ -141,7 +188,6 @@ export default function OrnamentDetail() {
           ornament.barcodeValue
             ? `Barcode/UPC: ${ornament.barcodeValue}`
             : null,
-          ornament.condition ? `Condition: ${ornament.condition}` : null,
           ornament.bookValue != null
             ? `Book value on file: $${Number(ornament.bookValue).toFixed(2)}${ornament.bookValueSource ? ` (source: ${ornament.bookValueSource})` : ""}`
             : "No book value on file yet.",
@@ -169,7 +215,16 @@ export default function OrnamentDetail() {
       onSuccess: (data) => {
         queryClient.setQueryData(getGetOrnamentQueryKey(id), data);
         queryClient.invalidateQueries({ queryKey: getListOrnamentsQueryKey() });
+        queryClient.invalidateQueries({
+          queryKey: getListOrnamentSeriesQueryKey(),
+        });
+        queryClient.invalidateQueries({
+          queryKey: getGetOrnamentStragglersQueryKey(),
+        });
         setIsEditing(false);
+        if (editRequested || focusField) {
+          setLocation(`/ornaments/ornament/${id}`, { replace: true });
+        }
         toast.success("Saved.");
       },
       onError: () => toast.error("Could not save changes."),
@@ -180,6 +235,9 @@ export default function OrnamentDetail() {
     mutation: {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListOrnamentsQueryKey() });
+        queryClient.invalidateQueries({
+          queryKey: getListOrnamentSeriesQueryKey(),
+        });
         toast.success("Ornament deleted");
         setLocation("/ornaments/");
       },
@@ -193,6 +251,7 @@ export default function OrnamentDetail() {
   const lookupRetailValue = useLookupOrnamentRetailValue();
   const [retailValueLookupBusy, setRetailValueLookupBusy] = useState(false);
   const addImage = useUploadOrnamentImage(id);
+  const refreshIdentity = useRefreshOrnamentIdentity();
   const setPrimaryImage = useSetOrnamentPrimaryImage();
   const deleteImage = useDeleteOrnamentImage();
   const relabelImage = useUpdateOrnamentImage();
@@ -208,7 +267,6 @@ export default function OrnamentDetail() {
       aiDesc: ornament.aiDescription || "",
       boxDescription: ornament.description || "",
       dimensions: ornament.dimensions || "",
-      condition: ornament.condition || "",
       barcode: ornament.barcodeValue || "",
     });
     setSelectedCategoryIds(ornament.categories?.map((c) => c.id) || []);
@@ -241,7 +299,6 @@ export default function OrnamentDetail() {
         aiDescription: draft.aiDesc.trim() || undefined,
         description: draft.boxDescription.trim() || undefined,
         dimensions: draft.dimensions.trim() || undefined,
-        condition: draft.condition.trim() || undefined,
         barcodeValue: draft.barcode.trim() || undefined,
         categoryIds: selectedCategoryIds,
       },
@@ -292,7 +349,12 @@ export default function OrnamentDetail() {
       toast.dismiss("refresh-all");
       toast.success("All data refreshed");
       queryClient.setQueryData(getGetOrnamentQueryKey(id), result);
-      queryClient.invalidateQueries({ queryKey: getListOrnamentsQueryKey() });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: getListOrnamentsQueryKey() }),
+        queryClient.invalidateQueries({
+          queryKey: getListOrnamentCategoriesQueryKey(),
+        }),
+      ]);
     } catch {
       toast.dismiss("refresh-all");
       toast.error("Refresh failed — check connection and try again");
@@ -348,6 +410,69 @@ export default function OrnamentDetail() {
       toast.error("PDF export failed");
     } finally {
       setExportingPdf(false);
+    }
+  };
+
+  const handleAddImage = async (file: File) => {
+    const formData = new FormData();
+    formData.append("image", file);
+    await addImage.mutateAsync(formData).catch((err) => {
+      toast.error(getUploadErrorMessage(err, "Failed to upload image"));
+      throw err;
+    });
+
+    if (!repairPhoto) {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: getGetOrnamentQueryKey(id),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: getListOrnamentsQueryKey(),
+        }),
+      ]);
+      toast.success("Photo added. Complete-photo analysis is scheduled.");
+      return;
+    }
+
+    toast.loading("Refreshing only the missing identity details…", {
+      id: "identity-refresh",
+    });
+    try {
+      const result = await refreshIdentity.mutateAsync({ id });
+      queryClient.setQueryData(getGetOrnamentQueryKey(id), result.item);
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: getListOrnamentsQueryKey(),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: getListOrnamentCategoriesQueryKey(),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: getGetOrnamentStragglersQueryKey(),
+        }),
+      ]);
+      toast.dismiss("identity-refresh");
+      if (result.unresolvedFields.length > 0) {
+        setLocation(
+          `/ornaments/ornament/${id}?repair=photo&missing=${encodeURIComponent(
+            result.unresolvedFields.join(","),
+          )}`,
+          { replace: true },
+        );
+        toast.message(
+          `Photo added. Still unknown: ${result.unresolvedFields
+            .map((field) => ornamentMaintenanceReasonLabels[field])
+            .join(", ")}.`,
+        );
+      } else {
+        setLocation(`/ornaments/ornament/${id}`, { replace: true });
+        toast.success("Photo added and maintenance is up to date.");
+      }
+    } catch {
+      toast.dismiss("identity-refresh");
+      toast.error(
+        "Photo added, but the identity refresh could not finish. Try again from Maintenance.",
+      );
     }
   };
 
@@ -454,7 +579,50 @@ export default function OrnamentDetail() {
         onBack={() => setLocation("/ornaments/")}
         gallery={
           <div className="space-y-4">
+            {repairFields.length > 0 && (
+              <div
+                className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4"
+                data-testid="identity-repair-summary"
+              >
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-700 dark:text-amber-400" />
+                  <div className="min-w-0 space-y-2">
+                    <div>
+                      <p className="font-medium">Identity evidence needed</p>
+                      <p className="text-sm text-muted-foreground">
+                        Still unknown:{" "}
+                        {repairFields
+                          .map(
+                            (field) => ornamentMaintenanceReasonLabels[field],
+                          )
+                          .join(", ")}
+                        . Locked fields stay unchanged during a refresh.
+                      </p>
+                    </div>
+                    {repairPhoto && (
+                      <Button
+                        size="sm"
+                        onClick={() => galleryRef.current?.openFilePicker()}
+                        disabled={
+                          addImage.isPending || refreshIdentity.isPending
+                        }
+                        className="gap-2"
+                        data-testid="button-repair-upload"
+                      >
+                        {addImage.isPending || refreshIdentity.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Camera className="h-4 w-4" />
+                        )}
+                        Upload evidence photo
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
             <ItemImageGallery
+              ref={galleryRef}
               mainImageClassName="aspect-[4/3] max-h-[55vh] w-full object-cover"
               images={[
                 {
@@ -473,20 +641,7 @@ export default function OrnamentDetail() {
                     isPrimary: false,
                   })),
               ]}
-              onAddImage={async (file) => {
-                const formData = new FormData();
-                formData.append("image", file);
-                await addImage.mutateAsync(formData).catch((err) => {
-                  toast.error(
-                    getUploadErrorMessage(err, "Failed to upload image"),
-                  );
-                  throw err;
-                });
-                queryClient.invalidateQueries({
-                  queryKey: getGetOrnamentQueryKey(id),
-                });
-                toast.success("Photo added");
-              }}
+              onAddImage={handleAddImage}
               onReplaceImage={handleReplaceImage}
               onDeleteImage={(imageId, isPrimary) => {
                 if (isPrimary) {
@@ -536,7 +691,7 @@ export default function OrnamentDetail() {
                 const idx = lightboxImages.indexOf(url);
                 if (idx >= 0) setLightboxIndex(idx);
               }}
-              isUploading={addImage.isPending}
+              isUploading={addImage.isPending || refreshIdentity.isPending}
               maxImages={10}
             />
           </div>
@@ -746,31 +901,31 @@ export default function OrnamentDetail() {
                     Categories
                   </p>
                   <div className="flex flex-wrap gap-1.5">
-                    {ornament.categories.map((cat) => (
-                      <Badge
-                        key={cat.id}
-                        variant="secondary"
-                        className="bg-secondary/50 font-normal"
-                      >
-                        {cat.name}
-                      </Badge>
-                    ))}
+                    {ornament.categories.map((cat) => {
+                      const palette = resolveCategoryPalette(cat);
+                      return (
+                        <Badge
+                          key={cat.id}
+                          className="font-normal"
+                          style={{
+                            backgroundColor: palette.bgColor,
+                            color: palette.textColor,
+                            borderColor: "transparent",
+                          }}
+                        >
+                          {cat.name}
+                        </Badge>
+                      );
+                    })}
                   </div>
                 </div>
               ) : null}
 
-              {(ornament.seriesOrCollection || ornament.condition) && (
+              {ornament.seriesOrCollection && (
                 <div className="flex flex-wrap gap-1.5">
-                  {ornament.seriesOrCollection && (
-                    <Badge variant="outline" className="font-normal">
-                      {ornament.seriesOrCollection}
-                    </Badge>
-                  )}
-                  {ornament.condition && (
-                    <Badge variant="outline" className="font-normal">
-                      {ornament.condition}
-                    </Badge>
-                  )}
+                  <Badge variant="outline" className="font-normal">
+                    {ornament.seriesOrCollection}
+                  </Badge>
                 </div>
               )}
             </div>
@@ -793,6 +948,9 @@ export default function OrnamentDetail() {
                   locked={lockedFields.includes("year")}
                   onToggleLock={() => toggleFieldLock("year")}
                   empty={!ornament.year}
+                  highlighted={
+                    repairFields.includes("year") || focusField === "year"
+                  }
                 />
               </>
             )}
@@ -832,6 +990,9 @@ export default function OrnamentDetail() {
                     />
                   }
                   empty={!ornament.year}
+                  highlighted={
+                    repairFields.includes("year") || focusField === "year"
+                  }
                 />
               </>
             )}
@@ -843,32 +1004,19 @@ export default function OrnamentDetail() {
                   locked={lockedFields.includes("seriesOrCollection")}
                   editing
                   editSlot={
-                    <Input
+                    <SeriesAutocomplete
                       value={draft.series}
-                      onChange={(e) =>
-                        setDraft((d) => ({ ...d, series: e.target.value }))
+                      onValueChange={(value) =>
+                        setDraft((d) => ({ ...d, series: value }))
                       }
                       className="h-8 text-sm"
                     />
                   }
                   empty={!ornament.seriesOrCollection}
-                />
-                <CollectionDetailField
-                  label="Condition"
-                  value={ornament.condition || "—"}
-                  locked={lockedFields.includes("condition")}
-                  editing
-                  editSlot={
-                    <Input
-                      value={draft.condition}
-                      onChange={(e) =>
-                        setDraft((d) => ({ ...d, condition: e.target.value }))
-                      }
-                      placeholder="e.g. Mint in Box"
-                      className="h-8 text-sm"
-                    />
+                  highlighted={
+                    repairFields.includes("seriesOrCollection") ||
+                    focusField === "seriesOrCollection"
                   }
-                  empty={!ornament.condition}
                 />
               </>
             )}
@@ -961,7 +1109,7 @@ export default function OrnamentDetail() {
                     onChange={(e) =>
                       setDraft((d) => ({ ...d, notes: e.target.value }))
                     }
-                    placeholder="Memories, condition notes, where it was bought..."
+                    placeholder="Memories, where it was bought..."
                     className="text-sm min-h-[80px]"
                   />
                 }

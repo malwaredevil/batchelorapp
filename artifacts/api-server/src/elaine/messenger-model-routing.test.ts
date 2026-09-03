@@ -262,7 +262,6 @@ vi.mock("../lib/pottery/ebay-market-value", () => ({
 
 vi.mock("../lib/ornaments/hallmark-search", () => ({
   searchHallmark: vi.fn().mockResolvedValue([]),
-  lookupHallmarkFromDb: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("../lib/ornaments/barcode", () => ({

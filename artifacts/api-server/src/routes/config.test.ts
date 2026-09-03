@@ -1014,4 +1014,47 @@ describe("PUT /api/config — cache-bust behaviour", () => {
     ).find((r) => r.key === "request_timeout_ms");
     expect(updatedRow?.value).toBe("5000");
   });
+
+  it.each([
+    ["daily_days", "day-list", "mon", "tue"],
+    ["daily_time", "time", "00:01", "09:30"],
+  ])(
+    "persists comm-check %s changes without waiting for cache expiry",
+    async (key, type, oldValue, newValue) => {
+      queueOwnerAndRow({
+        module: "comm_check",
+        key,
+        type,
+        value: oldValue,
+      });
+      selectQueue.push([
+        {
+          id: 1,
+          module: "comm_check",
+          key,
+          value: newValue,
+          type,
+          label: "Test label",
+          description: null,
+          updatedAt: new Date(),
+        },
+      ]);
+      const app = await buildApp();
+
+      expect(
+        (
+          await request(app)
+            .put(`/api/config/comm_check/${key}`)
+            .send({ value: newValue })
+        ).status,
+      ).toBe(200);
+      const getRes = await request(app).get("/api/config/comm_check");
+      expect(getRes.status).toBe(200);
+      expect(
+        (getRes.body.config as Array<{ key: string; value: string }>).find(
+          (row) => row.key === key,
+        )?.value,
+      ).toBe(newValue);
+    },
+  );
 });

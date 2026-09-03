@@ -2813,6 +2813,7 @@ test("real capability-registry.ts: all POLICY_ROWS tool names have a definition 
     "artifacts/api-server/src/elaine/pottery-actions.ts",
     "artifacts/api-server/src/elaine/quilting-actions.ts",
     "artifacts/api-server/src/elaine/ornaments-actions.ts",
+    "artifacts/api-server/src/elaine/magnets-actions.ts",
     "artifacts/api-server/src/elaine/universal-actions.ts",
     "artifacts/api-server/src/elaine/adaptive-actions.ts",
     "artifacts/api-server/src/elaine/app-operation-tools.ts",

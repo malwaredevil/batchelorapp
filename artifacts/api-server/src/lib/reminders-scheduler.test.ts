@@ -1229,6 +1229,8 @@ describe("runSchedulerTick — full pipeline runs when guard passes", () => {
       (c) => typeof c[0] === "string" && (c[0] as string).includes("INTERVAL"),
     );
     expect(scheduleClientQuery).toBeDefined();
+    expect(scheduleClientQuery![0]).toContain("status = 'active'");
+    expect(scheduleClientQuery![0]).toContain("deleted_at IS NULL");
 
     // Phase 3 — claimAndSendDueDeliveries: pool.query for
     // recoverStuckSendingDeliveries (status = 'sending' WHERE clause) AND a

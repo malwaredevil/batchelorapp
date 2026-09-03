@@ -18,6 +18,7 @@ import type { ElainePlannerTool } from "./runtime/planner";
 import { potteryActionTools } from "./pottery-actions";
 import { quiltingActionTools } from "./quilting-actions";
 import { ornamentActionTools } from "./ornaments-actions";
+import { magnetActionTools } from "./magnets-actions";
 import { universalActionTools } from "./universal-actions";
 import { adaptiveActionTools } from "./adaptive-actions";
 import {
@@ -741,6 +742,7 @@ export const ACTION_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   ...potteryActionTools,
   ...quiltingActionTools,
   ...ornamentActionTools,
+  ...magnetActionTools,
   ...universalActionTools,
   ...adaptiveActionTools,
   ...appOperationActionTools,

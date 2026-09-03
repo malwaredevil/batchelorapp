@@ -7,7 +7,6 @@ import {
   desc,
   eq,
   getTableColumns,
-  ilike,
   inArray,
   isNull,
   sql,
@@ -81,9 +80,9 @@ import {
 import { generateVisualEmbedding } from "../../lib/visual-embed";
 import { serializeFabric, serializeFabrics } from "../../lib/serialize";
 import {
-  semanticCollectionSearch,
-  buildFabricSearchDocument,
-} from "../../lib/collection-search";
+  collectionSearchArrayText,
+  createCollectionTextSearch,
+} from "../../lib/collection-text-search";
 import { getModels } from "../../lib/ai-client";
 import {
   assignGenerationRunTarget,
@@ -92,7 +91,11 @@ import {
 } from "../../lib/ai-provenance";
 import { parseStringArray } from "../../lib/collection-parsing";
 import { resolveOrCreateQuiltingCategories as resolveOrCreateCategories } from "../../lib/quilting/resolve-categories";
-import { getElaineGlobalConfig } from "../../lib/elaine-config";
+import {
+  runFabricRecognition,
+  scheduleQuiltingRecognition,
+} from "../../lib/quilting/recognition";
+import { runQuiltingBulkReanalysis } from "../../lib/quilting/bulk-reanalyze";
 
 const {
   embedding: _e,
@@ -360,64 +363,25 @@ router.get("/fabrics", async (req, res) => {
   );
   const offset = (page - 1) * pageSize;
 
-  // When a text query is provided, try hybrid semantic search first.
-  // Falls back to ILIKE when embeddings are unavailable or the result is empty.
-  if (q) {
-    try {
-      const rankedIds = await semanticCollectionSearch({
-        query: q,
-        table: fabrics,
-        textEmbeddingCol: "embedding",
-        visualEmbeddingCol: "visual_embedding",
-        visibilityWhere: isNull(fabrics.deletedAt),
-        db,
-        fetchDocuments: async (ids) => {
-          const rows = await db
-            .select(fabricColumns)
-            .from(fabrics)
-            .where(and(inArray(fabrics.id, ids), isNull(fabrics.deletedAt)));
-          return rows.map((r) => ({
-            id: r.id,
-            text: buildFabricSearchDocument(
-              r as Parameters<typeof buildFabricSearchDocument>[0],
-            ),
-          }));
-        },
-      });
-
-      if (rankedIds.length > 0) {
-        const total = rankedIds.length;
-        const pageIds = rankedIds.slice(offset, offset + pageSize);
-
-        if (pageIds.length === 0) {
-          res.json(
-            ListFabricsResponse.parse({ items: [], total, page, pageSize }),
-          );
-          return;
-        }
-
-        const pageRows = await db
-          .select(fabricColumns)
-          .from(fabrics)
-          .where(and(inArray(fabrics.id, pageIds), isNull(fabrics.deletedAt)));
-        const byId = new Map(pageRows.map((r) => [r.id, r]));
-        const orderedRows = pageIds
-          .filter((id) => byId.has(id))
-          .map((id) => byId.get(id)!);
-        const items = await serializeFabrics(
-          orderedRows as Array<
-            Omit<FabricRow, "embedding" | "visualEmbedding">
-          >,
-        );
-        res.json(ListFabricsResponse.parse({ items, total, page, pageSize }));
-        return;
-      }
-    } catch {
-      // Semantic search unavailable — fall through to ILIKE.
-    }
-  }
-
-  const baseWhere = q ? ilike(fabrics.name, `%${q}%`) : undefined;
+  const textSearch = q
+    ? createCollectionTextSearch(q, {
+        title: [fabrics.name],
+        collection: [fabrics.lineName],
+        broad: [
+          fabrics.designer,
+          fabrics.manufacturer,
+          fabrics.colorway,
+          fabrics.printType,
+          fabrics.fiberContent,
+          fabrics.sku,
+          fabrics.notes,
+          fabrics.aiDescription,
+          collectionSearchArrayText(fabrics.motifs),
+          collectionSearchArrayText(fabrics.styleDescriptors),
+        ],
+      })
+    : null;
+  const baseWhere = textSearch?.where;
   const where = baseWhere
     ? and(baseWhere, isNull(fabrics.deletedAt))
     : isNull(fabrics.deletedAt);
@@ -431,7 +395,10 @@ router.get("/fabrics", async (req, res) => {
     .select(fabricColumns)
     .from(fabrics)
     .where(where)
-    .orderBy(desc(fabrics.createdAt))
+    .orderBy(
+      ...(textSearch?.relevance ? [textSearch.relevance] : []),
+      desc(fabrics.createdAt),
+    )
     .limit(pageSize)
     .offset(offset);
 
@@ -984,118 +951,7 @@ router.get("/fabrics/:id/tile-image.png", async (req, res) => {
 
 router.post("/fabrics/:id/reanalyze", aiLimiter, async (req, res) => {
   const { id } = ReanalyzeFabricParams.parse(req.params);
-  const [row] = await db
-    .select()
-    .from(fabrics)
-    .where(eq(fabrics.id, id))
-    .limit(1);
-  if (!row) {
-    res.status(404).json({ error: "Fabric not found." });
-    return;
-  }
-
-  const supplementalPaths = await db
-    .select({
-      storagePath: quiltingImages.storagePath,
-      position: quiltingImages.position,
-    })
-    .from(quiltingImages)
-    .where(sql`entity_type = 'fabric' AND entity_id = ${id}`)
-    .orderBy(quiltingImages.position);
-
-  const allPaths = [
-    row.imagePath,
-    ...supplementalPaths.map((i) => i.storagePath),
-  ].slice(0, MAX_REANALYZE_IMAGES);
-  const settled = await Promise.allSettled(
-    allPaths.map(downloadImageAsDataUrl),
-  );
-  const dataUrls = settled
-    .filter(
-      (s): s is PromiseFulfilledResult<string> => s.status === "fulfilled",
-    )
-    .map((s) => s.value);
-  if (dataUrls.length === 0) {
-    res
-      .status(422)
-      .json({ error: "Could not load any image for this fabric." });
-    return;
-  }
-
-  const lockedFields = (row.lockedFields as string[]) ?? [];
-  const context: AnalysisContext = {
-    lockedFields,
-    name: row.name,
-    lineName: row.lineName,
-    designer: row.designer,
-    manufacturer: row.manufacturer,
-    colorway: row.colorway,
-    printType: row.printType,
-    fiberContent: row.fiberContent,
-    dominantColors: row.dominantColors,
-    motifs: row.motifs,
-    styleDescriptors: row.styleDescriptors,
-  };
-
-  const [analysis, visualEmb] = await Promise.all([
-    runAnalysisWithEvidence(
-      {
-        module: "quilting",
-        feature: "reanalyze-fabric",
-        targetType: "quilting_fabric",
-        targetId: id,
-        userId: row.userId ?? undefined,
-        model: (await getModels()).fastVision,
-      },
-      () => analyzeImage(dataUrls, context),
-    ),
-    generateVisualEmbedding(dataUrls[0]).catch(() => null),
-  ]);
-  const embeddingText = buildEmbeddingText(analysis);
-  const embedding = await embedText(embeddingText);
-
-  await db
-    .update(fabrics)
-    .set({
-      ...(lockedFields.includes("name") ? {} : { name: analysis.name }),
-      ...(lockedFields.includes("lineName")
-        ? {}
-        : { lineName: analysis.lineName }),
-      ...(lockedFields.includes("designer")
-        ? {}
-        : { designer: analysis.designer }),
-      ...(lockedFields.includes("manufacturer")
-        ? {}
-        : { manufacturer: analysis.manufacturer }),
-      ...(lockedFields.includes("colorway")
-        ? {}
-        : { colorway: analysis.colorway }),
-      ...(lockedFields.includes("printType")
-        ? {}
-        : { printType: analysis.printType }),
-      ...(lockedFields.includes("fiberContent")
-        ? {}
-        : { fiberContent: analysis.fiberContent }),
-      aiDescription: analysis.aiDescription,
-      ...(lockedFields.includes("dominantColors")
-        ? {}
-        : { dominantColors: analysis.dominantColors }),
-      ...(lockedFields.includes("motifs") ? {} : { motifs: analysis.motifs }),
-      ...(lockedFields.includes("styleDescriptors")
-        ? {}
-        : { styleDescriptors: analysis.styleDescriptors }),
-      embedding: sql`${`[${embedding.join(",")}]`}::vector`,
-      ...(visualEmb
-        ? { visualEmbedding: sql`${`[${visualEmb.join(",")}]`}::vector` }
-        : {}),
-    })
-    .where(eq(fabrics.id, id));
-
-  const [updated] = await db
-    .select(fabricColumns)
-    .from(fabrics)
-    .where(eq(fabrics.id, id))
-    .limit(1);
+  const updated = await runFabricRecognition(id);
   res.json(
     ReanalyzeFabricResponse.parse(
       await serializeFabric(
@@ -1114,128 +970,9 @@ router.post("/fabrics/:id/reanalyze", aiLimiter, async (req, res) => {
 export async function bulkReanalyzeFabrics(
   ids: number[],
 ): Promise<{ succeeded: number[]; failed: number[] }> {
-  const elaineConfig = await getElaineGlobalConfig();
-  const capped = [...new Set(ids)].slice(
-    0,
-    elaineConfig.thresholds.quiltingBulkReanalyzeLimit,
+  return runQuiltingBulkReanalysis(ids, (id) =>
+    runFabricRecognition(id, "bulk-reanalyze-fabric"),
   );
-  const succeeded: number[] = [];
-  const failed: number[] = [];
-
-  for (const id of capped) {
-    try {
-      const [row] = await db
-        .select()
-        .from(fabrics)
-        .where(eq(fabrics.id, id))
-        .limit(1);
-      if (!row) {
-        failed.push(id);
-        continue;
-      }
-
-      const supplementalPaths = await db
-        .select({ storagePath: quiltingImages.storagePath })
-        .from(quiltingImages)
-        .where(sql`entity_type = 'fabric' AND entity_id = ${id}`)
-        .orderBy(quiltingImages.position);
-
-      const allPaths = [
-        row.imagePath,
-        ...supplementalPaths.map((i) => i.storagePath),
-      ].slice(0, MAX_REANALYZE_IMAGES);
-      const settled = await Promise.allSettled(
-        allPaths.map(downloadImageAsDataUrl),
-      );
-      const dataUrls = settled
-        .filter(
-          (s): s is PromiseFulfilledResult<string> => s.status === "fulfilled",
-        )
-        .map((s) => s.value);
-      if (dataUrls.length === 0) {
-        failed.push(id);
-        continue;
-      }
-
-      const lockedFields = (row.lockedFields as string[]) ?? [];
-      const context: AnalysisContext = {
-        lockedFields,
-        name: row.name,
-        lineName: row.lineName,
-        designer: row.designer,
-        manufacturer: row.manufacturer,
-        colorway: row.colorway,
-        printType: row.printType,
-        fiberContent: row.fiberContent,
-        dominantColors: row.dominantColors,
-        motifs: row.motifs,
-        styleDescriptors: row.styleDescriptors,
-      };
-      const [analysis, visualEmb] = await Promise.all([
-        runAnalysisWithEvidence(
-          {
-            module: "quilting",
-            feature: "bulk-reanalyze-fabric",
-            targetType: "quilting_fabric",
-            targetId: id,
-            userId: row.userId ?? undefined,
-            model: (await getModels()).fastVision,
-          },
-          () => analyzeImage(dataUrls, context),
-        ),
-        generateVisualEmbedding(dataUrls[0]).catch(() => null),
-      ]);
-      const embedding = await embedText(buildEmbeddingText(analysis));
-      await db
-        .update(fabrics)
-        .set({
-          ...(lockedFields.includes("name") ? {} : { name: analysis.name }),
-          ...(lockedFields.includes("lineName")
-            ? {}
-            : { lineName: analysis.lineName }),
-          ...(lockedFields.includes("designer")
-            ? {}
-            : { designer: analysis.designer }),
-          ...(lockedFields.includes("manufacturer")
-            ? {}
-            : { manufacturer: analysis.manufacturer }),
-          ...(lockedFields.includes("colorway")
-            ? {}
-            : { colorway: analysis.colorway }),
-          ...(lockedFields.includes("printType")
-            ? {}
-            : { printType: analysis.printType }),
-          ...(lockedFields.includes("fiberContent")
-            ? {}
-            : { fiberContent: analysis.fiberContent }),
-          aiDescription: analysis.aiDescription,
-          ...(lockedFields.includes("dominantColors")
-            ? {}
-            : { dominantColors: analysis.dominantColors }),
-          ...(lockedFields.includes("motifs")
-            ? {}
-            : { motifs: analysis.motifs }),
-          ...(lockedFields.includes("styleDescriptors")
-            ? {}
-            : { styleDescriptors: analysis.styleDescriptors }),
-          embedding: sql`${`[${embedding.join(",")}]`}::vector`,
-          ...(visualEmb
-            ? {
-                visualEmbedding: sql`${`[${visualEmb.join(",")}]`}::vector`,
-              }
-            : {}),
-        })
-        .where(eq(fabrics.id, id));
-      succeeded.push(id);
-    } catch {
-      failed.push(id);
-    }
-    if (capped.indexOf(id) < capped.length - 1) {
-      await new Promise((resolve) => setTimeout(resolve, 300));
-    }
-  }
-
-  return { succeeded, failed };
 }
 
 router.post("/fabrics/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
@@ -1307,6 +1044,7 @@ router.post("/fabrics/:id/images", upload.single("image"), async (req, res) => {
     })
     .returning();
 
+  scheduleQuiltingRecognition("fabric", id);
   res.status(201).json({
     id: image.id,
     url: `/api/quilting/fabrics/${id}/images/${image.id}`,
@@ -1384,6 +1122,7 @@ router.patch("/fabrics/:id/images/:imageId", async (req, res) => {
     res.status(404).json({ error: "Image not found." });
     return;
   }
+  if (body.position !== undefined) scheduleQuiltingRecognition("fabric", id);
   res.json({
     id: image.id,
     url: `/api/quilting/fabrics/${id}/images/${image.id}`,
@@ -1437,6 +1176,7 @@ router.put(
       .where(eq(quiltingImages.id, imageId));
 
     void deleteImage(oldPath).catch(() => null);
+    scheduleQuiltingRecognition("fabric", id);
 
     res.json({
       id: imageId,
@@ -1471,6 +1211,7 @@ router.delete("/fabrics/:id/images/:imageId", async (req, res) => {
     res.status(404).json({ error: "Image not found." });
     return;
   }
+  scheduleQuiltingRecognition("fabric", id);
   res.status(200).json({ ok: true });
 });
 
@@ -1538,6 +1279,7 @@ router.post("/fabrics/:id/images/:imageId/set-default", async (req, res) => {
     res.status(404).json({ error: "Fabric or image not found." });
     return;
   }
+  scheduleQuiltingRecognition("fabric", id);
 
   const [updatedRow] = await db
     .select(fabricColumns)

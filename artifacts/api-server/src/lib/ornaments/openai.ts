@@ -22,6 +22,11 @@ export interface OrnamentAnalysis {
   upc: string | null;
 }
 
+export interface OrnamentIdentityEnrichment {
+  seriesOrCollection: string | null;
+  year: number | null;
+}
+
 const ANALYSIS_PROMPT = `You are an expert Hallmark Keepsake ornament collector and cataloguer. You will be given one or more photos of the same Christmas ornament — box, tag, and/or the ornament itself.
 
 Respond with STRICT JSON only, using exactly these keys:
@@ -42,7 +47,17 @@ Do not include any commentary outside the JSON.`;
 
 export async function analyzeOrnamentImage(
   dataUrls: string[],
-  options: { resolveDimensions?: boolean } = {},
+  options: {
+    resolveDimensions?: boolean;
+    existingContext?: {
+      name: string | null;
+      brand: string | null;
+      seriesOrCollection: string | null;
+      year: number | null;
+      barcodeValue: string | null;
+      lockedFields: readonly string[];
+    };
+  } = {},
 ): Promise<OrnamentAnalysis> {
   const imageContent = dataUrls.map((url) => ({
     type: "image_url" as const,
@@ -61,10 +76,25 @@ export async function analyzeOrnamentImage(
           content: [
             {
               type: "text",
-              text:
+              text: [
                 dataUrls.length > 1
-                  ? `Catalogue this Hallmark ornament. All ${dataUrls.length} photos show the same ornament. Respond with JSON only.`
-                  : "Catalogue this Hallmark ornament. Respond with JSON only.",
+                  ? `Catalogue this Hallmark ornament. All ${dataUrls.length} photos show the same ornament.`
+                  : "Catalogue this Hallmark ornament.",
+                options.existingContext
+                  ? [
+                      "Existing saved facts are context, not permission to overwrite them:",
+                      `Name: ${options.existingContext.name ?? "(unknown)"}`,
+                      `Brand: ${options.existingContext.brand ?? "(unknown)"}`,
+                      `Series/collection: ${options.existingContext.seriesOrCollection ?? "(unknown)"}`,
+                      `Year: ${options.existingContext.year ?? "(unknown)"}`,
+                      `Barcode: ${options.existingContext.barcodeValue ?? "(unknown)"}`,
+                      `Locked fields: ${options.existingContext.lockedFields.join(", ") || "(none)"}`,
+                    ].join("\n")
+                  : null,
+                "Respond with JSON only.",
+              ]
+                .filter(Boolean)
+                .join("\n"),
             },
             ...imageContent,
           ],
@@ -113,6 +143,80 @@ export async function analyzeOrnamentImage(
     boxDescription: asString(parsed?.["boxDescription"]),
     boxDescriptionGenerated: parsed?.["boxDescriptionGenerated"] === true,
     upc,
+  };
+}
+
+const IDENTITY_ENRICHMENT_PROMPT = `You are verifying only the missing identity details for a Hallmark Keepsake ornament.
+
+Use the supplied photos and the existing saved identifiers. Respond with STRICT JSON only:
+{ "seriesOrCollection": string or null, "year": integer or null }
+
+Rules:
+- Fill a field only when it is directly visible in a photo, supported by a clearly readable existing identifier, or you can identify the exact ornament with high confidence from both the visible evidence and existing identifier.
+- Do not infer a series just because the ornament has a theme or character. Return null when it is not a numbered/named series.
+- The year must be the printed release or copyright year for this exact ornament. Return null if it is not legible or cannot be confidently verified.
+- Never change, contradict, or replace a provided existing value. This pass only supplies missing details.
+- Never invent facts. If the photos do not provide enough evidence, return null for that field.`;
+
+/**
+ * A bounded second visual pass used only after the normal catalogue analysis
+ * leaves an unlocked series or year unknown. It sees the same images plus
+ * saved identifiers so it can focus on the missing facts without replacing
+ * already-recorded identity.
+ */
+export async function enrichOrnamentIdentity(
+  dataUrls: string[],
+  existing: {
+    name: string | null;
+    barcodeValue: string | null;
+    seriesOrCollection: string | null;
+    year: number | null;
+  },
+): Promise<OrnamentIdentityEnrichment> {
+  const models = await getModels();
+  const completion = await callModel(models.fastVision, (c, model) =>
+    c.chat.completions.create({
+      model,
+      response_format: { type: "json_object" },
+      temperature: 0,
+      messages: [
+        { role: "system", content: IDENTITY_ENRICHMENT_PROMPT },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text" as const,
+              text: [
+                "Existing saved identifiers:",
+                `Name: ${existing.name ?? "(unknown)"}`,
+                `Barcode: ${existing.barcodeValue ?? "(unknown)"}`,
+                `Series/collection: ${existing.seriesOrCollection ?? "(unknown)"}`,
+                `Year: ${existing.year ?? "(unknown)"}`,
+                "Identify only currently unknown series/year fields. Respond with JSON only.",
+              ].join("\n"),
+            },
+            ...dataUrls.map((url) => ({
+              type: "image_url" as const,
+              image_url: { url },
+            })),
+          ],
+        },
+      ],
+    }),
+  );
+
+  const parsed = parseJson(completion.choices[0]?.message?.content ?? "{}");
+  const yearRaw = parsed?.["year"];
+  const year =
+    typeof yearRaw === "number" && Number.isInteger(yearRaw)
+      ? yearRaw
+      : typeof yearRaw === "string" && /^\d{4}$/.test(yearRaw.trim())
+        ? parseInt(yearRaw.trim(), 10)
+        : null;
+
+  return {
+    seriesOrCollection: asString(parsed?.["seriesOrCollection"]),
+    year: year != null && year >= 1800 && year <= 2100 ? year : null,
   };
 }
 
@@ -174,7 +278,7 @@ const APPRAISAL_PROMPT = `You are an expert Hallmark Keepsake ornament appraiser
 
 Given the photos and metadata provided, write a concise 2–3 sentence collector's appraisal. You MUST include:
 - A specific estimated current market value range in USD (e.g. "$25–$45")
-- The key factors driving that estimate (series position, year, condition, demand)
+- The key factors driving that estimate (series position, year, demand, collector interest)
 - A brief note on how value may change over time
 
 Be direct and specific. Do not hedge with "it depends" — give your best estimate based on what you can see.
@@ -185,7 +289,6 @@ export interface OrnamentMeta {
   brand: string | null;
   seriesOrCollection: string | null;
   year: number | null;
-  condition: string | null;
   aiDescription: string | null;
   description?: string | null;
   barcodeValue?: string | null;
@@ -200,7 +303,6 @@ export async function appraiseOrnamentImage(
     meta.brand ? `Brand: ${meta.brand}` : null,
     meta.seriesOrCollection ? `Series: ${meta.seriesOrCollection}` : null,
     meta.year ? `Year: ${meta.year}` : null,
-    meta.condition ? `Condition: ${meta.condition}` : null,
     meta.aiDescription ? `Description: ${meta.aiDescription}` : null,
     meta.description ? `Box description: ${meta.description}` : null,
     meta.barcodeValue ? `UPC/Barcode: ${meta.barcodeValue}` : null,

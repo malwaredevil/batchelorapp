@@ -151,6 +151,11 @@ const SECRETS: Array<{ name: string; purpose: string; required: boolean }> = [
     purpose: "Voyage AI — reranking API",
     required: true,
   },
+  {
+    name: "FIRECRAWL_API_KEY",
+    purpose: "Firecrawl — deterministic Hallmark event source retrieval",
+    required: false,
+  },
   // ── Email ───────────────────────────────────────────────────────────────────
   {
     name: "RESEND_API_KEY",
@@ -202,12 +207,7 @@ const SECRETS: Array<{ name: string; purpose: string; required: boolean }> = [
   // ── Automation ──────────────────────────────────────────────────────────────
   {
     name: "APIFY_API_TOKEN",
-    purpose: "Apify Actors API token (Hallmark HooH crawler, etc.)",
-    required: true,
-  },
-  {
-    name: "APIFY_WEBHOOK_SECRET",
-    purpose: "Apify webhook HMAC signing secret",
+    purpose: "Apify Actors API token for live research and valuations",
     required: true,
   },
   // ── Product catalog ─────────────────────────────────────────────────────────

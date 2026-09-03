@@ -24,6 +24,7 @@
     "@workspace/ornaments-shared": "workspace:*",
     "@workspace/upload-policy": "workspace:*",
     "@workspace/upload-validation": "workspace:*",
+    "@workspace/web-core": "workspace:*",
     "bcryptjs": "^3.0.3",
     "connect-pg-simple": "^10.0.0",
     "cookie-parser": "^1.4.7",

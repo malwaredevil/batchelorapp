@@ -1,4 +1,10 @@
-import { useState, useRef, useEffect } from "react";
+import {
+  forwardRef,
+  useImperativeHandle,
+  useState,
+  useRef,
+  useEffect,
+} from "react";
 import {
   Camera,
   Upload,
@@ -16,6 +22,7 @@ import { Input } from "@workspace/ui/input";
 import { Button } from "@workspace/ui/button";
 import { ImageEditor } from "./image-editor";
 import { CameraModal } from "./image-picker";
+import { ImageCaptureReview } from "./image-capture-review";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -103,29 +110,43 @@ export interface ItemImageGalleryProps {
   mainImageClassName?: string;
 }
 
+export interface ItemImageGalleryHandle {
+  openFilePicker: () => void;
+  openCamera: () => void;
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export function ItemImageGallery({
-  images,
-  onAddImage,
-  onReplaceImage,
-  onDeleteImage,
-  onSetPrimary,
-  onRelabel,
-  labelSuggestions = DEFAULT_LABEL_SUGGESTIONS,
-  onZoom,
-  maxImages,
-  isUploading = false,
-  isMutating = false,
-  className,
-  mainImageClassName,
-}: ItemImageGalleryProps) {
+export const ItemImageGallery = forwardRef<
+  ItemImageGalleryHandle,
+  ItemImageGalleryProps
+>(function ItemImageGallery(
+  {
+    images,
+    onAddImage,
+    onReplaceImage,
+    onDeleteImage,
+    onSetPrimary,
+    onRelabel,
+    labelSuggestions = DEFAULT_LABEL_SUGGESTIONS,
+    onZoom,
+    maxImages,
+    isUploading = false,
+    isMutating = false,
+    className,
+    mainImageClassName,
+  },
+  ref,
+) {
   const [activeIdx, setActiveIdx] = useState(0);
 
   // ── Add flow ──────────────────────────────────────────────────────────────
   const [showCamera, setShowCamera] = useState(false);
+  const [reviewingCameraFile, setReviewingCameraFile] = useState<File | null>(
+    null,
+  );
   const [pendingAddFile, setPendingAddFile] = useState<File | null>(null);
   const [isSavingAdd, setIsSavingAdd] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -155,6 +176,19 @@ export function ItemImageGallery({
   const canAddMore = maxImages == null || images.length < maxImages;
   const isBusy =
     isFetchingEdit || isSavingEdit || isSavingAdd || isUploading || isMutating;
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      openFilePicker: () => {
+        if (canAddMore && !isBusy) fileInputRef.current?.click();
+      },
+      openCamera: () => {
+        if (canAddMore && !isBusy) setShowCamera(true);
+      },
+    }),
+    [canAddMore, isBusy],
+  );
 
   // ── Reset active index when the primary image changes (e.g. after set-primary) ──
   // Keyed on id AND url: some callers use a fixed synthetic id for the primary
@@ -188,7 +222,7 @@ export function ItemImageGallery({
   // ── Camera / file pick for ADD ────────────────────────────────────────────
   function handleCapture(file: File) {
     setShowCamera(false);
-    setPendingAddFile(file);
+    setReviewingCameraFile(file);
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -263,10 +297,10 @@ export function ItemImageGallery({
     }
   }
 
-  const showActionBar = !!(
-    (active && !active.isPrimary && onSetPrimary) ||
-    onDeleteImage
-  );
+  // Editing applies to every existing image, including the primary image.
+  // Keep the action bar visible even when there is no primary/delete action:
+  // a tiny overlay icon is too easy to miss on a touch device.
+  const showActionBar = !!active;
   const showLabelPanel = !!(active && !active.isPrimary && onRelabel);
 
   /** Set-primary / delete buttons, or the delete-confirmation strip — shared
@@ -303,6 +337,19 @@ export function ItemImageGallery({
     }
     return (
       <>
+        <button
+          type="button"
+          onClick={() => void handleEditImage(active)}
+          className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm transition hover:bg-primary/10 hover:text-primary disabled:opacity-40"
+          disabled={isBusy}
+        >
+          {isFetchingEdit && editTarget?.id === active.id ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Pencil className="h-3.5 w-3.5" />
+          )}
+          Edit photo
+        </button>
         {!active.isPrimary && onSetPrimary && (
           <button
             type="button"
@@ -339,6 +386,19 @@ export function ItemImageGallery({
         <CameraModal
           onCapture={handleCapture}
           onClose={() => setShowCamera(false)}
+        />
+      )}
+      {reviewingCameraFile && (
+        <ImageCaptureReview
+          file={reviewingCameraFile}
+          onConfirm={(file) => {
+            setReviewingCameraFile(null);
+            setPendingAddFile(file);
+          }}
+          onRetry={() => {
+            setReviewingCameraFile(null);
+            setShowCamera(true);
+          }}
         />
       )}
 
@@ -431,7 +491,7 @@ export function ItemImageGallery({
             )}
           </div>
 
-          {/* Action bar — Set Primary + Delete (Edit is now on the image icon) */}
+          {/* Action bar — explicitly labeled photo management for touch devices. */}
           {showActionBar &&
             (showLabelPanel ? (
               /* Merged into the labeling panel below for supplemental photos */
@@ -610,4 +670,4 @@ export function ItemImageGallery({
       )}
     </div>
   );
-}
+});

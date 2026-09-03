@@ -67,6 +67,8 @@ import {
   CollectionDetailField,
   CollectionDetailSkeleton,
   CollectionErrorState,
+  getPhotoRecognitionRefetchInterval,
+  PhotoRecognitionStatus,
   ReminderBellButton,
   useToggleLockedField,
   mergeSelectedCategoryNames,
@@ -101,6 +103,7 @@ type PatternData = {
     label: string | null;
     position: number;
   }>;
+  recognitionRefreshStatus?: "pending" | "complete" | null;
 };
 
 const AI_FIELDS = ["name", "designer", "blockSize", "difficulty", "notes"];
@@ -141,7 +144,15 @@ export default function PatternDetail() {
     isLoading,
     isError,
     refetch,
-  } = useGetPattern(patternId);
+  } = useGetPattern(patternId, {
+    query: {
+      queryKey: getGetPatternQueryKey(patternId),
+      refetchInterval: (query) =>
+        getPhotoRecognitionRefetchInterval(
+          query.state.data?.recognitionRefreshStatus,
+        ),
+    },
+  });
   const { data: allCategories } = useListQuiltingCategories();
 
   usePageAssistantContext(
@@ -701,6 +712,7 @@ export default function PatternDetail() {
             </div>
           )}
         </div>
+        <PhotoRecognitionStatus status={p.recognitionRefreshStatus} />
       </CollectionDetailHero>
 
       <CollectionDetailPanelStack>

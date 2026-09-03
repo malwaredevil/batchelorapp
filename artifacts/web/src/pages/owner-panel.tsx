@@ -3171,7 +3171,7 @@ function DbRow({
 // Daily Comms Check card — shows today's email/SMS/Slack send+verify status.
 // ---------------------------------------------------------------------------
 
-type CommStatus = "pending" | "sent" | "error" | "verified";
+type CommStatus = "pending" | "sending" | "sent" | "error" | "verified";
 
 interface CommCheckRow {
   id: number;
@@ -3214,6 +3214,14 @@ function statusBadge(
       <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
         <Circle className="h-3 w-3" />
         Sent — awaiting reply
+      </span>
+    );
+  }
+  if (status === "sending") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/15 px-2 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-400">
+        <RefreshCw className="h-3 w-3 animate-spin" />
+        Sending
       </span>
     );
   }
@@ -3665,6 +3673,11 @@ function CommCheckScheduleCard() {
           key,
           data: { value },
         });
+        toast({
+          title: "Schedule saved",
+          description: `Saved ${key.replaceAll("_", " ")} for ${timezone ?? "the owner timezone"}.`,
+        });
+        load();
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Network error.";
         toast({
@@ -3677,7 +3690,7 @@ function CommCheckScheduleCard() {
         setSaving(null);
       }
     },
-    [toast, load, updateConfigValue],
+    [toast, load, timezone, updateConfigValue],
   );
 
   const toggleDay = (daysKey: "daily_days" | "phone_days", code: string) => {
@@ -3797,9 +3810,10 @@ function CommCheckScheduleCard() {
       )}
 
       <p className="text-xs text-muted-foreground border-t border-border pt-2">
-        Times run in{" "}
+        Effective schedule timezone:{" "}
         <span className="font-medium text-foreground">{timezone ?? "…"}</span> —
-        the owner account's timezone, editable from the{" "}
+        taken from the owner account and used by the server on every poll.
+        Editable from the{" "}
         <Link
           href="/owner-panel?tab=users"
           className="underline hover:text-foreground"

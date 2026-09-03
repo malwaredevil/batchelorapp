@@ -34,6 +34,9 @@ import "@/ornaments/features";
 import "@/travels/features";
 import "@/office/features";
 // scaffold:anchor:feature-imports — scaffold-collection-module inserts feature imports below; do not remove
+// scaffold:begin:magnets
+import "@/magnets/features";
+// scaffold:end:magnets
 
 import { MessengerNotification } from "@workspace/messenger-ui";
 import { BulkAddProvider } from "@/quilting/contexts/bulk-add-context";
@@ -112,6 +115,13 @@ const FabricPhotoPreviewDevPage = lazy(
 const BarcodeLookupPage = lazy(() => import("@/pages/barcode-lookup"));
 
 // scaffold:anchor:lazy-pages — scaffold-collection-module inserts lazy page imports below; do not remove
+// scaffold:begin:magnets
+const MagnetsCollection = lazy(() => import("@/magnets/pages/collection"));
+const MagnetsDetail = lazy(() => import("@/magnets/pages/detail"));
+const MagnetsAdd = lazy(() => import("@/magnets/pages/add"));
+const MagnetsBulkAdd = lazy(() => import("@/magnets/pages/bulk-add"));
+const MagnetsCategories = lazy(() => import("@/magnets/pages/categories"));
+// scaffold:end:magnets
 
 // Ornaments
 const OrnamentsCollection = lazy(() => import("@/ornaments/pages/collection"));
@@ -186,6 +196,7 @@ function deriveAppId(path: string): ElaineAppId {
   if (path.startsWith("/pottery")) return "pottery";
   if (path.startsWith("/quilting")) return "quilting";
   if (path.startsWith("/ornaments")) return "ornaments";
+  if (path.startsWith("/magnets")) return "magnets";
   if (path.startsWith("/travels")) return "travels";
   return "hub";
 }
@@ -425,6 +436,16 @@ function Routes() {
                   component={OrnamentsDetail}
                 />
                 {/* scaffold:anchor:module-routes — scaffold-collection-module inserts routes below; do not remove */}
+                {/* scaffold:begin:magnets */}
+                <Route path="/magnets" component={MagnetsCollection} />
+                <Route path="/magnets/item/:id" component={MagnetsDetail} />
+                <Route path="/magnets/add" component={MagnetsAdd} />
+                <Route path="/magnets/bulk-add" component={MagnetsBulkAdd} />
+                <Route
+                  path="/magnets/categories"
+                  component={MagnetsCategories}
+                />
+                {/* scaffold:end:magnets */}
 
                 <Route path="/office">
                   <Redirect to="/office/gmail" />

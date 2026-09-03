@@ -600,14 +600,39 @@ impossible to raise without a code change.
   owner-facing) go in `HARDCODED_CONFIG_ALLOWLIST` in the script, with a
   comment explaining why — never rename/reformat around the check.
 
+#### Architecture policy — leave touched areas better
+
+Every change also runs the named `check-architecture-policy` guard. It compares
+the merge-base and working-tree audit snapshots against
+`docs/architecture-policy-baseline.json`:
+
+- **New** and **worsened** findings fail validation immediately.
+- **Unchanged legacy** findings remain visible but do not fail an unrelated
+  task. If the task touches the same file/mechanism, make a safe small cleanup
+  in the same change whenever practical; otherwise state the blocker in the
+  completion report.
+- **Removed** findings are progress. Remove them from the reviewed baseline in
+  the cleanup change so the acknowledged debt count shrinks.
+- **Baseline additions** are baseline-maintenance work, never a way to hide a
+  violation. They must be a separately reviewable change, and a baseline
+  entry cannot match new or worsened working-tree debt.
+- **Exceptions** are separate from legacy debt. They must identify one stable
+  finding, name a file, and explain why sharing/configuration would be less
+  correct. Never exempt a directory, rule family, or wildcard.
+
+Before writing code: search for the existing shared mechanism. Before
+completion: inspect related findings in the policy report, remove small safe
+ones, document any blocked cleanup, and propose a focused task for unrelated
+debt rather than silently expanding the task.
+
 #### Enforcement gates (all three must pass; none can be skipped)
 
-1. **`pnpm run lint`** — `check-domain-composition` and `check-duplicate-code`
-   both run; any violation fails the lint run.
-2. **`scripts/src/pre-publish.sh`** — runs `check-domain-composition` and
-   `check-duplicate-code` as blocking parallel gates before sync or publish.
-3. **GitHub CI Guardrails workflow** — runs the same checks on every PR; the
-   PR cannot merge until they pass.
+1. **`pnpm run lint`** — the composition, duplicate-code, and architecture
+   policy checks all run; any violation fails the lint run.
+2. **`scripts/src/pre-publish.sh`** — runs the same architecture policy as a
+   blocking parallel gate before sync or publish.
+3. **GitHub CI Guardrails workflow** — runs the same no-new-debt check on every
+   PR; the PR cannot merge until it passes.
 
 See `docs/composition-and-configuration.md` for the decision order, review
 questions, accepted/rejected examples, and the current list of protected

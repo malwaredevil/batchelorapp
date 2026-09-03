@@ -75,3 +75,4 @@ export {
   sslConfig,
 } from "./resolve-url";
 export { STATEMENTS } from "./schema-statements";
+export { DESTRUCTIVE_MIGRATIONS } from "./destructive-migrations";

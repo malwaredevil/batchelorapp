@@ -7,6 +7,7 @@ import {
   useGetStats,
   useGetTravelsStats,
   useGetOrnamentStats,
+  useListMagnets,
 } from "@workspace/api-client-react";
 import {
   DropdownMenu,
@@ -19,6 +20,9 @@ import { AppTileLogo } from "./AppTileLogo";
 
 export type AppId =
   // scaffold:anchor:app-ids — scaffold-collection-module inserts app ids below; do not remove
+  // scaffold:begin:magnets
+  | "magnets"
+  // scaffold:end:magnets
   | "hub"
   | "pottery"
   | "quilting"
@@ -125,11 +129,13 @@ function useApps(): AppEntry[] {
   const { data: quiltingStats } = useGetStats();
   const { data: ornamentsStats } = useGetOrnamentStats();
   const { data: travelsStats } = useGetTravelsStats();
+  const { data: magnetsList } = useListMagnets({});
 
   const potteryCount = potteryStats?.totalItems;
   const fabricCount = quiltingStats?.totalFabrics;
   const tripCount = travelsStats?.totalTrips;
   const ornamentsCount = ornamentsStats?.totalItems;
+  const magnetsCount = magnetsList?.total;
 
   return [
     {
@@ -187,6 +193,18 @@ function useApps(): AppEntry[] {
       Logo: ElaineLogo,
     },
     // scaffold:anchor:app-entries — scaffold-collection-module inserts app entries below; do not remove
+    // scaffold:begin:magnets
+    {
+      id: "magnets",
+      name: "Batchelor Magnets",
+      subtitle:
+        magnetsCount != null ? `${magnetsCount} magnets` : "Magnet Collection",
+      href: "/modules/magnets/",
+      Logo: ({ className }) => (
+        <GenericModuleLogo initial="M" className={className} />
+      ),
+    },
+    // scaffold:end:magnets
   ];
 }
 

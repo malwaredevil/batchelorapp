@@ -23,7 +23,9 @@ import {
   type ConnectedCalendar,
 } from "@workspace/api-client-react";
 import { toast } from "sonner";
+import { useAuth } from "@workspace/web-core/auth";
 import { usePageAssistantContext } from "@/ornaments/lib/assistant-context";
+import { HallmarkSyncPanel } from "@/ornaments/components/hallmark-sync-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -405,6 +407,7 @@ function formatRange(start: string, end: string) {
 export default function HallmarkEvents() {
   const queryClient = useQueryClient();
   const deleteEvent = useDeleteHallmarkGCalEvent();
+  const { user } = useAuth();
 
   const [gcalEvents, setGcalEvents] = useState<TravelCalendarEvent[]>([]);
   const [gcalLoaded, setGcalLoaded] = useState(false);
@@ -604,6 +607,8 @@ export default function HallmarkEvents() {
           </Button>
         </div>
       </div>
+
+      <HallmarkSyncPanel isOwner={!!user?.isOwner} />
 
       <CalendarCore
         defaultView={initialView}

@@ -257,6 +257,18 @@ export interface PotteryPotteryImageUpdate {
 }
 
 /**
+ * Status of the automatic complete-photo recognition refresh.
+ * @nullable
+ */
+export type PotteryPotteryItemRecognitionRefreshStatus = typeof PotteryPotteryItemRecognitionRefreshStatus[keyof typeof PotteryPotteryItemRecognitionRefreshStatus] | null;
+
+
+export const PotteryPotteryItemRecognitionRefreshStatus = {
+  pending: 'pending',
+  complete: 'complete',
+} as const;
+
+/**
  * AI-detected decorative surface zone breakdown (zones, complexity, repeatPattern)
  * @nullable
  */
@@ -301,6 +313,11 @@ export interface PotteryPotteryItem {
   categories: PotteryCategory[];
   images: PotteryPotteryImage[];
   imageUrl: string;
+  /**
+     * Status of the automatic complete-photo recognition refresh.
+     * @nullable
+     */
+  recognitionRefreshStatus: PotteryPotteryItemRecognitionRefreshStatus;
   createdAt: string;
 }
 
@@ -500,6 +517,17 @@ export interface QuiltingEntityImage {
   position: number;
 }
 
+/**
+ * Status of the automatic complete-photo recognition refresh.
+ */
+export type QuiltingFabricRecognitionRefreshStatus = typeof QuiltingFabricRecognitionRefreshStatus[keyof typeof QuiltingFabricRecognitionRefreshStatus] | null;
+
+
+export const QuiltingFabricRecognitionRefreshStatus = {
+  pending: 'pending',
+  complete: 'complete',
+} as const;
+
 export interface QuiltingFabric {
   id: number;
   name: string;
@@ -526,6 +554,8 @@ export interface QuiltingFabric {
   /** Flat-field-corrected, tileable crop of the fabric photo. Use this (not imageUrl) for SVG pattern-fill rendering — it removes the source photo's natural lighting/vignette falloff so tiled squares don't show a "puffy" embossed grid. */
   tileImageUrl: string;
   hasEmbedding: boolean;
+  /** Status of the automatic complete-photo recognition refresh. */
+  recognitionRefreshStatus: QuiltingFabricRecognitionRefreshStatus;
   createdAt: string;
 }
 
@@ -535,6 +565,17 @@ export interface QuiltingFabricsListResponse {
   page: number;
   pageSize: number;
 }
+
+/**
+ * Status of the automatic complete-photo recognition refresh.
+ */
+export type QuiltingQuiltPatternRecognitionRefreshStatus = typeof QuiltingQuiltPatternRecognitionRefreshStatus[keyof typeof QuiltingQuiltPatternRecognitionRefreshStatus] | null;
+
+
+export const QuiltingQuiltPatternRecognitionRefreshStatus = {
+  pending: 'pending',
+  complete: 'complete',
+} as const;
 
 export interface QuiltingQuiltPattern {
   id: number;
@@ -552,6 +593,8 @@ export interface QuiltingQuiltPattern {
   images: QuiltingEntityImage[];
   imageUrl?: string | null;
   hasEmbedding: boolean;
+  /** Status of the automatic complete-photo recognition refresh. */
+  recognitionRefreshStatus: QuiltingQuiltPatternRecognitionRefreshStatus;
   createdAt: string;
 }
 
@@ -569,6 +612,18 @@ export interface QuiltingQuiltFabricSummary {
   imageUrl: string;
   dominantColors: string[];
 }
+
+/**
+ * Status of the automatic complete-photo recognition refresh.
+ * @nullable
+ */
+export type QuiltingFinishedQuiltRecognitionRefreshStatus = typeof QuiltingFinishedQuiltRecognitionRefreshStatus[keyof typeof QuiltingFinishedQuiltRecognitionRefreshStatus] | null;
+
+
+export const QuiltingFinishedQuiltRecognitionRefreshStatus = {
+  pending: 'pending',
+  complete: 'complete',
+} as const;
 
 export interface QuiltingFinishedQuilt {
   id: number;
@@ -592,6 +647,11 @@ export interface QuiltingFinishedQuilt {
   linkedFabricIds: number[];
   linkedPatternIds: number[];
   linkedFabrics: QuiltingQuiltFabricSummary[];
+  /**
+     * Status of the automatic complete-photo recognition refresh.
+     * @nullable
+     */
+  recognitionRefreshStatus: QuiltingFinishedQuiltRecognitionRefreshStatus;
   createdAt: string;
 }
 
@@ -2266,8 +2326,6 @@ export interface OrnamentsOrnamentItem {
   /** @nullable */
   dimensions?: string | null;
   /** @nullable */
-  condition?: string | null;
-  /** @nullable */
   origin?: string | null;
   /** @nullable */
   aiDescription?: string | null;
@@ -2354,6 +2412,10 @@ export interface OrnamentsOrnamentListStats {
   minYear?: number | null;
   /** @nullable */
   maxYear?: number | null;
+  /** Collection estimate: each item's available current-market signals (book value, eBay prices, and AI appraisal) are averaged; when none are saved, retail/MSRP is used as the fallback. Each estimate is multiplied by quantity. */
+  estimatedValueTotal: number;
+  /** How many matching items had at least one valid market or retail value. */
+  itemsWithEstimatedValue: number;
   /** Sum of each matching item's parsed AI-appraisal low estimate × quantity. */
   aiAppraisalLowTotal: number;
   /** Sum of each matching item's parsed AI-appraisal high estimate × quantity. */
@@ -2404,8 +2466,6 @@ export interface OrnamentsOrnamentUpdate {
   /** @nullable */
   dimensions?: string | null;
   /** @nullable */
-  condition?: string | null;
-  /** @nullable */
   origin?: string | null;
   /** @minimum 1 */
   quantity?: number;
@@ -2428,16 +2488,42 @@ export type OrnamentsStragglerItemReasonsItem = typeof OrnamentsStragglerItemRea
 
 export const OrnamentsStragglerItemReasonsItem = {
   embedding: 'embedding',
-  attributes: 'attributes',
+  seriesOrCollection: 'seriesOrCollection',
+  year: 'year',
+} as const;
+
+export type OrnamentsStragglerItemStatus = typeof OrnamentsStragglerItemStatus[keyof typeof OrnamentsStragglerItemStatus];
+
+
+export const OrnamentsStragglerItemStatus = {
+  pending_refresh: 'pending_refresh',
 } as const;
 
 export interface OrnamentsStragglerItem {
   id: number;
   reasons: OrnamentsStragglerItemReasonsItem[];
+  status?: OrnamentsStragglerItemStatus;
+  recommendation?: string;
 }
 
 export interface OrnamentsStragglers {
   items: OrnamentsStragglerItem[];
+}
+
+export type OrnamentsIdentityRefreshResultUnresolvedFieldsItem = typeof OrnamentsIdentityRefreshResultUnresolvedFieldsItem[keyof typeof OrnamentsIdentityRefreshResultUnresolvedFieldsItem];
+
+
+export const OrnamentsIdentityRefreshResultUnresolvedFieldsItem = {
+  embedding: 'embedding',
+  seriesOrCollection: 'seriesOrCollection',
+  year: 'year',
+} as const;
+
+export interface OrnamentsIdentityRefreshResult {
+  item: OrnamentsOrnamentItem;
+  unresolvedFields: OrnamentsIdentityRefreshResultUnresolvedFieldsItem[];
+  /** @nullable */
+  recommendation: string | null;
 }
 
 export interface OrnamentsBulkReanalyzeInput {
@@ -2445,16 +2531,52 @@ export interface OrnamentsBulkReanalyzeInput {
   ids: number[];
 }
 
-export type OrnamentsBulkReanalyzeResultErrorsItem = {
+export type OrnamentsBulkReanalyzeResultOutcomesItemStatus = typeof OrnamentsBulkReanalyzeResultOutcomesItemStatus[keyof typeof OrnamentsBulkReanalyzeResultOutcomesItemStatus];
+
+
+export const OrnamentsBulkReanalyzeResultOutcomesItemStatus = {
+  refreshed: 'refreshed',
+  needs_evidence: 'needs_evidence',
+  failed: 'failed',
+} as const;
+
+export type OrnamentsBulkReanalyzeResultOutcomesItemUnresolvedFieldsItem = typeof OrnamentsBulkReanalyzeResultOutcomesItemUnresolvedFieldsItem[keyof typeof OrnamentsBulkReanalyzeResultOutcomesItemUnresolvedFieldsItem];
+
+
+export const OrnamentsBulkReanalyzeResultOutcomesItemUnresolvedFieldsItem = {
+  embedding: 'embedding',
+  seriesOrCollection: 'seriesOrCollection',
+  year: 'year',
+} as const;
+
+export type OrnamentsBulkReanalyzeResultOutcomesItem = {
   id: number;
-  error: string;
+  status: OrnamentsBulkReanalyzeResultOutcomesItemStatus;
+  unresolvedFields: OrnamentsBulkReanalyzeResultOutcomesItemUnresolvedFieldsItem[];
+  /** @nullable */
+  recommendation: string | null;
+  error?: string;
 };
 
 export interface OrnamentsBulkReanalyzeResult {
-  total: number;
   succeeded: number[];
   failed: number[];
-  errors: OrnamentsBulkReanalyzeResultErrorsItem[];
+  outcomes: OrnamentsBulkReanalyzeResultOutcomesItem[];
+}
+
+export interface OrnamentsCategoryAssignmentOutcome {
+  entityId: number;
+  matchedCategoryIds: number[];
+  assignmentsCreated: number;
+  error?: string;
+}
+
+export interface OrnamentsApplyExistingCategoriesResult {
+  total: number;
+  matched: number;
+  assignmentsCreated: number;
+  failed: number;
+  outcomes: OrnamentsCategoryAssignmentOutcome[];
 }
 
 export interface OrnamentsBarcodeLookupInput {
@@ -2479,42 +2601,6 @@ export interface OrnamentsBarcodeLookupResult {
   description?: string | null;
   /** @nullable */
   imageUrl?: string | null;
-  /** @nullable */
-  hallmarkSku?: string | null;
-  /** @nullable */
-  hallmarkArtist?: string | null;
-  /** @nullable */
-  hallmarkSeriesName?: string | null;
-  /** @nullable */
-  hallmarkSequenceNumber?: number | null;
-  /** @nullable */
-  hallmarkRetailPriceUsd?: number | null;
-  /** @nullable */
-  hallmarkCollectorPriceUsd?: number | null;
-  /** @nullable */
-  hallmarkInStock?: boolean | null;
-  /** @nullable */
-  hallmarkImages?: string[] | null;
-  /** @nullable */
-  hallmarkProductUrl?: string | null;
-}
-
-export interface OrnamentsBarcodeCorrectionInput {
-  /**
-     * @minLength 1
-     * @maxLength 30
-     */
-  barcode: string;
-  wrongName?: string | null;
-  wrongBrand?: string | null;
-  correctedName?: string | null;
-  correctedBrand?: string | null;
-  correctedSeriesOrCollection?: string | null;
-  correctedYear?: number | null;
-}
-
-export interface OrnamentsBarcodeCorrectionResult {
-  success: boolean;
 }
 
 export interface OrnamentsBarcodePhotoInput {
@@ -2541,11 +2627,25 @@ export interface OrnamentsSeriesValueBreakdown {
   totalValue: number;
 }
 
+/**
+ * The policy used for the total and every series breakdown.
+ */
+export type OrnamentsStatsResponseValuationPolicy = typeof OrnamentsStatsResponseValuationPolicy[keyof typeof OrnamentsStatsResponseValuationPolicy];
+
+
+export const OrnamentsStatsResponseValuationPolicy = {
+  market_signals_then_retail_fallback: 'market_signals_then_retail_fallback',
+} as const;
+
 export interface OrnamentsStatsResponse {
   totalItems: number;
   totalQuantity: number;
-  totalBookValue: number;
-  itemsWithBookValue: number;
+  /** Collection estimate: average each item's saved current-market signals (book value, eBay price, AI appraisal); use retail/MSRP only when no market signal exists. Includes quantity. */
+  totalEstimatedValue: number;
+  /** Number of unique ornament designs with at least one valid market or retail value. */
+  itemsWithEstimatedValue: number;
+  /** The policy used for the total and every series breakdown. */
+  valuationPolicy: OrnamentsStatsResponseValuationPolicy;
   bySeriesOrCollection: OrnamentsSeriesValueBreakdown[];
 }
 
@@ -3003,6 +3103,98 @@ export interface NotificationsPreferencesBody {
   entries: NotificationsPreferenceEntry[];
 }
 
+export interface MagnetsCategory {
+  id: number;
+  name: string;
+  /** @nullable */
+  bgColor?: string | null;
+  /** @nullable */
+  textColor?: string | null;
+  count?: number;
+}
+
+export interface MagnetsMagnetImage {
+  id: number;
+  url: string;
+  /** @nullable */
+  label?: string | null;
+  position: number;
+}
+
+export interface MagnetsMagnetItem {
+  id: number;
+  name: string;
+  /** @nullable */
+  notes?: string | null;
+  /** @nullable */
+  description?: string | null;
+  lockedFields: string[];
+  categories: MagnetsCategory[];
+  images: MagnetsMagnetImage[];
+  /** @nullable */
+  imageUrl: string | null;
+  /** @nullable */
+  primaryImageId: number | null;
+  createdAt: string;
+}
+
+export interface MagnetsMagnetCreate {
+  /** @minLength 1 */
+  name: string;
+  /** @nullable */
+  notes?: string | null;
+  /** @nullable */
+  description?: string | null;
+  categoryIds?: number[];
+}
+
+export interface MagnetsMagnetUpdate {
+  /** @minLength 1 */
+  name?: string;
+  /** @nullable */
+  notes?: string | null;
+  /** @nullable */
+  description?: string | null;
+  lockedFields?: string[];
+  categoryIds?: number[];
+}
+
+export interface MagnetsMagnetListResponse {
+  items: MagnetsMagnetItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export interface MagnetsMagnetImageUpdate {
+  /** @nullable */
+  label?: string | null;
+}
+
+export interface MagnetsCategoryInput {
+  /**
+     * @minLength 1
+     * @maxLength 50
+     */
+  name: string;
+  /** @nullable */
+  bgColor?: string | null;
+  /** @nullable */
+  textColor?: string | null;
+}
+
+export interface MagnetsCategoryColorInput {
+  /** @nullable */
+  bgColor?: string | null;
+  /** @nullable */
+  textColor?: string | null;
+}
+
+export interface MagnetsMergeCategoryInput {
+  intoId: number;
+}
+
 export type ListPotteryParams = {
 /**
  * Text search across name, pattern description, style, shape, maker, and motifs
@@ -3364,4 +3556,46 @@ export const ListSeverity = {
   important: 'important',
   critical: 'critical',
 } as const;
+
+export type ListMagnetsParams = {
+q?: string;
+categoryId?: number;
+categoryIds?: number[];
+uncategorized?: boolean;
+sort?: ListMagnetsSort;
+/**
+ * @minimum 1
+ */
+page?: number;
+/**
+ * @minimum 1
+ * @maximum 200
+ */
+pageSize?: number;
+};
+
+export type ListMagnetsSort = typeof ListMagnetsSort[keyof typeof ListMagnetsSort];
+
+
+export const ListMagnetsSort = {
+  newest: 'newest',
+  oldest: 'oldest',
+  'name-asc': 'name-asc',
+  'name-desc': 'name-desc',
+} as const;
+
+export type AddMagnetImageBody = {
+  image: Blob;
+  label?: string;
+};
+
+export type SetMagnetPrimaryImage200 = {
+  id: number;
+  /** @nullable */
+  imagePath: string | null;
+};
+
+export type DeleteMagnetUnusedCategories200 = {
+  deleted: number;
+};
 

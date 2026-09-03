@@ -256,6 +256,9 @@ importers:
       '@workspace/upload-validation':
         specifier: workspace:*
         version: link:../../lib/upload-validation
+      '@workspace/web-core':
+        specifier: workspace:*
+        version: link:../../lib/web-core
       bcryptjs:
         specifier: ^3.0.3
         version: 3.0.3

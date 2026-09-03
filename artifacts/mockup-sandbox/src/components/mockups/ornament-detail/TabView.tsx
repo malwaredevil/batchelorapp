@@ -19,7 +19,6 @@ const ORNAMENT = {
   brand: "Hallmark",
   year: "2016",
   series: "Sweet Decade",
-  condition: "Mint in Box",
   dimensions: "3.5 in",
   barcode: "661127022308",
   aiDescription:
@@ -150,7 +149,6 @@ export function TabView() {
                       { label: "Brand", value: ORNAMENT.brand },
                       { label: "Year", value: ORNAMENT.year },
                       { label: "Series / Collection", value: ORNAMENT.series },
-                      { label: "Condition", value: ORNAMENT.condition },
                       { label: "Dimensions", value: ORNAMENT.dimensions },
                       { label: "Barcode / UPC", value: ORNAMENT.barcode },
                     ].map((item, idx) => (

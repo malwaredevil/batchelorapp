@@ -53,6 +53,10 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+import {
+  getCategoryPalette,
+  resolveCategoryPalette,
+} from "@workspace/web-core/colors";
 
 const createSchema = z.object({
   name: z.string().min(1, "Name is required").max(50),
@@ -64,8 +68,9 @@ function CategoryColorEditor({ category }: { category: Category }) {
   const queryClient = useQueryClient();
   const updateColors = useUpdateOrnamentCategoryColors();
 
-  const [bgColor, setBgColor] = useState(category.bgColor || "#f3f4f6");
-  const [textColor, setTextColor] = useState(category.textColor || "#374151");
+  const palette = resolveCategoryPalette(category);
+  const [bgColor, setBgColor] = useState(palette.bgColor);
+  const [textColor, setTextColor] = useState(palette.textColor);
   const [isEditing, setIsEditing] = useState(false);
 
   const handleSave = async () => {
@@ -90,9 +95,9 @@ function CategoryColorEditor({ category }: { category: Category }) {
       <Badge
         className="cursor-pointer font-normal rounded-md"
         style={{
-          backgroundColor: category.bgColor || "#f3f4f6",
-          color: category.textColor || "#374151",
-          border: `1px solid ${category.bgColor || "#e5e7eb"}`,
+          backgroundColor: palette.bgColor,
+          color: palette.textColor,
+          border: `1px solid ${palette.bgColor}`,
         }}
         onClick={() => setIsEditing(true)}
       >
@@ -320,8 +325,8 @@ function CategoryActionMenu({
                   <Badge
                     className="font-normal rounded-md"
                     style={{
-                      backgroundColor: c.bgColor || "#f3f4f6",
-                      color: c.textColor || "#374151",
+                      backgroundColor: resolveCategoryPalette(c).bgColor,
+                      color: resolveCategoryPalette(c).textColor,
                     }}
                   >
                     {c.name}
@@ -524,7 +529,10 @@ export default function Categories() {
   const [isSuggesting, setIsSuggesting] = useState(false);
   const form = useForm<z.infer<typeof createSchema>>({
     resolver: zodResolver(createSchema),
-    defaultValues: { name: "", bgColor: "#fed7aa", textColor: "#9a3412" },
+    defaultValues: {
+      name: "",
+      ...getCategoryPalette("New category"),
+    },
   });
 
   usePageAssistantContext(

@@ -71,11 +71,7 @@ const REQUIRED_GITHUB_SECRETS: Array<{ name: string; purpose: string }> = [
   },
   {
     name: "APIFY_API_TOKEN",
-    purpose: "Apify Actors (Hallmark HooH crawler, etc.)",
-  },
-  {
-    name: "APIFY_WEBHOOK_SECRET",
-    purpose: "Apify webhook HMAC signing secret",
+    purpose: "Apify Actors for live research and valuations",
   },
   { name: "EBAY_APP_ID", purpose: "eBay Finding API application ID" },
   { name: "EBAY_CERT_ID", purpose: "eBay Finding API certificate ID" },

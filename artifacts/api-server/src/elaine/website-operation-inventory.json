@@ -1,5 +1,15 @@
 [
   {
+    "operationId": "applyExistingOrnamentCategories",
+    "method": "POST",
+    "path": "/ornaments/categories/apply-existing",
+    "domain": "ornaments",
+    "summary": "Apply matching existing categories to every active ornament without creating or removing categories",
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
+  },
+  {
     "operationId": "addFabricIdentifier",
     "method": "POST",
     "path": "/quilting/fabrics/{id}/identifiers",
@@ -15,6 +25,16 @@
     "path": "/quilting/fabrics/{id}/images",
     "domain": "fabrics",
     "summary": "Add a supplemental image to a fabric",
+    "disposition": "attachment_or_camera",
+    "mappedTools": [],
+    "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it."
+  },
+  {
+    "operationId": "addMagnetImage",
+    "method": "POST",
+    "path": "/magnets/items/{id}/images",
+    "domain": "magnets",
+    "summary": "Upload a photo for a magnet",
     "disposition": "attachment_or_camera",
     "mappedTools": [],
     "reason": "This operation starts with binary upload, camera capture, or a generated binary response. Elaine can reason over chat attachments, but a shared binary-operation service is still required before she can safely execute it."
@@ -280,6 +300,16 @@
     "reason": "Elaine has registered tools that reuse or mirror this website operation."
   },
   {
+    "operationId": "createMagnet",
+    "method": "POST",
+    "path": "/magnets/items",
+    "domain": "magnets",
+    "summary": "Create a magnet",
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
+  },
+  {
     "operationId": "createNote",
     "method": "POST",
     "path": "/office/notes",
@@ -327,6 +357,16 @@
     "summary": "Create the given category names (skipping ones that already exist) and backfill matching assignments across every existing ornament",
     "disposition": "direct",
     "mappedTools": ["suggest_and_create_ornament_categories"],
+    "reason": "Elaine has registered tools that reuse or mirror this website operation."
+  },
+  {
+    "operationId": "createMagnetCategory",
+    "method": "POST",
+    "path": "/magnets/categories",
+    "domain": "magnets",
+    "summary": "Create a category",
+    "disposition": "direct",
+    "mappedTools": ["create_magnet_category"],
     "reason": "Elaine has registered tools that reuse or mirror this website operation."
   },
   {
@@ -520,6 +560,26 @@
     "reason": "Elaine has registered tools that reuse or mirror this website operation."
   },
   {
+    "operationId": "deleteMagnet",
+    "method": "DELETE",
+    "path": "/magnets/items/{id}",
+    "domain": "magnets",
+    "summary": "Soft-delete a magnet",
+    "disposition": "direct",
+    "mappedTools": ["delete_magnet_item"],
+    "reason": "Elaine has registered tools that reuse or mirror this website operation."
+  },
+  {
+    "operationId": "deleteMagnetImage",
+    "method": "DELETE",
+    "path": "/magnets/items/{id}/images/{imageId}",
+    "domain": "magnets",
+    "summary": "Delete a photo",
+    "disposition": "direct",
+    "mappedTools": ["delete_magnet_photo"],
+    "reason": "Elaine has registered tools that reuse or mirror this website operation."
+  },
+  {
     "operationId": "deleteMessage",
     "method": "DELETE",
     "path": "/messenger/messages/{id}",
@@ -568,6 +628,26 @@
     "disposition": "direct",
     "mappedTools": ["delete_ornament_photo"],
     "reason": "Elaine has registered tools that reuse or mirror this website operation."
+  },
+  {
+    "operationId": "deleteMagnetCategory",
+    "method": "DELETE",
+    "path": "/magnets/categories/{id}",
+    "domain": "magnets",
+    "summary": "Delete a category",
+    "disposition": "direct",
+    "mappedTools": ["delete_magnet_category"],
+    "reason": "Elaine has registered tools that reuse or mirror this website operation."
+  },
+  {
+    "operationId": "deleteMagnetUnusedCategories",
+    "method": "DELETE",
+    "path": "/magnets/categories/unused",
+    "domain": "magnets",
+    "summary": "Delete all categories with no items assigned",
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
     "operationId": "deleteOrnamentUnusedCategories",
@@ -1085,6 +1165,16 @@
     "reason": "Elaine can discover and execute this authenticated JSON read through the reviewed OpenAPI operation bridge."
   },
   {
+    "operationId": "getMagnet",
+    "method": "GET",
+    "path": "/magnets/items/{id}",
+    "domain": "magnets",
+    "summary": "Get a magnet",
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and execute this authenticated JSON operation through the reviewed OpenAPI operation bridge and existing confirmation flow."
+  },
+  {
     "operationId": "getNotificationsPreferences",
     "method": "GET",
     "path": "/notifications/preferences",
@@ -1129,7 +1219,7 @@
     "method": "GET",
     "path": "/ornaments/items/stragglers",
     "domain": "ornaments",
-    "summary": "List ornaments missing an embedding or core attributes",
+    "summary": "List ornaments missing an embedding, series/collection, or year",
     "disposition": "covered_by_general_tool",
     "mappedTools": ["search_household_data", "query_household_data"],
     "reason": "Elaine can answer common questions through household search/summary, but this specialized endpoint is not yet a dedicated tool."
@@ -1515,6 +1605,26 @@
     "reason": "Elaine can discover and execute this authenticated JSON read through the reviewed OpenAPI operation bridge."
   },
   {
+    "operationId": "listMagnetCategories",
+    "method": "GET",
+    "path": "/magnets/categories",
+    "domain": "magnets",
+    "summary": "List categories",
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and execute this authenticated JSON operation through the reviewed OpenAPI operation bridge and existing confirmation flow."
+  },
+  {
+    "operationId": "listMagnets",
+    "method": "GET",
+    "path": "/magnets/items",
+    "domain": "magnets",
+    "summary": "List magnets (paginated)",
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and execute this authenticated JSON operation through the reviewed OpenAPI operation bridge and existing confirmation flow."
+  },
+  {
     "operationId": "listNotes",
     "method": "GET",
     "path": "/office/notes",
@@ -1779,30 +1889,10 @@
     "method": "POST",
     "path": "/ornaments/items/lookup-barcode",
     "domain": "ornaments",
-    "summary": "Look up a barcode via UPCitemdb for the add-item form (does not save)",
+    "summary": "Identify an ornament barcode using live eBay data with an AI fallback (does not save)",
     "disposition": "direct",
     "mappedTools": ["lookup_product_barcode"],
     "reason": "Elaine has registered tools that reuse or mirror this website operation."
-  },
-  {
-    "operationId": "lookupOrnamentBarcode",
-    "method": "POST",
-    "path": "/ornaments/items/{id}/lookup-barcode",
-    "domain": "ornaments",
-    "summary": "Look up a barcode via UPCitemdb and return candidate fields (does not save)",
-    "disposition": "direct",
-    "mappedTools": ["lookup_product_barcode"],
-    "reason": "Elaine has registered tools that reuse or mirror this website operation."
-  },
-  {
-    "operationId": "reportBarcodeCorrection",
-    "method": "POST",
-    "path": "/ornaments/items/report-barcode-correction",
-    "domain": "ornaments",
-    "summary": "Submit a correction when a barcode lookup returned wrong information",
-    "disposition": "covered_by_general_tool",
-    "mappedTools": ["lookup_product_barcode"],
-    "reason": "Submitting a barcode correction is a UI-driven action (Yes/No confirmation on the Lookup Ornament page). Elaine can explain the correction flow to users and re-run lookups via lookup_product_barcode, but has no dedicated tool to submit corrections directly. The primary user path is the on-screen confirmation form."
   },
   {
     "operationId": "lookupOrnamentBookValue",
@@ -1843,6 +1933,16 @@
     "disposition": "universal_bridge",
     "mappedTools": ["discover_app_operations", "execute_app_operation"],
     "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
+  },
+  {
+    "operationId": "mergeMagnetCategory",
+    "method": "POST",
+    "path": "/magnets/categories/{id}/merge",
+    "domain": "magnets",
+    "summary": "Merge a category into another (reassigns items, deletes source)",
+    "disposition": "direct",
+    "mappedTools": ["merge_magnet_categories"],
+    "reason": "Elaine has registered tools that reuse or mirror this website operation."
   },
   {
     "operationId": "mergeOrnamentCategory",
@@ -1955,6 +2055,16 @@
     "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
+    "operationId": "reanalyzeMagnet",
+    "method": "POST",
+    "path": "/magnets/items/{id}/reanalyze",
+    "domain": "magnets",
+    "summary": "Re-analyse a magnet with AI vision",
+    "disposition": "direct",
+    "mappedTools": ["reanalyze_magnet"],
+    "reason": "Elaine has registered tools that reuse or mirror this website operation."
+  },
+  {
     "operationId": "reanalyzeOrnament",
     "method": "POST",
     "path": "/ornaments/items/{id}/reanalyze",
@@ -2005,6 +2115,16 @@
     "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
   },
   {
+    "operationId": "refreshOrnamentIdentity",
+    "method": "POST",
+    "path": "/ornaments/items/{id}/identity-refresh",
+    "domain": "ornaments",
+    "summary": "Refresh only missing, unlocked ornament identity evidence from its photos",
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
+  },
+  {
     "operationId": "removeReaction",
     "method": "DELETE",
     "path": "/messenger/messages/{id}/reactions/{emoji}",
@@ -2013,6 +2133,16 @@
     "disposition": "universal_bridge",
     "mappedTools": ["discover_app_operations", "execute_app_operation"],
     "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
+  },
+  {
+    "operationId": "renameMagnetCategory",
+    "method": "PATCH",
+    "path": "/magnets/categories/{id}",
+    "domain": "magnets",
+    "summary": "Rename a category",
+    "disposition": "direct",
+    "mappedTools": ["rename_magnet_category"],
+    "reason": "Elaine has registered tools that reuse or mirror this website operation."
   },
   {
     "operationId": "renameOrnamentCategory",
@@ -2203,6 +2333,16 @@
     "disposition": "universal_bridge",
     "mappedTools": ["discover_app_operations", "execute_app_operation"],
     "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
+  },
+  {
+    "operationId": "setMagnetPrimaryImage",
+    "method": "POST",
+    "path": "/magnets/items/{id}/images/{imageId}/primary",
+    "domain": "magnets",
+    "summary": "Promote an image to primary (gallery cover)",
+    "disposition": "direct",
+    "mappedTools": ["promote_magnet_photo"],
+    "reason": "Elaine has registered tools that reuse or mirror this website operation."
   },
   {
     "operationId": "setOrnamentPrimaryImage",
@@ -2420,6 +2560,36 @@
     "path": "/quilting/layouts/{id}",
     "domain": "layouts",
     "summary": "Update a quilt layout",
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
+  },
+  {
+    "operationId": "updateMagnet",
+    "method": "PATCH",
+    "path": "/magnets/items/{id}",
+    "domain": "magnets",
+    "summary": "Update a magnet",
+    "disposition": "direct",
+    "mappedTools": ["update_magnet_item"],
+    "reason": "Elaine has registered tools that reuse or mirror this website operation."
+  },
+  {
+    "operationId": "updateMagnetCategoryColors",
+    "method": "PUT",
+    "path": "/magnets/categories/{id}/colors",
+    "domain": "magnets",
+    "summary": "Update a category's colours",
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."
+  },
+  {
+    "operationId": "updateMagnetImage",
+    "method": "PATCH",
+    "path": "/magnets/items/{id}/images/{imageId}",
+    "domain": "magnets",
+    "summary": "Update a supplemental image's label",
     "disposition": "universal_bridge",
     "mappedTools": ["discover_app_operations", "execute_app_operation"],
     "reason": "Elaine can discover and propose this authenticated JSON mutation through the reviewed OpenAPI operation bridge and existing confirmation flow."

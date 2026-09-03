@@ -133,6 +133,7 @@ export const apiLimiter = rateLimit({
   store: new PostgresRateLimitStore("api"),
   passOnStoreError: false,
   skip: (req) =>
+    req.path === "/" ||
     req.path === "/healthz" ||
     req.path === "/health/live" ||
     req.path === "/health/ready",

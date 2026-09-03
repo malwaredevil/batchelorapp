@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { getCategoryPalette } from "@workspace/web-core/colors";
 import { requireAuth } from "../middleware/auth";
 
 /** Minimal duck-type that covers both Zod v3 and v4 schema objects. */
@@ -260,12 +261,13 @@ export function buildCategoryRouter(
       textColor?: string | null;
     };
     const name = normalize(body.name);
+    const palette = getCategoryPalette(name);
     try {
       const id = await ops.create(
         userId,
         name,
-        body.bgColor ?? null,
-        body.textColor ?? null,
+        body.bgColor ?? palette.bgColor,
+        body.textColor ?? palette.textColor,
       );
       const withCount = await ops.fetchWithCount(id, userId);
       res.status(201).json(schemas.listItem.parse(withCount));

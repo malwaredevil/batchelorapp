@@ -20,6 +20,17 @@
 export const STATEMENTS: string[] = [
   // ── Extensions ─────────────────────────────────────────────────────────────
   `CREATE EXTENSION IF NOT EXISTS vector`,
+  `CREATE EXTENSION IF NOT EXISTS pg_trgm`,
+  // array_to_string(text[], text) is STABLE, so PostgreSQL will not allow it in
+  // a trigram expression index. This wrapper has a fixed separator and is safe
+  // to mark immutable, letting both the predicate and index use one expression.
+  `CREATE OR REPLACE FUNCTION collection_search_text(text_values text[])
+     RETURNS text
+     LANGUAGE sql
+     IMMUTABLE
+     STRICT
+     PARALLEL SAFE
+     AS $function$ SELECT array_to_string(text_values, ' ') $function$`,
 
   // ── Shared user accounts (used by BOTH apps — never drop this table) ────────
   `CREATE TABLE IF NOT EXISTS app_users (
@@ -79,6 +90,38 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE scheduler_runs ADD COLUMN IF NOT EXISTS last_success_at timestamptz`,
   `ALTER TABLE scheduler_runs ADD COLUMN IF NOT EXISTS expected_interval_ms integer`,
   `ALTER TABLE scheduler_runs ADD COLUMN IF NOT EXISTS last_claim_granted boolean NOT NULL DEFAULT false`,
+
+  // Google Calendar remains the source of truth for Hallmark events. This
+  // singleton stores scanner health and the last validated preview/apply
+  // result, not calendar events.
+  `CREATE TABLE IF NOT EXISTS ornaments_hallmark_event_sync (
+     id                  integer PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+     source_url          text NOT NULL,
+     source_fetched_at   timestamptz,
+     source_fingerprint  text,
+     last_run_at         timestamptz,
+     last_success_at     timestamptz,
+     last_status         text NOT NULL DEFAULT 'never',
+     last_error          text,
+     candidate_count     integer NOT NULL DEFAULT 0,
+     rejected_count      integer NOT NULL DEFAULT 0,
+     candidates          jsonb NOT NULL DEFAULT '[]'::jsonb,
+     rejected            jsonb NOT NULL DEFAULT '[]'::jsonb,
+     updated_at          timestamptz NOT NULL DEFAULT now()
+  )`,
+  `ALTER TABLE ornaments_hallmark_event_sync ENABLE ROW LEVEL SECURITY`,
+  `ALTER TABLE ornaments_hallmark_event_sync ADD COLUMN IF NOT EXISTS source_url text NOT NULL DEFAULT 'https://www.hallmark.com/keepsake-ornament-events/'`,
+  `ALTER TABLE ornaments_hallmark_event_sync ADD COLUMN IF NOT EXISTS source_fetched_at timestamptz`,
+  `ALTER TABLE ornaments_hallmark_event_sync ADD COLUMN IF NOT EXISTS source_fingerprint text`,
+  `ALTER TABLE ornaments_hallmark_event_sync ADD COLUMN IF NOT EXISTS last_run_at timestamptz`,
+  `ALTER TABLE ornaments_hallmark_event_sync ADD COLUMN IF NOT EXISTS last_success_at timestamptz`,
+  `ALTER TABLE ornaments_hallmark_event_sync ADD COLUMN IF NOT EXISTS last_status text NOT NULL DEFAULT 'never'`,
+  `ALTER TABLE ornaments_hallmark_event_sync ADD COLUMN IF NOT EXISTS last_error text`,
+  `ALTER TABLE ornaments_hallmark_event_sync ADD COLUMN IF NOT EXISTS candidate_count integer NOT NULL DEFAULT 0`,
+  `ALTER TABLE ornaments_hallmark_event_sync ADD COLUMN IF NOT EXISTS rejected_count integer NOT NULL DEFAULT 0`,
+  `ALTER TABLE ornaments_hallmark_event_sync ADD COLUMN IF NOT EXISTS candidates jsonb NOT NULL DEFAULT '[]'::jsonb`,
+  `ALTER TABLE ornaments_hallmark_event_sync ADD COLUMN IF NOT EXISTS rejected jsonb NOT NULL DEFAULT '[]'::jsonb`,
+  `ALTER TABLE ornaments_hallmark_event_sync ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now()`,
 
   // ── Session stores (owned by connect-pg-simple, never altered by drizzle) ──
   `CREATE TABLE IF NOT EXISTS pottery_sessions (
@@ -1396,7 +1439,6 @@ export const STATEMENTS: string[] = [
     quantity               INTEGER NOT NULL DEFAULT 1,
     notes                  TEXT,
     dimensions             TEXT,
-    condition              TEXT,
     origin                 TEXT,
     acquired_at            DATE,
     description            TEXT,
@@ -1434,17 +1476,6 @@ export const STATEMENTS: string[] = [
     position     INTEGER NOT NULL DEFAULT 0,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
-  `CREATE TABLE IF NOT EXISTS ornaments_barcode_cache (
-    barcode              TEXT PRIMARY KEY,
-    found                INTEGER NOT NULL DEFAULT 0,
-    name                 TEXT,
-    brand                TEXT,
-    series_or_collection TEXT,
-    year                 INTEGER,
-    description          TEXT,
-    image_url            TEXT,
-    created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`,
   `CREATE INDEX IF NOT EXISTS ornaments_embedding_idx
      ON ornaments_items USING hnsw (embedding vector_cosine_ops)`,
   `CREATE INDEX IF NOT EXISTS ornaments_visual_embedding_idx
@@ -1461,38 +1492,6 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE ornaments_categories ENABLE ROW LEVEL SECURITY`,
   `ALTER TABLE ornaments_item_categories ENABLE ROW LEVEL SECURITY`,
   `ALTER TABLE ornaments_images ENABLE ROW LEVEL SECURITY`,
-  `ALTER TABLE ornaments_barcode_cache ENABLE ROW LEVEL SECURITY`,
-
-  // ── Hallmark.com enrichment columns on barcode cache (additive, idempotent) ─
-  `ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_sku TEXT`,
-  `ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_series_name TEXT`,
-  `ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_sequence_number INTEGER`,
-  `ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_artist TEXT`,
-  `ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_original_retail_price NUMERIC(10,2)`,
-  `ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_product_url TEXT`,
-  `ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_confidence NUMERIC(4,3)`,
-  `ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_enriched_at TIMESTAMPTZ`,
-  `ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_collector_price_usd NUMERIC(10,2)`,
-  `ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_in_stock BOOLEAN`,
-  `ALTER TABLE ornaments_barcode_cache ADD COLUMN IF NOT EXISTS hallmark_images TEXT[]`,
-
-  // ── Barcode correction submissions ───────────────────────────────────────────
-  // Users can flag incorrect barcode lookup results and submit corrections.
-  // These are stored here and consulted first on future lookups for the same
-  // barcode (most-recent correction wins).
-  `CREATE TABLE IF NOT EXISTS ornament_upc_corrections (
-    id SERIAL PRIMARY KEY,
-    barcode TEXT NOT NULL,
-    corrected_name TEXT,
-    corrected_brand TEXT,
-    corrected_series_or_collection TEXT,
-    corrected_year INTEGER,
-    wrong_name TEXT,
-    wrong_brand TEXT,
-    submitted_by INTEGER,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )`,
-  `CREATE INDEX IF NOT EXISTS idx_ornament_upc_corrections_barcode ON ornament_upc_corrections(barcode)`,
 
   // ── Realtime replication (issue #128) ───────────────────────────────────────
   // Adds the household-shared collection tables to Supabase's built-in
@@ -1611,7 +1610,6 @@ export const STATEMENTS: string[] = [
     ('web_search',  'search_timeout_ms',             '15000',   'integer', 'Web search timeout (ms)',                      'AbortController timeout for Perplexity Sonar web-search calls via OpenRouter.'),
     ('openrouter',  'model_fetch_timeout_ms',         '8000',    'integer', 'OpenRouter model list fetch timeout (ms)',      'AbortController timeout when fetching the OpenRouter model catalogue for the admin UI.'),
     ('openrouter',  'model_list_cache_ttl_ms',        '3600000', 'integer', 'OpenRouter model list cache TTL (ms)',          'How long to keep the OpenRouter model catalogue in-memory (default 1 h).'),
-    ('ornaments',   'barcode_fetch_timeout_ms',       '8000',    'integer', 'Barcode lookup fetch timeout (ms)',             'AbortController timeout for UPCitemdb barcode lookup calls.'),
     ('quilting',    'color_suggestion_max_tokens',    '200',     'integer', 'Colour suggestion AI max tokens',               'max_tokens cap for the fabric colour-suggestion vision call (quilting tools).'),
     ('quilting',    'pattern_import_max_tokens',      '400',     'integer', 'Pattern import AI max tokens',                  'max_tokens cap for the quilting pattern-import AI extraction call.'),
     ('quilting',    'reranker_timeout_ms',            '10000',   'integer', 'Voyage reranker timeout (ms)',                  'AbortSignal.timeout value for Voyage AI rerank calls (fabric Compare).'),
@@ -2772,108 +2770,6 @@ export const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS quilting_block_templates_created_by_user_id_idx
      ON quilting_block_templates (created_by_user_id)`,
 
-  // ── Hallmark catalog ────────────────────────────────────────────────────────
-  `CREATE TABLE IF NOT EXISTS hallmark_catalog (
-    id                serial PRIMARY KEY,
-    hallmark_sku      text NOT NULL UNIQUE,
-    name              text NOT NULL,
-    description       text,
-    series_name       text,
-    sequence_number   integer,
-    year              integer,
-    artist            text,
-    retail_price_usd  numeric(10,2),
-    product_url       text,
-    images            text[],
-    ornament_category text,
-    crawled_at        timestamptz NOT NULL,
-    created_at        timestamptz NOT NULL DEFAULT now(),
-    updated_at        timestamptz NOT NULL DEFAULT now()
-  )`,
-  `ALTER TABLE hallmark_catalog ENABLE ROW LEVEL SECURITY`,
-  `CREATE INDEX IF NOT EXISTS hallmark_catalog_year_idx ON hallmark_catalog (year)`,
-  `CREATE INDEX IF NOT EXISTS hallmark_catalog_series_idx ON hallmark_catalog (series_name)`,
-
-  // ── Hallmark historical catalog (hallmarkornaments.com, 1973-present) ────────
-  `CREATE TABLE IF NOT EXISTS hallmark_historical_catalog (
-    id                    serial PRIMARY KEY,
-    hallmark_sku          text,
-    name                  text NOT NULL,
-    year                  integer,
-    series_name           text,
-    sequence_number       integer,
-    artist                text,
-    collector_price_usd   numeric(10,2),
-    product_url           text NOT NULL UNIQUE,
-    images                text[],
-    source                text NOT NULL DEFAULT 'hallmarkornaments.com',
-    crawled_at            timestamptz NOT NULL,
-    created_at            timestamptz NOT NULL DEFAULT now(),
-    updated_at            timestamptz NOT NULL DEFAULT now()
-  )`,
-  `ALTER TABLE hallmark_historical_catalog ENABLE ROW LEVEL SECURITY`,
-  `CREATE INDEX IF NOT EXISTS hallmark_hist_sku_idx ON hallmark_historical_catalog (hallmark_sku)`,
-  `CREATE INDEX IF NOT EXISTS hallmark_hist_year_idx ON hallmark_historical_catalog (year)`,
-  `CREATE INDEX IF NOT EXISTS hallmark_hist_series_idx ON hallmark_historical_catalog (series_name)`,
-
-  // ── Hallmark HookedOnHallmark catalog (hookedonhallmark.com, 1973-present) ──
-  // Retail/collector prices, availability, and series from the world's largest
-  // Hallmark ornament retailer. Upserted on product_url. Cross-reference with
-  // hallmark_historical_catalog by hallmark_sku to backfill prices.
-  `CREATE TABLE IF NOT EXISTS hallmark_hooh_catalog (
-    id               serial PRIMARY KEY,
-    product_url      text NOT NULL UNIQUE,
-    catalog_id       integer,
-    hallmark_sku     text,
-    name             text,
-    year             integer,
-    subcategory      text,
-    series_name      text,
-    sequence_number  integer,
-    retail_price_usd numeric(10,2),
-    in_stock         boolean,
-    source           text NOT NULL DEFAULT 'hookedonhallmark.com',
-    crawled_at       timestamptz NOT NULL,
-    created_at       timestamptz NOT NULL DEFAULT now(),
-    updated_at       timestamptz NOT NULL DEFAULT now()
-  )`,
-  `ALTER TABLE hallmark_hooh_catalog ENABLE ROW LEVEL SECURITY`,
-  `CREATE INDEX IF NOT EXISTS hallmark_hooh_sku_idx ON hallmark_hooh_catalog (hallmark_sku)`,
-  `CREATE INDEX IF NOT EXISTS hallmark_hooh_year_idx ON hallmark_hooh_catalog (year)`,
-  `CREATE INDEX IF NOT EXISTS hallmark_hooh_series_idx ON hallmark_hooh_catalog (series_name)`,
-
-  // ── Hallmark ornaments — merged single-table view ─────────────────────────
-  // Populated by the merge-hallmark-catalogs script. Keyed by hallmark_sku.
-  // Consolidates hallmark_catalog + hallmark_historical_catalog + hallmark_hooh_catalog.
-  // Source tables are retained as read-only history; queries use this table only.
-  `CREATE TABLE IF NOT EXISTS hallmark_ornaments (
-    id                     serial PRIMARY KEY,
-    hallmark_sku           text NOT NULL UNIQUE,
-    name                   text NOT NULL,
-    description            text,
-    series_name            text,
-    sequence_number        integer,
-    year                   integer,
-    artist                 text,
-    retail_price_usd       numeric(10,2),
-    collector_price_usd    numeric(10,2),
-    in_stock               boolean,
-    ornament_category      text,
-    subcategory            text,
-    images                 text[],
-    product_url_hallmark   text,
-    product_url_historical text,
-    product_url_hooh       text,
-    in_hallmark_catalog    boolean NOT NULL DEFAULT false,
-    in_historical_catalog  boolean NOT NULL DEFAULT false,
-    in_hooh_catalog        boolean NOT NULL DEFAULT false,
-    created_at             timestamptz NOT NULL DEFAULT now(),
-    updated_at             timestamptz NOT NULL DEFAULT now()
-  )`,
-  `ALTER TABLE hallmark_ornaments ENABLE ROW LEVEL SECURITY`,
-  `CREATE INDEX IF NOT EXISTS hallmark_ornaments_year_idx   ON hallmark_ornaments (year)`,
-  `CREATE INDEX IF NOT EXISTS hallmark_ornaments_series_idx ON hallmark_ornaments (series_name)`,
-
   // ── Messenger reactions ──────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS messenger_reactions (
     id          serial PRIMARY KEY,
@@ -3003,9 +2899,8 @@ export const STATEMENTS: string[] = [
      WHERE status IN ('pending', 'retryable')`,
 
   // ── #328: redundant non-unique indexes superseded by unique constraints ──
-  // (hallmark_catalog_sku_idx, hallmark_hist_url_idx, hallmark_hooh_url_idx,
-  // hallmark_ornaments_sku_idx, travels_packing_lists_trip_id_idx,
-  // travels_monitoring_prefs_user_idx) were one-time cleanup DROP INDEX
+  // (travels_packing_lists_trip_id_idx, travels_monitoring_prefs_user_idx)
+  // were one-time cleanup DROP INDEX
   // statements. They already ran in every environment this array has ever
   // been applied to. Architecture hardening (#754): this startup script must
   // never carry destructive DDL (DROP/TRUNCATE), even idempotent one-time
@@ -3032,6 +2927,126 @@ export const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS quilting_fabrics_live_idx ON quilting_fabrics (id) WHERE deleted_at IS NULL`,
   `CREATE INDEX IF NOT EXISTS travels_trips_live_idx ON travels_trips (id) WHERE deleted_at IS NULL`,
   `CREATE INDEX IF NOT EXISTS ornaments_items_live_idx ON ornaments_items (id) WHERE deleted_at IS NULL`,
+
+  // ── Collection literal-search indexes ──────────────────────────────────────
+  // Search uses ILIKE '%token%' with escaped literal patterns. The pg_trgm
+  // operator class supports those substring predicates; partial indexes keep
+  // soft-deleted rows out of the search path. Tokens shorter than three
+  // characters may still use a sequential scan because they have no trigrams.
+  `CREATE INDEX IF NOT EXISTS ornaments_items_name_trgm_idx
+     ON ornaments_items USING gin (name gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS ornaments_items_series_trgm_idx
+     ON ornaments_items USING gin (series_or_collection gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS ornaments_items_brand_trgm_idx
+     ON ornaments_items USING gin (brand gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS ornaments_items_notes_trgm_idx
+     ON ornaments_items USING gin (notes gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS ornaments_items_description_trgm_idx
+     ON ornaments_items USING gin (description gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS ornaments_items_ai_description_trgm_idx
+     ON ornaments_items USING gin (ai_description gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS pottery_items_name_trgm_idx
+     ON pottery_items USING gin (name gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS pottery_items_pattern_description_trgm_idx
+     ON pottery_items USING gin (pattern_description gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS pottery_items_style_trgm_idx
+     ON pottery_items USING gin (style gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS pottery_items_shape_trgm_idx
+     ON pottery_items USING gin (shape gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS pottery_items_maker_trgm_idx
+     ON pottery_items USING gin (maker gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS pottery_items_maker_info_trgm_idx
+     ON pottery_items USING gin (maker_info gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS pottery_items_notes_trgm_idx
+     ON pottery_items USING gin (notes gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS pottery_items_ai_description_trgm_idx
+     ON pottery_items USING gin (ai_description gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS pottery_items_motifs_trgm_idx
+     ON pottery_items USING gin (collection_search_text(motifs) gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS quilting_finished_quilts_name_trgm_idx
+     ON quilting_finished_quilts USING gin (name gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS quilting_finished_quilts_recipient_trgm_idx
+     ON quilting_finished_quilts USING gin (recipient gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS quilting_finished_quilts_notes_trgm_idx
+     ON quilting_finished_quilts USING gin (notes gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS quilting_patterns_name_trgm_idx
+     ON quilting_patterns USING gin (name gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS quilting_patterns_designer_trgm_idx
+     ON quilting_patterns USING gin (designer gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS quilting_patterns_block_size_trgm_idx
+     ON quilting_patterns USING gin (block_size gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS quilting_patterns_difficulty_trgm_idx
+     ON quilting_patterns USING gin (difficulty gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS quilting_patterns_source_type_trgm_idx
+     ON quilting_patterns USING gin (source_type gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS quilting_patterns_source_reference_trgm_idx
+     ON quilting_patterns USING gin (source_reference gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS quilting_patterns_notes_trgm_idx
+     ON quilting_patterns USING gin (notes gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS quilting_patterns_publication_name_trgm_idx
+     ON quilting_patterns USING gin (publication_name gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS quilting_fabrics_name_trgm_idx
+     ON quilting_fabrics USING gin (name gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS quilting_fabrics_line_name_trgm_idx
+     ON quilting_fabrics USING gin (line_name gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS quilting_fabrics_designer_trgm_idx
+     ON quilting_fabrics USING gin (designer gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS quilting_fabrics_manufacturer_trgm_idx
+     ON quilting_fabrics USING gin (manufacturer gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS quilting_fabrics_colorway_trgm_idx
+     ON quilting_fabrics USING gin (colorway gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS quilting_fabrics_print_type_trgm_idx
+     ON quilting_fabrics USING gin (print_type gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS quilting_fabrics_fiber_content_trgm_idx
+     ON quilting_fabrics USING gin (fiber_content gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS quilting_fabrics_sku_trgm_idx
+     ON quilting_fabrics USING gin (sku gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS quilting_fabrics_notes_trgm_idx
+     ON quilting_fabrics USING gin (notes gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS quilting_fabrics_ai_description_trgm_idx
+     ON quilting_fabrics USING gin (ai_description gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS quilting_fabrics_motifs_trgm_idx
+     ON quilting_fabrics USING gin (collection_search_text(motifs) gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS quilting_fabrics_style_descriptors_trgm_idx
+     ON quilting_fabrics USING gin (collection_search_text(style_descriptors) gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
 
   // ── #341: household_activity_log ─────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS household_activity_log (
@@ -3353,4 +3368,64 @@ END $$`,
   `ALTER TABLE reminder_calendar_sync_state ENABLE ROW LEVEL SECURITY`,
 
   // scaffold:anchor:collection-ddl — scaffold-collection-module inserts DDL below; do not remove
+  // scaffold:begin:magnets
+  `CREATE TABLE IF NOT EXISTS magnets_items (
+    id serial PRIMARY KEY,
+    user_id integer NOT NULL,
+    name text NOT NULL,
+    notes text,
+    description text,
+    image_path text,
+    locked_fields text[] NOT NULL DEFAULT '{}',
+    deleted_at timestamptz,
+    created_at timestamptz NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS magnets_items_user_id_idx ON magnets_items (user_id)`,
+  `CREATE INDEX IF NOT EXISTS magnets_items_name_trgm_idx
+     ON magnets_items USING gin (name gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS magnets_items_notes_trgm_idx
+     ON magnets_items USING gin (notes gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `CREATE INDEX IF NOT EXISTS magnets_items_description_trgm_idx
+     ON magnets_items USING gin (description gin_trgm_ops)
+     WHERE deleted_at IS NULL`,
+  `ALTER TABLE magnets_items ENABLE ROW LEVEL SECURITY`,
+  `CREATE TABLE IF NOT EXISTS magnets_categories (
+    id serial PRIMARY KEY,
+    user_id integer NOT NULL,
+    name text NOT NULL,
+    bg_color text,
+    text_color text,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT magnets_categories_name_key UNIQUE (name)
+  )`,
+  `CREATE INDEX IF NOT EXISTS magnets_categories_user_id_idx ON magnets_categories (user_id)`,
+  `ALTER TABLE magnets_categories ENABLE ROW LEVEL SECURITY`,
+  `DO $$ BEGIN
+     IF NOT EXISTS (
+       SELECT 1 FROM pg_constraint WHERE conname = 'magnets_categories_name_key'
+     ) THEN
+       ALTER TABLE magnets_categories
+         ADD CONSTRAINT magnets_categories_name_key UNIQUE (name);
+     END IF;
+   END $$`,
+  `CREATE TABLE IF NOT EXISTS magnets_item_categories (
+    item_id integer NOT NULL REFERENCES magnets_items(id) ON DELETE CASCADE,
+    category_id integer NOT NULL REFERENCES magnets_categories(id) ON DELETE CASCADE,
+    PRIMARY KEY (item_id, category_id)
+  )`,
+  `ALTER TABLE magnets_item_categories ENABLE ROW LEVEL SECURITY`,
+  `CREATE TABLE IF NOT EXISTS magnets_images (
+    id serial PRIMARY KEY,
+    item_id integer NOT NULL REFERENCES magnets_items(id) ON DELETE CASCADE,
+    storage_path text NOT NULL,
+    label text,
+    position integer NOT NULL DEFAULT 0,
+    deleted_at timestamptz,
+    created_at timestamptz NOT NULL DEFAULT now()
+  )`,
+  `CREATE INDEX IF NOT EXISTS magnets_images_item_id_idx ON magnets_images (item_id)`,
+  `ALTER TABLE magnets_images ENABLE ROW LEVEL SECURITY`,
+  // scaffold:end:magnets
 ];

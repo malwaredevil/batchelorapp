@@ -114,6 +114,8 @@ jobs:
           fetch-depth: "0"
       - uses: ./.github/actions/setup-workspace
       - run: pnpm run lint
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
 
   app-config-drift:
     name: App-config drift guard

@@ -84,10 +84,8 @@ export async function queryHouseholdData(include: string[]): Promise<string> {
       isNull(ornamentsItems.deletedAt),
     );
     const valuationText =
-      valuation.itemsWithAiAppraisal > 0 ||
-      valuation.itemsWithConsensusValue > 0 ||
-      valuation.itemsWithRetailValue > 0
-        ? ` Estimated collection value — AI collector appraisal range: ${formatUsd(valuation.aiAppraisalLowTotal)} (low) to ${formatUsd(valuation.aiAppraisalHighTotal)} (high), based on ${valuation.itemsWithAiAppraisal} appraised item(s). Consensus value (averaging AI appraisal, eBay asking prices, and book value where available): ${formatUsd(valuation.consensusValueTotal)}, based on ${valuation.itemsWithConsensusValue} priced item(s). Retail value on file: ${formatUsd(valuation.retailValueTotal)}, based on ${valuation.itemsWithRetailValue} item(s).`
+      valuation.itemsWithEstimatedValue > 0
+        ? ` Estimated collection value: ${formatUsd(valuation.estimatedValueTotal)} across ${valuation.itemsWithEstimatedValue} priced design(s). Policy: average each design's saved current-market signals (book value, eBay prices, and AI appraisal); when it has no market signal, use its saved retail/MSRP value instead. All values include quantity.`
         : "";
     parts.push(
       `Ornaments collection: ${ornRow?.total ?? 0} ornaments total.` +

@@ -23,7 +23,7 @@ import {
   XCircle,
   GitCompare,
 } from "lucide-react";
-import { GalleryPaginator } from "@/components/GalleryPaginator";
+import { GalleryPaginationPair } from "@/components/GalleryPaginationPair";
 import { useBulkAdd } from "@/quilting/contexts/bulk-add-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,7 +41,6 @@ import {
   useListFabrics,
   useDeleteFabric,
   useReanalyzeFabric,
-  useBulkReanalyzeFabrics,
   useLabBulkCreaseFix,
   getListFabricsQueryKey,
   getGetFabricQueryKey,
@@ -83,7 +82,16 @@ import {
   CompareFloatingBar,
   BulkActionBar,
   type CompareItem,
+  clearSettledAsyncActionStatuses,
+  isAsyncActionBusy,
+  trackAsyncAction,
+  useAsyncActionStatus,
+  useBulkReanalyzeRun,
 } from "@workspace/collection-ui";
+import {
+  fabricReanalyzeKey,
+  FABRIC_REANALYZE_KEY_PREFIX,
+} from "@/quilting/lib/reanalyze-status";
 
 const FABRICS_LIST_SS_KEY = "quilting-fabrics-list-state";
 let hasWarnedListStateSaveFailure = false;
@@ -198,6 +206,15 @@ function FabricCard({
   const [zoomOpen, setZoomOpen] = useState(false);
   const [imgLoaded, setImgLoaded] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const aiStatus = useAsyncActionStatus(fabricReanalyzeKey(fabric.id));
+  const visibleBulkStatus: BulkItemStatus | undefined =
+    aiStatus === "processing"
+      ? "processing"
+      : aiStatus === "success"
+        ? "success"
+        : aiStatus === "error"
+          ? "failed"
+          : bulkStatus;
   return (
     <>
       <div
@@ -217,21 +234,25 @@ function FabricCard({
             )}
           </div>
         )}
-        {isBulkMode && bulkStatus && bulkStatus !== "pending" && (
+        {isBulkMode && visibleBulkStatus && visibleBulkStatus !== "pending" && (
           <div
             className={`absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full shadow-sm ${
-              bulkStatus === "processing"
+              visibleBulkStatus === "processing"
                 ? "bg-amber-500 text-white"
-                : bulkStatus === "success"
+                : visibleBulkStatus === "success"
                   ? "bg-green-500 text-white"
                   : "bg-red-500 text-white"
             }`}
           >
-            {bulkStatus === "processing" && (
+            {visibleBulkStatus === "processing" && (
               <RefreshCw className="h-3.5 w-3.5 animate-spin" />
             )}
-            {bulkStatus === "success" && <Check className="h-3.5 w-3.5" />}
-            {bulkStatus === "failed" && <XCircle className="h-3.5 w-3.5" />}
+            {visibleBulkStatus === "success" && (
+              <Check className="h-3.5 w-3.5" />
+            )}
+            {visibleBulkStatus === "failed" && (
+              <XCircle className="h-3.5 w-3.5" />
+            )}
           </div>
         )}
         <Link
@@ -512,24 +533,24 @@ export default function Fabrics() {
     },
   });
 
-  const bulkReanalyze = useBulkReanalyzeFabrics({
-    mutation: {
-      onSuccess: ({ succeeded, failed }) => {
-        queryClient.invalidateQueries({ queryKey: getListFabricsQueryKey() });
-        setSelectedIds(new Set());
-        setIsBulkMode(false);
-        if (failed.length === 0) {
-          toast.success(
-            `Refreshed AI for ${succeeded.length} fabric${succeeded.length !== 1 ? "s" : ""}`,
-          );
-        } else {
-          toast.success(
-            `Refreshed ${succeeded.length}, failed ${failed.length}`,
-          );
-        }
-      },
-      onError: () => toast.error("Bulk refresh failed."),
+  const bulkRun = useBulkReanalyzeRun({
+    runItem: (id) => reanalyzeFabric.mutateAsync({ id }),
+    keyFor: fabricReanalyzeKey,
+    invalidate: () =>
+      queryClient.invalidateQueries({ queryKey: getListFabricsQueryKey() }),
+    onSettled: ({ succeeded, failed }) => {
+      // Keep Select mode open so the per-card outcomes stay visible until
+      // the user presses Done, matching the other collection galleries.
+      setSelectedIds(new Set());
+      if (failed.length === 0) {
+        toast.success(
+          `Refreshed AI for ${succeeded.length} fabric${succeeded.length !== 1 ? "s" : ""}`,
+        );
+      } else {
+        toast.success(`Refreshed ${succeeded.length}, failed ${failed.length}`);
+      }
     },
+    onFailed: () => toast.error("Bulk refresh failed."),
   });
 
   const [bulkCreaseProgress, setBulkCreaseProgress] = useState<{
@@ -614,7 +635,9 @@ export default function Fabrics() {
   }
 
   function handleReanalyze(id: number) {
-    reanalyzeFabric.mutate({ id });
+    const key = fabricReanalyzeKey(id);
+    if (isAsyncActionBusy(key)) return;
+    trackAsyncAction(key, reanalyzeFabric.mutateAsync({ id }));
     toast.info("Refreshing AI analysis…");
   }
 
@@ -628,6 +651,10 @@ export default function Fabrics() {
   }
 
   function toggleBulkMode() {
+    if (isBulkMode) {
+      bulkRun.dismiss();
+      clearSettledAsyncActionStatuses(FABRIC_REANALYZE_KEY_PREFIX);
+    }
     setIsBulkMode((v) => !v);
     setSelectedIds(new Set());
     setBulkItemStatus(new Map());
@@ -950,17 +977,15 @@ export default function Fabrics() {
           onSelectAll={selectAll}
           onClearSelection={() => setSelectedIds(new Set())}
           onDone={toggleBulkMode}
-          onRun={() =>
-            bulkReanalyze.mutate({ data: { ids: Array.from(selectedIds) } })
-          }
+          onRun={() => void bulkRun.run(Array.from(selectedIds))}
           runLabel={`Refresh AI (${selectedIds.size})`}
-          isPending={bulkReanalyze.isPending || bulkCreaseFixMutation.isPending}
+          isPending={bulkRun.isPending || bulkCreaseFixMutation.isPending}
           extraActions={
             selectedIds.size > 0 ? (
               <button
                 type="button"
                 onClick={runBulkCreaseFix}
-                disabled={bulkCreaseFixMutation.isPending}
+                disabled={bulkRun.isPending || bulkCreaseFixMutation.isPending}
                 className="inline-flex h-8 items-center gap-2 rounded-md border border-input bg-background px-3 text-xs font-medium shadow-sm transition hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
               >
                 <Sparkles
@@ -1240,87 +1265,79 @@ export default function Fabrics() {
         </div>
       )}
 
-      {totalPages > 1 && sorted && sorted.length > 0 && (
-        <GalleryPaginator
-          page={page}
-          totalPages={totalPages}
-          onPageChange={(p) => setPage(p)}
-          className="mb-4"
-        />
-      )}
-
-      {(uploadingItems.length > 0 || (sorted && sorted.length > 0)) && (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-          {uploadingItems.map((item) => (
-            <div
-              key={item.clientId}
-              className="relative animate-pulse overflow-hidden rounded-xl border border-primary/40 bg-card"
-            >
-              <div className="aspect-square overflow-hidden bg-muted">
-                <img
-                  src={item.preview}
-                  alt=""
-                  className="h-full w-full object-cover opacity-60"
-                />
+      <GalleryPaginationPair
+        page={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        hasResults={Boolean(sorted?.length)}
+      >
+        {(uploadingItems.length > 0 || (sorted && sorted.length > 0)) && (
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+            {uploadingItems.map((item) => (
+              <div
+                key={item.clientId}
+                className="relative animate-pulse overflow-hidden rounded-xl border border-primary/40 bg-card"
+              >
+                <div className="aspect-square overflow-hidden bg-muted">
+                  <img
+                    src={item.preview}
+                    alt=""
+                    className="h-full w-full object-cover opacity-60"
+                  />
+                </div>
+                <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                </span>
+                <div className="p-3">
+                  <div className="mb-1.5 h-3 w-3/4 rounded-full bg-muted" />
+                  <div className="h-2.5 w-1/2 rounded-full bg-muted/60" />
+                </div>
               </div>
-              <span className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
-                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-              </span>
-              <div className="p-3">
-                <div className="mb-1.5 h-3 w-3/4 rounded-full bg-muted" />
-                <div className="h-2.5 w-1/2 rounded-full bg-muted/60" />
-              </div>
-            </div>
-          ))}
-          {paged &&
-            paged.map((fabric) => (
-              <FabricCard
-                key={fabric.id}
-                fabric={fabric as FabricSummary}
-                onDelete={handleDelete}
-                onReanalyze={handleReanalyze}
-                isBulkMode={isBulkMode || compareMode.active}
-                isSelected={
-                  isBulkMode
-                    ? selectedIds.has(fabric.id)
-                    : compareMode.selectedIds.includes(fabric.id)
-                }
-                bulkStatus={bulkItemStatus.get(fabric.id)}
-                onToggleSelect={isBulkMode ? toggleSelect : compareMode.toggle}
-                activeColor={colorFilter}
-                onFilterByPrintType={(pt) =>
-                  setPrintTypeFilter((prev) => (prev === pt ? null : pt))
-                }
-                onFilterByCategory={(id) =>
-                  setCategoryFilter((prev) => (prev === id ? null : id))
-                }
-                onFilterByColor={(c) =>
-                  setColorFilter((prev) =>
-                    prev.includes(c)
-                      ? prev.filter((x) => x !== c)
-                      : [...prev, c],
-                  )
-                }
-                onEditCategories={() =>
-                  setCategoryEditItem(fabric as FabricSummary)
-                }
-                onQuickEdit={() => setQuickEditItem(fabric as FabricSummary)}
-                onCreaseRemover={() =>
-                  setCreaseRemoverItem(fabric as FabricSummary)
-                }
-                onNavigate={handleFabricNavigate}
-              />
             ))}
-        </div>
-      )}
-      {totalPages > 1 && sorted && sorted.length > 0 && (
-        <GalleryPaginator
-          page={page}
-          totalPages={totalPages}
-          onPageChange={(p) => setPage(p)}
-          className="mt-6"
-        />
-      )}
+            {paged &&
+              paged.map((fabric) => (
+                <FabricCard
+                  key={fabric.id}
+                  fabric={fabric as FabricSummary}
+                  onDelete={handleDelete}
+                  onReanalyze={handleReanalyze}
+                  isBulkMode={isBulkMode || compareMode.active}
+                  isSelected={
+                    isBulkMode
+                      ? selectedIds.has(fabric.id)
+                      : compareMode.selectedIds.includes(fabric.id)
+                  }
+                  bulkStatus={bulkItemStatus.get(fabric.id)}
+                  onToggleSelect={
+                    isBulkMode ? toggleSelect : compareMode.toggle
+                  }
+                  activeColor={colorFilter}
+                  onFilterByPrintType={(pt) =>
+                    setPrintTypeFilter((prev) => (prev === pt ? null : pt))
+                  }
+                  onFilterByCategory={(id) =>
+                    setCategoryFilter((prev) => (prev === id ? null : id))
+                  }
+                  onFilterByColor={(c) =>
+                    setColorFilter((prev) =>
+                      prev.includes(c)
+                        ? prev.filter((x) => x !== c)
+                        : [...prev, c],
+                    )
+                  }
+                  onEditCategories={() =>
+                    setCategoryEditItem(fabric as FabricSummary)
+                  }
+                  onQuickEdit={() => setQuickEditItem(fabric as FabricSummary)}
+                  onCreaseRemover={() =>
+                    setCreaseRemoverItem(fabric as FabricSummary)
+                  }
+                  onNavigate={handleFabricNavigate}
+                />
+              ))}
+          </div>
+        )}
+      </GalleryPaginationPair>
       <CategoryEditDialog
         open={categoryEditItem !== null}
         onClose={() => setCategoryEditItem(null)}

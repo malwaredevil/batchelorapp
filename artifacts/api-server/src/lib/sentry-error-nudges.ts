@@ -170,9 +170,11 @@ export async function computeAndStoreSentryErrorNudges(): Promise<void> {
 
   const client = await pool.connect().catch((err: unknown) => {
     logger.warn({ err }, "sentry-error-nudges: could not connect to DB");
-    return null;
+    // The scheduler wraps the full pass in withRetry(). Do not turn a failed
+    // connection into a successful no-op, or the caller will persist a false
+    // last_success_at and the retry will never happen.
+    throw err;
   });
-  if (!client) return;
 
   try {
     const ownerId = await resolveOwnerId();

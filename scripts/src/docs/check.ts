@@ -2,10 +2,12 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { GENERATED_DIR, ROOT } from "./utils";
-import "./generate";
+import { generateDocs } from "./generate";
 
 const SECRET_RE =
   /(postgres:\/\/|postgresql:\/\/|eyJ[a-zA-Z0-9_-]{40,}|sk-[a-zA-Z0-9_-]{20,}|ghp_[a-zA-Z0-9_]{20,})/i;
+
+await generateDocs();
 
 for (const file of fs.readdirSync(GENERATED_DIR)) {
   const full = path.join(GENERATED_DIR, file);

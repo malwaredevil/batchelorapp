@@ -22,13 +22,18 @@ import {
 // ---------------------------------------------------------------------------
 // Hoisted shared state — must exist before vi.mock factories run.
 // ---------------------------------------------------------------------------
-const { selectQueue, insertReturning, deleteReturning, dbMock } = vi.hoisted(
-  () => {
+const { selectQueue, insertReturning, deleteReturning, dbMock, cancel } =
+  vi.hoisted(() => {
     const selectQueue: unknown[][] = [];
     /** Rows returned from the next insert().values().returning() call. */
     const insertReturning: { value: unknown[] } = { value: [] };
     /** Rows returned from the next delete().where().returning() call. */
     const deleteReturning: { value: unknown[] } = { value: [] };
+    const cancel = {
+      updateReturning: { value: [] as unknown[] },
+      updateSetValues: [] as unknown[],
+      findManageable: vi.fn(),
+    };
 
     /**
      * Builds a Drizzle-style select query builder that consumes one slot from
@@ -92,7 +97,16 @@ const { selectQueue, insertReturning, deleteReturning, dbMock } = vi.hoisted(
         }),
       })),
       update: vi.fn(() => ({
-        set: () => ({ where: () => Promise.resolve([]) }),
+        set: (values: unknown) => ({
+          where: () => {
+            cancel.updateSetValues.push(values);
+            const promise = Promise.resolve(cancel.updateReturning.value);
+            return {
+              returning: () => promise,
+              then: promise.then.bind(promise),
+            };
+          },
+        }),
       })),
       delete: vi.fn(() => ({
         where: () => ({
@@ -101,9 +115,8 @@ const { selectQueue, insertReturning, deleteReturning, dbMock } = vi.hoisted(
       })),
     };
 
-    return { selectQueue, insertReturning, deleteReturning, dbMock };
-  },
-);
+    return { selectQueue, insertReturning, deleteReturning, dbMock, cancel };
+  });
 
 // ---------------------------------------------------------------------------
 // Module mocks — same set as messenger-model-routing.test.ts
@@ -134,6 +147,15 @@ vi.mock("@sentry/node", () => sentryMockFactory());
 vi.mock("@workspace/db", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@workspace/db")>();
   return { ...actual, db: dbMock };
+});
+
+vi.mock("../lib/reminders-management", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../lib/reminders-management")>();
+  return {
+    ...actual,
+    findManageableReminder: cancel.findManageable,
+  };
 });
 
 vi.mock("../lib/ai-client", () => ({
@@ -257,7 +279,6 @@ vi.mock("../lib/pottery/ebay-market-value", () => ({
 
 vi.mock("../lib/ornaments/hallmark-search", () => ({
   searchHallmark: vi.fn().mockResolvedValue([]),
-  lookupHallmarkFromDb: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("../lib/ornaments/barcode", () => ({
@@ -373,17 +394,22 @@ vi.mock("multer", () => {
 // Module under test — imported AFTER all vi.mock() declarations.
 // ---------------------------------------------------------------------------
 
-import type { buildAgentphoneContext as BuildAgentphoneContextFn } from "./index";
+import type {
+  buildActionLabel as BuildActionLabelFn,
+  buildAgentphoneContext as BuildAgentphoneContextFn,
+} from "./index";
 
 const TEST_USER_ID = 99;
 
 let elaineRouter: IRouter;
 let buildAgentphoneContext: typeof BuildAgentphoneContextFn;
+let buildActionLabel: typeof BuildActionLabelFn;
 
 beforeAll(async () => {
   const mod = await import("./index");
   elaineRouter = mod.default;
   buildAgentphoneContext = mod.buildAgentphoneContext;
+  buildActionLabel = mod.buildActionLabel;
 }, 30_000);
 
 // ---------------------------------------------------------------------------
@@ -436,8 +462,116 @@ function buildApp(): Express {
 beforeEach(() => {
   selectQueue.length = 0;
   insertReturning.value = [];
+  cancel.updateReturning.value = [];
+  cancel.updateSetValues.length = 0;
   deleteReturning.value = [];
+  cancel.findManageable.mockReset();
   vi.clearAllMocks();
+});
+
+// ---------------------------------------------------------------------------
+// delete_reminder executor and confirmation target identity
+// ---------------------------------------------------------------------------
+
+describe("delete_reminder executor (POST /elaine/action)", () => {
+  const intendedReminder = {
+    id: 42,
+    entityType: "travels_trip",
+    entityId: 5,
+    createdByUserId: TEST_USER_ID,
+    title: "Check in for the flight",
+    dueAt: new Date("2026-09-10T14:30:00.000Z"),
+    deletedAt: null,
+  };
+
+  it("labels and deletes the same manageable reminder, including its due time", async () => {
+    cancel.findManageable.mockResolvedValue(intendedReminder);
+    // Timezone lookup for the human-readable due time.
+    selectQueue.push([{ timezone: "America/Chicago" }]);
+
+    const label = await buildActionLabel(
+      {
+        type: "delete_reminder",
+        payload: { tripId: 5, reminderId: 42 },
+      } as never,
+      TEST_USER_ID,
+    );
+
+    expect(label).toContain('"Check in for the flight"');
+    expect(label).toContain("reminder #42");
+    expect(label).toContain("due");
+
+    // Execution repeats the same scoped identity check before mutating.
+    cancel.updateReturning.value = [{ id: 42 }];
+
+    const res = await request(buildApp())
+      .post("/elaine/action")
+      .send({
+        type: "delete_reminder",
+        payload: { tripId: 5, reminderId: 42 },
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.result).toEqual({ id: 42 });
+    expect(dbMock.update).toHaveBeenCalledTimes(1);
+    expect(cancel.updateSetValues).toEqual([
+      expect.objectContaining({
+        deletedAt: expect.any(Date),
+        updatedAt: expect.any(Date),
+      }),
+    ]);
+    expect(cancel.findManageable).toHaveBeenNthCalledWith(1, 42, TEST_USER_ID);
+    expect(cancel.findManageable).toHaveBeenNthCalledWith(2, 42, TEST_USER_ID);
+  });
+
+  it.each([
+    ["stale or inaccessible id", []],
+    ["wrong trip id", [{ ...intendedReminder, entityId: 6 }]],
+  ])("rejects a %s without changing any reminder", async (_case, rows) => {
+    cancel.findManageable.mockResolvedValue(rows[0] ?? null);
+
+    const res = await request(buildApp())
+      .post("/elaine/action")
+      .send({
+        type: "delete_reminder",
+        payload: { tripId: 5, reminderId: 42 },
+      });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatch(/reminder not found/i);
+    expect(dbMock.update).not.toHaveBeenCalled();
+  });
+
+  it("does not prepare a confirmation for a deleted or inaccessible reminder", async () => {
+    cancel.findManageable.mockResolvedValue(null);
+
+    await expect(
+      buildActionLabel(
+        {
+          type: "delete_reminder",
+          payload: { tripId: 5, reminderId: 42 },
+        } as never,
+        TEST_USER_ID,
+      ),
+    ).rejects.toThrow(/not found or not manageable/i);
+
+    expect(dbMock.update).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 without claiming success if the exact row becomes stale before update", async () => {
+    cancel.findManageable.mockResolvedValue(intendedReminder);
+    cancel.updateReturning.value = [];
+
+    const res = await request(buildApp())
+      .post("/elaine/action")
+      .send({
+        type: "delete_reminder",
+        payload: { tripId: 5, reminderId: 42 },
+      });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error).toMatch(/reminder not found/i);
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -263,7 +263,6 @@ vi.mock("../lib/pottery/ebay-market-value", () => ({
 
 vi.mock("../lib/ornaments/hallmark-search", () => ({
   searchHallmark: vi.fn().mockResolvedValue([]),
-  lookupHallmarkFromDb: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("../lib/ornaments/barcode", () => ({
@@ -510,6 +509,13 @@ vi.mock("../lib/upload-limits", () => ({
 }));
 
 vi.mock("../lib/storage-core", () => ({
+  buildStorageAdapter: vi.fn(() => ({
+    uploadImage: vi.fn(),
+    downloadImageBuffer: vi.fn(),
+    deleteImage: vi.fn(),
+    invalidateImageCache: vi.fn(),
+  })),
+  IMAGE_ONLY_POLICY: {},
   ensureBucketWithPolicy: vi.fn().mockResolvedValue(undefined),
   ELAINE_ATTACHMENTS_BUCKET_POLICY: {
     name: "elaine-attachments",
@@ -867,7 +873,7 @@ describe("start_new_chat tool → SSE done payload", () => {
     const app = buildApp();
     const res = await request(app)
       .post("/api/elaine/chat")
-      .send({ message: "Start a new chat please", appId: "hub" })
+      .send({ message: "Hello", appId: "hub" })
       .set("Content-Type", "application/json")
       .buffer(true);
 

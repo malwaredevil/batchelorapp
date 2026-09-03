@@ -28,6 +28,8 @@ export interface CollectionDetailFieldProps {
   /** Plain-language explanation of how this value was collected/calculated,
    * shown via an info icon next to the label on hover/focus. */
   tooltip?: string;
+  /** Visually call out a field that a guided repair flow asked the user to review. */
+  highlighted?: boolean;
 }
 
 export function CollectionDetailField({
@@ -41,9 +43,16 @@ export function CollectionDetailField({
   valueClassName,
   empty,
   tooltip,
+  highlighted = false,
 }: CollectionDetailFieldProps) {
   return (
-    <div className="flex items-start justify-between gap-3 py-1.5 border-b border-border/60 last:border-0">
+    <div
+      className={cn(
+        "flex items-start justify-between gap-3 py-1.5 border-b border-border/60 last:border-0",
+        highlighted &&
+          "rounded-md bg-amber-500/10 px-2 ring-1 ring-amber-500/30",
+      )}
+    >
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1 mb-0.5">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">

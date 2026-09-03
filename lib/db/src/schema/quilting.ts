@@ -89,6 +89,36 @@ export const fabrics = pgTable(
       "hnsw",
       table.visualEmbedding.op("vector_cosine_ops"),
     ),
+    index("quilting_fabrics_name_trgm_idx")
+      .using("gin", table.name.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
+    index("quilting_fabrics_line_name_trgm_idx")
+      .using("gin", table.lineName.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
+    index("quilting_fabrics_designer_trgm_idx")
+      .using("gin", table.designer.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
+    index("quilting_fabrics_manufacturer_trgm_idx")
+      .using("gin", table.manufacturer.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
+    index("quilting_fabrics_colorway_trgm_idx")
+      .using("gin", table.colorway.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
+    index("quilting_fabrics_print_type_trgm_idx")
+      .using("gin", table.printType.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
+    index("quilting_fabrics_fiber_content_trgm_idx")
+      .using("gin", table.fiberContent.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
+    index("quilting_fabrics_sku_trgm_idx")
+      .using("gin", table.sku.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
+    index("quilting_fabrics_notes_trgm_idx")
+      .using("gin", table.notes.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
+    index("quilting_fabrics_ai_description_trgm_idx")
+      .using("gin", table.aiDescription.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
     index("quilting_fabrics_user_id_idx").on(table.userId),
   ],
 ).enableRLS();
@@ -142,6 +172,30 @@ export const quiltPatterns = pgTable(
       "hnsw",
       table.visualEmbedding.op("vector_cosine_ops"),
     ),
+    index("quilting_patterns_name_trgm_idx")
+      .using("gin", table.name.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
+    index("quilting_patterns_designer_trgm_idx")
+      .using("gin", table.designer.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
+    index("quilting_patterns_block_size_trgm_idx")
+      .using("gin", table.blockSize.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
+    index("quilting_patterns_difficulty_trgm_idx")
+      .using("gin", table.difficulty.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
+    index("quilting_patterns_source_type_trgm_idx")
+      .using("gin", table.sourceType.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
+    index("quilting_patterns_source_reference_trgm_idx")
+      .using("gin", table.sourceReference.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
+    index("quilting_patterns_notes_trgm_idx")
+      .using("gin", table.notes.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
+    index("quilting_patterns_publication_name_trgm_idx")
+      .using("gin", table.publicationName.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
     index("quilting_patterns_user_id_idx").on(table.userId),
   ],
 ).enableRLS();
@@ -153,30 +207,44 @@ export type InsertQuiltPattern = typeof quiltPatterns.$inferInsert;
 // Finished Quilts
 // ---------------------------------------------------------------------------
 
-export const finishedQuilts = pgTable("quilting_finished_quilts", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id"),
-  name: text("name").notNull(),
-  dateCompleted: date("date_completed"),
-  sizeWidth: real("size_width"),
-  sizeHeight: real("size_height"),
-  recipient: text("recipient"),
-  notes: text("notes"),
-  imagePath: text("image_path").notNull(),
-  dominantColors: text("dominant_colors")
-    .array()
-    .notNull()
-    .default(sql`'{}'::text[]`),
-  lockedFields: text("locked_fields")
-    .array()
-    .notNull()
-    .default(sql`'{}'::text[]`),
-  completionPercentage: smallint("completion_percentage").default(0),
-  deletedAt: timestamp("deleted_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-}).enableRLS();
+export const finishedQuilts = pgTable(
+  "quilting_finished_quilts",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id"),
+    name: text("name").notNull(),
+    dateCompleted: date("date_completed"),
+    sizeWidth: real("size_width"),
+    sizeHeight: real("size_height"),
+    recipient: text("recipient"),
+    notes: text("notes"),
+    imagePath: text("image_path").notNull(),
+    dominantColors: text("dominant_colors")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    lockedFields: text("locked_fields")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
+    completionPercentage: smallint("completion_percentage").default(0),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("quilting_finished_quilts_name_trgm_idx")
+      .using("gin", table.name.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
+    index("quilting_finished_quilts_recipient_trgm_idx")
+      .using("gin", table.recipient.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
+    index("quilting_finished_quilts_notes_trgm_idx")
+      .using("gin", table.notes.op("gin_trgm_ops"))
+      .where(sql`${table.deletedAt} IS NULL`),
+  ],
+).enableRLS();
 
 export type FinishedQuiltRow = typeof finishedQuilts.$inferSelect;
 export type InsertFinishedQuilt = typeof finishedQuilts.$inferInsert;

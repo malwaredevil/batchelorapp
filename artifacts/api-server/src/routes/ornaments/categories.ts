@@ -18,6 +18,7 @@ import {
   SuggestOrnamentCategoriesResponse,
   CreateAndBackfillOrnamentCategoriesBody,
   CreateAndBackfillOrnamentCategoriesResponse,
+  ApplyExistingOrnamentCategoriesResponse,
 } from "@workspace/api-zod";
 import {
   buildCategoryRouter,
@@ -25,7 +26,8 @@ import {
   type CategoryOps,
 } from "../../lib/category-router-factory";
 import { createCategoryCountOps } from "../../lib/collection-category-ops";
-import { matchCategoryIds } from "../../lib/collection-parsing";
+import { getCategoryPalette } from "@workspace/web-core/colors";
+import { applyExistingOrnamentCategories } from "../../lib/ornaments/category-assignment";
 import {
   suggestOrnamentCategoryNames,
   type OrnamentCollectionSignals,
@@ -260,69 +262,24 @@ export async function createAndBackfillOrnamentCategories(
   if (names.length > 0) {
     const inserted = await db
       .insert(cats)
-      .values(names.map((name) => ({ userId, name })))
+      .values(
+        names.map((name) => ({
+          userId,
+          name,
+          ...getCategoryPalette(name),
+        })),
+      )
       .onConflictDoNothing()
       .returning({ id: cats.id });
     createdCount = inserted.length;
   }
 
-  // Re-fetch every category (existing + newly created) so the backfill below
-  // covers both, exactly like item-creation/reanalyze auto-matching does.
-  const allCats = await db.select({ id: cats.id, name: cats.name }).from(cats);
-
-  const items = await db
-    .select({
-      id: ornamentsItems.id,
-      name: ornamentsItems.name,
-      seriesOrCollection: ornamentsItems.seriesOrCollection,
-      dimensions: ornamentsItems.dimensions,
-      motifs: ornamentsItems.motifs,
-    })
-    .from(ornamentsItems)
-    .where(isNull(ornamentsItems.deletedAt));
-
-  const existingAssignments = await db
-    .select({ itemId: joinTable.itemId, categoryId: joinTable.categoryId })
-    .from(joinTable);
-  const assignedByItem = new Map<number, Set<number>>();
-  for (const row of existingAssignments) {
-    const set = assignedByItem.get(row.itemId) ?? new Set<number>();
-    set.add(row.categoryId);
-    assignedByItem.set(row.itemId, set);
-  }
-
-  const newAssignments: { itemId: number; categoryId: number }[] = [];
-  for (const item of items) {
-    // Same field set used at item-creation and reanalyze time — reused
-    // unchanged, per this feature's scope (matching logic isn't modified).
-    const matched = matchCategoryIds(allCats, [
-      item.name,
-      item.seriesOrCollection,
-      item.dimensions,
-      item.motifs,
-    ]);
-    const already = assignedByItem.get(item.id);
-    for (const categoryId of matched) {
-      if (!already?.has(categoryId)) {
-        newAssignments.push({ itemId: item.id, categoryId });
-      }
-    }
-  }
-
-  let assignmentsCreated = 0;
-  if (newAssignments.length > 0) {
-    const inserted = await db
-      .insert(joinTable)
-      .values(newAssignments)
-      .onConflictDoNothing()
-      .returning({ itemId: joinTable.itemId });
-    assignmentsCreated = inserted.length;
-  }
+  const assignment = await applyExistingOrnamentCategories();
 
   return {
     categories: await ops.listWithCounts(),
     createdCount,
-    assignmentsCreated,
+    assignmentsCreated: assignment.assignmentsCreated,
   };
 }
 
@@ -336,6 +293,14 @@ router.post("/categories/create-and-backfill", async (req, res) => {
   const body = CreateAndBackfillOrnamentCategoriesBody.parse(req.body);
   const result = await createAndBackfillOrnamentCategories(userId, body.names);
   res.json(CreateAndBackfillOrnamentCategoriesResponse.parse(result));
+});
+
+// Applies only categories that already exist. It is intentionally separate
+// from suggestions/creation so maintenance can be safely retried without
+// changing the household taxonomy.
+router.post("/categories/apply-existing", async (_req, res) => {
+  const result = await applyExistingOrnamentCategories();
+  res.json(ApplyExistingOrnamentCategoriesResponse.parse(result));
 });
 
 export default router;

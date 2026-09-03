@@ -101,6 +101,22 @@ export function makeFetchRawImages(
   };
 }
 
+export function groupRowsByItem<TRow extends { itemId: number }, TValue>(
+  rows: TRow[],
+  toValue: (row: TRow) => TValue,
+  compare?: (a: TValue, b: TValue) => number,
+): Map<number, TValue[]> {
+  const map = new Map<number, TValue[]>();
+  for (const row of rows) {
+    if (!map.has(row.itemId)) map.set(row.itemId, []);
+    map.get(row.itemId)!.push(toValue(row));
+  }
+  if (compare) {
+    for (const values of map.values()) values.sort(compare);
+  }
+  return map;
+}
+
 interface SerializerConfig<TRow extends { id: number }, TItem> {
   fetchRawCategories: (
     itemIds: number[],
@@ -114,36 +130,27 @@ interface SerializerConfig<TRow extends { id: number }, TItem> {
 function buildCatsMap(
   rows: Array<CategoryResult & { itemId: number }>,
 ): Map<number, CategoryResult[]> {
-  const map = new Map<number, CategoryResult[]>();
-  for (const row of rows) {
-    if (!map.has(row.itemId)) map.set(row.itemId, []);
-    map.get(row.itemId)!.push({
-      id: row.id,
-      name: row.name,
-      bgColor: row.bgColor,
-      textColor: row.textColor,
-    });
-  }
-  return map;
+  return groupRowsByItem(rows, (row) => ({
+    id: row.id,
+    name: row.name,
+    bgColor: row.bgColor,
+    textColor: row.textColor,
+  }));
 }
 
 function buildImgsMap(
   rows: Array<ImageResult & { itemId: number }>,
 ): Map<number, ImageResult[]> {
-  const map = new Map<number, ImageResult[]>();
-  for (const row of rows) {
-    if (!map.has(row.itemId)) map.set(row.itemId, []);
-    map.get(row.itemId)!.push({
+  return groupRowsByItem(
+    rows,
+    (row) => ({
       id: row.id,
       url: row.url,
       label: row.label,
       position: row.position,
-    });
-  }
-  for (const imgs of map.values()) {
-    imgs.sort((a, b) => a.position - b.position || a.id - b.id);
-  }
-  return map;
+    }),
+    (a, b) => a.position - b.position || a.id - b.id,
+  );
 }
 
 export function createCollectionSerializer<TRow extends { id: number }, TItem>(

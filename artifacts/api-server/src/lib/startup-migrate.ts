@@ -21,7 +21,7 @@
  */
 
 import { createHash } from "crypto";
-import { pool, STATEMENTS } from "@workspace/db";
+import { DESTRUCTIVE_MIGRATIONS, pool, STATEMENTS } from "@workspace/db";
 import { logger } from "./logger";
 
 const KEEPALIVE_URL = "https://app.batchelor.app/api/healthz";
@@ -106,7 +106,10 @@ export async function runStartupMigration(): Promise<void> {
 
     let ran = 0;
     let skipped = 0;
-    for (const statement of STATEMENTS) {
+    for (const statement of [
+      ...STATEMENTS,
+      ...DESTRUCTIVE_MIGRATIONS.map((migration) => migration.sql),
+    ]) {
       const h = createHash("sha256")
         .update(statement)
         .digest("hex")

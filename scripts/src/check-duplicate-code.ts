@@ -104,6 +104,7 @@ export function isScannableFile(file: string): boolean {
   if (!/^(artifacts|lib)\//.test(file)) return false;
   if (/\.(test|spec)\.tsx?$/.test(file)) return false;
   if (file.endsWith(".generated.ts")) return false;
+  if (file.includes("/generated/")) return false;
   if (file.includes("/dist/")) return false;
   if (SELF_EXEMPT.has(file)) return false;
   return true;
@@ -112,11 +113,18 @@ export function isScannableFile(file: string): boolean {
 /**
  * Pre-reviewed matches that are NOT duplication worth extracting (e.g.
  * independently-evolving adapters that are only superficially similar
- * today). Each entry is "path/relative/to/repo-root.ts:lineNumber" for the
- * flagged (candidate) side. Add new entries only with a `//` comment
- * explaining why — do not use this to silence a genuine miss.
+ * today). Each entry is a stable candidate/match identity, not a line number.
+ * Add new entries only with a specific rationale — do not use this to silence
+ * a genuine miss.
  */
 export const DUPLICATE_CODE_ALLOWLIST: ReadonlySet<string> = new Set([
+  // Magnet vision uses a collection-specific structured output contract; a
+  // generic ornament/magnet helper would blur the distinct schema and prompt.
+  "artifacts/api-server/src/lib/magnets/openai.ts:analyzeMagnetImage:artifacts/api-server/src/lib/ornaments/openai.ts:analyzeOrnamentImage",
+  "artifacts/api-server/src/lib/ornaments/openai.ts:analyzeOrnamentImage:artifacts/api-server/src/lib/magnets/openai.ts:analyzeMagnetImage",
+  // Generated API hooks and query keys make this otherwise-shared UI adapter
+  // domain-specific; a generic menu would expose a much wider hook contract.
+  "artifacts/modules/src/magnets/pages/categories.tsx:CategoryActionMenu:artifacts/modules/src/ornaments/pages/categories.tsx:CategoryActionMenu",
   // All pre-existing duplication grandfathered when this guardrail was
   // introduced (2026-08-18) has since been paid down. Add new entries only
   // with a `//` comment explaining why — do not use this to silence a
@@ -127,12 +135,68 @@ export const DUPLICATE_CODE_ALLOWLIST: ReadonlySet<string> = new Set([
   // The current viewer-only change only removes their duplicate result
   // lightbox; extracting the canvas editor is tracked separately to avoid
   // changing image-editing behavior as part of a viewer-layout task.
-  "artifacts/modules/src/quilting/components/FabricAiLab.tsx:112",
-  "artifacts/modules/src/quilting/components/FabricAiLab.tsx:149",
-  "artifacts/modules/src/quilting/components/FabricAiLab.tsx:164",
-  "artifacts/modules/src/quilting/components/FabricAiLab.tsx:192",
-  "artifacts/modules/src/quilting/components/FabricAiLab.tsx:284",
+  "artifacts/modules/src/quilting/components/FabricAiLab.tsx:syncCanvasSize:artifacts/modules/src/quilting/components/FabricCreaseRemoverModal.tsx:syncCanvasSize",
+  "artifacts/modules/src/quilting/components/FabricAiLab.tsx:canvasCoord:artifacts/modules/src/quilting/components/FabricCreaseRemoverModal.tsx:canvasCoord",
+  "artifacts/modules/src/quilting/components/FabricAiLab.tsx:handleOuterWheel:artifacts/modules/src/quilting/components/FabricCreaseRemoverModal.tsx:handleOuterWheel",
+  "artifacts/modules/src/quilting/components/FabricAiLab.tsx:paint:artifacts/modules/src/quilting/components/FabricCreaseRemoverModal.tsx:paint",
+  "artifacts/modules/src/quilting/components/FabricAiLab.tsx:loadMaskFromDataUrl:artifacts/modules/src/quilting/components/FabricCreaseRemoverModal.tsx:loadMaskFromDataUrl",
 ]);
+
+export function duplicateAllowlistKey(
+  violation: Pick<
+    DuplicateViolation,
+    "file" | "name" | "matchFile" | "matchName"
+  >,
+): string {
+  return `${violation.file}:${violation.name}:${violation.matchFile}:${violation.matchName}`;
+}
+
+/**
+ * Machine-readable, finding-specific reasons for the source allowlist. The
+ * policy guard converts a detector match into a stable function/evidence
+ * identity, so this line-keyed map is only used to find its explanation.
+ */
+export const DUPLICATE_CODE_EXCEPTION_REASONS: ReadonlyMap<string, string> =
+  new Map([
+    [
+      "artifacts/api-server/src/lib/magnets/openai.ts:analyzeMagnetImage:artifacts/api-server/src/lib/ornaments/openai.ts:analyzeOrnamentImage",
+      "Magnet vision has a collection-specific structured output contract; a generic ornament/magnet helper would blur distinct schema and prompt requirements.",
+    ],
+    [
+      "artifacts/api-server/src/lib/ornaments/openai.ts:analyzeOrnamentImage:artifacts/api-server/src/lib/magnets/openai.ts:analyzeMagnetImage",
+      "Ornament vision has a collection-specific structured output contract; a generic ornament/magnet helper would blur distinct schema and prompt requirements.",
+    ],
+    [
+      "artifacts/modules/src/magnets/pages/categories.tsx:CategoryActionMenu:artifacts/modules/src/ornaments/pages/categories.tsx:CategoryActionMenu",
+      "Generated API hooks and query keys make this menu adapter domain-specific; a generic menu would expose an unnecessarily wide hook contract.",
+    ],
+    [
+      "artifacts/modules/src/quilting/components/FabricAiLab.tsx:syncCanvasSize:artifacts/modules/src/quilting/components/FabricCreaseRemoverModal.tsx:syncCanvasSize",
+      "The AI Lab canvas has a distinct result and save lifecycle from the crease-removal editor.",
+    ],
+    [
+      "artifacts/modules/src/quilting/components/FabricAiLab.tsx:canvasCoord:artifacts/modules/src/quilting/components/FabricCreaseRemoverModal.tsx:canvasCoord",
+      "The AI Lab canvas reset lifecycle differs from the crease-removal editor.",
+    ],
+    [
+      "artifacts/modules/src/quilting/components/FabricAiLab.tsx:handleOuterWheel:artifacts/modules/src/quilting/components/FabricCreaseRemoverModal.tsx:handleOuterWheel",
+      "The AI Lab canvas editing setup is coupled to its AI-result lifecycle.",
+    ],
+    [
+      "artifacts/modules/src/quilting/components/FabricAiLab.tsx:paint:artifacts/modules/src/quilting/components/FabricCreaseRemoverModal.tsx:paint",
+      "The AI Lab canvas editing action is coupled to its AI-result lifecycle.",
+    ],
+    [
+      "artifacts/modules/src/quilting/components/FabricAiLab.tsx:loadMaskFromDataUrl:artifacts/modules/src/quilting/components/FabricCreaseRemoverModal.tsx:loadMaskFromDataUrl",
+      "The AI Lab canvas sizing behavior is coupled to its result/save lifecycle.",
+    ],
+  ]);
+
+if (DUPLICATE_CODE_EXCEPTION_REASONS.size !== DUPLICATE_CODE_ALLOWLIST.size) {
+  throw new Error(
+    "Every DUPLICATE_CODE_ALLOWLIST entry needs a finding-specific reason in DUPLICATE_CODE_EXCEPTION_REASONS.",
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Tokenization
@@ -316,8 +380,9 @@ function findBestMatch(
   corpus: Corpus,
 ): { block: CodeBlock; similarity: number; kind: "exact" | "near" } | null {
   const exactBucket = corpus.exactIndex.get(candidate.normalizedText);
-  if (exactBucket && exactBucket.length > 0) {
-    return { block: exactBucket[0]!, similarity: 1, kind: "exact" };
+  const exactMatch = exactBucket?.find((block) => block !== candidate);
+  if (exactMatch) {
+    return { block: exactMatch, similarity: 1, kind: "exact" };
   }
 
   const shared = new Map<CodeBlock, number>();
@@ -325,6 +390,7 @@ function findBestMatch(
     const bucket = corpus.shingleIndex.get(shingle);
     if (!bucket) continue;
     for (const block of bucket) {
+      if (block === candidate) continue;
       shared.set(block, (shared.get(block) ?? 0) + 1);
     }
   }
@@ -381,12 +447,9 @@ export function checkDuplicateCode(
       continue;
     }
     for (const block of blocks) {
-      if (DUPLICATE_CODE_ALLOWLIST.has(`${block.file}:${block.startLine}`)) {
-        continue;
-      }
       const match = findBestMatch(block, corpus);
       if (!match) continue;
-      violations.push({
+      const violation: DuplicateViolation = {
         file: block.file,
         line: block.startLine,
         name: block.name,
@@ -395,7 +458,11 @@ export function checkDuplicateCode(
         matchName: match.block.name,
         similarity: match.similarity,
         kind: match.kind,
-      });
+      };
+      if (DUPLICATE_CODE_ALLOWLIST.has(duplicateAllowlistKey(violation))) {
+        continue;
+      }
+      violations.push(violation);
     }
   }
   return violations;
@@ -452,10 +519,27 @@ export function runDuplicateCodeCheck(base: string): DuplicateViolation[] {
 export function runDuplicateCodeAudit(): DuplicateViolation[] {
   const root = repoRoot();
   const allRepoFiles = listRepoFiles(root).filter(isScannableFile);
+  return checkDuplicateCodeAudit(allRepoFiles, (file) =>
+    readFileOrNull(root, file),
+  );
+}
+
+/**
+ * Whole-repository report-only pass against an arbitrary file snapshot.
+ *
+ * The architecture-policy check uses this overload for both the merge-base
+ * snapshot and the working tree. Keeping the detector's pure inputs explicit
+ * prevents the policy from copying a second duplicate-code implementation.
+ */
+export function checkDuplicateCodeAudit(
+  allRepoFiles: string[],
+  readFile: (file: string) => string | null,
+): DuplicateViolation[] {
+  const scannableFiles = allRepoFiles.filter(isScannableFile);
 
   const allBlocks: CodeBlock[] = [];
-  for (const file of allRepoFiles) {
-    const content = readFileOrNull(root, file);
+  for (const file of scannableFiles) {
+    const content = readFile(file);
     if (content === null) continue;
     try {
       allBlocks.push(...extractBlocks(file, content));

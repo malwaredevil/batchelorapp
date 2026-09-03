@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { cn } from "@workspace/web-core/utils";
 import { Slider } from "@workspace/ui/slider";
+import { ImageEditor } from "./image-editor";
+import { ImageCaptureReview } from "./image-capture-review";
 
 // ---------------------------------------------------------------------------
 // CameraModal — full-screen viewfinder with zoom, flash, and flip controls
@@ -416,11 +418,27 @@ interface ImagePickerProps {
   file: File | null;
   onSelect: (file: File | null) => void;
   disabled?: boolean;
+  /**
+   * When enabled, camera captures open in ImageEditor before being handed to
+   * the caller. Uploads still call onSelect immediately.
+   */
+  editCameraCaptures?: boolean;
+  /** Called with the edited camera file after the user presses Done. */
+  onCameraSave?: (file: File) => void | Promise<void>;
 }
 
-export function ImagePicker({ file, onSelect, disabled }: ImagePickerProps) {
+export function ImagePicker({
+  file,
+  onSelect,
+  disabled,
+  editCameraCaptures = false,
+  onCameraSave,
+}: ImagePickerProps) {
   const [preview, setPreview] = useState<string | null>(null);
   const [showCamera, setShowCamera] = useState(false);
+  const [reviewingFile, setReviewingFile] = useState<File | null>(null);
+  const [editingFile, setEditingFile] = useState<File | null>(null);
+  const [isSavingCamera, setIsSavingCamera] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -440,7 +458,32 @@ export function ImagePicker({ file, onSelect, disabled }: ImagePickerProps) {
 
   function handleCapture(captured: File) {
     setShowCamera(false);
-    onSelect(captured);
+    setReviewingFile(captured);
+  }
+
+  function handleReviewConfirm(reviewed: File) {
+    setReviewingFile(null);
+    if (editCameraCaptures) setEditingFile(reviewed);
+    else onSelect(reviewed);
+  }
+
+  async function handleEditorSave(edited: File) {
+    if (onCameraSave) {
+      setIsSavingCamera(true);
+      try {
+        await onCameraSave(edited);
+      } catch {
+        // The caller reports the error and the edited file stays open so the
+        // user can retry or retake without losing their work.
+        return;
+      } finally {
+        setIsSavingCamera(false);
+      }
+      setEditingFile(null);
+      return;
+    }
+    setEditingFile(null);
+    onSelect(edited);
   }
 
   function handleDrop(e: React.DragEvent<HTMLElement>) {
@@ -461,6 +504,28 @@ export function ImagePicker({ file, onSelect, disabled }: ImagePickerProps) {
         <CameraModal
           onCapture={handleCapture}
           onClose={() => setShowCamera(false)}
+        />
+      )}
+      {reviewingFile && (
+        <ImageCaptureReview
+          file={reviewingFile}
+          onConfirm={handleReviewConfirm}
+          onRetry={() => {
+            setReviewingFile(null);
+            setShowCamera(true);
+          }}
+        />
+      )}
+      {editingFile && (
+        <ImageEditor
+          file={editingFile}
+          onSave={handleEditorSave}
+          onCancel={() => setEditingFile(null)}
+          onRetake={() => {
+            setEditingFile(null);
+            setShowCamera(true);
+          }}
+          isSaving={isSavingCamera}
         />
       )}
 

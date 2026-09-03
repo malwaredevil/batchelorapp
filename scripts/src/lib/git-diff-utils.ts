@@ -60,8 +60,15 @@ export function refResolves(root: string, ref: string): boolean {
 // Diffing against `github/main` in that situation makes content guards (e.g.
 // the restricted-exclusion shrink check) report phantom regressions that no
 // local commit introduced, so the true merge target must win when present.
+//
+// Replit's Validation tab deliberately requests `main-repl/main`. The main
+// workspace itself does not have that remote, so it falls back to its local
+// `main` branch only. Do not add `github/main` to this path: validation is
+// intended to compare against the Replit merge target, not an independently
+// synced GitHub mirror that can be stale.
 const LOCAL_BASE_FALLBACK: Record<string, readonly string[]> = {
-  "origin/main": ["main-repl/main", "github/main"],
+  "origin/main": ["main-repl/main", "main", "github/main"],
+  "main-repl/main": ["main"],
 };
 
 /**
@@ -99,12 +106,40 @@ export function readFileOrNull(root: string, file: string): string | null {
   }
 }
 
-/** Files changed between `resolveBase(root, base)` and HEAD, repo-relative paths. */
+/**
+ * Files changed between `resolveBase(root, base)` and HEAD, plus current
+ * staged, unstaged, and untracked work. The working-tree union makes a local
+ * Validation-tab run useful before an agent's edits have been committed.
+ */
 export function getChangedFiles(root: string, resolvedBase: string): string[] {
-  return git(root, ["diff", "--name-only", `${resolvedBase}...HEAD`])
-    .split("\n")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  return [
+    git(root, ["diff", "--name-only", `${resolvedBase}...HEAD`]),
+    git(root, ["diff", "--name-only", "HEAD"]),
+    git(root, ["ls-files", "--others", "--exclude-standard"]),
+  ]
+    .flatMap((output) => output.split("\n"))
+    .map((file) => file.trim())
+    .filter(Boolean)
+    .filter((file, index, all) => all.indexOf(file) === index);
+}
+
+/**
+ * Patch content between a merge base and HEAD, plus edits already present in
+ * the working tree. Used by diff-text guardrails so local Validation-tab
+ * runs cover uncommitted code as well as task-branch commits.
+ */
+export function getChangedDiff(
+  root: string,
+  resolvedBase: string,
+  pathspecs: string[] = [],
+): string {
+  const suffix = pathspecs.length > 0 ? ["--", ...pathspecs] : [];
+  return [
+    git(root, ["diff", `${resolvedBase}...HEAD`, ...suffix]),
+    git(root, ["diff", "HEAD", ...suffix]),
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 const AUDIT_SKIP_DIRS = new Set([

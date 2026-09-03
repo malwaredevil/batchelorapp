@@ -27,6 +27,10 @@ import {
   ornamentReanalyzeKey,
   ORNAMENT_REANALYZE_KEY_PREFIX,
 } from "../lib/reanalyze-status";
+import {
+  getOrnamentMaintenanceRepairHref,
+  parseOrnamentMaintenanceReasons,
+} from "../lib/maintenance-repair";
 
 // Mirrors the bulk-reanalyze wiring in collection.tsx: bulkMode owns
 // selection (shared `useMultiSelectMode`), `useBulkReanalyzeRun` owns the
@@ -95,6 +99,47 @@ function makeHook(
 }
 
 describe("Ornaments bulk-reanalyze — bulk-run lifecycle", () => {
+  it("preserves per-item evidence outcomes for maintenance surfaces", async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({
+      succeeded: [1, 2],
+      failed: [],
+      outcomes: [
+        {
+          id: 1,
+          status: "refreshed",
+          unresolvedFields: [],
+          recommendation: null,
+        },
+        {
+          id: 2,
+          status: "needs_evidence",
+          unresolvedFields: ["seriesOrCollection", "year"],
+          recommendation: "Add a clear box-front photo.",
+        },
+      ],
+    });
+    const { result } = renderHook(() =>
+      useBulkReanalyzeRun({
+        mutateAsync,
+        keyFor: ornamentReanalyzeKey,
+        invalidate: () => undefined,
+        onSettled: () => undefined,
+        onFailed: () => undefined,
+      }),
+    );
+
+    let runResult: Awaited<ReturnType<typeof result.current.run>>;
+    await act(async () => {
+      runResult = await result.current.run([1, 2]);
+    });
+
+    expect(runResult?.outcomes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 2, status: "needs_evidence" }),
+      ]),
+    );
+  });
+
   it("stays in Select mode with the selection cleared on full success", async () => {
     const mutateAsync = vi
       .fn()
@@ -331,5 +376,38 @@ describe("Ornaments bulk-reanalyze — bulk-run lifecycle", () => {
     expect(result.current.bulkMode.active).toBe(true);
     expect(result.current.bulkMode.selectedIds).toHaveLength(0);
     expect(result.current.bulkStatus).toBeNull();
+  });
+});
+
+describe("Ornaments maintenance repair links", () => {
+  it("opens the photo-evidence repair path for a missing embedding", () => {
+    expect(
+      getOrnamentMaintenanceRepairHref(
+        42,
+        ["embedding", "seriesOrCollection"],
+        "embedding",
+      ),
+    ).toBe(
+      "/ornaments/ornament/42?repair=photo&missing=embedding%2CseriesOrCollection",
+    );
+  });
+
+  it("opens and focuses the relevant editor for every unresolved identity field from a bulk result", () => {
+    const reasons = ["embedding", "seriesOrCollection", "year"];
+
+    expect(
+      getOrnamentMaintenanceRepairHref(42, reasons, "seriesOrCollection"),
+    ).toContain("?edit=1&focus=seriesOrCollection");
+    expect(getOrnamentMaintenanceRepairHref(42, reasons, "year")).toContain(
+      "?edit=1&focus=year",
+    );
+  });
+
+  it("keeps only known fields when returning from Maintenance", () => {
+    expect(
+      parseOrnamentMaintenanceReasons(
+        "?repair=photo&missing=embedding,seriesOrCollection,unknown,year",
+      ),
+    ).toEqual(["embedding", "seriesOrCollection", "year"]);
   });
 });

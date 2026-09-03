@@ -1,7 +1,7 @@
 /**
  * REST API ingestion adapter (#230).
  *
- * Fetches items from a paginated REST endpoint. Used for UPCitemdb and
+ * Fetches items from a paginated REST endpoint. Used for
  * similar public/private REST APIs. Uses ssrfSafeFetch so destinations are
  * validated against the internal-IP blocklist.
  */

@@ -21,6 +21,8 @@ import {
   reminders,
   ornamentsItems,
   ornamentsImages,
+  magnetsItems,
+  magnetsImages,
 } from "@workspace/db";
 import { createClient } from "@supabase/supabase-js";
 import { logger } from "./logger";
@@ -91,6 +93,7 @@ export type PurgeSummary = {
   tripDocuments: number;
   reminders: number;
   ornaments: number;
+  magnets: number;
   errors: string[];
 };
 
@@ -106,6 +109,7 @@ export async function purgeDeletedItems(): Promise<PurgeSummary> {
     tripDocuments: 0,
     reminders: 0,
     ornaments: 0,
+    magnets: 0,
     errors: [],
   };
 
@@ -488,6 +492,36 @@ export async function purgeDeletedItems(): Promise<PurgeSummary> {
   } catch (err) {
     summary.errors.push(`ornaments: ${String(err)}`);
     logger.error({ err }, "purge: ornaments failed");
+  }
+
+  // --- Magnets ---
+  try {
+    const rows = await db
+      .select({ id: magnetsItems.id, imagePath: magnetsItems.imagePath })
+      .from(magnetsItems)
+      .where(
+        and(
+          isNotNull(magnetsItems.deletedAt),
+          lt(magnetsItems.deletedAt, cutoff),
+        ),
+      );
+    if (rows.length > 0) {
+      const ids = rows.map((r) => r.id);
+      const supplemental = await db
+        .select({ storagePath: magnetsImages.storagePath })
+        .from(magnetsImages)
+        .where(inArray(magnetsImages.itemId, ids));
+      await removeStoragePaths("magnets", [
+        ...rows.map((r) => r.imagePath),
+        ...supplemental.map((image) => image.storagePath),
+      ]);
+      await db.delete(magnetsImages).where(inArray(magnetsImages.itemId, ids));
+      await db.delete(magnetsItems).where(inArray(magnetsItems.id, ids));
+      summary.magnets = rows.length;
+    }
+  } catch (err) {
+    summary.errors.push(`magnets: ${String(err)}`);
+    logger.error({ err }, "purge: magnets failed");
   }
 
   logger.info({ summary }, "purge-deleted: completed");

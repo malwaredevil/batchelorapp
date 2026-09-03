@@ -1,6 +1,6 @@
 # Batchelor App
 
-Combined pnpm monorepo serving both the Pottery and Quilting collection apps under one domain (app.batchelor.app). Users log in once and access both apps.
+Combined pnpm monorepo serving household collection apps under one domain (app.batchelor.app). Users log in once and access every app.
 
 ## Run & Operate
 
@@ -25,12 +25,12 @@ Combined pnpm monorepo serving both the Pottery and Quilting collection apps und
 
 ## Where things live
 
-- `artifacts/api-server/` — single Express API server serving all apps' routes (pottery, quilting, travels, ornaments, hub, elaine, auth)
-- `artifacts/modules/` — single consolidated web artifact serving pottery, quilting, travels, and ornaments under one `/modules` base path (each app still namespaced at `/modules/pottery`, `/modules/quilting`, `/modules/travels`, `/modules/ornaments`). The standalone `artifacts/pottery`, `artifacts/quilting`, `artifacts/travels`, and `artifacts/ornaments` artifacts were decommissioned and removed once `/modules` reached full parity.
+- `artifacts/api-server/` — single Express API server serving all apps' routes (pottery, quilting, travels, ornaments, magnets, hub, elaine, auth)
+- `artifacts/modules/` — single consolidated web artifact serving pottery, quilting, travels, ornaments, and magnets under one `/modules` base path (each app remains namespaced below `/modules`). The standalone collection artifacts were decommissioned once `/modules` reached full parity.
 - `artifacts/web/` — Hub app (app switcher, launcher, dashboard widgets)
 - `artifacts/elaine/` — standalone Elaine AI assistant app (not merged into modules)
 - Only 4 artifacts remain registered: `api-server`, `modules`, `web`, `elaine`
-- `lib/db/` — shared Drizzle schema + bootstrap (pottery + quilting + travels + ornaments tables)
+- `lib/db/` — shared Drizzle schema + bootstrap (pottery, quilting, travels, ornaments, and magnets tables)
 - `scripts/src/backup-to-replit.ts` — Supabase → Replit DB snapshot
 - `scripts/src/restore-from-replit.ts` — restore from snapshot
 - `scripts/post-merge.sh` — runs after every agent merge: install → bootstrap → backup
@@ -65,9 +65,11 @@ Combined pnpm monorepo serving both the Pottery and Quilting collection apps und
 
   **Pre-publishing:** `pre-publish.sh` runs `check-domain-composition` as a blocking parallel gate. No sync or publish may proceed if it fails. This rule applies to repairs and refactors made during the pre-publishing checklist too.
 
+  **Leave it better protocol:** The named `check-architecture-policy` validation compares the working tree with the merge base and the reviewed `docs/architecture-policy-baseline.json`. New/worsened findings fail; unchanged legacy findings stay visible. When touching a related area, remove small safe debt in the same change or record why cleanup is unsafe/broad/blocked in completion reporting. Remove fixed items from the baseline; never expand it to hide new debt. Exceptions must be a single stable finding plus a reason, never a file/directory/rule-family blanket exemption. Use a separate focused task for unrelated cleanup.
+
   See `docs/composition-and-configuration.md` for the full decision order, review questions, accepted/rejected examples, and the list of currently protected boundaries.
 
-- **Pottery, quilting, and travels data are fully household-shared.** Every authenticated user can view, create, edit, and delete any record in these apps — there is no per-user ownership boundary. `user_id` columns are retained only for insert attribution (who created a record), never used to filter/scope reads, writes, or deletes. This is intentional: the app has one household, not per-user tenants. See `threat_model.md` for the full security implications.
+- **Pottery, quilting, travels, ornaments, and magnets data are fully household-shared.** Every authenticated user can view, create, edit, and delete any record in these apps — there is no per-user ownership boundary. `user_id` columns are retained only for insert attribution (who created a record), never used to filter/scope reads, writes, or deletes. This is intentional: the app has one household, not per-user tenants. See `threat_model.md` for the full security implications.
 - **One Supabase, two namespaced table sets.** Pottery and quilting already share one Supabase project. The merge adds nothing to the DB — just consolidates the code that talks to it.
 - **Additive-only migrations.** `bootstrap.ts` uses `CREATE TABLE IF NOT EXISTS` exclusively. `drizzle-kit push --force` is permanently banned (it introspects all tables and will silently drop the other app's tables).
 - **Backup before publish.** `post-merge.sh` snapshots Supabase → built-in Replit DB after every merge. Embedding columns are excluded (not in Replit DB's pgvector). Regenerate via each app's Bulk Re-analyse.

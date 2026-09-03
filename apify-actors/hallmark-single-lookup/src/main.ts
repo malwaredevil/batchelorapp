@@ -6,7 +6,7 @@
  * structured data from the product page.
  *
  * Actor: hallmark-single-lookup
- * Actor ID: created separately from hallmark-catalog-crawl and hallmark-historical-crawl
+ * Actor ID: deployed for single-item Hallmark product research.
  */
 
 import { Actor } from "apify";

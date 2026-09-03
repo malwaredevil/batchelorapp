@@ -29,7 +29,6 @@ import {
   useListPatterns,
   useDeletePattern,
   useReanalyzePattern,
-  useBulkReanalyzePatterns,
   getListPatternsQueryKey,
   getGetPatternQueryKey,
   useGetStats,
@@ -448,12 +447,11 @@ export default function Patterns() {
     },
   });
 
-  const bulkReanalyzeMutation = useBulkReanalyzePatterns();
   // Shared bulk-run lifecycle: per-card processing → sticky success/error
   // badges (persist until "Done"), with a per-run generation guard so a
   // dismissed run's late result can never write icons back.
   const bulkRun = useBulkReanalyzeRun({
-    mutateAsync: bulkReanalyzeMutation.mutateAsync,
+    runItem: (id) => reanalyzePattern.mutateAsync({ id }),
     keyFor: patternReanalyzeKey,
     invalidate: () =>
       queryClient.invalidateQueries({ queryKey: getListPatternsQueryKey() }),

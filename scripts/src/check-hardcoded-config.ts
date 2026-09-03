@@ -48,6 +48,10 @@ export interface HardcodedConfigViolation {
   lines: number[];
   names: string[];
   kind: "cluster" | "constant";
+  /** Stable nearby declaration/context that distinguishes same-named findings. */
+  context: string;
+  /** Present only when the focused detector's source allowlist suppressed it. */
+  allowlisted?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -235,6 +239,20 @@ export function findTunableConstantsInFile(
   return results;
 }
 
+function findingContext(content: string, firstLine: number): string {
+  const lines = content.split("\n");
+  for (
+    let index = firstLine - 2;
+    index >= 0 && index >= firstLine - 16;
+    index--
+  ) {
+    const candidate = lines[index]?.trim();
+    if (!candidate || OBJECT_KEY_NUMBER_RE.test(candidate)) continue;
+    return candidate.replace(/\s+/g, " ");
+  }
+  return "file-scope";
+}
+
 // ---------------------------------------------------------------------------
 // Combined per-file-list scan
 // ---------------------------------------------------------------------------
@@ -247,6 +265,34 @@ export function findTunableConstantsInFile(
  * miss, fix the code instead.
  */
 export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
+  // Fixed protocol limits in the large Elaine dispatcher; these protect phone
+  // verification and bound internal tool loops rather than owner settings.
+  "artifacts/api-server/src/elaine/index.ts:919", // MAX_PHONE_CODE_ATTEMPTS
+  "artifacts/api-server/src/elaine/index.ts:10217", // MAX_ROUNDS
+  "artifacts/api-server/src/elaine/index.ts:10479", // MAX_ROUNDS
+  // Client-side concurrency safeguard for an expensive image-processing
+  // action, not an owner-facing collection setting.
+  "artifacts/modules/src/quilting/pages/fabrics/index.tsx:567", // CREASE_BATCH_SIZE
+  // Fixed per-request image cap that prevents oversized AI payloads.
+  "artifacts/api-server/src/routes/magnets/magnets.ts:259", // MAX_REANALYZE_IMAGES
+  "artifacts/api-server/src/elaine/magnets-actions.ts:511",
+  // UI-only reconnect poll cadence; it controls a local query refresh, not
+  // any owner-facing product behavior or server-side resource budget.
+  "artifacts/web/src/pages/control-panel.tsx:381", // POLL_INTERVAL_MS
+  // Fixed actor-client execution bounds that prevent an individual Hallmark
+  // lookup from consuming unbounded API time, polling, or result payloads.
+  "artifacts/api-server/src/lib/ornaments/hallmark-search.ts:82",
+  "artifacts/api-server/src/lib/ornaments/hallmark-search.ts:83",
+  "artifacts/api-server/src/lib/ornaments/hallmark-search.ts:84",
+  // Fixed outbound Firecrawl request budget; this is a network safety bound,
+  // not owner-facing scanner configuration.
+  "artifacts/api-server/src/lib/ornaments/hallmark-events-source.ts:9",
+  // Input-validation cap for a short internal category label, not a tunable
+  // collection setting.
+  "artifacts/api-server/src/routes/ornaments/ornaments.ts:119", // MAX_LABEL
+  // Scanner heuristic that avoids treating short common strings as secrets;
+  // it is a fixed detector safeguard, never product configuration.
+  "scripts/src/check-public-file-secrets.ts:169", // MIN_SECRET_LENGTH
   // ---- scripts/scaffold-collection-module.ts ----
   // minLength/maxLength inside the generated OpenAPI YAML templates for
   // category/item name fields — input-validation caps mirroring the existing
@@ -268,15 +314,6 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   // probe. This is a diagnostic implementation safeguard, not product config.
   "scripts/src/check-agent-screenshot-access.ts:10",
 
-  // ---- elaine/index.ts — pre-existing internal constants surfaced when the
-  // file entered a diff (scaffolded-read-registry dispatch hook). All three are
-  // fixed algorithm/abuse-guard parameters, not owner-facing product config:
-  // MAX_PHONE_CODE_ATTEMPTS: brute-force guard on phone verification codes.
-  "artifacts/api-server/src/elaine/index.ts:915",
-  // MAX_ROUNDS: bounded tool-loop iteration caps in two internal helpers.
-  "artifacts/api-server/src/elaine/index.ts:10216",
-  "artifacts/api-server/src/elaine/index.ts:10478",
-
   // ---- observability / request-logging threshold ----
   // Fixed monitoring constant; changing it has no product-visible effect.
   "artifacts/api-server/src/app.ts:24",
@@ -292,24 +329,43 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
 
   // ---- elaine/index.ts ----
   // Auth security: max verification-code attempts before lockout.
-  "artifacts/api-server/src/elaine/index.ts:910",
+  "artifacts/api-server/src/elaine/index.ts:941",
   // MAX_ROUNDS: fixed 3-attempt ceiling inside the restricted-channel OpenAI
   // Responses attempt loop and the SMS/email/Slack reply loop. Not
   // owner-facing — the outer RuntimeBudgetConfig controls the agentic turn
   // budget; these inner loops are implementation guards for the restricted
   // channel path that are too tightly coupled to the response-parsing logic
   // to be safely raised by the owner.
-  "artifacts/api-server/src/elaine/index.ts:10216", // MAX_ROUNDS (restricted-channel OpenAI-Responses attempt loop)
-  "artifacts/api-server/src/elaine/index.ts:10478", // MAX_ROUNDS (restricted-channel reply loop, SMS/email/Slack)
+  "artifacts/api-server/src/elaine/index.ts:10256", // MAX_ROUNDS (restricted-channel OpenAI-Responses attempt loop)
+  "artifacts/api-server/src/elaine/index.ts:10518", // MAX_ROUNDS (restricted-channel reply loop, SMS/email/Slack)
+
+  // ---- lib/comm-check-scheduler.ts ----
+  // Per-channel network safety timeout. This bounds a single delivery attempt
+  // so one provider cannot stall the scheduler; it is not a user preference.
+  "artifacts/api-server/src/lib/comm-check-scheduler.ts:305",
+
+  // ---- routes/magnets/magnets.ts ----
+  // Fixed per-request image cap that prevents oversized AI payloads.
+  "artifacts/api-server/src/routes/magnets/magnets.ts:266",
+
+  // ---- routes/pottery/pottery.ts ----
+  // Input-validation and storage caps tied to field sizes and upload safety,
+  // not owner-facing product configuration.
+  "artifacts/api-server/src/routes/pottery/pottery.ts:114", // MAX_NAME
+  "artifacts/api-server/src/routes/pottery/pottery.ts:116", // MAX_TEXT
+  "artifacts/api-server/src/routes/pottery/pottery.ts:117", // MAX_LABEL
+  "artifacts/api-server/src/routes/pottery/pottery.ts:120", // MAX_SUPPLEMENTAL_IMAGES
 
   // ---- routes/ornaments/ornaments.ts ----
   // Pre-existing input-validation caps (notes length, supplemental-image
   // counts) — not owner-facing: these are DB column-length guards and
   // a fixed storage cap tied to the upload pipeline.
-  "artifacts/api-server/src/routes/ornaments/ornaments.ts:122", // MAX_NOTES
-  "artifacts/api-server/src/routes/ornaments/ornaments.ts:124", // MAX_LABEL
-  "artifacts/api-server/src/routes/ornaments/ornaments.ts:126", // MAX_SUPPLEMENTAL_IMAGES
-  "artifacts/api-server/src/routes/ornaments/ornaments.ts:127", // MAX_AI_SUPPLEMENTAL
+  "artifacts/api-server/src/routes/ornaments/ornaments.ts:128", // MAX_NOTES
+  "artifacts/api-server/src/routes/ornaments/ornaments.ts:129", // MAX_TEXT
+  "artifacts/api-server/src/routes/ornaments/ornaments.ts:127", // MAX_NAME
+  "artifacts/api-server/src/routes/ornaments/ornaments.ts:130", // MAX_LABEL
+  "artifacts/api-server/src/routes/ornaments/ornaments.ts:132", // MAX_SUPPLEMENTAL_IMAGES
+  "artifacts/api-server/src/routes/ornaments/ornaments.ts:133", // MAX_AI_SUPPLEMENTAL
   // ornaments MAX_BULK_REANALYZE is now owner-configurable via
   // thresholds.ornamentsBulkReanalyzeLimit in the Elaine config store.
 
@@ -322,17 +378,27 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   // Pre-existing input-validation caps moved verbatim from blocks.ts/layouts.ts
   // into the shared category helper (Task dedupe of category helpers); same
   // rationale as the patterns/quilts caps below.
-  "artifacts/api-server/src/routes/quilting/category-helpers.ts:16", // MAX_CATEGORY_NAMES
-  "artifacts/api-server/src/routes/quilting/category-helpers.ts:17", // MAX_CATEGORY_NAME_LEN
-  "artifacts/api-server/src/routes/quilting/patterns.ts:60", // MAX_NOTES
-  "artifacts/api-server/src/routes/quilting/patterns.ts:61", // MAX_LABEL
-  "artifacts/api-server/src/routes/quilting/patterns.ts:309", // MAX_REANALYZE_IMAGES
-  "artifacts/api-server/src/routes/quilting/quilts.ts:62", // MAX_NOTES
-  "artifacts/api-server/src/routes/quilting/quilts.ts:63", // MAX_LABEL
-  "artifacts/api-server/src/routes/quilting/quilts.ts:376", // MAX_REANALYZE_IMAGES
+  "artifacts/api-server/src/routes/quilting/category-helpers.ts:17", // MAX_CATEGORY_NAMES
+  "artifacts/api-server/src/routes/quilting/category-helpers.ts:18", // MAX_CATEGORY_NAME_LEN
+  "artifacts/api-server/src/routes/quilting/fabrics.ts:107", // MAX_FIELD
+  "artifacts/api-server/src/routes/quilting/fabrics.ts:111", // MAX_SUPPLEMENTAL_IMAGES
+  "artifacts/api-server/src/routes/quilting/fabrics.ts:112", // MAX_REANALYZE_IMAGES
+  "artifacts/api-server/src/routes/quilting/patterns.ts:64", // MAX_NAME
+  "artifacts/api-server/src/routes/quilting/patterns.ts:65", // MAX_FIELD
+  "artifacts/api-server/src/routes/quilting/patterns.ts:66", // MAX_NOTES
+  "artifacts/api-server/src/routes/quilting/patterns.ts:67", // MAX_LABEL
+  "artifacts/api-server/src/routes/quilting/patterns.ts:332", // MAX_REANALYZE_IMAGES
+  "artifacts/api-server/src/routes/quilting/quilts.ts:67", // MAX_NAME
+  "artifacts/api-server/src/routes/quilting/quilts.ts:68", // MAX_NOTES
+  "artifacts/api-server/src/routes/quilting/quilts.ts:69", // MAX_LABEL
   // quilting MAX_BULK_REANALYZE (fabrics/patterns/quilts) is now
   // owner-configurable via thresholds.quiltingBulkReanalyzeLimit in the
   // Elaine config store.
+
+  // ---- modules/ornaments/pages/hallmark-events.tsx ----
+  // UI-only query timeout that prevents a stalled Calendar request from
+  // blocking the page indefinitely; it does not alter scanner reconciliation.
+  "artifacts/modules/src/ornaments/pages/hallmark-events.tsx:62",
 
   // ---- lib/sentry-error-nudges.ts ----
   // MAX_DETAILED_ISSUES: cosmetic cap on how many individual issue lines
@@ -739,6 +805,7 @@ export function checkHardcodedConfigFromFiles(
   files: string[],
   readFile: (file: string) => string | null,
   allowlist: ReadonlySet<string> = HARDCODED_CONFIG_ALLOWLIST,
+  includeAllowlisted = false,
 ): HardcodedConfigViolation[] {
   const violations: HardcodedConfigViolation[] = [];
   for (const file of files) {
@@ -748,19 +815,35 @@ export function checkHardcodedConfigFromFiles(
 
     for (const cluster of findTunableClustersInFile(content)) {
       const key = `${file}:${cluster.lines[0]}`;
-      if (allowlist.has(key)) continue;
-      violations.push({ ...cluster, file, kind: "cluster" });
+      const allowlisted = allowlist.has(key);
+      if (!allowlisted || includeAllowlisted) {
+        violations.push({
+          ...cluster,
+          file,
+          kind: "cluster",
+          context: findingContext(content, cluster.lines[0]!),
+          ...(allowlisted ? { allowlisted: true } : {}),
+        });
+      }
     }
 
     for (const constant of findTunableConstantsInFile(content)) {
       const key = `${file}:${constant.line}`;
-      if (allowlist.has(key)) continue;
-      violations.push({
-        file,
-        lines: [constant.line],
-        names: [constant.name],
-        kind: "constant",
-      });
+      const allowlisted = allowlist.has(key);
+      if (!allowlisted || includeAllowlisted) {
+        violations.push({
+          file,
+          lines: [constant.line],
+          names: [constant.name],
+          kind: "constant",
+          context:
+            content
+              .split("\n")
+              [constant.line - 1]?.trim()
+              .replace(/\s+/g, " ") ?? "file-scope",
+          ...(allowlisted ? { allowlisted: true } : {}),
+        });
+      }
     }
   }
   return violations;

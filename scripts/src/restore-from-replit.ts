@@ -286,10 +286,7 @@ async function main() {
   await dest.query("TRUNCATE ornaments_images CASCADE");
   await dest.query("TRUNCATE ornaments_items CASCADE");
   await dest.query("TRUNCATE ornaments_categories CASCADE");
-  await dest.query("TRUNCATE ornaments_barcode_cache CASCADE");
-  await dest.query("TRUNCATE hallmark_ornaments CASCADE");
   await dest.query("TRUNCATE ornaments_hallmark_events CASCADE");
-  await dest.query("TRUNCATE ornament_upc_corrections CASCADE");
 
   await copyTable(source, dest, {
     table: "ornaments_categories",
@@ -310,7 +307,6 @@ async function main() {
       "quantity",
       "notes",
       "dimensions",
-      "condition",
       "origin",
       "acquired_at",
       "ai_description",
@@ -346,62 +342,55 @@ async function main() {
     columns: ["item_id", "category_id"],
   });
 
-  await copyTable(source, dest, {
-    table: "ornaments_barcode_cache",
-    columns: [
-      "barcode",
-      "found",
-      "name",
-      "brand",
-      "series_or_collection",
-      "year",
-      "description",
-      "image_url",
-      "created_at",
-      "hallmark_sku",
-      "hallmark_series_name",
-      "hallmark_sequence_number",
-      "hallmark_artist",
-      "hallmark_original_retail_price",
-      "hallmark_product_url",
-      "hallmark_confidence",
-      "hallmark_enriched_at",
-      "hallmark_collector_price_usd",
-      "hallmark_in_stock",
-      "hallmark_images",
-    ],
-    orderBy: "barcode",
-  });
+  // ── Magnets ──────────────────────────────────────────────────────────────
+  await dest.query("TRUNCATE magnets_item_categories CASCADE");
+  await dest.query("TRUNCATE magnets_images CASCADE");
+  await dest.query("TRUNCATE magnets_items CASCADE");
+  await dest.query("TRUNCATE magnets_categories CASCADE");
 
   await copyTable(source, dest, {
-    table: "hallmark_ornaments",
+    table: "magnets_categories",
+    columns: ["id", "user_id", "name", "bg_color", "text_color", "created_at"],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "magnets_categories", "id");
+
+  await copyTable(source, dest, {
+    table: "magnets_items",
     columns: [
       "id",
-      "hallmark_sku",
+      "user_id",
       "name",
+      "notes",
       "description",
-      "series_name",
-      "sequence_number",
-      "year",
-      "artist",
-      "retail_price_usd",
-      "collector_price_usd",
-      "in_stock",
-      "ornament_category",
-      "subcategory",
-      "images",
-      "product_url_hallmark",
-      "product_url_historical",
-      "product_url_hooh",
-      "in_hallmark_catalog",
-      "in_historical_catalog",
-      "in_hooh_catalog",
+      "image_path",
+      "locked_fields",
+      "deleted_at",
       "created_at",
-      "updated_at",
     ],
     orderBy: "id",
   });
-  await resetSequence(dest, "hallmark_ornaments", "id");
+  await resetSequence(dest, "magnets_items", "id");
+
+  await copyTable(source, dest, {
+    table: "magnets_images",
+    columns: [
+      "id",
+      "item_id",
+      "storage_path",
+      "label",
+      "position",
+      "deleted_at",
+      "created_at",
+    ],
+    orderBy: "id",
+  });
+  await resetSequence(dest, "magnets_images", "id");
+
+  await copyTable(source, dest, {
+    table: "magnets_item_categories",
+    columns: ["item_id", "category_id"],
+  });
 
   await copyTable(source, dest, {
     table: "ornaments_hallmark_events",
@@ -419,24 +408,6 @@ async function main() {
     orderBy: "id",
   });
   await resetSequence(dest, "ornaments_hallmark_events", "id");
-
-  await copyTable(source, dest, {
-    table: "ornament_upc_corrections",
-    columns: [
-      "id",
-      "barcode",
-      "corrected_name",
-      "corrected_brand",
-      "corrected_series_or_collection",
-      "corrected_year",
-      "wrong_name",
-      "wrong_brand",
-      "submitted_by",
-      "created_at",
-    ],
-    orderBy: "id",
-  });
-  await resetSequence(dest, "ornament_upc_corrections", "id");
 
   // ── Office ────────────────────────────────────────────────────────────────
   await dest.query("TRUNCATE office_notes CASCADE");

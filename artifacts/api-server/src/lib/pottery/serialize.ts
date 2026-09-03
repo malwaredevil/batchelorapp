@@ -12,6 +12,10 @@ import {
   type CategoryResult,
   type ImageResult,
 } from "../collection-item-serializer";
+import {
+  getCompletePhotoScanStatus,
+  type CompletePhotoScanStatus,
+} from "../ai-scan-pipeline";
 
 type ItemRowForSerialization = Omit<
   PotteryItemRow,
@@ -43,6 +47,7 @@ export interface SerializedItem {
   categories: CategoryResult[];
   images: PotteryImageResult[];
   imageUrl: string;
+  recognitionRefreshStatus: CompletePhotoScanStatus | null;
   createdAt: Date;
 }
 
@@ -75,6 +80,8 @@ const { serializeItem, serializeItems } = createCollectionSerializer<
       categories: cats,
       images: imgs,
       imageUrl: `/api/pottery/items/${row.id}/image?v=${pathCacheBuster(row.imagePath)}`,
+      recognitionRefreshStatus:
+        getCompletePhotoScanStatus(`pottery:${row.id}`) ?? null,
       createdAt: row.createdAt,
     };
   },

@@ -1,9 +1,12 @@
 import bcrypt from "bcryptjs";
-import crypto from "crypto";
 
-const password = crypto.randomBytes(16).toString("hex");
+const password = process.env.AGENT_LOGIN_PASSWORD;
 const email = "agent-test@batchelor.app";
 const displayName = "Test Agent";
+
+if (!password) {
+  throw new Error("AGENT_LOGIN_PASSWORD must be set");
+}
 
 const passwordHash = await bcrypt.hash(password, 12);
 
@@ -37,5 +40,4 @@ if (!res.ok) {
 
 const rows = (await res.json()) as { id: number; email: string }[];
 console.log(`EMAIL=${email}`);
-console.log(`PASSWORD=${password}`);
 console.log(`USER_ID=${rows[0]?.id ?? "unknown"}`);

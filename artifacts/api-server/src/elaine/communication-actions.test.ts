@@ -251,7 +251,8 @@ describe("call_me executor — immediate path (no scheduleAt)", () => {
     expect(mockInitiateOutboundCall).toHaveBeenCalledWith(
       expect.objectContaining({
         toNumber: "+12105559999",
-        initialGreeting: "Hey, it's your reminder!",
+        userId: 1,
+        openingMessage: "Hey, it's your reminder!",
       }),
     );
     expect(mockInsertReturning).not.toHaveBeenCalled();

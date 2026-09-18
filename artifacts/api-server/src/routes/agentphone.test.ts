@@ -531,6 +531,42 @@ describe("POST /api/agentphone/webhook — 10DLC keyword handling", () => {
       .send(raw);
   }
 
+  it("does not expose or consume a pending voice opening when an SMS arrives", async () => {
+    selectQueue.push([{ id: 1, smsOptedOutAt: null }]);
+    selectQueue.push([{ timezone: "Europe/London" }]);
+    selectQueue.push([
+      {
+        id: 107,
+        messages: [],
+        version: 0,
+        userId: 1,
+        pendingOutboundId: "pending-voice-1",
+        pendingOutboundOpening: "This belongs to the phone call.",
+        pendingOutboundPrivateContext: null,
+        pendingOutboundExpiresAt: new Date(Date.now() + 60_000),
+      },
+    ]);
+    dbMock.update.mockImplementation(() => makeUpdateBuilder());
+
+    const app = await buildApp();
+    const res = await sendSmsWebhook(
+      app,
+      "Can you check my reminders?",
+      "sms-while-call-pending",
+    );
+
+    expect(res.status).toBe(200);
+    expect(runAgentphoneTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channel: "sms",
+        history: [],
+      }),
+    );
+    expect(
+      JSON.stringify(runAgentphoneTurn.mock.calls[0]?.[0] ?? {}),
+    ).not.toContain("This belongs to the phone call.");
+  });
+
   // ── STOP ─────────────────────────────────────────────────────────────────
 
   it("handles STOP from an unrecognized number without querying Elaine", async () => {
@@ -790,7 +826,7 @@ describe("POST /api/agentphone/webhook — missing required headers", () => {
 //     selected (not the smarter/slower restrictedTextModel used for SMS).
 //  5. Gate on phone-number lookup: unrecognized numbers get an immediate
 //     rejection + hangup without invoking Elaine at all.
-//  6. Return a greeting for an empty transcript without invoking Elaine.
+//  6. Preserve the inbound greeting while an empty outbound startup stays silent.
 // ---------------------------------------------------------------------------
 
 describe("POST /api/agentphone/webhook — voice channel", () => {
@@ -800,11 +836,18 @@ describe("POST /api/agentphone/webhook — voice channel", () => {
     transcript: string,
     from = FROM,
     deliveryId = `voice-delivery-${Date.now()}`,
+    direction?: "inbound" | "outbound",
+    callId?: string,
   ) {
     const raw = JSON.stringify({
       event: "agent.message",
       channel: "voice",
-      data: { from, transcript },
+      data: {
+        from,
+        transcript,
+        ...(direction ? { direction } : {}),
+        ...(callId ? { callId } : {}),
+      },
     });
     return { raw, deliveryId };
   }
@@ -814,11 +857,15 @@ describe("POST /api/agentphone/webhook — voice channel", () => {
     transcript: string,
     from = FROM,
     deliveryId?: string,
+    direction?: "inbound" | "outbound",
+    callId?: string,
   ) {
     const { raw, deliveryId: id } = voiceBody(
       transcript,
       from,
       deliveryId ?? `voice-${transcript.slice(0, 8)}-${Date.now()}`,
+      direction,
+      callId,
     );
     const ts = freshTimestamp();
     return request(app)
@@ -1077,6 +1124,184 @@ describe("POST /api/agentphone/webhook — voice channel", () => {
     expect(typeof body.text).toBe("string");
     expect((body.text as string).length).toBeGreaterThan(0);
     expect(body.hangup).toBeUndefined(); // greeting does not hang up
+  });
+
+  it("stays silent for an empty outbound startup event", async () => {
+    const app = await buildApp();
+    const res = await sendVoiceWebhook(
+      app,
+      "",
+      FROM,
+      "voice-outbound-start",
+      "outbound",
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ text: "" });
+    expect(runAgentphoneTurn).not.toHaveBeenCalled();
+  });
+
+  it("does not consume pending context when direction metadata is absent", async () => {
+    selectQueue.push([
+      {
+        pendingOutboundId: "pending-1",
+        pendingOutboundExpiresAt: new Date(Date.now() + 60_000),
+      },
+    ]);
+    const app = await buildApp();
+    const res = await sendVoiceWebhook(
+      app,
+      "",
+      FROM,
+      "voice-outbound-no-direction",
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.text).toMatch(/this is Elaine/i);
+    expect(runAgentphoneTurn).not.toHaveBeenCalled();
+  });
+
+  it("delivers pending outbound purpose on the first spoken voice turn", async () => {
+    selectQueue.push([{ id: 1 }]);
+    selectQueue.push([
+      {
+        id: 106,
+        messages: [],
+        version: 0,
+        userId: 1,
+        pendingOutboundId: "pending-1",
+        pendingOutboundOpening: "Your prescription is ready.",
+        pendingOutboundPrivateContext: "The pharmacy closes at six.",
+        pendingOutboundExpiresAt: new Date(Date.now() + 60_000),
+      },
+    ]);
+    dbMock.update.mockImplementation(makeVoiceUpdateMock(106));
+
+    const app = await buildApp();
+    await sendVoiceWebhook(
+      app,
+      "Hello?",
+      FROM,
+      "voice-first-spoken-outbound",
+      "outbound",
+    );
+
+    expect(runAgentphoneTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channel: "voice",
+        inputText: "Hello?",
+        history: [
+          expect.objectContaining({
+            role: "assistant",
+            content: expect.stringContaining("Your prescription is ready."),
+          }),
+        ],
+      }),
+    );
+  });
+
+  it("does not deliver a missed outbound purpose during a later inbound call", async () => {
+    selectQueue.push([{ id: 1 }]);
+    selectQueue.push([
+      {
+        id: 108,
+        messages: [],
+        version: 0,
+        userId: 1,
+        pendingOutboundId: "missed-call-purpose",
+        pendingOutboundCallId: "old-outbound-call",
+        pendingOutboundOpening: "This old reminder must not be delivered.",
+        pendingOutboundPrivateContext: null,
+        pendingOutboundExpiresAt: new Date(Date.now() + 60_000),
+      },
+    ]);
+    dbMock.update.mockImplementation(makeVoiceUpdateMock(108));
+
+    const app = await buildApp();
+    await sendVoiceWebhook(
+      app,
+      "Hello, I am calling you now.",
+      FROM,
+      "voice-later-inbound",
+      "inbound",
+      "arbitrary-inbound-call",
+    );
+
+    expect(runAgentphoneTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channel: "voice",
+        history: [],
+      }),
+    );
+    expect(
+      JSON.stringify(runAgentphoneTurn.mock.calls[0]?.[0] ?? {}),
+    ).not.toContain("This old reminder must not be delivered.");
+  });
+
+  it("does not consume attached outbound context for an outbound event without its call id", async () => {
+    selectQueue.push([{ id: 1 }]);
+    selectQueue.push([
+      {
+        id: 109,
+        messages: [],
+        version: 0,
+        userId: 1,
+        pendingOutboundId: "pending-attached",
+        pendingOutboundCallId: "expected-call",
+        pendingOutboundOpening: "Must not be delivered without correlation.",
+        pendingOutboundPrivateContext: null,
+        pendingOutboundExpiresAt: new Date(Date.now() + 60_000),
+      },
+    ]);
+    dbMock.update.mockImplementation(makeVoiceUpdateMock(109));
+
+    const app = await buildApp();
+    await sendVoiceWebhook(
+      app,
+      "Hello from the recipient.",
+      FROM,
+      "voice-outbound-without-id",
+      "outbound",
+    );
+
+    expect(runAgentphoneTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ channel: "voice", history: [] }),
+    );
+    expect(
+      JSON.stringify(runAgentphoneTurn.mock.calls[0]?.[0] ?? {}),
+    ).not.toContain("Must not be delivered without correlation.");
+  });
+
+  it("does not consume attached outbound context for a mismatched outbound call id", async () => {
+    selectQueue.push([{ id: 1 }]);
+    selectQueue.push([
+      {
+        id: 110,
+        messages: [],
+        version: 0,
+        userId: 1,
+        pendingOutboundId: "pending-attached-mismatch",
+        pendingOutboundCallId: "expected-call",
+        pendingOutboundOpening: "Must not be delivered to another call.",
+        pendingOutboundPrivateContext: null,
+        pendingOutboundExpiresAt: new Date(Date.now() + 60_000),
+      },
+    ]);
+    dbMock.update.mockImplementation(makeVoiceUpdateMock(110));
+
+    const app = await buildApp();
+    await sendVoiceWebhook(
+      app,
+      "Hello from another call.",
+      FROM,
+      "voice-outbound-mismatch",
+      "outbound",
+      "different-call",
+    );
+
+    expect(
+      JSON.stringify(runAgentphoneTurn.mock.calls[0]?.[0] ?? {}),
+    ).not.toContain("Must not be delivered to another call.");
   });
 
   it("returns a rejection + hangup for an unrecognized phone number without invoking Elaine", async () => {

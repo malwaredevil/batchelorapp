@@ -26,11 +26,12 @@
  */
 
 import pg from "pg";
+import { pathToFileURL } from "node:url";
 import { resolveProductionDatabaseUrl, sslConfig } from "@workspace/db";
 
 const { Client } = pg;
 
-async function copyTable(
+export async function copyTable(
   source: pg.Client,
   dest: pg.Client,
   opts: {
@@ -38,12 +39,35 @@ async function copyTable(
     columns: string[];
     orderBy?: string;
     jsonbColumns?: string[];
+    /** Expressions used when a column is absent from an older backup table. */
+    missingColumnDefaults?: Record<string, string>;
   },
 ): Promise<number> {
+  // Backups are durable snapshots and must never be migrated in place just to
+  // restore them. Build the SELECT from the source's current shape instead.
+  const { rows: columnRows } = await source.query(
+    `SELECT column_name
+       FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = $1`,
+    [opts.table],
+  );
+  const sourceColumns = new Set(
+    columnRows.map((row: { column_name: string }) => row.column_name),
+  );
+  const selectColumns = opts.columns.map((column) => {
+    if (sourceColumns.has(column)) return column;
+    const fallback = opts.missingColumnDefaults?.[column];
+    if (!fallback) {
+      throw new Error(
+        `Source table "${opts.table}" is missing required column "${column}"`,
+      );
+    }
+    return `${fallback} AS ${column}`;
+  });
   const cols = opts.columns.join(", ");
   const order = opts.orderBy ? ` ORDER BY ${opts.orderBy}` : "";
   const { rows } = await source.query(
-    `SELECT ${cols} FROM ${opts.table}${order}`,
+    `SELECT ${selectColumns.join(", ")} FROM ${opts.table}${order}`,
   );
   const jsonbCols = new Set(opts.jsonbColumns ?? []);
   const placeholders = opts.columns
@@ -156,7 +180,27 @@ async function main() {
   );
   await copyTable(source, dest, {
     table: "agentphone_conversations",
-    columns: ["id", "phone_number", "user_id", "messages", "updated_at"],
+    columns: [
+      "id",
+      "phone_number",
+      "user_id",
+      "messages",
+      "pending_outbound_id",
+      "pending_outbound_call_id",
+      "pending_outbound_opening",
+      "pending_outbound_private_context",
+      "pending_outbound_expires_at",
+      "version",
+      "updated_at",
+    ],
+    missingColumnDefaults: {
+      pending_outbound_id: "NULL",
+      pending_outbound_call_id: "NULL",
+      pending_outbound_opening: "NULL",
+      pending_outbound_private_context: "NULL",
+      pending_outbound_expires_at: "NULL",
+      version: "0",
+    },
     orderBy: "id",
   });
   await resetSequence(dest, "agentphone_conversations", "id");
@@ -2242,7 +2286,12 @@ async function main() {
   await dest.end();
 }
 
-main().catch((err) => {
-  console.error("Restore failed:", err);
-  process.exit(1);
-});
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
+  main().catch((err) => {
+    console.error("Restore failed:", err);
+    process.exit(1);
+  });
+}

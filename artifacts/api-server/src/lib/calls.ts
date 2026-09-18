@@ -1,5 +1,11 @@
 import { logger } from "./logger";
 import { agentphoneRequest } from "./agentphone-http";
+import {
+  attachPendingOutboundCallId,
+  clearPendingOutboundCallContext,
+  clearPendingOutboundCallContextByCallId,
+  seedOutboundCallContext,
+} from "./agentphone-conversation";
 
 interface AgentPhoneNumber {
   id: string;
@@ -87,10 +93,16 @@ export interface OutboundCallOptions {
   /** E.164 destination number */
   toNumber: string;
   /**
-   * What Elaine speaks the moment the call is answered. Write in first person —
-   * Elaine speaks directly, never attributes the message to anyone else.
+   * User whose AgentPhone conversation should receive the pending call purpose.
    */
-  initialGreeting?: string;
+  userId: number;
+  /**
+   * What Elaine should say after the recipient first speaks. Write in first
+   * person — Elaine speaks directly, never attributes the message to anyone else.
+   */
+  openingMessage: string;
+  /** Additional private context Elaine may need after delivering the opening. */
+  privateContextNote?: string;
   /**
    * What Elaine tells an iOS 26 / Android call-screener when asked who is
    * calling. Defaults to "Elaine" when omitted.
@@ -109,14 +121,29 @@ export interface OutboundCallOptions {
  * it, so if the recipient speaks back Elaine continues the conversation
  * naturally using the same engine as inbound calls.
  *
- * initialGreeting is spoken as soon as the recipient answers.
+ * Outbound calls deliberately omit AgentPhone's initialGreeting so the line
+ * stays silent until the recipient speaks. The intended opening is seeded into
+ * the recipient's conversation before the call is placed.
  *
  * Docs: https://docs.agentphone.ai/api-reference/calls/create-outbound-call-v-1-calls-post
  */
 export async function initiateOutboundCall(
   opts: OutboundCallOptions,
-): Promise<{ callId: string }> {
+): Promise<{ callId: string; contextAttached: boolean }> {
   const { agentId, phoneNumberId } = await getAgentCredentials();
+
+  let pendingId: string | null = null;
+  try {
+    pendingId = await seedOutboundCallContext(
+      opts.toNumber,
+      opts.userId,
+      opts.openingMessage,
+      opts.privateContextNote,
+    );
+  } catch (err) {
+    // Context is helpful but must never prevent the provider call.
+    logger.warn({ err }, "agentphone: failed to seed outbound call context");
+  }
 
   const body: Record<string, string> = { agentId, toNumber: opts.toNumber };
   // Explicitly pin the caller-ID number so AgentPhone uses the number
@@ -127,17 +154,25 @@ export async function initiateOutboundCall(
   // *responses*, e.g. from GET /v1/calls/:id). Sending `phoneNumberId` in
   // the request body is silently ignored by the API.
   if (phoneNumberId) body.fromNumberId = phoneNumberId;
-  if (opts.initialGreeting) body.initialGreeting = opts.initialGreeting;
   body.callScreeningIdentity = opts.callScreeningIdentity ?? "Elaine";
   if (opts.callScreeningPurpose)
     body.callScreeningPurpose = opts.callScreeningPurpose;
 
-  const response = await agentphoneRequest(
-    "/v1/calls",
-    { method: "POST", body },
-    { op: "create-call" },
-  );
+  let response: Awaited<ReturnType<typeof agentphoneRequest>>;
+  try {
+    response = await agentphoneRequest(
+      "/v1/calls",
+      { method: "POST", body },
+      { op: "create-call" },
+    );
+  } catch (err) {
+    if (pendingId)
+      await clearPendingOutboundCallContext(opts.toNumber, pendingId);
+    throw err;
+  }
   if (!response.ok) {
+    if (pendingId)
+      await clearPendingOutboundCallContext(opts.toNumber, pendingId);
     const text = await response.text().catch(() => "");
     logger.error(
       { status: response.status, text },
@@ -147,8 +182,53 @@ export async function initiateOutboundCall(
       `AgentPhone: failed to initiate outbound call (status ${response.status})`,
     );
   }
-  const data = (await response.json()) as { id?: string };
-  return { callId: data.id ?? "unknown" };
+  let data: unknown;
+  try {
+    data = await response.json();
+  } catch (err) {
+    if (pendingId)
+      await clearPendingOutboundCallContext(opts.toNumber, pendingId);
+    throw new Error("AgentPhone: outbound call returned invalid JSON", {
+      cause: err,
+    });
+  }
+  const callId =
+    typeof data === "object" &&
+    data !== null &&
+    "id" in data &&
+    typeof data.id === "string"
+      ? data.id.trim()
+      : "";
+  if (!callId) {
+    if (pendingId)
+      await clearPendingOutboundCallContext(opts.toNumber, pendingId);
+    throw new Error(
+      "AgentPhone: outbound call response did not include a call id",
+    );
+  }
+  let contextAttached = false;
+  if (pendingId) {
+    try {
+      await attachPendingOutboundCallId(opts.toNumber, pendingId, callId);
+      contextAttached = true;
+    } catch (err) {
+      // The provider accepted the call, but an uncorrelated pending context
+      // must not be left behind for a later call.
+      logger.warn(
+        { err, callId },
+        "agentphone: failed to attach outbound call context",
+      );
+      try {
+        await clearPendingOutboundCallContext(opts.toNumber, pendingId);
+      } catch (clearErr) {
+        logger.warn(
+          { err: clearErr, callId },
+          "agentphone: failed to clear uncorrelated call context",
+        );
+      }
+    }
+  }
+  return { callId, contextAttached };
 }
 
 /**
@@ -266,13 +346,23 @@ export async function waitForCallOutcome(
       if (status === "completed") {
         if (duration === 0) {
           clearAgentCredentialsCache();
+          await clearPendingOutboundCallContextByCallId(callId);
           return "no-answer";
         }
         return "answered";
       }
-      if (status === "no-answer" || status === "busy") return "no-answer";
-      if (status === "failed") return "error";
-      if (status === "voicemail") return "voicemail";
+      if (status === "no-answer" || status === "busy") {
+        await clearPendingOutboundCallContextByCallId(callId);
+        return "no-answer";
+      }
+      if (status === "failed") {
+        await clearPendingOutboundCallContextByCallId(callId);
+        return "error";
+      }
+      if (status === "voicemail") {
+        await clearPendingOutboundCallContextByCallId(callId);
+        return "voicemail";
+      }
       // "ringing" / "in-progress" — still live, keep polling
     } catch {
       break; // network error — give up, report "pending"

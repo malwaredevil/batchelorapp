@@ -407,6 +407,7 @@ export class ElaineTurnRuntime {
   verify(input: {
     finalContent: string;
     hasPendingConfirmation: boolean;
+    hasConcreteReplanRoute?: boolean;
   }): RuntimeVerificationDecision {
     if (input.finalContent.trim()) {
       for (const step of this.trace.plan.steps) {
@@ -484,6 +485,7 @@ export class ElaineTurnRuntime {
 
     if (
       (unfinished.length > 0 || missingCurrentEvidence) &&
+      input.hasConcreteReplanRoute !== false &&
       this.trace.usage.replans < this.budget.maxReplans &&
       this.trace.usage.modelRounds < this.budget.maxModelRounds &&
       this.withinElapsedBudget()

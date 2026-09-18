@@ -22,6 +22,7 @@ import { ElaineAvatar, ElaineWordmark } from "./ElaineAvatar";
 import { useElaineChat } from "./useElaineChat";
 import { ElaineChatPanel } from "./ElaineChatPanel";
 import { ElaineHistoryPanel } from "./ElaineHistoryPanel";
+import { SESSION_HIDE_KEY } from "./ElaineSessionStorage";
 
 // Default pixel dimensions per size preference.
 const CHAT_WINDOW_DEFAULT_SIZES: Record<string, { w: number; h: number }> = {
@@ -32,11 +33,6 @@ const CHAT_WINDOW_DEFAULT_SIZES: Record<string, { w: number; h: number }> = {
 
 const MIN_W = 280;
 const MIN_H = 340;
-
-// sessionStorage key for the "hide for this session" choice. Session-scoped
-// storage is naturally shared across every module on the same origin for the
-// rest of the browser session and clears on the next visit.
-const SESSION_HIDE_KEY = "elaineWidgetSessionHidden";
 
 function readSessionHidden(): boolean {
   try {
@@ -322,8 +318,8 @@ export function ElaineWidget({
   }, []);
 
   if (
-    !settings?.enabled ||
-    settings.widgetHidden ||
+    settings?.enabled === false ||
+    settings?.widgetHidden ||
     sessionHidden ||
     onFullScreenChat
   ) {

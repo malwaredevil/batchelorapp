@@ -14,7 +14,7 @@
     "test:a11y": "playwright test --project=accessibility",
     "test:visual": "playwright test --project=visual",
     "format:check": "prettier --check .",
-    "lint:semantic": "eslint artifacts lib scripts --ext .ts,.tsx"
+    "lint:semantic": "NODE_OPTIONS=--max-old-space-size=8192 eslint artifacts lib scripts --ext .ts,.tsx"
   },
   "private": true,
   "devDependencies": {

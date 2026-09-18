@@ -124,6 +124,29 @@ function renderBoth(settings: { enabled: boolean; widgetHidden: boolean }) {
   return { qc, ...utils };
 }
 
+function renderWidgetWithSettings(settings?: {
+  enabled: boolean;
+  widgetHidden: boolean;
+}) {
+  const qc = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  if (settings) {
+    qc.setQueryData(SETTINGS_KEY, {
+      enabled: settings.enabled,
+      actionConfirmationMode: "one_by_one",
+      chatWindowSize: "compact",
+      widgetHidden: settings.widgetHidden,
+    });
+  }
+  const utils = render(
+    <QueryClientProvider client={qc}>
+      <ElaineWidget appId="hub" />
+    </QueryClientProvider>,
+  );
+  return { qc, ...utils };
+}
+
 const bubble = () => screen.queryByLabelText(/Open Elaine assistant/);
 
 // jsdom has no matchMedia — the widget uses it for its desktop breakpoint.
@@ -144,6 +167,27 @@ beforeEach(() => {
 });
 
 describe("Elaine widget hide/re-enable", () => {
+  it("shows the bubble while settings are still loading", () => {
+    renderWidgetWithSettings();
+
+    const assistantBubble = bubble();
+    expect(assistantBubble).not.toBeNull();
+
+    const widgetContainer = assistantBubble?.parentElement?.parentElement;
+    expect(widgetContainer).not.toBeNull();
+    expect(widgetContainer).toHaveStyle({
+      position: "absolute",
+      right: "1.5rem",
+      bottom: "1.5rem",
+    });
+  });
+
+  it("hides the bubble when Elaine is explicitly disabled", () => {
+    renderWidgetWithSettings({ enabled: false, widgetHidden: false });
+
+    expect(bubble()).toBeNull();
+  });
+
   it("hide-forever + session flag → 'Show bubble' restores the bubble without a reload", () => {
     sessionStorage.setItem(SESSION_KEY, "1");
     renderBoth({ enabled: true, widgetHidden: true });
@@ -153,6 +197,19 @@ describe("Elaine widget hide/re-enable", () => {
     fireEvent.click(screen.getByRole("button", { name: "Show bubble" }));
 
     expect(mutateSpy).toHaveBeenCalledWith({ widgetHidden: false });
+    expect(sessionStorage.getItem(SESSION_KEY)).toBeNull();
+    expect(bubble()).not.toBeNull();
+  });
+
+  it("session-only hidden → Account settings offers recovery without changing the account flag", () => {
+    sessionStorage.setItem(SESSION_KEY, "1");
+    renderBoth({ enabled: true, widgetHidden: false });
+
+    expect(bubble()).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show bubble" }));
+
+    expect(mutateSpy).not.toHaveBeenCalled();
     expect(sessionStorage.getItem(SESSION_KEY)).toBeNull();
     expect(bubble()).not.toBeNull();
   });

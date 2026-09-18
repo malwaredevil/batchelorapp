@@ -28,7 +28,6 @@ import {
   fireCallMe,
 } from "../elaine/communication-actions";
 import { richTextToPlainText, richTextToSpeech } from "./rich-text-plaintext";
-import { seedOutboundCallContext } from "./agentphone-conversation";
 
 /**
  * Unified, entity-agnostic reminder delivery scheduler — replaces the old
@@ -628,7 +627,7 @@ export async function claimAndSendDueDeliveries(): Promise<{
           const speechDescription = richTextToSpeech(
             delivery.reminder_description,
           );
-          const initialGreeting = buildGenericReminderCallScript(
+          const openingMessage = buildGenericReminderCallScript(
             delivery.reminder_title,
             label,
             formattedDate,
@@ -642,20 +641,13 @@ export async function claimAndSendDueDeliveries(): Promise<{
           );
           await initiateOutboundCall({
             toNumber: phone,
-            initialGreeting,
-            callScreeningPurpose: `Reminder: ${delivery.reminder_title}`,
-          });
-          // Best-effort: give the restricted voice-turn engine the context
-          // it needs to answer "yes" to the description offer above without
-          // ever having seen the raw HTML or a URL itself.
-          await seedOutboundCallContext(
-            phone,
-            Number(delivery.recipient_ref),
-            initialGreeting,
-            speechDescription
+            userId: Number(delivery.recipient_ref),
+            openingMessage,
+            privateContextNote: speechDescription
               ? `if the caller wants to hear the reminder description, read them exactly this: "${speechDescription}"`
               : undefined,
-          );
+            callScreeningPurpose: `Reminder: ${delivery.reminder_title}`,
+          });
         } catch (callErr) {
           logger.warn(
             { err: callErr, deliveryId: delivery.id },

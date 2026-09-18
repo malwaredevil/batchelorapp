@@ -81,6 +81,8 @@ export function RichTextEditor({
         codeBlock: false,
         code: false,
         blockquote: false,
+        link: false,
+        underline: false,
       }),
       UnderlineExt,
       Highlight.configure({ multicolor: false }),
@@ -110,7 +112,7 @@ export function RichTextEditor({
     const current = editor.getHTML();
     const next = value || "";
     if (current === next || (current === "<p></p>" && next === "")) return;
-    editor.commands.setContent(next, false);
+    editor.commands.setContent(next, { emitUpdate: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, editor]);
 

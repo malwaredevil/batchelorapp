@@ -35,6 +35,24 @@ const SyncBody = z.object({
     .string()
     .regex(/^[a-f0-9]{64}$/)
     .optional(),
+  reviewedSource: z
+    .object({
+      sourceUrl: z.string().url(),
+      complete: z.boolean(),
+      year: z.number().int().nullable(),
+      candidates: z.array(
+        z.object({
+          sourceKey: z.string(),
+          title: z.string(),
+          startDate: z.string(),
+          endDate: z.string(),
+          details: z.string().nullable(),
+          sourceUrl: z.string().url(),
+          year: z.number().int(),
+        }),
+      ),
+    })
+    .optional(),
 });
 
 // Protected operational visibility and manual control for the scanner. The
@@ -59,10 +77,13 @@ router.post(
   requireOwner,
   async (req, res) => {
     try {
-      const { dryRun, sourceFingerprint } = SyncBody.parse(req.body ?? {});
+      const { dryRun, sourceFingerprint, reviewedSource } = SyncBody.parse(
+        req.body ?? {},
+      );
       const result = await runHallmarkEventsSync(
         dryRun ? "dry-run" : "apply",
         sourceFingerprint,
+        reviewedSource,
       );
       res.json(result);
     } catch (err) {
@@ -72,6 +93,7 @@ router.post(
           error: err.message,
           expectedSourceFingerprint: err.expectedSourceFingerprint,
           actualSourceFingerprint: err.actualSourceFingerprint,
+          differences: err.differences,
         });
         return;
       }

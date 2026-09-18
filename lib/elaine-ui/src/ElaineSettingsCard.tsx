@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { crossAppUrl } from "@workspace/web-core/cross-app";
 import { toast } from "sonner";
+import { useEffect, useState } from "react";
 import { Brain, ArrowRight } from "lucide-react";
 import {
   useGetElaineSettings,
@@ -20,7 +21,11 @@ import {
   SelectValue,
 } from "@workspace/ui";
 import { ElaineAvatar, ElaineWordmark, ElaineName } from "./ElaineAvatar";
-import { ELAINE_WIDGET_UNHIDE_EVENT } from "./ElaineWidget";
+import {
+  ELAINE_SESSION_HIDDEN_EVENT,
+  readElaineSessionHidden,
+  setElaineSessionHidden,
+} from "./ElaineSessionStorage";
 
 /**
  * Shared "Elaine" settings card — enable/disable, action-confirmation mode,
@@ -37,6 +42,19 @@ export function ElaineSettingsCard({
   const { data: assistantSettings, isLoading: settingsLoading } =
     useGetElaineSettings();
   const updateAssistantSettings = useUpdateElaineSettings();
+  const [sessionWidgetHidden, setSessionWidgetHidden] = useState(
+    readElaineSessionHidden,
+  );
+  useEffect(() => {
+    const onSessionHiddenChange = () =>
+      setSessionWidgetHidden(readElaineSessionHidden());
+    window.addEventListener(ELAINE_SESSION_HIDDEN_EVENT, onSessionHiddenChange);
+    return () =>
+      window.removeEventListener(
+        ELAINE_SESSION_HIDDEN_EVENT,
+        onSessionHiddenChange,
+      );
+  }, []);
   const { data: memoryRaw, isLoading: memoryLoading } = useListElaineMemory();
   // Defensive: guard against non-array (e.g. HTML SPA fallback mis-routed by dev proxy).
   const memory = Array.isArray(memoryRaw) ? memoryRaw : [];
@@ -114,6 +132,39 @@ export function ElaineSettingsCard({
     );
   }
 
+  function restoreFloatingBubble() {
+    const restoreInBrowser = () => {
+      setElaineSessionHidden(false);
+      toast.success(
+        <>
+          <ElaineName />
+          's bubble is back
+        </>,
+      );
+    };
+
+    if (!assistantSettings?.widgetHidden) {
+      restoreInBrowser();
+      return;
+    }
+
+    updateAssistantSettings.mutate(
+      { widgetHidden: false },
+      {
+        onSuccess: (result) => {
+          qc.setQueryData(getGetElaineSettingsQueryKey(), result);
+          restoreInBrowser();
+        },
+        onError: () =>
+          toast.error(
+            <>
+              Failed to update <ElaineName /> settings
+            </>,
+          ),
+      },
+    );
+  }
+
   return (
     <div className="rounded-2xl border border-card-border bg-card p-6 space-y-5">
       <div className="flex items-center gap-3">
@@ -173,7 +224,7 @@ export function ElaineSettingsCard({
         </Select>
       </div>
 
-      {assistantSettings?.widgetHidden && (
+      {(assistantSettings?.widgetHidden || sessionWidgetHidden) && (
         <div className="flex items-center justify-between gap-3 rounded-lg border border-card-border p-4">
           <div>
             <p className="text-sm font-medium text-foreground">
@@ -188,35 +239,7 @@ export function ElaineSettingsCard({
             variant="outline"
             size="sm"
             disabled={settingsLoading || updateAssistantSettings.isPending}
-            onClick={() =>
-              updateAssistantSettings.mutate(
-                { widgetHidden: false },
-                {
-                  onSuccess: (result) => {
-                    qc.setQueryData(getGetElaineSettingsQueryKey(), result);
-                    try {
-                      sessionStorage.removeItem("elaineWidgetSessionHidden");
-                    } catch {
-                      // sessionStorage unavailable — persistent flag is off.
-                    }
-                    // Let an already-mounted widget reappear without a reload.
-                    window.dispatchEvent(new Event(ELAINE_WIDGET_UNHIDE_EVENT));
-                    toast.success(
-                      <>
-                        <ElaineName />
-                        's bubble is back
-                      </>,
-                    );
-                  },
-                  onError: () =>
-                    toast.error(
-                      <>
-                        Failed to update <ElaineName /> settings
-                      </>,
-                    ),
-                },
-              )
-            }
+            onClick={restoreFloatingBubble}
           >
             Show bubble
           </Button>

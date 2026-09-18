@@ -10,6 +10,11 @@ function optional(name: string): string | undefined {
   return process.env[name]?.trim() || undefined;
 }
 
+function optionalPositiveInteger(name: string, fallback: number): number {
+  const value = Number(process.env[name]);
+  return Number.isInteger(value) && value > 0 ? value : fallback;
+}
+
 function devOrRequired(_devName: string, prodName: string): string {
   return required(prodName);
 }
@@ -54,6 +59,17 @@ export const env = {
   // boots without it — callers.ts/sms.ts throw a clear error if a send is
   // attempted while unset.
   agentphoneApiKey: optional("AGENTPHONE_API_KEY"),
+  // Exact-token outbound context reconciliation. These are centralized here
+  // so retry behavior is deploy-configurable without hardcoded call-path
+  // timers.
+  agentphonePendingAttachmentRetryIntervalMs: optionalPositiveInteger(
+    "AGENTPHONE_PENDING_ATTACHMENT_RETRY_INTERVAL_MS",
+    1_000,
+  ),
+  agentphonePendingAttachmentRetryMaxLifetimeMs: optionalPositiveInteger(
+    "AGENTPHONE_PENDING_ATTACHMENT_RETRY_MAX_LIFETIME_MS",
+    60 * 60 * 1_000,
+  ),
   // Resend inbound-email webhook signing secret for
   // `/api/elaine/email-webhook`. Two separate webhooks were provisioned in
   // Resend (one per environment domain), so the secret to verify against is

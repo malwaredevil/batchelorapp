@@ -18,6 +18,7 @@ import {
   shouldRunScheduledTask,
 } from "../scheduler-guard";
 import {
+  createHallmarkSyncPlanFingerprint,
   fetchHallmarkEventsSource,
   type HallmarkEventCandidate,
   type HallmarkEventsSourceResult,
@@ -46,6 +47,8 @@ export interface HallmarkSyncResult {
   sourceUrl: string;
   sourceFingerprint: string;
   fetchedAt: string;
+  complete: boolean;
+  year: number | null;
   candidateCount: number;
   rejectedCount: number;
   candidates: HallmarkEventCandidate[];
@@ -53,13 +56,45 @@ export interface HallmarkSyncResult {
   actions: HallmarkSyncAction[];
 }
 
+export interface HallmarkSyncPlanSnapshot {
+  sourceUrl: string;
+  complete: boolean;
+  year: number | null;
+  candidates: HallmarkEventCandidate[];
+}
+
+export interface HallmarkSyncCandidateFieldChange {
+  field: keyof HallmarkEventCandidate;
+  before: string | number | null;
+  after: string | number | null;
+}
+
+export interface HallmarkSyncChangedCandidate {
+  sourceKey: string;
+  title: string;
+  changes: HallmarkSyncCandidateFieldChange[];
+}
+
+export interface HallmarkSyncPlanDiff {
+  added: HallmarkEventCandidate[];
+  removed: HallmarkEventCandidate[];
+  changed: HallmarkSyncChangedCandidate[];
+  planChanges: Array<{
+    field: "sourceUrl" | "complete" | "year";
+    before: string | number | boolean | null;
+    after: string | number | boolean | null;
+  }>;
+}
+
 export class HallmarkSyncPreviewStaleError extends Error {
   readonly expectedSourceFingerprint: string;
   readonly actualSourceFingerprint: string;
+  readonly differences: HallmarkSyncPlanDiff;
 
   constructor(
     expectedSourceFingerprint: string,
     actualSourceFingerprint: string,
+    differences: HallmarkSyncPlanDiff,
   ) {
     super(
       "The Hallmark source changed after this preview. Run a new preview before applying.",
@@ -67,6 +102,7 @@ export class HallmarkSyncPreviewStaleError extends Error {
     this.name = "HallmarkSyncPreviewStaleError";
     this.expectedSourceFingerprint = expectedSourceFingerprint;
     this.actualSourceFingerprint = actualSourceFingerprint;
+    this.differences = differences;
   }
 }
 
@@ -174,13 +210,65 @@ export function planHallmarkCalendarSync(
 export function assertHallmarkSourceFingerprint(
   expectedSourceFingerprint: string,
   actualSourceFingerprint: string,
+  differences: HallmarkSyncPlanDiff = {
+    added: [],
+    removed: [],
+    changed: [],
+    planChanges: [],
+  },
 ): void {
   if (expectedSourceFingerprint !== actualSourceFingerprint) {
     throw new HallmarkSyncPreviewStaleError(
       expectedSourceFingerprint,
       actualSourceFingerprint,
+      differences,
     );
   }
+}
+
+export function diffHallmarkSyncPlans(
+  before: HallmarkSyncPlanSnapshot,
+  after: HallmarkSyncPlanSnapshot,
+): HallmarkSyncPlanDiff {
+  const beforeByKey = new Map(
+    before.candidates.map((candidate) => [candidate.sourceKey, candidate]),
+  );
+  const afterByKey = new Map(
+    after.candidates.map((candidate) => [candidate.sourceKey, candidate]),
+  );
+  const added = after.candidates.filter(
+    (candidate) => !beforeByKey.has(candidate.sourceKey),
+  );
+  const removed = before.candidates.filter(
+    (candidate) => !afterByKey.has(candidate.sourceKey),
+  );
+  const fields: Array<keyof HallmarkEventCandidate> = [
+    "title",
+    "startDate",
+    "endDate",
+    "details",
+    "sourceUrl",
+    "year",
+  ];
+  const changed = before.candidates.flatMap((candidate) => {
+    const current = afterByKey.get(candidate.sourceKey);
+    if (!current) return [];
+    const changes = fields.flatMap((field) =>
+      candidate[field] === current[field]
+        ? []
+        : [{ field, before: candidate[field], after: current[field] }],
+    );
+    return changes.length === 0
+      ? []
+      : [{ sourceKey: candidate.sourceKey, title: current.title, changes }];
+  });
+  const planChanges: HallmarkSyncPlanDiff["planChanges"] = [];
+  for (const field of ["sourceUrl", "complete", "year"] as const) {
+    if (before[field] !== after[field]) {
+      planChanges.push({ field, before: before[field], after: after[field] });
+    }
+  }
+  return { added, removed, changed, planChanges };
 }
 
 async function writeState(values: {
@@ -228,20 +316,31 @@ export async function getHallmarkEventSyncStatus() {
 async function runSync(
   mode: "dry-run" | "apply",
   expectedSourceFingerprint?: string,
+  reviewedSource?: HallmarkSyncPlanSnapshot,
 ): Promise<HallmarkSyncResult> {
   const startedAt = new Date();
   let source: HallmarkEventsSourceResult | undefined;
   try {
     source = await fetchHallmarkEventsSource();
-    if (!source.complete || source.candidates.length === 0 || !source.year) {
-      throw new Error(
-        "Hallmark source did not produce a complete, year-consistent event set; calendar was not changed",
-      );
-    }
     if (mode === "apply" && expectedSourceFingerprint) {
+      const actualPlan = {
+        sourceUrl: source.sourceUrl,
+        complete: source.complete,
+        year: source.year,
+        candidates: source.candidates,
+      };
+      const differences = reviewedSource
+        ? diffHallmarkSyncPlans(reviewedSource, actualPlan)
+        : { added: [], removed: [], changed: [], planChanges: [] };
       assertHallmarkSourceFingerprint(
         expectedSourceFingerprint,
         source.fingerprint,
+        differences,
+      );
+    }
+    if (!source.complete || source.candidates.length === 0 || !source.year) {
+      throw new Error(
+        "Hallmark source did not produce a complete, year-consistent event set; calendar was not changed",
       );
     }
     const actions: HallmarkSyncAction[] = [];
@@ -371,6 +470,8 @@ async function runSync(
       sourceUrl: source.sourceUrl,
       sourceFingerprint: source.fingerprint,
       fetchedAt: source.fetchedAt,
+      complete: source.complete,
+      year: source.year,
       candidateCount: source.candidates.length,
       rejectedCount: source.rejected.length,
       candidates: source.candidates,
@@ -399,9 +500,18 @@ async function runSync(
 export async function runHallmarkEventsSync(
   mode: "dry-run" | "apply" = "apply",
   expectedSourceFingerprint?: string,
+  reviewedSource?: HallmarkSyncPlanSnapshot,
 ): Promise<HallmarkSyncResult> {
+  if (
+    expectedSourceFingerprint &&
+    reviewedSource &&
+    createHallmarkSyncPlanFingerprint(reviewedSource) !==
+      expectedSourceFingerprint
+  ) {
+    throw new Error("Reviewed Hallmark source does not match its fingerprint");
+  }
   if (activeRun) throw new Error("Hallmark event sync is already running");
-  activeRun = runSync(mode, expectedSourceFingerprint);
+  activeRun = runSync(mode, expectedSourceFingerprint, reviewedSource);
   try {
     return await activeRun;
   } finally {

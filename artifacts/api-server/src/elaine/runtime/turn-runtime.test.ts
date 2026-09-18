@@ -121,6 +121,61 @@ describe("ElaineTurnRuntime", () => {
     expect(second.verification.status).toBe("blocked");
   });
 
+  it("does not consume a re-plan when no concrete verification route exists", () => {
+    const runtime = new ElaineTurnRuntime({
+      traceId: "trace-no-route",
+      requestClass: { ...requestClass, kind: "action" },
+      plan: toRuntimePlan({
+        version: 1,
+        goal: "Send an invented SMS",
+        assumptions: [],
+        completionCriteria: ["The SMS delivery result is explicit"],
+        steps: [
+          {
+            id: "send",
+            label: "Send the SMS",
+            kind: "action",
+            toolName: "message_contact",
+            dependsOn: [],
+            expectedEvidence: "A successful send or a specific channel blocker",
+            required: true,
+          },
+        ],
+      }),
+    });
+    runtime.recordModelRound();
+    runtime.registerToolCalls([
+      {
+        id: "send-call",
+        name: "message_contact",
+        consequential: true,
+        confirmationRequired: false,
+        dedupeKey: "sms:invented-recipient:invented-message",
+      },
+    ]);
+    runtime.recordObservation({
+      callId: "send-call",
+      toolName: "message_contact",
+      success: false,
+      summary: "Recipient has no verified phone number",
+      errorCategory: "http_422",
+    });
+
+    const decision = runtime.verify({
+      finalContent:
+        "The recipient needs to verify a phone number before SMS can be sent.",
+      hasPendingConfirmation: false,
+      hasConcreteReplanRoute: false,
+    });
+
+    expect(decision.shouldReplan).toBe(false);
+    expect(decision.verification.status).toBe("blocked");
+    expect(runtime.snapshot().usage).toMatchObject({
+      modelRounds: 1,
+      replans: 0,
+    });
+  });
+
   it("preserves completed work across a bounded re-plan", () => {
     const runtime = new ElaineTurnRuntime({
       traceId: "trace-preserve",

@@ -248,7 +248,9 @@ export function classifyArchitectureFindings(
 
   for (const finding of current.findings) {
     const before = baseById.get(finding.id);
-    const reviewed = baselineById.has(finding.id);
+    const reviewed =
+      baselineById.has(finding.id) ||
+      baselineExceptionIds.has(`exception:${finding.id}`);
     if (!before) {
       newFindings.push(finding);
     } else if (finding.metric > before.metric) {

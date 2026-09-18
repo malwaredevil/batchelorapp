@@ -13,6 +13,7 @@ const {
   mockOpenDmChannel,
   mockPostSlackMessage,
   mockSlackConfigured,
+  MockOutboundCallIndeterminateError,
 } = vi.hoisted(() => ({
   mockSelect: vi.fn(),
   // findDuplicateScheduledReminder() runs its own db.select(...).where(...)
@@ -27,6 +28,7 @@ const {
   mockOpenDmChannel: vi.fn(),
   mockPostSlackMessage: vi.fn(),
   mockSlackConfigured: vi.fn().mockReturnValue(false),
+  MockOutboundCallIndeterminateError: class extends Error {},
 }));
 
 // resolveContact() / findDuplicateScheduledReminder() and the appUsers-backed
@@ -65,6 +67,7 @@ vi.mock("@workspace/db", () => ({
 }));
 vi.mock("../lib/calls", () => ({
   initiateOutboundCall: mockInitiateOutboundCall,
+  OutboundCallIndeterminateError: MockOutboundCallIndeterminateError,
   // waitForCallOutcome is called after every successful call — mock it so
   // tests don't hit the real AgentPhone connector.
   waitForCallOutcome: vi.fn().mockResolvedValue("answered"),
@@ -251,11 +254,30 @@ describe("call_me executor — immediate path (no scheduleAt)", () => {
     expect(mockInitiateOutboundCall).toHaveBeenCalledWith(
       expect.objectContaining({
         toNumber: "+12105559999",
-        initialGreeting: "Hey, it's your reminder!",
+        userId: 1,
+        openingMessage: "Hey, it's your reminder!",
       }),
     );
     expect(mockInsertReturning).not.toHaveBeenCalled();
     expect(JSON.stringify(result.body)).not.toContain("scheduled");
+  });
+
+  it("returns accepted/pending when call acceptance is indeterminate", async () => {
+    mockSelect.mockResolvedValue(makeSelfUser());
+    mockInitiateOutboundCall.mockRejectedValueOnce(
+      new MockOutboundCallIndeterminateError("socket timeout"),
+    );
+
+    const result = await communicationActionExecutors.call_me(
+      { greeting: "Please call me" } as never,
+      1,
+    );
+
+    expect(result.status).toBe(202);
+    expect(JSON.stringify(result.body)).toMatch(/pending|already connecting/i);
+    expect(JSON.stringify(result.body)).not.toMatch(
+      /failed to place|try again shortly/i,
+    );
   });
 });
 

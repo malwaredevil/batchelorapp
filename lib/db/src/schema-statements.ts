@@ -1359,6 +1359,11 @@ export const STATEMENTS: string[] = [
     phone_number TEXT NOT NULL UNIQUE,
     user_id      INTEGER NOT NULL,
     messages     JSONB NOT NULL DEFAULT '[]'::jsonb,
+    pending_outbound_id TEXT,
+    pending_outbound_call_id TEXT,
+    pending_outbound_opening TEXT,
+    pending_outbound_private_context TEXT,
+    pending_outbound_expires_at TIMESTAMPTZ,
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
   `ALTER TABLE agentphone_conversations ENABLE ROW LEVEL SECURITY`,
@@ -3149,6 +3154,11 @@ END $$`,
   `CREATE UNIQUE INDEX IF NOT EXISTS messenger_conversations_direct_pair_idx
      ON messenger_conversations (direct_pair_key) WHERE direct_pair_key IS NOT NULL`,
   `ALTER TABLE agentphone_conversations ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE agentphone_conversations ADD COLUMN IF NOT EXISTS pending_outbound_id TEXT`,
+  `ALTER TABLE agentphone_conversations ADD COLUMN IF NOT EXISTS pending_outbound_call_id TEXT`,
+  `ALTER TABLE agentphone_conversations ADD COLUMN IF NOT EXISTS pending_outbound_opening TEXT`,
+  `ALTER TABLE agentphone_conversations ADD COLUMN IF NOT EXISTS pending_outbound_private_context TEXT`,
+  `ALTER TABLE agentphone_conversations ADD COLUMN IF NOT EXISTS pending_outbound_expires_at TIMESTAMPTZ`,
   `ALTER TABLE elaine_email_conversations ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 0`,
 
   // ── Daily comms check table ───────────────────────────────────────────────

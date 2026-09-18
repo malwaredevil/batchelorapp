@@ -15,7 +15,11 @@ import {
   SmsOptedOutError,
   SmsRegistrationPendingError,
 } from "../lib/sms";
-import { initiateOutboundCall, waitForCallOutcome } from "../lib/calls";
+import {
+  initiateOutboundCall,
+  OutboundCallIndeterminateError,
+  waitForCallOutcome,
+} from "../lib/calls";
 import { openDmChannel, postSlackMessage, slackConfigured } from "../lib/slack";
 import { sendAssistantEmail, resendConfigured } from "../lib/email";
 import { getElaineGlobalConfig } from "../lib/elaine-config";
@@ -446,7 +450,7 @@ const CallMePayload = z.object({
     .max(500)
     .optional()
     .describe(
-      "Opening words Elaine says when the call connects. Omit for the default warm greeting.",
+      "Opening words Elaine says after the recipient first speaks. Omit for the default warm introduction.",
     ),
   scheduleAt: scheduleAtField,
   timezone: explicitTimezoneField,
@@ -581,9 +585,10 @@ export async function fireCallContact(
     };
   }
   try {
-    const { callId } = await initiateOutboundCall({
+    const { callId, pendingOutboundContext } = await initiateOutboundCall({
       toNumber: contact.phoneNumber,
-      initialGreeting: message,
+      userId: contact.id,
+      openingMessage: message,
       callScreeningPurpose: "household message",
     });
     logger.info(
@@ -594,7 +599,11 @@ export async function fireCallContact(
     // Poll for a terminal status (answered / voicemail / no-answer / error).
     // Returns "pending" if the 12-second window closes without a terminal
     // status — callers should treat "pending" as "call initiated, outcome unknown".
-    const callStatus = await waitForCallOutcome(callId);
+    const callStatus = await waitForCallOutcome(
+      callId,
+      undefined,
+      pendingOutboundContext,
+    );
     logger.info({ callId, callStatus }, "elaine: outbound call outcome");
 
     return {
@@ -609,6 +618,26 @@ export async function fireCallContact(
       },
     };
   } catch (err) {
+    if (
+      typeof OutboundCallIndeterminateError === "function" &&
+      err instanceof OutboundCallIndeterminateError
+    ) {
+      logger.warn(
+        { err, toNumber: contact.phoneNumber },
+        "elaine: outbound call acceptance indeterminate; avoiding duplicate fallback",
+      );
+      return {
+        status: 202,
+        body: {
+          type: "call_contact",
+          result: {
+            callId: null,
+            callStatus: "pending",
+            contactName: contact.displayName ?? contactName,
+          },
+        },
+      };
+    }
     logger.error({ err }, "elaine: failed to initiate outbound call");
     return {
       status: 500,
@@ -680,7 +709,8 @@ export async function fireCallMe(
   try {
     const { callId } = await initiateOutboundCall({
       toNumber: user.phoneNumber,
-      initialGreeting: resolvedGreeting,
+      userId,
+      openingMessage: resolvedGreeting,
       callScreeningPurpose: "Elaine callback request",
     });
     logger.info(
@@ -698,6 +728,27 @@ export async function fireCallMe(
       },
     };
   } catch (err) {
+    if (
+      typeof OutboundCallIndeterminateError === "function" &&
+      err instanceof OutboundCallIndeterminateError
+    ) {
+      logger.warn(
+        { err, toNumber: user.phoneNumber, userId },
+        "elaine: self-callback acceptance indeterminate; avoiding duplicate retry",
+      );
+      return {
+        status: 202,
+        body: {
+          type: "call_me",
+          result: {
+            callId: null,
+            callStatus: "pending",
+            confirmationMessage:
+              "Your call may already be connecting. Please wait a moment before trying again.",
+          },
+        },
+      };
+    }
     logger.error({ err }, "elaine: failed to initiate self-callback call");
     return {
       status: 500,
@@ -2106,7 +2157,7 @@ export const communicationActionTools: OpenAI.Chat.Completions.ChatCompletionToo
           "datetime, or (STRONGLY preferred, including for a bare clock time like 'call me at 2:30' with no " +
           "explicit day — use the at-clock-time spec kind) the structured relative-time spec described on that " +
           "field; never hand-compute the datetime (or its UTC offset) yourself. Put any reminder content the " +
-          "user wants ('remind me to pick up X') into `greeting` so Elaine says it as soon as the call connects. " +
+          "user wants ('remind me to pick up X') into `greeting` so Elaine says it after the recipient first speaks. " +
           "Only include `timezone` when the user explicitly names a different timezone/city for this call than " +
           "their own (see that field's description) — omit it otherwise. " +
           "When scheduling: confirm the resolved time in your visible reply before calling this tool. " +
@@ -2118,7 +2169,7 @@ export const communicationActionTools: OpenAI.Chat.Completions.ChatCompletionToo
             greeting: {
               type: "string",
               description:
-                "Optional opening words Elaine says when the call connects (1–2 warm sentences). Omit to use the default greeting.",
+                "Optional opening words Elaine says after the recipient first speaks (1–2 warm sentences). Omit to use the default introduction.",
             },
             scheduleAt: {
               oneOf: [

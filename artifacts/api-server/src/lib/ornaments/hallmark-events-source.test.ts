@@ -5,6 +5,7 @@ vi.mock("../env", () => ({
 }));
 
 import {
+  createHallmarkSyncPlanFingerprint,
   fetchHallmarkEventsSource,
   HALLMARK_EVENTS_URL,
   parseHallmarkEventsForTest,
@@ -80,6 +81,70 @@ describe("Hallmark event source", () => {
         reason: "Unsupported event category",
       },
     ]);
+  });
+
+  it("uses the same fingerprint for equivalent scraper presentation data", () => {
+    const first = parseHallmarkEventsForTest(structuredPage);
+    const second = parseHallmarkEventsForTest({
+      markdown: "Updated page formatting and unrelated promotional copy",
+      json: {
+        pageYear: 2026,
+        events: [
+          structuredPage.json.events[2],
+          {
+            ...structuredPage.json.events[1],
+            sourceKey: "Keepsake Ornament Debut",
+            startDate: "October 10, 2026",
+            endDate: "October 18, 2026",
+          },
+          {
+            ...structuredPage.json.events[0],
+            sourceKey: "Keepsake Ornament Premiere",
+            startDate: "July 11, 2026",
+            endDate: "July 19, 2026",
+          },
+        ],
+      },
+    });
+
+    expect(second.candidates).toEqual([...first.candidates].reverse());
+    expect(second.fingerprint).toBe(first.fingerprint);
+  });
+
+  it.each([
+    ["title", { title: "Changed calendar title" }],
+    ["date range", { endDate: "2026-07-20" }],
+    ["supported identity", { sourceKey: "ornament-premiere:2027" }],
+  ])(
+    "changes the fingerprint when the normalized %s changes",
+    (_label, change) => {
+      const result = parseHallmarkEventsForTest(structuredPage);
+      const changedCandidates = result.candidates.map((candidate, index) =>
+        index === 0 ? { ...candidate, ...change } : candidate,
+      );
+
+      expect(
+        createHallmarkSyncPlanFingerprint({
+          sourceUrl: result.sourceUrl,
+          complete: result.complete,
+          year: result.year,
+          candidates: changedCandidates,
+        }),
+      ).not.toBe(result.fingerprint);
+    },
+  );
+
+  it("changes the fingerprint when source completeness changes", () => {
+    const complete = parseHallmarkEventsForTest(structuredPage);
+
+    expect(
+      createHallmarkSyncPlanFingerprint({
+        sourceUrl: complete.sourceUrl,
+        complete: false,
+        year: complete.year,
+        candidates: complete.candidates,
+      }),
+    ).not.toBe(complete.fingerprint);
   });
 
   it("does not mark malformed or yearless date data as safe to reconcile", () => {

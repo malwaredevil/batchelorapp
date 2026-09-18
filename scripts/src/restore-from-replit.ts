@@ -156,7 +156,19 @@ async function main() {
   );
   await copyTable(source, dest, {
     table: "agentphone_conversations",
-    columns: ["id", "phone_number", "user_id", "messages", "updated_at"],
+    columns: [
+      "id",
+      "phone_number",
+      "user_id",
+      "messages",
+      "pending_outbound_id",
+      "pending_outbound_call_id",
+      "pending_outbound_opening",
+      "pending_outbound_private_context",
+      "pending_outbound_expires_at",
+      "version",
+      "updated_at",
+    ],
     orderBy: "id",
   });
   await resetSequence(dest, "agentphone_conversations", "id");

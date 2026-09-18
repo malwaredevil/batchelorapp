@@ -1278,11 +1278,27 @@ export function useElaineChat({
           invalidateActionQueries();
           toast.success("Done!");
         },
-        onError: () => {
+        onError: (error) => {
+          // Confirmation is a one-shot authorization. Do not leave the same
+          // consequential action available to submit again after an
+          // ambiguous network/provider failure.
+          setActionDone(true);
+          setPendingActions((prev) => prev.slice(1));
+          const rawMessage =
+            error instanceof Error ? error.message : String(error ?? "");
+          let message = rawMessage;
+          try {
+            const parsed = JSON.parse(rawMessage) as { error?: unknown };
+            if (typeof parsed.error === "string") message = parsed.error;
+          } catch {
+            // customFetch may already have reduced the response to plain text.
+          }
           toast.error(
-            <>
-              <ElaineName /> couldn't do that just now. Please try again.
-            </>,
+            message || (
+              <>
+                <ElaineName /> couldn't do that just now.
+              </>
+            ),
           );
         },
       },

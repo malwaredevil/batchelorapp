@@ -57,6 +57,7 @@ import { MarkdownMessage } from "./MarkdownMessage";
 import { ChatWidget } from "./ChatWidgets";
 import { LinkPreviewCard } from "./LinkPreviewCard";
 import { ElainePlanProgress } from "./ElainePlanProgress";
+import { MessageCopyButton } from "./MessageCopyButton";
 
 // ─── Communication action result helpers ─────────────────────────────────────
 
@@ -278,7 +279,7 @@ function buildChatItems(messages: AssistantMessage[]): ChatItem[] {
 }
 
 /** Renders message text with markdown + [N] citation markers turned into clickable links. */
-function MessageText({
+export function MessageText({
   text,
   citations,
 }: {
@@ -287,10 +288,13 @@ function MessageText({
 }) {
   if (citations.length === 0) return <MarkdownMessage text={text} />;
 
-  // Inject citation links as inline [N] markers inside the final text block
-  // by replacing [N] references with anchor elements after markdown rendering.
-  // For simplicity: split on [N] markers, render text blocks as markdown, links inline.
-  const parts = text.split(/(\[\d+\])/g);
+  // Keep fenced code intact so array indexes and other citation-shaped code
+  // remain part of the raw text copied from that block.
+  const parts = text
+    .split(/(```[\s\S]*?(?:```|$))/g)
+    .flatMap((part) =>
+      part.startsWith("```") ? [part] : part.split(/(\[\d+\])/g),
+    );
   return (
     <div className="space-y-0.5">
       {parts.map((part, i) => {
@@ -860,11 +864,17 @@ export function ElaineChatPanel({
                     Not sent — tap to retry
                   </button>
                 )}
-                {showTimestamp && msg.createdAt && (
-                  <span className="mr-1 text-[11px] text-muted-foreground/50 select-none tabular-nums">
-                    {formatMessageTime(msg.createdAt)}
-                  </span>
-                )}
+                <div className="flex min-h-10 items-center justify-end gap-1">
+                  {showTimestamp && msg.createdAt && (
+                    <span className="text-[11px] text-muted-foreground/50 select-none tabular-nums">
+                      {formatMessageTime(msg.createdAt)}
+                    </span>
+                  )}
+                  <MessageCopyButton
+                    text={msg.content}
+                    complete={!msg.queued && !msg.failed}
+                  />
+                </div>
                 {firstUserUrl && <LinkPreviewCard url={firstUserUrl} />}
               </div>
             );
@@ -928,11 +938,14 @@ export function ElaineChatPanel({
                 {firstAssistantUrl && (
                   <LinkPreviewCard url={firstAssistantUrl} />
                 )}
-                {showTimestamp && msg.createdAt && (
-                  <span className="ml-1 text-[11px] text-muted-foreground/50 select-none tabular-nums">
-                    {formatMessageTime(msg.createdAt)}
-                  </span>
-                )}
+                <div className="flex min-h-10 items-center gap-1">
+                  <MessageCopyButton text={text} complete={!msg.stopped} />
+                  {showTimestamp && msg.createdAt && (
+                    <span className="text-[11px] text-muted-foreground/50 select-none tabular-nums">
+                      {formatMessageTime(msg.createdAt)}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           );

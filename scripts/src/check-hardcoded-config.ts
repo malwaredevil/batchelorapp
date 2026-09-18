@@ -268,8 +268,6 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   // Fixed protocol limits in the large Elaine dispatcher; these protect phone
   // verification and bound internal tool loops rather than owner settings.
   "artifacts/api-server/src/elaine/index.ts:919", // MAX_PHONE_CODE_ATTEMPTS
-  "artifacts/api-server/src/elaine/index.ts:10217", // MAX_ROUNDS
-  "artifacts/api-server/src/elaine/index.ts:10479", // MAX_ROUNDS
   // Client-side concurrency safeguard for an expensive image-processing
   // action, not an owner-facing collection setting.
   "artifacts/modules/src/quilting/pages/fabrics/index.tsx:567", // CREASE_BATCH_SIZE
@@ -290,6 +288,11 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   // Input-validation cap for a short internal category label, not a tunable
   // collection setting.
   "artifacts/api-server/src/routes/ornaments/ornaments.ts:119", // MAX_LABEL
+  // Fixed client-only display heuristics: collapse unusually long citation
+  // lists and load older chat messages near the scroll boundary. Neither
+  // changes Elaine's server behavior or belongs in owner-facing settings.
+  "lib/elaine-ui/src/ElaineChatPanel.tsx:351", // INLINE_CITATION_LIMIT
+  "lib/elaine-ui/src/ElaineChatPanel.tsx:544", // SCROLL_TOP_LOAD_THRESHOLD
   // Scanner heuristic that avoids treating short common strings as secrets;
   // it is a fixed detector safeguard, never product configuration.
   "scripts/src/check-public-file-secrets.ts:169", // MIN_SECRET_LENGTH
@@ -336,8 +339,8 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   // budget; these inner loops are implementation guards for the restricted
   // channel path that are too tightly coupled to the response-parsing logic
   // to be safely raised by the owner.
-  "artifacts/api-server/src/elaine/index.ts:10256", // MAX_ROUNDS (restricted-channel OpenAI-Responses attempt loop)
-  "artifacts/api-server/src/elaine/index.ts:10518", // MAX_ROUNDS (restricted-channel reply loop, SMS/email/Slack)
+  "artifacts/api-server/src/elaine/index.ts:10269", // MAX_ROUNDS (restricted-channel OpenAI-Responses attempt loop)
+  "artifacts/api-server/src/elaine/index.ts:10531", // MAX_ROUNDS (restricted-channel reply loop, SMS/email/Slack)
 
   // ---- lib/comm-check-scheduler.ts ----
   // Per-channel network safety timeout. This bounds a single delivery attempt

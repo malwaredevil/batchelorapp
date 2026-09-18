@@ -39,7 +39,7 @@ import { getCategoryPalette, colorToHex } from "@workspace/web-core";
 import { toast } from "sonner";
 import { parseCell, fmtInch } from "@/quilting/lib/cell-parser";
 import {
-  svgCellStr,
+  buildEmbeddedLayoutSvgString,
   downloadSvgAsPng,
   downloadSvgAsJpeg,
   downloadAsSvg,
@@ -135,135 +135,78 @@ const SORT_LABELS: Record<SortKey, string> = {
   "name-desc": "Name Z–A",
 };
 
-// ---------------------------------------------------------------------------
-// Export helpers
-// ---------------------------------------------------------------------------
-
-function buildLayoutSvgString(
-  layout: LayoutSummary,
-  blockMap: Map<number, BlockSummary>,
-  size: number,
-): string {
-  const sashW = layout.sashingWidthInches ?? 0;
-  const bordW = layout.borderWidthInches ?? 0;
-  const sashingColor = layout.sashingColor ?? "#d4c5a9";
-  const borderColor = layout.borderColor ?? "#8b6f5e";
-  const cornerstoneColorStr = layout.cornerstoneColor ?? null;
-
-  const unitW = layout.cols + sashW * (layout.cols - 1) + bordW * 2;
-  const unitH = layout.rows + sashW * (layout.rows - 1) + bordW * 2;
-  const scale = size / Math.max(unitW, unitH);
-  const cellPx = scale;
-  const sashPx = sashW * scale;
-  const borderPx = bordW * scale;
-  const W = unitW * scale;
-  const H = unitH * scale;
-
-  const parts: string[] = [];
-  parts.push(
-    `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">`,
-  );
-  if (borderPx > 0)
-    parts.push(
-      `<rect x="0" y="0" width="${W}" height="${H}" fill="${borderColor}"/>`,
-    );
-  if (sashPx > 0) {
-    parts.push(
-      `<rect x="${borderPx}" y="${borderPx}" width="${W - borderPx * 2}" height="${H - borderPx * 2}" fill="${sashingColor}"/>`,
-    );
-  } else {
-    parts.push(
-      `<rect x="${borderPx}" y="${borderPx}" width="${W - borderPx * 2}" height="${H - borderPx * 2}" fill="#FFFFFF"/>`,
-    );
-  }
-  if (sashPx > 0 && cornerstoneColorStr) {
-    for (let r = 0; r < layout.rows - 1; r++) {
-      for (let c = 0; c < layout.cols - 1; c++) {
-        const cx2 = borderPx + (c + 1) * (cellPx + sashPx) - sashPx;
-        const cy2 = borderPx + (r + 1) * (cellPx + sashPx) - sashPx;
-        parts.push(
-          `<rect x="${cx2}" y="${cy2}" width="${sashPx}" height="${sashPx}" fill="${cornerstoneColorStr}"/>`,
-        );
-      }
-    }
-  }
-  layout.cells.forEach((cell, i) => {
-    const row = Math.floor(i / layout.cols);
-    const col = i % layout.cols;
-    const x = borderPx + col * (cellPx + sashPx);
-    const y = borderPx + row * (cellPx + sashPx);
-    const block = cell.blockId !== null ? blockMap.get(cell.blockId) : null;
-    if (!block) {
-      parts.push(
-        `<rect x="${x}" y="${y}" width="${cellPx}" height="${cellPx}" fill="#F5F5F5" stroke="#E0E0E0" stroke-width="0.5"/>`,
-      );
-      return;
-    }
-    const bCellPx = cellPx / block.gridSize;
-    const cx = x + cellPx / 2;
-    const cy = y + cellPx / 2;
-    parts.push(`<g transform="rotate(${cell.rotation}, ${cx}, ${cy})">`);
-    for (let j = 0; j < block.cells.length; j++) {
-      const br = Math.floor(j / block.gridSize);
-      const bc = j % block.gridSize;
-      parts.push(
-        svgCellStr(
-          x + bc * bCellPx,
-          y + br * bCellPx,
-          bCellPx,
-          bCellPx,
-          block.cells[j] ?? "",
-        ),
-      );
-    }
-    parts.push(`</g>`);
-  });
-  parts.push(`</svg>`);
-  return parts.join("");
-}
-
 async function exportLayoutAsPng(
   layout: LayoutSummary,
   blockMap: Map<number, BlockSummary>,
+  fabricUrlMap: Record<number, string>,
+  fabricNames: Record<number, string>,
 ) {
-  const svgStr = buildLayoutSvgString(layout, blockMap, 800);
   const name = (layout.name.trim() || "layout")
     .replace(/\s+/g, "-")
     .toLowerCase();
   try {
-    await downloadSvgAsPng(svgStr, `${name}.png`);
+    const svgStr = await buildEmbeddedLayoutSvgString(
+      layout,
+      blockMap,
+      800,
+      fabricUrlMap,
+      { fabricNames },
+    );
+    await downloadSvgAsPng(svgStr, `${name}.png`, { fabricNames });
     toast.success("Exported as PNG.");
-  } catch {
-    toast.error("Export failed.");
+  } catch (error) {
+    toast.error(
+      error instanceof Error ? error.message : "Couldn’t create the download.",
+    );
   }
 }
 
 async function exportLayoutAsJpeg(
   layout: LayoutSummary,
   blockMap: Map<number, BlockSummary>,
+  fabricUrlMap: Record<number, string>,
+  fabricNames: Record<number, string>,
 ) {
-  const svgStr = buildLayoutSvgString(layout, blockMap, 800);
   const name = (layout.name.trim() || "layout")
     .replace(/\s+/g, "-")
     .toLowerCase();
   try {
-    await downloadSvgAsJpeg(svgStr, `${name}.jpg`);
+    const svgStr = await buildEmbeddedLayoutSvgString(
+      layout,
+      blockMap,
+      800,
+      fabricUrlMap,
+      { fabricNames },
+    );
+    await downloadSvgAsJpeg(svgStr, `${name}.jpg`, { fabricNames });
     toast.success("Exported as JPEG.");
-  } catch {
-    toast.error("Export failed.");
+  } catch (error) {
+    toast.error(
+      error instanceof Error ? error.message : "Couldn’t create the download.",
+    );
   }
 }
 
-function exportLayoutAsSvg(
+async function exportLayoutAsSvg(
   layout: LayoutSummary,
   blockMap: Map<number, BlockSummary>,
+  fabricUrlMap: Record<number, string>,
 ) {
-  const svgStr = buildLayoutSvgString(layout, blockMap, 800);
   const name = (layout.name.trim() || "layout")
     .replace(/\s+/g, "-")
     .toLowerCase();
-  downloadAsSvg(svgStr, `${name}.svg`);
-  toast.success("Exported as SVG.");
+  try {
+    const svgStr = await buildEmbeddedLayoutSvgString(
+      layout,
+      blockMap,
+      800,
+      fabricUrlMap,
+    );
+    downloadAsSvg(svgStr, `${name}.svg`);
+    toast.success("Exported as SVG.");
+  } catch {
+    toast.error("Export failed because a fabric image could not be embedded.");
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -280,6 +223,7 @@ function LayoutCard({
   onFilterByCategory,
   onFilterByColor,
   fabricUrlMap = {},
+  fabricNames = {},
   onEditCategories,
 }: {
   layout: LayoutSummary;
@@ -291,6 +235,7 @@ function LayoutCard({
   onFilterByCategory?: (id: number) => void;
   onFilterByColor?: (hex: string) => void;
   fabricUrlMap?: Record<number, string>;
+  fabricNames?: Record<number, string>;
   onEditCategories?: () => void;
 }) {
   const [, navigate] = useLocation();
@@ -435,19 +380,35 @@ function LayoutCard({
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent>
                   <DropdownMenuItem
-                    onClick={() => void exportLayoutAsPng(layout, blockMap)}
+                    onClick={() =>
+                      void exportLayoutAsPng(
+                        layout,
+                        blockMap,
+                        fabricUrlMap,
+                        fabricNames,
+                      )
+                    }
                   >
                     <FileImage className="mr-2 h-3.5 w-3.5" />
                     PNG
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    onClick={() => void exportLayoutAsJpeg(layout, blockMap)}
+                    onClick={() =>
+                      void exportLayoutAsJpeg(
+                        layout,
+                        blockMap,
+                        fabricUrlMap,
+                        fabricNames,
+                      )
+                    }
                   >
                     <FileImage className="mr-2 h-3.5 w-3.5" />
                     JPEG
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    onClick={() => exportLayoutAsSvg(layout, blockMap)}
+                    onClick={() =>
+                      void exportLayoutAsSvg(layout, blockMap, fabricUrlMap)
+                    }
                   >
                     <FileCode2 className="mr-2 h-3.5 w-3.5" />
                     SVG
@@ -512,6 +473,13 @@ export default function Layouts() {
 
   const fabricUrlMap = useMemo(
     () => buildFabricUrlMap(fabricsList ?? []),
+    [fabricsList],
+  );
+  const fabricNames = useMemo(
+    () =>
+      Object.fromEntries(
+        (fabricsList ?? []).map((fabric) => [fabric.id, fabric.name]),
+      ),
     [fabricsList],
   );
 
@@ -955,6 +923,7 @@ export default function Layouts() {
                 )
               }
               fabricUrlMap={fabricUrlMap}
+              fabricNames={fabricNames}
               onEditCategories={() => setCategoryEditItem(layout)}
             />
           ))}

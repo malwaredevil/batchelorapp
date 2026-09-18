@@ -131,9 +131,6 @@ vi.mock("./rich-text-plaintext", () => ({
   richTextToPlainText: mockRichTextToPlainText,
   richTextToSpeech: vi.fn().mockReturnValue(""),
 }));
-vi.mock("./agentphone-conversation", () => ({
-  seedOutboundCallContext: vi.fn().mockResolvedValue(undefined),
-}));
 vi.mock("drizzle-orm", () => ({
   inArray: vi.fn(),
   eq: vi.fn(),

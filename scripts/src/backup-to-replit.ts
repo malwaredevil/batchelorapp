@@ -95,8 +95,20 @@ CREATE TABLE IF NOT EXISTS agentphone_conversations (
   phone_number  TEXT NOT NULL UNIQUE,
   user_id       INTEGER NOT NULL,
   messages      JSONB NOT NULL DEFAULT '[]'::jsonb,
+  pending_outbound_id TEXT,
+  pending_outbound_call_id TEXT,
+  pending_outbound_opening TEXT,
+  pending_outbound_private_context TEXT,
+  pending_outbound_expires_at TIMESTAMPTZ,
+  version       INTEGER NOT NULL DEFAULT 0,
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE agentphone_conversations ADD COLUMN IF NOT EXISTS pending_outbound_id TEXT;
+ALTER TABLE agentphone_conversations ADD COLUMN IF NOT EXISTS pending_outbound_call_id TEXT;
+ALTER TABLE agentphone_conversations ADD COLUMN IF NOT EXISTS pending_outbound_opening TEXT;
+ALTER TABLE agentphone_conversations ADD COLUMN IF NOT EXISTS pending_outbound_private_context TEXT;
+ALTER TABLE agentphone_conversations ADD COLUMN IF NOT EXISTS pending_outbound_expires_at TIMESTAMPTZ;
+ALTER TABLE agentphone_conversations ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 0;
 
 -- Elaine cross-channel context (rolling per-user log of recent turns)
 CREATE TABLE IF NOT EXISTS elaine_cross_channel_context (
@@ -1921,7 +1933,19 @@ async function main() {
 
   summary["agentphone_conversations"] = await copyTable(source, dest, {
     table: "agentphone_conversations",
-    columns: ["id", "phone_number", "user_id", "messages", "updated_at"],
+    columns: [
+      "id",
+      "phone_number",
+      "user_id",
+      "messages",
+      "pending_outbound_id",
+      "pending_outbound_call_id",
+      "pending_outbound_opening",
+      "pending_outbound_private_context",
+      "pending_outbound_expires_at",
+      "version",
+      "updated_at",
+    ],
     orderBy: "id",
     jsonbColumns: ["messages"],
   });

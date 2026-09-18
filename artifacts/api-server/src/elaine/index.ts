@@ -144,6 +144,7 @@ import { searchHallmark } from "../lib/ornaments/hallmark-search";
 import { lookupBarcode } from "../lib/ornaments/barcode";
 import { lookupFlightPrices } from "../lib/travels/flights";
 import { removeWishlistItemExecutor } from "./travel-wishlist-executors";
+import { buildAutoRunActionFailureCorrection } from "./auto-run-failure";
 import { fetchJsonSafe } from "../lib/ssrf-safe-fetch";
 import { consultExperts } from "../lib/expert-consult";
 import {
@@ -5307,6 +5308,7 @@ router.post("/chat", async (req, res) => {
     // action is "ready to confirm". Tracked here so a corrective note can be
     // appended once the round finishes — see its use below.
     const droppedActionAttempts: string[] = [];
+    let autoRunExecutorFailureCount = 0;
     // Accumulates streamed tool-call fragments by their index. `arguments`
     // arrives as growing string fragments across multiple chunks — this is
     // the standard OpenAI/OpenRouter streaming tool-call shape. `id` only
@@ -5861,8 +5863,17 @@ router.post("/chat", async (req, res) => {
           userId,
           appOperationContextFromRequest(req),
         );
-        executedActions.push({ ...finalAction, status, result: body });
         const executedOk = status >= 200 && status < 400;
+        // Executor bodies are implementation details. In particular, a
+        // failed provider/storage/DB response may put its raw error in
+        // `body.error`; never expose that through the completed-action event.
+        executedActions.push({
+          ...finalAction,
+          status,
+          result: executedOk
+            ? body
+            : { error: "Action could not be completed." },
+        });
         runtime.recordObservation({
           callId: schedule.id,
           toolName: name,
@@ -5883,6 +5894,7 @@ router.post("/chat", async (req, res) => {
             "elaine: auto_run action executor returned an error",
           );
           droppedActionAttempts.push(name);
+          autoRunExecutorFailureCount++;
         }
         continue;
       }
@@ -5970,13 +5982,15 @@ router.post("/chat", async (req, res) => {
       // narrative stand uncorrected. Appended as its own delta so the client
       // renders it the same way as any other streamed text.
       if (droppedActionAttempts.length > 0) {
-        const noteText =
-          droppedActionAttempts.length === 1
-            ? "I wasn't actually able to prepare that as a confirmable action just now — nothing was scheduled or changed. Please try again in a moment."
-            : "I wasn't actually able to prepare some of those as confirmable actions just now — nothing was scheduled or changed for them. Please try again in a moment.";
-        const noteDelta = rawContent.trim() ? `\n\n${noteText}` : noteText;
-        rawContent += noteDelta;
-        sendEvent("delta", { text: noteDelta });
+        const noteText = buildAutoRunActionFailureCorrection({
+          droppedActionCount: droppedActionAttempts.length,
+          executorFailureCount: autoRunExecutorFailureCount,
+        });
+        if (noteText) {
+          const noteDelta = rawContent.trim() ? `\n\n${noteText}` : noteText;
+          rawContent += noteDelta;
+          sendEvent("delta", { text: noteDelta });
+        }
       }
       // Self-heal: catch Elaine describing a check/confirmation ("I checked
       // and...", "I confirmed that...") that has no corresponding tool call
@@ -6022,9 +6036,14 @@ router.post("/chat", async (req, res) => {
           );
         }
       }
+      const selectedReplanTool = selectElaineReplanTool(
+        runtime.snapshot(),
+        MODEL_VISIBLE_HARD_TOOL_NAMES,
+      );
       const decision = runtime.verify({
         finalContent: rawContent,
         hasPendingConfirmation: resolvedActions.length > 0,
+        hasConcreteReplanRoute: selectedReplanTool !== null,
       });
       if (
         !decision.shouldReplan &&
@@ -6066,10 +6085,7 @@ router.post("/chat", async (req, res) => {
         !repeatedActionBuildFailure &&
         round < MAX_ROUNDS - 1
       ) {
-        const selectedTool = selectElaineReplanTool(
-          runtime.snapshot(),
-          MODEL_VISIBLE_HARD_TOOL_NAMES,
-        );
+        const selectedTool = selectedReplanTool;
         if (selectedTool) {
           runtime.markFailedReadStepsAdjusted(
             selectedTool.replacesStepIds,
@@ -7674,6 +7690,7 @@ router.post("/chat", async (req, res) => {
   const finalVerification = runtime.verify({
     finalContent: rawContent,
     hasPendingConfirmation: resolvedActions.length > 0,
+    hasConcreteReplanRoute: false,
   });
   if (finalVerification.verification.status === "blocked") {
     req.log.warn(

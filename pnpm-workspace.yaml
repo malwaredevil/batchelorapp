@@ -110,7 +110,7 @@ overrides:
   filelist: ">=2.0.2 <3" # GHSA-mh99: transitively pulls minimatch@^10 which has no brace-expansion dep
   jake: ">=12.10.1 <13" # required by ejs; v12 uses filelist@^2, eliminating brace-expansion@^2 chain
   body-parser: ">=2.3.0"
-  js-yaml: 4.3.1 # GHSA-5p4m-2wfm-xmqj/CVE-2026-59870: quadratic CPU consumption in !!omap resolution; patched 4.3.1. Keep EXACT pin (not a range) — an unbounded override previously let js-yaml jump to an ESM-only v5 and broke orval codegen (see orval-codegen-js-yaml-pin memory)
+  js-yaml: 4.3.2 # GHSA-5p4m-2wfm-xmqj/CVE-2026-59870 plus maxTotalMergeKeys CPU-limit bypass; patched 4.3.2. Keep EXACT pin (not a range) — an unbounded override previously let js-yaml jump to an ESM-only v5 and broke orval codegen (see orval-codegen-js-yaml-pin memory)
   "lightningcss>lightningcss-android-arm64": "-"
   "lightningcss>lightningcss-darwin-arm64": "-"
   "lightningcss>lightningcss-darwin-x64": "-"

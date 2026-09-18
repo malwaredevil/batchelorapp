@@ -13,6 +13,8 @@ import {
   callsConfigured,
   initiateOutboundCall,
   buildGenericReminderCallScript,
+  OutboundCallIndeterminateError,
+  waitForCallOutcome,
 } from "./calls";
 import {
   shouldRunScheduledTask,
@@ -28,7 +30,6 @@ import {
   fireCallMe,
 } from "../elaine/communication-actions";
 import { richTextToPlainText, richTextToSpeech } from "./rich-text-plaintext";
-import { seedOutboundCallContext } from "./agentphone-conversation";
 
 /**
  * Unified, entity-agnostic reminder delivery scheduler — replaces the old
@@ -628,7 +629,7 @@ export async function claimAndSendDueDeliveries(): Promise<{
           const speechDescription = richTextToSpeech(
             delivery.reminder_description,
           );
-          const initialGreeting = buildGenericReminderCallScript(
+          const openingMessage = buildGenericReminderCallScript(
             delivery.reminder_title,
             label,
             formattedDate,
@@ -640,35 +641,49 @@ export async function claimAndSendDueDeliveries(): Promise<{
             // once the caller says yes (see seedOutboundCallContext below).
             !!speechDescription,
           );
-          await initiateOutboundCall({
+          const call = await initiateOutboundCall({
             toNumber: phone,
-            initialGreeting,
-            callScreeningPurpose: `Reminder: ${delivery.reminder_title}`,
-          });
-          // Best-effort: give the restricted voice-turn engine the context
-          // it needs to answer "yes" to the description offer above without
-          // ever having seen the raw HTML or a URL itself.
-          await seedOutboundCallContext(
-            phone,
-            Number(delivery.recipient_ref),
-            initialGreeting,
-            speechDescription
+            userId: Number(delivery.recipient_ref),
+            openingMessage,
+            privateContextNote: speechDescription
               ? `if the caller wants to hear the reminder description, read them exactly this: "${speechDescription}"`
               : undefined,
+            callScreeningPurpose: `Reminder: ${delivery.reminder_title}`,
+          });
+          // Reconcile the exact seeded row before marking delivery complete;
+          // call-id cleanup cannot see a context whose attach failed.
+          const outcome = await waitForCallOutcome(
+            call.callId,
+            undefined,
+            call.pendingOutboundContext,
+          );
+          logger.info(
+            { deliveryId: delivery.id, callId: call.callId, outcome },
+            "reminders-scheduler: outbound call outcome",
           );
         } catch (callErr) {
-          logger.warn(
-            { err: callErr, deliveryId: delivery.id },
-            "reminders-scheduler: outbound call failed — falling back to SMS",
-          );
-          await sendGenericReminderAlertSms(
-            phone,
-            delivery.reminder_title,
-            label,
-            formattedDate,
-            contextLabel,
-            calendarEventUrl,
-          );
+          if (
+            typeof OutboundCallIndeterminateError === "function" &&
+            callErr instanceof OutboundCallIndeterminateError
+          ) {
+            logger.warn(
+              { err: callErr, deliveryId: delivery.id },
+              "reminders-scheduler: call acceptance indeterminate; retaining context without SMS fallback",
+            );
+          } else {
+            logger.warn(
+              { err: callErr, deliveryId: delivery.id },
+              "reminders-scheduler: outbound call failed — falling back to SMS",
+            );
+            await sendGenericReminderAlertSms(
+              phone,
+              delivery.reminder_title,
+              label,
+              formattedDate,
+              contextLabel,
+              calendarEventUrl,
+            );
+          }
         }
       } else if (delivery.channel === "slack") {
         if (!slackEnabled) throw new Error("slack channel not configured");

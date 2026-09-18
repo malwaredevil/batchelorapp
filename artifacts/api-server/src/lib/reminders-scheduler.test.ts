@@ -106,6 +106,8 @@ vi.mock("./slack", () => ({
 vi.mock("./calls", () => ({
   callsConfigured: vi.fn().mockReturnValue(false),
   initiateOutboundCall: vi.fn(),
+  waitForCallOutcome: vi.fn().mockResolvedValue("answered"),
+  OutboundCallIndeterminateError: class OutboundCallIndeterminateError extends Error {},
   buildGenericReminderCallScript: vi.fn().mockReturnValue(""),
 }));
 vi.mock("./scheduler-guard", () => ({
@@ -130,9 +132,6 @@ vi.mock("./google-calendar", () => ({
 vi.mock("./rich-text-plaintext", () => ({
   richTextToPlainText: mockRichTextToPlainText,
   richTextToSpeech: vi.fn().mockReturnValue(""),
-}));
-vi.mock("./agentphone-conversation", () => ({
-  seedOutboundCallContext: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("drizzle-orm", () => ({
   inArray: vi.fn(),

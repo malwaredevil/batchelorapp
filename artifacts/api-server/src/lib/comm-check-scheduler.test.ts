@@ -276,6 +276,16 @@ describe("comm-check per-channel retries", () => {
       phone: "n/a",
     });
     expect(mockInitiateOutboundCall).toHaveBeenCalledTimes(2);
+    expect(mockInitiateOutboundCall).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        userId: 1,
+        openingMessage: expect.stringContaining(
+          "daily Batchelor App communications check",
+        ),
+        callScreeningIdentity: "Elaine from Batchelor App",
+        callScreeningPurpose: "daily communications test",
+      }),
+    );
   });
 
   it("does not let an expired worker overwrite a newer stale-reclaim attempt", async () => {

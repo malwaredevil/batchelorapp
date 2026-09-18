@@ -57,7 +57,9 @@
  */
 
 import pg from "pg";
+import { pathToFileURL } from "node:url";
 import { resolveProductionDatabaseUrl, sslConfig } from "@workspace/db";
+import { copyTable } from "./copy-table-helpers.js";
 
 const { Client } = pg;
 
@@ -95,8 +97,20 @@ CREATE TABLE IF NOT EXISTS agentphone_conversations (
   phone_number  TEXT NOT NULL UNIQUE,
   user_id       INTEGER NOT NULL,
   messages      JSONB NOT NULL DEFAULT '[]'::jsonb,
+  pending_outbound_id TEXT,
+  pending_outbound_call_id TEXT,
+  pending_outbound_opening TEXT,
+  pending_outbound_private_context TEXT,
+  pending_outbound_expires_at TIMESTAMPTZ,
+  version       INTEGER NOT NULL DEFAULT 0,
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE agentphone_conversations ADD COLUMN IF NOT EXISTS pending_outbound_id TEXT;
+ALTER TABLE agentphone_conversations ADD COLUMN IF NOT EXISTS pending_outbound_call_id TEXT;
+ALTER TABLE agentphone_conversations ADD COLUMN IF NOT EXISTS pending_outbound_opening TEXT;
+ALTER TABLE agentphone_conversations ADD COLUMN IF NOT EXISTS pending_outbound_private_context TEXT;
+ALTER TABLE agentphone_conversations ADD COLUMN IF NOT EXISTS pending_outbound_expires_at TIMESTAMPTZ;
+ALTER TABLE agentphone_conversations ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 0;
 
 -- Elaine cross-channel context (rolling per-user log of recent turns)
 CREATE TABLE IF NOT EXISTS elaine_cross_channel_context (
@@ -1802,61 +1816,6 @@ CREATE TABLE IF NOT EXISTS elaine_scheduled_actions (
 );
 `;
 
-async function copyTable(
-  source: pg.Client,
-  dest: pg.Client,
-  opts: {
-    table: string;
-    columns: string[];
-    orderBy?: string;
-    jsonbColumns?: string[];
-  },
-): Promise<number> {
-  const cols = opts.columns.join(", ");
-  const order = opts.orderBy ? ` ORDER BY ${opts.orderBy}` : "";
-  const { rows } = await source.query(
-    `SELECT ${cols} FROM ${opts.table}${order}`,
-  );
-  if (rows.length === 0) return 0;
-
-  await dest.query(`TRUNCATE ${opts.table} CASCADE`);
-  const jsonbCols = new Set(opts.jsonbColumns ?? []);
-  const BATCH = 500;
-  for (let i = 0; i < rows.length; i += BATCH) {
-    const batch = rows.slice(i, i + BATCH);
-    const values: unknown[] = [];
-    const rowPlaceholders = batch.map((row, ri) => {
-      const tuple = opts.columns.map((c, ci) => {
-        const v = row[c] ?? null;
-        // JSONB columns must always be re-encoded as JSON text, not just
-        // when the driver handed back an object/array. The pg driver
-        // auto-parses JSONB scalars (a bare string, number, or boolean
-        // value stored in a JSONB column) into the matching JS primitive,
-        // so a JSONB column holding e.g. the string `6" Widget` comes back
-        // as a plain JS string. Passing that raw string as a query param
-        // is invalid JSON (unquoted, unescaped) and 22P02s the insert.
-        // JSON.stringify() on every non-null value (object, array, or
-        // primitive) always produces valid JSON text.
-        values.push(v !== null && jsonbCols.has(c) ? JSON.stringify(v) : v);
-        return `$${ri * opts.columns.length + ci + 1}`;
-      });
-      return `(${tuple.join(", ")})`;
-    });
-    try {
-      await dest.query(
-        `INSERT INTO ${opts.table} (${cols}) VALUES ${rowPlaceholders.join(", ")} ON CONFLICT DO NOTHING`,
-        values,
-      );
-    } catch (err) {
-      console.error(
-        `[copyTable] batch failed on table="${opts.table}" rows ${i}–${i + batch.length - 1}`,
-      );
-      throw err;
-    }
-  }
-  return rows.length;
-}
-
 async function resetSequence(dest: pg.Client, table: string, col: string) {
   await dest.query(`
     SELECT setval(
@@ -1921,9 +1880,29 @@ async function main() {
 
   summary["agentphone_conversations"] = await copyTable(source, dest, {
     table: "agentphone_conversations",
-    columns: ["id", "phone_number", "user_id", "messages", "updated_at"],
+    columns: [
+      "id",
+      "phone_number",
+      "user_id",
+      "messages",
+      "pending_outbound_id",
+      "pending_outbound_call_id",
+      "pending_outbound_opening",
+      "pending_outbound_private_context",
+      "pending_outbound_expires_at",
+      "version",
+      "updated_at",
+    ],
     orderBy: "id",
     jsonbColumns: ["messages"],
+    missingColumnDefaults: {
+      pending_outbound_id: "NULL",
+      pending_outbound_call_id: "NULL",
+      pending_outbound_opening: "NULL",
+      pending_outbound_private_context: "NULL",
+      pending_outbound_expires_at: "NULL",
+      version: "0",
+    },
   });
   await resetSequence(dest, "agentphone_conversations", "id");
 
@@ -4078,7 +4057,12 @@ async function main() {
   await dest.end();
 }
 
-main().catch((err) => {
-  console.error("Backup failed:", err);
-  process.exit(1);
-});
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
+  main().catch((err) => {
+    console.error("Backup failed:", err);
+    process.exit(1);
+  });
+}

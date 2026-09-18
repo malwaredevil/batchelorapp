@@ -25,6 +25,11 @@ import {
   rateLimitMockFactory,
 } from "./test-helpers/standard-mock-scaffold";
 
+// Keep the bounded-loop expectation tied to the owner-configurable budget
+// supplied by the test config below, rather than coupling it to an inline
+// implementation literal.
+const restrictedMaxModelRounds = 3;
+
 // ---------------------------------------------------------------------------
 // Hoisted refs — created before vi.mock() factories run so factories can
 // reference them without temporal dead-zone errors.
@@ -129,6 +134,7 @@ vi.mock("../lib/elaine-config", () => ({
     plannerModel: "openai/gpt-4o-mini",
     plannerEnabled: false,
     responsesEnabled: false,
+    runtimeBudget: { maxModelRounds: restrictedMaxModelRounds },
     models: { restrictedTextModel: "restricted-text-model" },
   }),
   invalidateElaineGlobalConfigCache: vi.fn(),
@@ -753,8 +759,10 @@ describe("Non-voice restricted channels — OpenAI Responses API path", () => {
     });
 
     expect(result.replyText).toBe("Synthesized answer from the tool results.");
-    // 3 tool-calling rounds (MAX_ROUNDS) + 1 forced synthesis call.
-    expect(streamOpenAIResponseRound).toHaveBeenCalledTimes(4);
+    // Configured tool-calling rounds + 1 forced synthesis call.
+    expect(streamOpenAIResponseRound).toHaveBeenCalledTimes(
+      restrictedMaxModelRounds + 1,
+    );
   });
 
   it("falls back to the OpenRouter restricted-text-model when the Responses API throws", async () => {

@@ -322,8 +322,8 @@ export function ElaineWidget({
   }, []);
 
   if (
-    !settings?.enabled ||
-    settings.widgetHidden ||
+    settings?.enabled === false ||
+    settings?.widgetHidden ||
     sessionHidden ||
     onFullScreenChat
   ) {

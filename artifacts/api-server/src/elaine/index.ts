@@ -5307,6 +5307,7 @@ router.post("/chat", async (req, res) => {
     // action is "ready to confirm". Tracked here so a corrective note can be
     // appended once the round finishes — see its use below.
     const droppedActionAttempts: string[] = [];
+    const actionFailureMessages: string[] = [];
     // Accumulates streamed tool-call fragments by their index. `arguments`
     // arrives as growing string fragments across multiple chunks — this is
     // the standard OpenAI/OpenRouter streaming tool-call shape. `id` only
@@ -5883,6 +5884,14 @@ router.post("/chat", async (req, res) => {
             "elaine: auto_run action executor returned an error",
           );
           droppedActionAttempts.push(name);
+          const executorError =
+            typeof body === "object" &&
+            body !== null &&
+            "error" in body &&
+            typeof body.error === "string"
+              ? body.error.trim()
+              : "";
+          if (executorError) actionFailureMessages.push(executorError);
         }
         continue;
       }
@@ -5971,9 +5980,10 @@ router.post("/chat", async (req, res) => {
       // renders it the same way as any other streamed text.
       if (droppedActionAttempts.length > 0) {
         const noteText =
-          droppedActionAttempts.length === 1
+          actionFailureMessages.at(-1) ??
+          (droppedActionAttempts.length === 1
             ? "I wasn't actually able to prepare that as a confirmable action just now — nothing was scheduled or changed. Please try again in a moment."
-            : "I wasn't actually able to prepare some of those as confirmable actions just now — nothing was scheduled or changed for them. Please try again in a moment.";
+            : "I wasn't actually able to prepare some of those as confirmable actions just now — nothing was scheduled or changed for them. Please try again in a moment.");
         const noteDelta = rawContent.trim() ? `\n\n${noteText}` : noteText;
         rawContent += noteDelta;
         sendEvent("delta", { text: noteDelta });
@@ -6022,9 +6032,14 @@ router.post("/chat", async (req, res) => {
           );
         }
       }
+      const selectedReplanTool = selectElaineReplanTool(
+        runtime.snapshot(),
+        MODEL_VISIBLE_HARD_TOOL_NAMES,
+      );
       const decision = runtime.verify({
         finalContent: rawContent,
         hasPendingConfirmation: resolvedActions.length > 0,
+        hasConcreteReplanRoute: selectedReplanTool !== null,
       });
       if (
         !decision.shouldReplan &&
@@ -6066,10 +6081,7 @@ router.post("/chat", async (req, res) => {
         !repeatedActionBuildFailure &&
         round < MAX_ROUNDS - 1
       ) {
-        const selectedTool = selectElaineReplanTool(
-          runtime.snapshot(),
-          MODEL_VISIBLE_HARD_TOOL_NAMES,
-        );
+        const selectedTool = selectedReplanTool;
         if (selectedTool) {
           runtime.markFailedReadStepsAdjusted(
             selectedTool.replacesStepIds,
@@ -7674,6 +7686,7 @@ router.post("/chat", async (req, res) => {
   const finalVerification = runtime.verify({
     finalContent: rawContent,
     hasPendingConfirmation: resolvedActions.length > 0,
+    hasConcreteReplanRoute: false,
   });
   if (finalVerification.verification.status === "blocked") {
     req.log.warn(

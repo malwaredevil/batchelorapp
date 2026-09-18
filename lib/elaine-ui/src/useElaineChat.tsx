@@ -31,6 +31,10 @@ import { ElaineName } from "./ElaineAvatar";
 import { type ChatWidget } from "./ChatWidgets";
 import { useElainePageContextReader } from "./ElainePageContext";
 import {
+  getActionErrorMessage,
+  removeFirstPendingAction,
+} from "./action-confirmation";
+import {
   LARGE_ATTACHMENT_UPLOAD,
   validateClientUpload,
 } from "@workspace/upload-policy";
@@ -1273,16 +1277,26 @@ export function useElaineChat({
       { type: action.type, payload: action.payload },
       {
         onSuccess: () => {
-          setActionDone(true);
-          setPendingActions((prev) => prev.slice(1));
+          // Keep the confirmation card visible while there are more actions
+          // waiting. The next action should become actionable immediately.
+          if (pendingActions.length <= 1) setActionDone(true);
+          else setActionDone(false);
+          setPendingActions(removeFirstPendingAction);
           invalidateActionQueries();
           toast.success("Done!");
         },
-        onError: () => {
+        onError: (error) => {
+          // Confirmation is a one-shot authorization. Do not leave the same
+          // consequential action available to submit again after an
+          // ambiguous network/provider failure.
+          setPendingActions(removeFirstPendingAction);
+          const message = getActionErrorMessage(error);
           toast.error(
-            <>
-              <ElaineName /> couldn't do that just now. Please try again.
-            </>,
+            message || (
+              <>
+                <ElaineName /> couldn't do that just now.
+              </>
+            ),
           );
         },
       },

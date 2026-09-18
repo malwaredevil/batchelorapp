@@ -274,6 +274,7 @@ async function getTimeOfDaySignoff(now: Date = new Date()): Promise<string> {
 // callers can verify the call actually connected (duration > 0).
 async function sendCommCheckPhone(
   toNumber: string,
+  userId: number,
   date: string,
 ): Promise<{ callId: string }> {
   if (!callsConfigured()) {
@@ -282,7 +283,8 @@ async function sendCommCheckPhone(
   const signoff = await getTimeOfDaySignoff();
   return initiateOutboundCall({
     toNumber,
-    initialGreeting: `Hi! This is your daily Batchelor App communications check for ${date}. The phone lane is working correctly. ${signoff}`,
+    userId,
+    openingMessage: `Hi! This is your daily Batchelor App communications check for ${date}. The phone lane is working correctly. ${signoff}`,
     callScreeningIdentity: "Elaine from Batchelor App",
     callScreeningPurpose: "daily communications test",
   });
@@ -482,7 +484,7 @@ export async function runPhoneCommCheck(): Promise<PhoneCheckResult> {
       );
     }
     const { callId } = await withDeliveryTimeout(
-      sendCommCheckPhone(owner.phoneNumber, today),
+      sendCommCheckPhone(owner.phoneNumber, owner.id, today),
       "phone",
     );
     // Confirm the call actually connected (AgentPhone marks blocked/screened
@@ -569,7 +571,11 @@ export async function runChannelCheck(
       // phone
       if (!owner.phoneNumber)
         throw new Error("No phone number on owner account");
-      const { callId } = await sendCommCheckPhone(owner.phoneNumber, today);
+      const { callId } = await sendCommCheckPhone(
+        owner.phoneNumber,
+        owner.id,
+        today,
+      );
       // Wait up to 30 s to confirm the call actually connected (duration > 0).
       // A 0-second "completed" call means it was silently blocked — likely call
       // screening or a carrier STIR/SHAKEN rejection. Report it as an error so

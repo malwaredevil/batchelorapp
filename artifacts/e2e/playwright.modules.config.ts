@@ -21,7 +21,10 @@ export default defineConfig({
     {
       name: "chromium-modules",
       use: { ...devices["Desktop Chrome"] },
-      testMatch: "**/modules-smoke.spec.ts",
+      testMatch: [
+        "**/modules-smoke.spec.ts",
+        "**/quilting-layout-export.spec.ts",
+      ],
     },
   ],
   webServer: {

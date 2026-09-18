@@ -10,7 +10,10 @@ import { isValidIanaTimeZone } from "./timezone";
 import {
   initiateOutboundCall,
   callsConfigured,
+  reconcileOutboundCallOutcome,
   waitForCallOutcome,
+  OutboundCallIndeterminateError,
+  type OutboundCallResult,
 } from "./calls";
 
 // ---------------------------------------------------------------------------
@@ -274,15 +277,17 @@ async function getTimeOfDaySignoff(now: Date = new Date()): Promise<string> {
 // callers can verify the call actually connected (duration > 0).
 async function sendCommCheckPhone(
   toNumber: string,
+  userId: number,
   date: string,
-): Promise<{ callId: string }> {
+): Promise<OutboundCallResult> {
   if (!callsConfigured()) {
     throw new Error("AgentPhone connector not configured");
   }
   const signoff = await getTimeOfDaySignoff();
   return initiateOutboundCall({
     toNumber,
-    initialGreeting: `Hi! This is your daily Batchelor App communications check for ${date}. The phone lane is working correctly. ${signoff}`,
+    userId,
+    openingMessage: `Hi! This is your daily Batchelor App communications check for ${date}. The phone lane is working correctly. ${signoff}`,
     callScreeningIdentity: "Elaine from Batchelor App",
     callScreeningPurpose: "daily communications test",
   });
@@ -481,14 +486,17 @@ export async function runPhoneCommCheck(): Promise<PhoneCheckResult> {
         owner ? "No phone number on owner account" : "No owner account",
       );
     }
-    const { callId } = await withDeliveryTimeout(
-      sendCommCheckPhone(owner.phoneNumber, today),
+    const { callId, pendingOutboundContext } = await withDeliveryTimeout(
+      sendCommCheckPhone(owner.phoneNumber, owner.id, today),
       "phone",
     );
     // Confirm the call actually connected (AgentPhone marks blocked/screened
     // calls as "completed" with durationSeconds: 0). If no-answer, roll the
     // status back to error so the scheduler catches it on the next daily run.
-    const outcome = await waitForCallOutcome(callId, 30_000);
+    const outcome = await reconcileOutboundCallOutcome(
+      callId,
+      pendingOutboundContext,
+    );
     if (outcome === "no-answer") {
       throw new Error(
         "Call placed but not answered (0 s — likely blocked by call screening). " +
@@ -507,6 +515,18 @@ export async function runPhoneCommCheck(): Promise<PhoneCheckResult> {
     return { alreadySent: false, date: today, phone: "sent" };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    if (err instanceof OutboundCallIndeterminateError) {
+      await pool.query(
+        `UPDATE comm_checks SET phone_status = 'sent', phone_sent_at = NOW(), phone_error = $2
+         WHERE check_date = $1 AND phone_status = 'sending' AND phone_error = $3`,
+        [today, `indeterminate: ${msg}`, attemptId],
+      );
+      logger.warn(
+        { err, date: today },
+        "comm-check: indeterminate call; suppressing retry",
+      );
+      return { alreadySent: false, date: today, phone: `pending: ${msg}` };
+    }
     await pool.query(
       `UPDATE comm_checks
        SET phone_status = 'error', phone_sent_at = NULL, phone_error = $2
@@ -569,13 +589,21 @@ export async function runChannelCheck(
       // phone
       if (!owner.phoneNumber)
         throw new Error("No phone number on owner account");
-      const { callId } = await sendCommCheckPhone(owner.phoneNumber, today);
+      const { callId, pendingOutboundContext } = await sendCommCheckPhone(
+        owner.phoneNumber,
+        owner.id,
+        today,
+      );
       // Wait up to 30 s to confirm the call actually connected (duration > 0).
       // A 0-second "completed" call means it was silently blocked — likely call
       // screening or a carrier STIR/SHAKEN rejection. Report it as an error so
       // the owner knows the channel isn't working, rather than silently marking
       // it verified.
-      const outcome = await waitForCallOutcome(callId, 30_000);
+      const outcome = await waitForCallOutcome(
+        callId,
+        30_000,
+        pendingOutboundContext,
+      );
       if (outcome === "no-answer") {
         throw new Error(
           "Call placed but not answered (0 s — likely blocked by call screening). " +

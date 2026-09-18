@@ -88,6 +88,35 @@ function report(
   assert.deepEqual(result.blockingReasons, []);
 }
 
+// A current finding reviewed only through its exception entry is still
+// accepted as reviewed legacy debt, rather than being treated as new or
+// undocumented historical debt.
+{
+  const legacy = finding("duplicate-code:exception-reviewed");
+  const exception = {
+    id: `exception:${legacy.id}`,
+    category: legacy.category,
+    file: legacy.file,
+    evidence: legacy.evidence,
+    reason: "The implementations have deliberately different public contracts.",
+    metric: legacy.metric,
+  };
+  const result = classifyArchitectureFindings(
+    snapshot([legacy]),
+    snapshot([legacy]),
+    baseline([], [exception]),
+    [],
+    {
+      baselineExistsAtBase: true,
+      baselineAtBase: baseline([], [exception]),
+    },
+  );
+  assert.equal(result.newFindings.length, 0);
+  assert.equal(result.undocumentedHistoricalFindings.length, 0);
+  assert.deepEqual(result.unchangedLegacyFindings, [legacy]);
+  assert.deepEqual(result.blockingReasons, []);
+}
+
 // A cleanup removes debt from the current snapshot and reports that progress.
 {
   const legacy = finding("duplicate-code:cleanup");

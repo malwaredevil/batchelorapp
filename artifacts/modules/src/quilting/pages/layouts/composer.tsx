@@ -70,6 +70,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { downloadSvgAsJpeg, downloadSvgAsPng } from "@/quilting/lib/svg-export";
+import { buildFabricNameMap } from "@/quilting/lib/fabric-names";
 import { SvgCell } from "@/quilting/components/SvgCell";
 
 // ---------------------------------------------------------------------------
@@ -560,6 +561,10 @@ export default function LayoutComposer() {
     () => buildFabricUrlMap(fabricsList ?? []),
     [fabricsList],
   );
+  const fabricNames = useMemo(
+    () => buildFabricNameMap(fabricsList ?? []),
+    [fabricsList],
+  );
   const [activeFabricPicker, setActiveFabricPicker] = useState<
     null | "sashing" | "border" | "cornerstone"
   >(null);
@@ -802,14 +807,19 @@ export default function LayoutComposer() {
         );
       const filename = `${name.trim() || "layout"}.${format === "jpeg" ? "jpg" : "png"}`;
       try {
-        if (format === "jpeg") await downloadSvgAsJpeg(svgStr, filename);
-        else await downloadSvgAsPng(svgStr, filename);
+        if (format === "jpeg")
+          await downloadSvgAsJpeg(svgStr, filename, { fabricNames });
+        else await downloadSvgAsPng(svgStr, filename, { fabricNames });
         toast.success("Exported!");
-      } catch {
-        toast.error("Export failed.");
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Couldn’t create the download.",
+        );
       }
     },
-    [name],
+    [fabricNames, name],
   );
 
   function handleSave() {

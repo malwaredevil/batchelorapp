@@ -60,6 +60,11 @@ export function LayoutPreviewSvg({
   const sashingColor = layout.sashingColor ?? "#d4c5a9";
   const borderColor = layout.borderColor ?? "#8b6f5e";
   const cornerstoneColor = layout.cornerstoneColor ?? null;
+  const resolveFill = (value: string) => {
+    if (!value.startsWith("fab:")) return value;
+    const id = Number(value.slice(4));
+    return fabricUrlMap[id] ? `url(#${patternPrefix}fab-${id})` : "#D1D5DB";
+  };
 
   const fabIds = (() => {
     const ids = new Set<number>();
@@ -76,6 +81,11 @@ export function LayoutPreviewSvg({
           if (!isNaN(n) && fabricUrlMap[n]) ids.add(n);
         }
       }
+    }
+    for (const value of [sashingColor, borderColor, cornerstoneColor ?? ""]) {
+      if (!value.startsWith("fab:")) continue;
+      const id = Number(value.slice(4));
+      if (fabricUrlMap[id]) ids.add(id);
     }
     return Array.from(ids);
   })();
@@ -123,7 +133,13 @@ export function LayoutPreviewSvg({
         </defs>
       )}
       {borderPx > 0 && (
-        <rect x={0} y={0} width={W} height={H} fill={borderColor} />
+        <rect
+          x={0}
+          y={0}
+          width={W}
+          height={H}
+          fill={resolveFill(borderColor)}
+        />
       )}
       {sashPx > 0 ? (
         <rect
@@ -131,7 +147,7 @@ export function LayoutPreviewSvg({
           y={borderPx}
           width={W - borderPx * 2}
           height={H - borderPx * 2}
-          fill={sashingColor}
+          fill={resolveFill(sashingColor)}
         />
       ) : (
         <rect
@@ -155,7 +171,7 @@ export function LayoutPreviewSvg({
                 y={cy2}
                 width={sashPx}
                 height={sashPx}
-                fill={cornerstoneColor}
+                fill={resolveFill(cornerstoneColor)}
               />
             );
           }),

@@ -1,15 +1,24 @@
-import { eq } from "drizzle-orm";
+import { and, eq, isNull, lte, or } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import {
   db,
   agentphoneConversations,
   type AgentphoneConversationRow,
 } from "@workspace/db";
-import { logger } from "./logger";
 
 export interface AgentphoneChatMessage {
   role: "user" | "assistant";
   content: string;
 }
+
+export class PendingOutboundContextChangedError extends Error {
+  constructor() {
+    super("AgentPhone: pending outbound context changed or expired");
+    this.name = "PendingOutboundContextChangedError";
+  }
+}
+
+const PENDING_OUTBOUND_CONTEXT_TTL_MS = 60 * 60 * 1_000;
 
 /**
  * Loads the rolling AgentPhone conversation for a phone number, creating an
@@ -42,53 +51,125 @@ export async function getOrCreateAgentphoneConversation(
   return row;
 }
 
+/** Reloads the current conversation row without creating or returning a cache. */
+export async function getAgentphoneConversation(
+  phoneNumber: string,
+): Promise<AgentphoneConversationRow | undefined> {
+  const [conversation] = await db
+    .select()
+    .from(agentphoneConversations)
+    .where(eq(agentphoneConversations.phoneNumber, phoneNumber))
+    .limit(1);
+  return conversation;
+}
+
 /**
- * Seeds the outbound-call context an AgentPhone reminder call needs before
- * it's placed, so that if the recipient replies (e.g. "yes, read it to me"),
- * the restricted Elaine turn handling that reply already knows what was
- * just said and — for issue #521 — has the speech-safe reminder description
- * ready to read back, without ever having seen the raw HTML or a URL.
+ * Seeds the pending purpose of an outbound AgentPhone call before it is placed.
+ * AgentPhone starts the call silently; when the recipient first speaks, the
+ * restricted Elaine turn knows to introduce herself and deliver this opening.
  *
- * Stored as an "assistant" history entry since it reflects what Elaine
- * actually said (the spoken greeting), plus an optional bracketed note that
- * is private context only — the system prompt instructs the model never to
- * read bracketed notes aloud verbatim.
+ * Stored separately from shared SMS/voice history so an SMS cannot consume,
+ * supersede, or receive a voice call's opening.
  */
 export async function seedOutboundCallContext(
   phoneNumber: string,
   userId: number,
-  spokenGreeting: string,
+  openingMessage: string,
   privateContextNote?: string,
-): Promise<void> {
-  try {
-    const conversation = await getOrCreateAgentphoneConversation(
-      phoneNumber,
-      userId,
-    );
-    const history =
-      (conversation.messages as AgentphoneChatMessage[] | null) ?? [];
-    const content = privateContextNote
-      ? `${spokenGreeting}\n\n[Not spoken aloud — private context for you only: ${privateContextNote}]`
-      : spokenGreeting;
-    const updated: AgentphoneChatMessage[] = [
-      ...history,
-      { role: "assistant", content },
-    ];
-    await db
-      .update(agentphoneConversations)
-      .set({
-        messages: updated,
-        version: conversation.version + 1,
-        updatedAt: new Date(),
-      })
-      .where(eq(agentphoneConversations.id, conversation.id));
-  } catch (err) {
-    // Best-effort only: a failure here must never block placing the call
-    // itself — worst case the recipient's reply is handled without this
-    // extra context, same as before issue #521.
-    logger.warn(
-      { err, phoneNumber },
-      "agentphone-conversation: failed to seed outbound call context",
+): Promise<string> {
+  const conversation = await getOrCreateAgentphoneConversation(
+    phoneNumber,
+    userId,
+  );
+  const pendingId = randomUUID();
+  const [updated] = await db
+    .update(agentphoneConversations)
+    .set({
+      pendingOutboundId: pendingId,
+      pendingOutboundCallId: null,
+      pendingOutboundOpening: openingMessage,
+      pendingOutboundPrivateContext: privateContextNote ?? null,
+      pendingOutboundExpiresAt: new Date(
+        Date.now() + PENDING_OUTBOUND_CONTEXT_TTL_MS,
+      ),
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(agentphoneConversations.id, conversation.id),
+        or(
+          isNull(agentphoneConversations.pendingOutboundId),
+          isNull(agentphoneConversations.pendingOutboundExpiresAt),
+          lte(agentphoneConversations.pendingOutboundExpiresAt, new Date()),
+        ),
+      ),
+    )
+    .returning({ id: agentphoneConversations.id });
+  if (!updated) {
+    throw new Error(
+      "AgentPhone: another outbound call is already pending for this number",
     );
   }
+  return pendingId;
+}
+
+/** Clears only the pending purpose created by the matching call attempt. */
+export async function clearPendingOutboundCallContext(
+  phoneNumber: string,
+  pendingId: string,
+): Promise<void> {
+  await db
+    .update(agentphoneConversations)
+    .set({
+      pendingOutboundId: null,
+      pendingOutboundCallId: null,
+      pendingOutboundOpening: null,
+      pendingOutboundPrivateContext: null,
+      pendingOutboundExpiresAt: null,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(agentphoneConversations.phoneNumber, phoneNumber),
+        eq(agentphoneConversations.pendingOutboundId, pendingId),
+      ),
+    );
+}
+
+/** Correlates the pending purpose with the provider call after creation. */
+export async function attachPendingOutboundCallId(
+  phoneNumber: string,
+  pendingId: string,
+  callId: string,
+): Promise<void> {
+  const updated = await db
+    .update(agentphoneConversations)
+    .set({ pendingOutboundCallId: callId, updatedAt: new Date() })
+    .where(
+      and(
+        eq(agentphoneConversations.phoneNumber, phoneNumber),
+        eq(agentphoneConversations.pendingOutboundId, pendingId),
+      ),
+    )
+    .returning({ id: agentphoneConversations.id });
+  if (updated.length === 0) {
+    throw new PendingOutboundContextChangedError();
+  }
+}
+
+/** Clears pending context when the correlated provider call cannot answer. */
+export async function clearPendingOutboundCallContextByCallId(
+  callId: string,
+): Promise<void> {
+  await db
+    .update(agentphoneConversations)
+    .set({
+      pendingOutboundId: null,
+      pendingOutboundCallId: null,
+      pendingOutboundOpening: null,
+      pendingOutboundPrivateContext: null,
+      pendingOutboundExpiresAt: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(agentphoneConversations.pendingOutboundCallId, callId));
 }

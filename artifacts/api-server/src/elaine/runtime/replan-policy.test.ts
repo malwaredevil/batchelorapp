@@ -230,6 +230,29 @@ describe("selectElaineReplanTool", () => {
     expect(selectElaineReplanTool(trace, available)).toBeNull();
   });
 
+  it("returns no route for a failed confirmed SMS action", () => {
+    const trace = traceWith([
+      {
+        id: "send",
+        label: "Send the confirmed SMS",
+        kind: "action",
+        toolName: "message_contact",
+        dependsOn: [],
+        expectedEvidence: "A successful send or a specific channel blocker",
+        required: true,
+      },
+    ]);
+    trace.plan.steps[0]!.status = "failed";
+    trace.plan.steps[0]!.attempts = 1;
+
+    expect(
+      selectElaineReplanTool(
+        trace,
+        new Set([...available, "list_contact_channels"]),
+      ),
+    ).toBeNull();
+  });
+
   it("does not select a lookup whose dependencies are unfinished", () => {
     const trace = traceWith([
       {

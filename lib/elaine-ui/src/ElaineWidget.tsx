@@ -22,6 +22,10 @@ import { ElaineAvatar, ElaineWordmark } from "./ElaineAvatar";
 import { useElaineChat } from "./useElaineChat";
 import { ElaineChatPanel } from "./ElaineChatPanel";
 import { ElaineHistoryPanel } from "./ElaineHistoryPanel";
+import {
+  readElaineSessionHidden,
+  SESSION_HIDE_KEY,
+} from "./ElaineSessionStorage";
 
 // Default pixel dimensions per size preference.
 const CHAT_WINDOW_DEFAULT_SIZES: Record<string, { w: number; h: number }> = {
@@ -32,19 +36,6 @@ const CHAT_WINDOW_DEFAULT_SIZES: Record<string, { w: number; h: number }> = {
 
 const MIN_W = 280;
 const MIN_H = 340;
-
-// sessionStorage key for the "hide for this session" choice. Session-scoped
-// storage is naturally shared across every module on the same origin for the
-// rest of the browser session and clears on the next visit.
-const SESSION_HIDE_KEY = "elaineWidgetSessionHidden";
-
-function readSessionHidden(): boolean {
-  try {
-    return sessionStorage.getItem(SESSION_HIDE_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
 
 // Fired by the settings card's "Show bubble" action so an already-mounted
 // widget (e.g. on the same Account page) reappears immediately without a
@@ -63,7 +54,7 @@ export function ElaineWidget({
   const [open, setOpen] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   // Hide state — read synchronously so a session-hidden bubble never flashes.
-  const [sessionHidden, setSessionHidden] = useState(readSessionHidden);
+  const [sessionHidden, setSessionHidden] = useState(readElaineSessionHidden);
   const [showClosePrompt, setShowClosePrompt] = useState(false);
   const qc = useQueryClient();
   const updateSettings = useUpdateElaineSettings();
@@ -315,15 +306,15 @@ export function ElaineWidget({
   // same page/session ("Show bubble" clears the session flag and dispatches
   // this event; the widgetHidden=false half arrives via the settings cache).
   useEffect(() => {
-    const onUnhide = () => setSessionHidden(readSessionHidden());
+    const onUnhide = () => setSessionHidden(readElaineSessionHidden());
     window.addEventListener(ELAINE_WIDGET_UNHIDE_EVENT, onUnhide);
     return () =>
       window.removeEventListener(ELAINE_WIDGET_UNHIDE_EVENT, onUnhide);
   }, []);
 
   if (
-    !settings?.enabled ||
-    settings.widgetHidden ||
+    settings?.enabled === false ||
+    settings?.widgetHidden ||
     sessionHidden ||
     onFullScreenChat
   ) {

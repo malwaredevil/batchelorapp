@@ -446,7 +446,7 @@ const CallMePayload = z.object({
     .max(500)
     .optional()
     .describe(
-      "Opening words Elaine says when the call connects. Omit for the default warm greeting.",
+      "Opening words Elaine says after the recipient first speaks. Omit for the default warm introduction.",
     ),
   scheduleAt: scheduleAtField,
   timezone: explicitTimezoneField,
@@ -581,9 +581,10 @@ export async function fireCallContact(
     };
   }
   try {
-    const { callId } = await initiateOutboundCall({
+    const { callId, pendingOutboundContext } = await initiateOutboundCall({
       toNumber: contact.phoneNumber,
-      initialGreeting: message,
+      userId: contact.id,
+      openingMessage: message,
       callScreeningPurpose: "household message",
     });
     logger.info(
@@ -594,7 +595,11 @@ export async function fireCallContact(
     // Poll for a terminal status (answered / voicemail / no-answer / error).
     // Returns "pending" if the 12-second window closes without a terminal
     // status — callers should treat "pending" as "call initiated, outcome unknown".
-    const callStatus = await waitForCallOutcome(callId);
+    const callStatus = await waitForCallOutcome(
+      callId,
+      undefined,
+      pendingOutboundContext,
+    );
     logger.info({ callId, callStatus }, "elaine: outbound call outcome");
 
     return {
@@ -680,7 +685,8 @@ export async function fireCallMe(
   try {
     const { callId } = await initiateOutboundCall({
       toNumber: user.phoneNumber,
-      initialGreeting: resolvedGreeting,
+      userId,
+      openingMessage: resolvedGreeting,
       callScreeningPurpose: "Elaine callback request",
     });
     logger.info(
@@ -2106,7 +2112,7 @@ export const communicationActionTools: OpenAI.Chat.Completions.ChatCompletionToo
           "datetime, or (STRONGLY preferred, including for a bare clock time like 'call me at 2:30' with no " +
           "explicit day — use the at-clock-time spec kind) the structured relative-time spec described on that " +
           "field; never hand-compute the datetime (or its UTC offset) yourself. Put any reminder content the " +
-          "user wants ('remind me to pick up X') into `greeting` so Elaine says it as soon as the call connects. " +
+          "user wants ('remind me to pick up X') into `greeting` so Elaine says it after the recipient first speaks. " +
           "Only include `timezone` when the user explicitly names a different timezone/city for this call than " +
           "their own (see that field's description) — omit it otherwise. " +
           "When scheduling: confirm the resolved time in your visible reply before calling this tool. " +
@@ -2118,7 +2124,7 @@ export const communicationActionTools: OpenAI.Chat.Completions.ChatCompletionToo
             greeting: {
               type: "string",
               description:
-                "Optional opening words Elaine says when the call connects (1–2 warm sentences). Omit to use the default greeting.",
+                "Optional opening words Elaine says after the recipient first speaks (1–2 warm sentences). Omit to use the default introduction.",
             },
             scheduleAt: {
               oneOf: [

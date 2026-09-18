@@ -81,6 +81,37 @@ export interface HallmarkEventsSourceResult {
   rejected: HallmarkRejectedCandidate[];
 }
 
+export function createHallmarkSyncPlanFingerprint(input: {
+  sourceUrl: string;
+  complete: boolean;
+  year: number | null;
+  candidates: HallmarkEventCandidate[];
+}): string {
+  const candidates = input.candidates
+    .map((candidate) => ({
+      sourceKey: candidate.sourceKey,
+      title: candidate.title,
+      startDate: candidate.startDate,
+      endDate: candidate.endDate,
+      details: candidate.details,
+      sourceUrl: candidate.sourceUrl,
+      year: candidate.year,
+    }))
+    .sort((left, right) => left.sourceKey.localeCompare(right.sourceKey));
+
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        version: 1,
+        sourceUrl: input.sourceUrl,
+        complete: input.complete,
+        year: input.year,
+        candidates,
+      }),
+    )
+    .digest("hex");
+}
+
 interface FirecrawlResponse {
   success?: boolean;
   data?: {
@@ -308,25 +339,30 @@ function parseStructured(
     });
   }
 
-  const fingerprint = createHash("sha256")
-    .update(JSON.stringify({ markdown, json: rawJson ?? null }))
-    .digest("hex");
   const years = new Set(candidates.map((candidate) => candidate.year));
   const sourceKeys = new Set(
     candidates.map((candidate) => candidate.sourceKey.split(":")[0]),
   );
   const requiredEventsPresent =
     sourceKeys.has("ornament-premiere") && sourceKeys.has("ornament-debut");
+  const complete =
+    requiredEventsPresent &&
+    candidates.length === 2 &&
+    sourceKeys.size === candidates.length &&
+    years.size === 1;
+  const year = years.size === 1 ? [...years][0] : (pageYear ?? null);
+  const fingerprint = createHallmarkSyncPlanFingerprint({
+    sourceUrl,
+    complete,
+    year,
+    candidates,
+  });
   return {
     sourceUrl,
     fetchedAt: new Date().toISOString(),
     fingerprint,
-    complete:
-      requiredEventsPresent &&
-      candidates.length === 2 &&
-      sourceKeys.size === candidates.length &&
-      years.size === 1,
-    year: years.size === 1 ? [...years][0] : (pageYear ?? null),
+    complete,
+    year,
     candidates,
     rejected,
   };

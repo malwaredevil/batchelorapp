@@ -128,27 +128,25 @@ vi.mock("../lib/ai-client", () => ({
 }));
 
 // ── Elaine config: two distinct model strings so the test can tell them apart
-vi.mock("../lib/elaine-config", () => ({
-  getElaineGlobalConfig: vi.fn().mockResolvedValue({
-    chatModel: "fast-chat-model",
-    models: {
-      restrictedTextModel: "smart-restricted-model",
-    },
-    isEnabled: true,
-    actionConfirmationMode: "auto_run",
-  }),
-  updateElaineGlobalConfig: vi.fn(),
-  // ElaineTurnRuntime (loaded via the real, unmocked "./runtime" module in
-  // this file) falls back to this constant when no `budget` override is
-  // passed — must stay in the mock or the module import throws "No
-  // DEFAULT_RUNTIME_BUDGET export is defined".
-  DEFAULT_RUNTIME_BUDGET: {
-    maxModelRounds: 8,
-    maxToolCalls: 24,
-    maxReplans: 10,
-    maxElapsedMs: 240_000,
-  },
-}));
+vi.mock("../lib/elaine-config", async () => {
+  const actual = await vi.importActual<typeof import("../lib/elaine-config")>(
+    "../lib/elaine-config",
+  );
+  return {
+    getElaineGlobalConfig: vi.fn().mockResolvedValue({
+      chatModel: "fast-chat-model",
+      models: {
+        restrictedTextModel: "smart-restricted-model",
+      },
+      isEnabled: true,
+      actionConfirmationMode: "auto_run",
+      runtimeBudget: actual.ELAINE_CONFIG_DEFAULTS.runtimeBudget,
+    }),
+    updateElaineGlobalConfig: vi.fn(),
+    // ElaineTurnRuntime imports this constant from the config module.
+    DEFAULT_RUNTIME_BUDGET: actual.DEFAULT_RUNTIME_BUDGET,
+  };
+});
 
 // ── OpenAI Responses API: disabled so the OpenRouter callModel path runs ──
 vi.mock("../lib/openai-responses", () => ({

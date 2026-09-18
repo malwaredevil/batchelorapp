@@ -19,9 +19,8 @@ import {
 } from "@tanstack/react-query";
 
 const SETTINGS_KEY = ["/api/elaine/settings"] as const;
-const SESSION_KEY = "elaineWidgetSessionHidden";
-
 const mutateSpy = vi.fn();
+const mockSettingsError = vi.hoisted(() => ({ value: false }));
 
 vi.mock("lucide-react", () => {
   const Icon = () => null;
@@ -92,7 +91,11 @@ vi.mock("../../../lib/elaine-ui/src/useElaineChat", () => ({
       retry: false,
       enabled: false,
     });
-    return { settings: q.data, beginHandoff: async () => ({}) };
+    return {
+      settings: q.data,
+      settingsError: mockSettingsError.value,
+      beginHandoff: async () => ({}),
+    };
   },
 }));
 vi.mock("../../../lib/elaine-ui/src/ElaineChatPanel", () => ({
@@ -104,6 +107,11 @@ vi.mock("../../../lib/elaine-ui/src/ElaineHistoryPanel", () => ({
 
 import { ElaineWidget } from "../../../lib/elaine-ui/src/ElaineWidget";
 import { ElaineSettingsCard } from "../../../lib/elaine-ui/src/ElaineSettingsCard";
+import {
+  readElaineSessionHidden,
+  SESSION_HIDE_KEY as SESSION_KEY,
+  setElaineSessionHidden,
+} from "../../../lib/elaine-ui/src/ElaineSessionStorage";
 
 function renderBoth(settings: { enabled: boolean; widgetHidden: boolean }) {
   const qc = new QueryClient({
@@ -118,6 +126,29 @@ function renderBoth(settings: { enabled: boolean; widgetHidden: boolean }) {
   const utils = render(
     <QueryClientProvider client={qc}>
       <ElaineSettingsCard />
+      <ElaineWidget appId="hub" />
+    </QueryClientProvider>,
+  );
+  return { qc, ...utils };
+}
+
+function renderWidgetWithSettings(settings?: {
+  enabled: boolean;
+  widgetHidden: boolean;
+}) {
+  const qc = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  if (settings) {
+    qc.setQueryData(SETTINGS_KEY, {
+      enabled: settings.enabled,
+      actionConfirmationMode: "one_by_one",
+      chatWindowSize: "compact",
+      widgetHidden: settings.widgetHidden,
+    });
+  }
+  const utils = render(
+    <QueryClientProvider client={qc}>
       <ElaineWidget appId="hub" />
     </QueryClientProvider>,
   );
@@ -140,10 +171,42 @@ window.matchMedia = ((query: string) => ({
 
 beforeEach(() => {
   sessionStorage.clear();
+  setElaineSessionHidden(false);
   mutateSpy.mockClear();
 });
 
 describe("Elaine widget hide/re-enable", () => {
+  it("shows the bubble while settings are still loading", () => {
+    renderWidgetWithSettings();
+
+    const assistantBubble = bubble();
+    expect(assistantBubble).not.toBeNull();
+
+    const widgetContainer = assistantBubble?.parentElement?.parentElement;
+    expect(widgetContainer).not.toBeNull();
+    expect(widgetContainer).toHaveStyle({
+      position: "absolute",
+      right: "1.5rem",
+      bottom: "1.5rem",
+    });
+  });
+
+  it("hides the bubble when Elaine is explicitly disabled", () => {
+    renderWidgetWithSettings({ enabled: false, widgetHidden: false });
+
+    expect(bubble()).toBeNull();
+  });
+
+  it("fails closed when settings loading fails", () => {
+    mockSettingsError.value = true;
+    try {
+      renderWidgetWithSettings({ enabled: true, widgetHidden: false });
+      expect(bubble()).toBeNull();
+    } finally {
+      mockSettingsError.value = false;
+    }
+  });
+
   it("hide-forever + session flag → 'Show bubble' restores the bubble without a reload", () => {
     sessionStorage.setItem(SESSION_KEY, "1");
     renderBoth({ enabled: true, widgetHidden: true });
@@ -153,6 +216,19 @@ describe("Elaine widget hide/re-enable", () => {
     fireEvent.click(screen.getByRole("button", { name: "Show bubble" }));
 
     expect(mutateSpy).toHaveBeenCalledWith({ widgetHidden: false });
+    expect(sessionStorage.getItem(SESSION_KEY)).toBeNull();
+    expect(bubble()).not.toBeNull();
+  });
+
+  it("session-only hidden → Account settings offers recovery without changing the account flag", () => {
+    sessionStorage.setItem(SESSION_KEY, "1");
+    renderBoth({ enabled: true, widgetHidden: false });
+
+    expect(bubble()).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show bubble" }));
+
+    expect(mutateSpy).not.toHaveBeenCalled();
     expect(sessionStorage.getItem(SESSION_KEY)).toBeNull();
     expect(bubble()).not.toBeNull();
   });
@@ -179,6 +255,75 @@ describe("Elaine widget hide/re-enable", () => {
     expect(bubble()).toBeNull();
     expect(sessionStorage.getItem(SESSION_KEY)).toBe("1");
     expect(mutateSpy).not.toHaveBeenCalled();
+
+    // The settings card is already mounted, so the shared session event must
+    // expose recovery immediately rather than waiting for a remount.
+    expect(screen.getByRole("button", { name: "Show bubble" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Show bubble" }));
+    expect(bubble()).not.toBeNull();
+  });
+
+  it("recovers immediately when sessionStorage is blocked", () => {
+    window.name = "unrelated-window-data";
+    const getItem = vi
+      .spyOn(Storage.prototype, "getItem")
+      .mockImplementation(() => {
+        throw new Error("sessionStorage blocked");
+      });
+    const setItem = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new Error("sessionStorage blocked");
+      });
+    const removeItem = vi
+      .spyOn(Storage.prototype, "removeItem")
+      .mockImplementation(() => {
+        throw new Error("sessionStorage blocked");
+      });
+
+    try {
+      renderBoth({ enabled: true, widgetHidden: false });
+      fireEvent.click(screen.getByLabelText("Hide Elaine assistant bubble"));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Hide for this session" }),
+      );
+
+      expect(bubble()).toBeNull();
+      expect(screen.getByRole("button", { name: "Show bubble" })).toBeTruthy();
+      expect(window.name).toContain("unrelated-window-data");
+      expect(window.name).toContain("__elaine_widget_session_hidden__");
+    } finally {
+      getItem.mockRestore();
+      setItem.mockRestore();
+      removeItem.mockRestore();
+    }
+  });
+
+  it("preserves a failed hidden write when reads return a missing key", () => {
+    window.name = "unrelated-window-data";
+    const getItem = vi
+      .spyOn(Storage.prototype, "getItem")
+      .mockReturnValue(null);
+    const setItem = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation(() => {
+        throw new Error("sessionStorage is read-only");
+      });
+
+    try {
+      renderBoth({ enabled: true, widgetHidden: false });
+      fireEvent.click(screen.getByLabelText("Hide Elaine assistant bubble"));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Hide for this session" }),
+      );
+
+      expect(bubble()).toBeNull();
+      expect(readElaineSessionHidden()).toBe(true);
+      expect(screen.getByRole("button", { name: "Show bubble" })).toBeTruthy();
+    } finally {
+      getItem.mockRestore();
+      setItem.mockRestore();
+    }
   });
 
   it("renders hidden from the start when the session flag is already set (no flash)", () => {

@@ -26,44 +26,11 @@
  */
 
 import pg from "pg";
+import { pathToFileURL } from "node:url";
 import { resolveProductionDatabaseUrl, sslConfig } from "@workspace/db";
+import { copyTable } from "./restore-helper.js";
 
 const { Client } = pg;
-
-async function copyTable(
-  source: pg.Client,
-  dest: pg.Client,
-  opts: {
-    table: string;
-    columns: string[];
-    orderBy?: string;
-    jsonbColumns?: string[];
-  },
-): Promise<number> {
-  const cols = opts.columns.join(", ");
-  const order = opts.orderBy ? ` ORDER BY ${opts.orderBy}` : "";
-  const { rows } = await source.query(
-    `SELECT ${cols} FROM ${opts.table}${order}`,
-  );
-  const jsonbCols = new Set(opts.jsonbColumns ?? []);
-  const placeholders = opts.columns
-    .map((c, i) => (jsonbCols.has(c) ? `$${i + 1}::jsonb` : `$${i + 1}`))
-    .join(", ");
-  for (const row of rows) {
-    const values = opts.columns.map((c) => {
-      const v = row[c] ?? null;
-      if (jsonbCols.has(c) && v !== null && typeof v !== "string") {
-        return JSON.stringify(v);
-      }
-      return v;
-    });
-    await dest.query(
-      `INSERT INTO ${opts.table} (${cols}) VALUES (${placeholders}) ON CONFLICT DO NOTHING`,
-      values,
-    );
-  }
-  return rows.length;
-}
 
 async function resetSequence(dest: pg.Client, table: string, col: string) {
   await dest.query(`
@@ -156,7 +123,27 @@ async function main() {
   );
   await copyTable(source, dest, {
     table: "agentphone_conversations",
-    columns: ["id", "phone_number", "user_id", "messages", "updated_at"],
+    columns: [
+      "id",
+      "phone_number",
+      "user_id",
+      "messages",
+      "pending_outbound_id",
+      "pending_outbound_call_id",
+      "pending_outbound_opening",
+      "pending_outbound_private_context",
+      "pending_outbound_expires_at",
+      "version",
+      "updated_at",
+    ],
+    missingColumnDefaults: {
+      pending_outbound_id: "NULL",
+      pending_outbound_call_id: "NULL",
+      pending_outbound_opening: "NULL",
+      pending_outbound_private_context: "NULL",
+      pending_outbound_expires_at: "NULL",
+      version: "0",
+    },
     orderBy: "id",
   });
   await resetSequence(dest, "agentphone_conversations", "id");
@@ -2242,7 +2229,12 @@ async function main() {
   await dest.end();
 }
 
-main().catch((err) => {
-  console.error("Restore failed:", err);
-  process.exit(1);
-});
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
+  main().catch((err) => {
+    console.error("Restore failed:", err);
+    process.exit(1);
+  });
+}

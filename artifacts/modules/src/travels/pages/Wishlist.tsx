@@ -199,6 +199,8 @@ function NoteEditor({
         codeBlock: false,
         code: false,
         blockquote: false,
+        link: false,
+        underline: false,
       }),
       UnderlineExt,
       Highlight.configure({ multicolor: false }),

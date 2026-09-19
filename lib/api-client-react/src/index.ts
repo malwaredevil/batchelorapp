@@ -17,3 +17,4 @@ export * from "./elaine";
 export * from "./ornaments-hallmark";
 export * from "./pottery";
 export * from "./ornaments";
+export * from "./binary";

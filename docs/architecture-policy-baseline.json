@@ -274,14 +274,6 @@
       "metric": 0.8799076212471132
     },
     {
-      "id": "duplicate-code:artifacts/modules/src/quilting/lib/svg-export.ts:downloadSvgAsJpeg:artifacts/modules/src/quilting/lib/svg-export.ts:downloadSvgAsPng",
-      "category": "duplicate-code",
-      "file": "artifacts/modules/src/quilting/lib/svg-export.ts",
-      "symbol": "downloadSvgAsJpeg",
-      "evidence": "artifacts/modules/src/quilting/lib/svg-export.ts:downloadSvgAsPng",
-      "metric": 0.9007936507936508
-    },
-    {
       "id": "duplicate-code:artifacts/modules/src/quilting/lib/whole-quilt-storage.ts:readLegacySingle:artifacts/modules/src/quilting/pages/blocks/whole-quilt.tsx:loadDesign",
       "category": "duplicate-code",
       "file": "artifacts/modules/src/quilting/lib/whole-quilt-storage.ts",
@@ -636,14 +628,6 @@
       "metric": 1
     },
     {
-      "id": "exception:hardcoded-config:artifacts/api-server/src/elaine/index.ts:constant:constant:MAX_ROUNDS:const MAX_ROUNDS = 3;",
-      "category": "hardcoded-config",
-      "file": "artifacts/api-server/src/elaine/index.ts",
-      "evidence": "constant:MAX_ROUNDS:const MAX_ROUNDS = 3;",
-      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with MAX_ROUNDS in const MAX_ROUNDS = 3;.",
-      "metric": 2
-    },
-    {
       "id": "exception:hardcoded-config:artifacts/api-server/src/elaine/magnets-actions.ts:constant:constant:MAX_REANALYZE_IMAGES:const MAX_REANALYZE_IMAGES = 5;",
       "category": "hardcoded-config",
       "file": "artifacts/api-server/src/elaine/magnets-actions.ts",
@@ -753,6 +737,14 @@
       "file": "artifacts/api-server/src/lib/comm-check-scheduler.ts",
       "evidence": "constant:CHANNEL_DELIVERY_TIMEOUT_MS:const CHANNEL_DELIVERY_TIMEOUT_MS = 60_000;",
       "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with CHANNEL_DELIVERY_TIMEOUT_MS in const CHANNEL_DELIVERY_TIMEOUT_MS = 60_000;.",
+      "metric": 1
+    },
+    {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/comm-check-scheduler.ts:constant:constant:COMM_CHECK_INTERACTIVE_OUTCOME_TIMEOUT_MS:const COMM_CHECK_INTERACTIVE_OUTCOME_TIMEOUT_MS = 30_000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/comm-check-scheduler.ts",
+      "evidence": "constant:COMM_CHECK_INTERACTIVE_OUTCOME_TIMEOUT_MS:const COMM_CHECK_INTERACTIVE_OUTCOME_TIMEOUT_MS = 30_000;",
+      "reason": "The focused hardcoded-config guard separately reviews the fixed constant expression with COMM_CHECK_INTERACTIVE_OUTCOME_TIMEOUT_MS in const COMM_CHECK_INTERACTIVE_OUTCOME_TIMEOUT_MS = 30_000;.",
       "metric": 1
     },
     {

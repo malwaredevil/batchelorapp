@@ -682,8 +682,10 @@ router.post(
       // without sending its channels.
       const mainResult = await runDailyCommCheck();
       const phoneResult = await runPhoneCommCheck();
+      const phoneOutcomeKnown =
+        phoneResult.phone === "sent" || phoneResult.phone === "n/a";
       res.json({
-        ok: true,
+        ok: phoneOutcomeKnown,
         alreadyRan: mainResult.alreadyRan && phoneResult.alreadySent,
         date: mainResult.date,
         email: mainResult.email,

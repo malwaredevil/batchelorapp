@@ -10,7 +10,9 @@ import { isValidIanaTimeZone } from "./timezone";
 import {
   initiateOutboundCall,
   callsConfigured,
-  waitForCallOutcome,
+  reconcileOutboundCallOutcome,
+  OutboundCallIndeterminateError,
+  type OutboundCallResult,
 } from "./calls";
 
 // ---------------------------------------------------------------------------
@@ -274,18 +276,68 @@ async function getTimeOfDaySignoff(now: Date = new Date()): Promise<string> {
 // callers can verify the call actually connected (duration > 0).
 async function sendCommCheckPhone(
   toNumber: string,
+  userId: number,
   date: string,
-): Promise<{ callId: string }> {
+): Promise<OutboundCallResult> {
   if (!callsConfigured()) {
     throw new Error("AgentPhone connector not configured");
   }
   const signoff = await getTimeOfDaySignoff();
   return initiateOutboundCall({
     toNumber,
-    initialGreeting: `Hi! This is your daily Batchelor App communications check for ${date}. The phone lane is working correctly. ${signoff}`,
+    userId,
+    openingMessage: `Hi! This is your daily Batchelor App communications check for ${date}. The phone lane is working correctly. ${signoff}`,
     callScreeningIdentity: "Elaine from Batchelor App",
     callScreeningPurpose: "daily communications test",
   });
+}
+
+const PHONE_CREATE_TIMEOUT_MS = 60_000;
+
+async function sendCommCheckPhoneBounded(
+  toNumber: string,
+  userId: number,
+  date: string,
+): Promise<OutboundCallResult> {
+  const callPromise = sendCommCheckPhone(toNumber, userId, date);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let timedOut = false;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      timedOut = true;
+      reject(
+        new OutboundCallIndeterminateError({
+          phoneNumber: toNumber,
+          pendingId: "",
+        }),
+      );
+    }, PHONE_CREATE_TIMEOUT_MS);
+    timer.unref?.();
+  });
+  callPromise.then(
+    (result) => {
+      if (!timedOut) return;
+      void reconcileOutboundCallOutcome(
+        result.callId,
+        result.pendingOutboundContext,
+        { interactiveTimeoutMs: COMM_CHECK_INTERACTIVE_OUTCOME_TIMEOUT_MS },
+      ).catch((err) =>
+        logger.warn(
+          { err, callId: result.callId },
+          "comm-check: late call reconciliation failed",
+        ),
+      );
+    },
+    (err) => {
+      if (timedOut)
+        logger.warn({ err }, "comm-check: late call creation failed");
+    },
+  );
+  try {
+    return await Promise.race([callPromise, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 // ── Core run function (email / SMS / Slack) ──────────────────────────────────
@@ -303,6 +355,9 @@ export interface CommCheckResult {
 type DailyChannel = "email" | "sms" | "slack";
 const STALE_CHANNEL_ATTEMPT_MINUTES = 15;
 const CHANNEL_DELIVERY_TIMEOUT_MS = 60_000;
+// Diagnostic calls intentionally wait longer than interactive user calls so
+// short ringing/no-answer transitions are observed before marking unhealthy.
+const COMM_CHECK_INTERACTIVE_OUTCOME_TIMEOUT_MS = 30_000;
 
 async function withDeliveryTimeout<T>(
   operation: Promise<T>,
@@ -445,6 +500,22 @@ export interface PhoneCheckResult {
   phone: string;
 }
 
+/**
+ * Determines whether the serialized full communications check completed all
+ * four lanes successfully.  Keep this independent of the route so the
+ * aggregate contract cannot drift from the scheduler's result strings.
+ */
+export function isFullCommCheckSuccessful(
+  daily: Pick<CommCheckResult, "email" | "sms" | "slack">,
+  phone: Pick<PhoneCheckResult, "phone">,
+): boolean {
+  const dailyLanesSucceeded = [daily.email, daily.sms, daily.slack].every(
+    (result) => result === "sent" || result === "already sent",
+  );
+  const phoneOutcomeKnown = phone.phone === "sent" || phone.phone === "n/a";
+  return dailyLanesSucceeded && phoneOutcomeKnown;
+}
+
 export async function runPhoneCommCheck(): Promise<PhoneCheckResult> {
   const today = await getEffectiveDateString();
 
@@ -471,7 +542,29 @@ export async function runPhoneCommCheck(): Promise<PhoneCheckResult> {
   );
 
   if ((claim.rowCount ?? 0) === 0) {
-    return { alreadySent: true, date: today, phone: "n/a" };
+    const current = await pool.query<{
+      phone_status: string;
+      phone_error: string | null;
+    }>(
+      `SELECT phone_status, phone_error FROM comm_checks WHERE check_date = $1`,
+      [today],
+    );
+    const status = current.rows[0]?.phone_status;
+    if (status === "sent" || status === "verified") {
+      return { alreadySent: true, date: today, phone: "n/a" };
+    }
+    if (status === "indeterminate" || status === "sending") {
+      return {
+        alreadySent: false,
+        date: today,
+        phone: `unknown: ${current.rows[0]?.phone_error ?? "outcome pending"}`,
+      };
+    }
+    return {
+      alreadySent: false,
+      date: today,
+      phone: `error: ${current.rows[0]?.phone_error ?? "phone check unavailable"}`,
+    };
   }
 
   try {
@@ -481,19 +574,36 @@ export async function runPhoneCommCheck(): Promise<PhoneCheckResult> {
         owner ? "No phone number on owner account" : "No owner account",
       );
     }
-    const { callId } = await withDeliveryTimeout(
-      sendCommCheckPhone(owner.phoneNumber, today),
-      "phone",
+    const { callId, pendingOutboundContext } = await sendCommCheckPhoneBounded(
+      owner.phoneNumber,
+      owner.id,
+      today,
     );
     // Confirm the call actually connected (AgentPhone marks blocked/screened
     // calls as "completed" with durationSeconds: 0). If no-answer, roll the
     // status back to error so the scheduler catches it on the next daily run.
-    const outcome = await waitForCallOutcome(callId, 30_000);
-    if (outcome === "no-answer") {
+    const outcome = await reconcileOutboundCallOutcome(
+      callId,
+      pendingOutboundContext,
+      { interactiveTimeoutMs: COMM_CHECK_INTERACTIVE_OUTCOME_TIMEOUT_MS },
+    );
+    if (outcome === "no-answer" || outcome === "error") {
       throw new Error(
         "Call placed but not answered (0 s — likely blocked by call screening). " +
           "Add Elaine's number to your contacts to allow it through.",
       );
+    }
+    if (outcome === "pending") {
+      await pool.query(
+        `UPDATE comm_checks SET phone_status = 'indeterminate', phone_sent_at = NOW(), phone_error = $2
+         WHERE check_date = $1 AND phone_status = 'sending' AND phone_error = $3`,
+        [today, "accepted call outcome remains unknown", attemptId],
+      );
+      return {
+        alreadySent: false,
+        date: today,
+        phone: "unknown: accepted call outcome remains unknown",
+      };
     }
     await pool.query(
       `UPDATE comm_checks
@@ -507,6 +617,18 @@ export async function runPhoneCommCheck(): Promise<PhoneCheckResult> {
     return { alreadySent: false, date: today, phone: "sent" };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    if (err instanceof OutboundCallIndeterminateError) {
+      await pool.query(
+        `UPDATE comm_checks SET phone_status = 'indeterminate', phone_sent_at = NOW(), phone_error = $2
+         WHERE check_date = $1 AND phone_status = 'sending' AND phone_error = $3`,
+        [today, `indeterminate: ${msg}`, attemptId],
+      );
+      logger.warn(
+        { err, date: today },
+        "comm-check: indeterminate call; suppressing retry",
+      );
+      return { alreadySent: false, date: today, phone: `unknown: ${msg}` };
+    }
     await pool.query(
       `UPDATE comm_checks
        SET phone_status = 'error', phone_sent_at = NULL, phone_error = $2
@@ -569,18 +691,35 @@ export async function runChannelCheck(
       // phone
       if (!owner.phoneNumber)
         throw new Error("No phone number on owner account");
-      const { callId } = await sendCommCheckPhone(owner.phoneNumber, today);
+      const { callId, pendingOutboundContext } =
+        await sendCommCheckPhoneBounded(owner.phoneNumber, owner.id, today);
       // Wait up to 30 s to confirm the call actually connected (duration > 0).
       // A 0-second "completed" call means it was silently blocked — likely call
       // screening or a carrier STIR/SHAKEN rejection. Report it as an error so
       // the owner knows the channel isn't working, rather than silently marking
       // it verified.
-      const outcome = await waitForCallOutcome(callId, 30_000);
-      if (outcome === "no-answer") {
+      const outcome = await reconcileOutboundCallOutcome(
+        callId,
+        pendingOutboundContext,
+        { interactiveTimeoutMs: COMM_CHECK_INTERACTIVE_OUTCOME_TIMEOUT_MS },
+      );
+      if (outcome === "no-answer" || outcome === "error") {
         throw new Error(
           "Call placed but not answered (0 s — likely blocked by call screening). " +
             "Add Elaine's number to your contacts to allow it through.",
         );
+      }
+      if (outcome === "pending") {
+        await pool.query(
+          `UPDATE comm_checks SET phone_status = 'indeterminate', phone_error = $2
+           WHERE check_date = $1`,
+          [today, "accepted call outcome remains unknown"],
+        );
+        return {
+          date: today,
+          channel,
+          result: "unknown: accepted call outcome remains unknown",
+        };
       }
     }
 
@@ -613,6 +752,18 @@ export async function runChannelCheck(
     return { date: today, channel, result: "sent" };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    if (channel === "phone" && err instanceof OutboundCallIndeterminateError) {
+      await pool.query(
+        `UPDATE comm_checks SET phone_status = 'indeterminate', phone_error = $2
+         WHERE check_date = $1`,
+        [today, msg],
+      );
+      logger.warn(
+        { err, date: today },
+        "comm-check: manual phone acceptance indeterminate",
+      );
+      return { date: today, channel, result: `unknown: ${msg}` };
+    }
     const statusCol = `${channel}_status`;
     const errorCol = `${channel}_error`;
     await pool.query(

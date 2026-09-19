@@ -626,7 +626,7 @@ async function applyTunedFlatField(
   sigmas: number[],
 ): Promise<{ data: Buffer; info: OutputInfo }> {
   const { data: raw, info } = await cropToRawTile(buffer);
-  let corrected = raw;
+  let corrected: Buffer = raw;
   for (const sigma of sigmas) {
     corrected = await applyFlatFieldPass(corrected, info, sigma);
   }

@@ -31,6 +31,10 @@ import { ElaineName } from "./ElaineAvatar";
 import { type ChatWidget } from "./ChatWidgets";
 import { useElainePageContextReader } from "./ElainePageContext";
 import {
+  getActionErrorMessage,
+  removeSubmittedAction,
+} from "./action-confirmation";
+import {
   LARGE_ATTACHMENT_UPLOAD,
   validateClientUpload,
 } from "@workspace/upload-policy";
@@ -319,7 +323,11 @@ export function useElaineChat({
     };
   }, [active, captureBgScreenshot, captureGeo]);
 
-  const { data: settings } = useGetElaineSettings();
+  const {
+    data: settings,
+    isLoading: settingsLoading,
+    isError: settingsError,
+  } = useGetElaineSettings();
   const updateSettings = useUpdateElaineSettings();
   const { data: conversation, refetch: refetchConversation } =
     useGetElaineConversation({
@@ -1273,16 +1281,34 @@ export function useElaineChat({
       { type: action.type, payload: action.payload },
       {
         onSuccess: () => {
-          setActionDone(true);
-          setPendingActions((prev) => prev.slice(1));
+          // Keep the confirmation card visible while there are more actions
+          // waiting. The next action should become actionable immediately.
+          setPendingActions((current) => {
+            const remaining = removeSubmittedAction(current, action);
+            // Derive completion from the queue at resolution time. A new
+            // action may have arrived while this mutation was in flight.
+            setActionDone(remaining.length === 0);
+            return remaining;
+          });
           invalidateActionQueries();
           toast.success("Done!");
         },
-        onError: () => {
+        onError: (error) => {
+          // Confirmation is a one-shot authorization. Do not leave the same
+          // consequential action available to submit again after an
+          // ambiguous network/provider failure.
+          setPendingActions((current) => {
+            const remaining = removeSubmittedAction(current, action);
+            setActionDone(remaining.length === 0);
+            return remaining;
+          });
+          const message = getActionErrorMessage(error);
           toast.error(
-            <>
-              <ElaineName /> couldn't do that just now. Please try again.
-            </>,
+            message || (
+              <>
+                <ElaineName /> couldn't do that just now.
+              </>
+            ),
           );
         },
       },
@@ -1389,6 +1415,8 @@ export function useElaineChat({
 
   return {
     settings,
+    settingsLoading,
+    settingsError,
     updateSettings,
     input,
     setInput,

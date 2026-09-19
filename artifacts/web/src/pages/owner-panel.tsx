@@ -56,6 +56,12 @@ import { ImageLightbox } from "@workspace/collection-ui";
 import { useAuth } from "@/lib/auth";
 import { usePageAssistantContext } from "@/lib/assistant-context";
 import { COMMON_TIMEZONES } from "@/lib/timezones";
+import {
+  formatCommStatus,
+  formatIndeterminateCommResult,
+  isIndeterminateCommResult,
+  type CommStatus,
+} from "@/pages/comm-check-status";
 import { ControlPanelContent } from "@/pages/control-panel";
 import { GoogleApisDemoContent } from "@/pages/google-apis-demo";
 import { ServicesCatalogContent } from "@/pages/services-catalog";
@@ -3171,8 +3177,6 @@ function DbRow({
 // Daily Comms Check card — shows today's email/SMS/Slack send+verify status.
 // ---------------------------------------------------------------------------
 
-type CommStatus = "pending" | "sending" | "sent" | "error" | "verified";
-
 interface CommCheckRow {
   id: number;
   checkDate: string;
@@ -3188,7 +3192,8 @@ interface CommCheckRow {
   slackSentAt: string | null;
   slackVerifiedAt: string | null;
   slackError: string | null;
-  // Phone: no verified_at — sent = success (call placed = test passed)
+  // Phone: no verified_at — sent = call placed; indeterminate means the
+  // acceptance outcome could not be confirmed.
   phoneStatus: CommStatus;
   phoneSentAt: string | null;
   phoneError: string | null;
@@ -3201,11 +3206,19 @@ function statusBadge(
   error?: string | null,
   treatSentAsVerified = false,
 ) {
+  if (status === "indeterminate") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+        <AlertTriangle className="h-3 w-3" />
+        {formatCommStatus(status, treatSentAsVerified)}
+      </span>
+    );
+  }
   if (status === "verified" || (treatSentAsVerified && status === "sent")) {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-green-500/15 px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-400">
         <CheckCircle2 className="h-3 w-3" />
-        Verified
+        {formatCommStatus(status, treatSentAsVerified)}
       </span>
     );
   }
@@ -3213,7 +3226,7 @@ function statusBadge(
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
         <Circle className="h-3 w-3" />
-        Sent — awaiting reply
+        {formatCommStatus(status)}
       </span>
     );
   }
@@ -3221,7 +3234,7 @@ function statusBadge(
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/15 px-2 py-0.5 text-xs font-medium text-blue-700 dark:text-blue-400">
         <RefreshCw className="h-3 w-3 animate-spin" />
-        Sending
+        {formatCommStatus(status)}
       </span>
     );
   }
@@ -3232,14 +3245,14 @@ function statusBadge(
         title={error ?? undefined}
       >
         <AlertTriangle className="h-3 w-3" />
-        Error
+        {formatCommStatus(status)}
       </span>
     );
   }
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
       <Circle className="h-3 w-3" />
-      Pending
+      {formatCommStatus(status)}
     </span>
   );
 }
@@ -3290,7 +3303,16 @@ function CommCheckCard() {
         phone?: string;
         error?: string;
       };
-      if (d.alreadyRan) {
+      if (isIndeterminateCommResult(d.phone)) {
+        const phoneMessage = formatIndeterminateCommResult(d.phone);
+        setRunMsg(
+          `Sent — email: ${d.email}, SMS: ${d.sms}, Slack: ${d.slack}, ${phoneMessage}`,
+        );
+        toast({
+          title: "Phone call outcome unknown",
+          description: phoneMessage,
+        });
+      } else if (d.alreadyRan) {
         setRunMsg(
           "Already ran today — use the per-channel Send buttons to resend individual channels.",
         );
@@ -3330,7 +3352,14 @@ function CommCheckCard() {
         result?: string;
         error?: string;
       };
-      if (d.ok) {
+      if (channel === "phone" && isIndeterminateCommResult(d.result)) {
+        const phoneMessage = formatIndeterminateCommResult(d.result);
+        setRunMsg(`phone: ${phoneMessage}`);
+        toast({
+          title: "Phone call outcome unknown",
+          description: phoneMessage,
+        });
+      } else if (d.ok) {
         toast({ title: `${channel} check sent` });
         setRunMsg(`${channel}: ${d.result ?? "sent"}`);
       } else {
@@ -3367,7 +3396,8 @@ function CommCheckCard() {
     error: string | null,
     // For email/SMS/Slack: the verified_at timestamp. For phone: sent_at.
     timestampAt: string | null,
-    // Phone: treat "sent" as verified (call placed = success, no reply needed).
+    // Phone: treat "sent" as verified (call placed = success); indeterminate
+    // remains a neutral warning because acceptance was not confirmed.
     treatSentAsVerified = false,
   ) => (
     <div className="rounded-md border border-border px-3 py-2">

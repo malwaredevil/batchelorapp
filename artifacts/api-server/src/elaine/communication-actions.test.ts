@@ -9,10 +9,13 @@ const {
   mockDuplicateSelect,
   mockInsertReturning,
   mockInitiateOutboundCall,
+  mockWaitForCallOutcome,
+  mockReconcileOutboundCallOutcome,
   mockSendSms,
   mockOpenDmChannel,
   mockPostSlackMessage,
   mockSlackConfigured,
+  MockOutboundCallIndeterminateError,
 } = vi.hoisted(() => ({
   mockSelect: vi.fn(),
   // findDuplicateScheduledReminder() runs its own db.select(...).where(...)
@@ -23,10 +26,13 @@ const {
   mockDuplicateSelect: vi.fn().mockResolvedValue([]),
   mockInsertReturning: vi.fn(),
   mockInitiateOutboundCall: vi.fn(),
+  mockWaitForCallOutcome: vi.fn().mockResolvedValue("answered"),
+  mockReconcileOutboundCallOutcome: vi.fn().mockResolvedValue("answered"),
   mockSendSms: vi.fn(),
   mockOpenDmChannel: vi.fn(),
   mockPostSlackMessage: vi.fn(),
   mockSlackConfigured: vi.fn().mockReturnValue(false),
+  MockOutboundCallIndeterminateError: class extends Error {},
 }));
 
 // resolveContact() / findDuplicateScheduledReminder() and the appUsers-backed
@@ -65,9 +71,11 @@ vi.mock("@workspace/db", () => ({
 }));
 vi.mock("../lib/calls", () => ({
   initiateOutboundCall: mockInitiateOutboundCall,
+  OutboundCallIndeterminateError: MockOutboundCallIndeterminateError,
   // waitForCallOutcome is called after every successful call — mock it so
   // tests don't hit the real AgentPhone connector.
-  waitForCallOutcome: vi.fn().mockResolvedValue("answered"),
+  waitForCallOutcome: mockWaitForCallOutcome,
+  reconcileOutboundCallOutcome: mockReconcileOutboundCallOutcome,
 }));
 vi.mock("../lib/sms", () => ({
   sendSms: mockSendSms,
@@ -207,6 +215,7 @@ describe("call_me executor — immediate path (no scheduleAt)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockInitiateOutboundCall.mockResolvedValue({ callId: "call-456" });
+    mockWaitForCallOutcome.mockResolvedValue("answered");
   });
 
   it("returns 404 when the user account isn't found", async () => {
@@ -251,11 +260,73 @@ describe("call_me executor — immediate path (no scheduleAt)", () => {
     expect(mockInitiateOutboundCall).toHaveBeenCalledWith(
       expect.objectContaining({
         toNumber: "+12105559999",
-        initialGreeting: "Hey, it's your reminder!",
+        userId: 1,
+        openingMessage: "Hey, it's your reminder!",
       }),
     );
     expect(mockInsertReturning).not.toHaveBeenCalled();
     expect(JSON.stringify(result.body)).not.toContain("scheduled");
+  });
+
+  it("polls an attached call for terminal outcomes without pending context", async () => {
+    mockSelect.mockResolvedValue(makeSelfUser());
+    mockInitiateOutboundCall.mockResolvedValueOnce({
+      callId: "call-attached",
+      contextAttached: true,
+    });
+    mockWaitForCallOutcome.mockResolvedValueOnce("no-answer");
+
+    const result = await communicationActionExecutors.call_me({} as never, 1);
+
+    expect(result.status).toBe(200);
+    expect(mockReconcileOutboundCallOutcome).toHaveBeenCalledWith(
+      "call-attached",
+      undefined,
+    );
+  });
+
+  it("reconciles an accepted call whose context attach was not persisted", async () => {
+    mockSelect.mockResolvedValue(makeSelfUser());
+    mockInitiateOutboundCall.mockResolvedValueOnce({
+      callId: "call-accepted",
+      contextAttached: false,
+      pendingOutboundContext: {
+        phoneNumber: "+12105559999",
+        pendingId: "pending-self-callback",
+      },
+    });
+
+    const result = await communicationActionExecutors.call_me(
+      { greeting: "Please call me now" } as never,
+      1,
+    );
+
+    expect(result.status).toBe(200);
+    expect(mockReconcileOutboundCallOutcome).toHaveBeenCalledWith(
+      "call-accepted",
+      {
+        phoneNumber: "+12105559999",
+        pendingId: "pending-self-callback",
+      },
+    );
+  });
+
+  it("returns accepted/pending when call acceptance is indeterminate", async () => {
+    mockSelect.mockResolvedValue(makeSelfUser());
+    mockInitiateOutboundCall.mockRejectedValueOnce(
+      new MockOutboundCallIndeterminateError("socket timeout"),
+    );
+
+    const result = await communicationActionExecutors.call_me(
+      { greeting: "Please call me" } as never,
+      1,
+    );
+
+    expect(result.status).toBe(202);
+    expect(JSON.stringify(result.body)).toMatch(/pending|already connecting/i);
+    expect(JSON.stringify(result.body)).not.toMatch(
+      /failed to place|try again shortly/i,
+    );
   });
 });
 

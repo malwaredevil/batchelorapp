@@ -108,8 +108,8 @@ describe("runMonitoringCheckForReservation", () => {
     id: 10,
     lat: null,
     lng: null,
-    startDate: "2026-09-01",
-    endDate: "2026-09-05",
+    startDate: "2099-09-01",
+    endDate: "2099-09-05",
   };
 
   it("records lastCheckedAt only after the underlying checks complete successfully", async () => {

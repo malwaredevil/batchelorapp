@@ -34,6 +34,8 @@ function parseRetryAfterMs(response: Response): number | null {
 export interface AgentphoneRequestInit {
   method: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
+  /** Disable retries for non-idempotent provider operations such as call creation. */
+  retry?: boolean;
 }
 
 /**
@@ -63,7 +65,8 @@ export async function agentphoneRequest(
 
   let lastResponse: Response | null = null;
 
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+  const maxRetries = init.retry === false ? 0 : MAX_RETRIES;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const response = await fetch(url, {
       method: init.method,
       headers,
@@ -73,7 +76,7 @@ export async function agentphoneRequest(
       return response;
     }
     lastResponse = response;
-    if (attempt === MAX_RETRIES) break;
+    if (attempt === maxRetries) break;
 
     const retryAfterMs = parseRetryAfterMs(response);
     const backoffMs = retryAfterMs ?? BASE_DELAY_MS * 2 ** attempt;

@@ -11,6 +11,7 @@ import {
   runChannelCheck,
   getEffectiveDateString,
   getEffectiveTimezone,
+  isFullCommCheckSuccessful,
 } from "../lib/comm-check-scheduler";
 import dns from "node:dns";
 import { isIP } from "node:net";
@@ -683,7 +684,7 @@ router.post(
       const mainResult = await runDailyCommCheck();
       const phoneResult = await runPhoneCommCheck();
       res.json({
-        ok: true,
+        ok: isFullCommCheckSuccessful(mainResult, phoneResult),
         alreadyRan: mainResult.alreadyRan && phoneResult.alreadySent,
         date: mainResult.date,
         email: mainResult.email,
@@ -717,7 +718,8 @@ router.post(
     }
     try {
       const result = await runChannelCheck(channel);
-      res.json({ ok: true, ...result });
+      const ok = result.result === "sent";
+      res.json({ ok, ...result });
     } catch (err) {
       req.log.error({ err }, "hub/comm-checks/run/:channel: failed");
       res.status(500).json({

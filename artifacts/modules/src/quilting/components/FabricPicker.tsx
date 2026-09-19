@@ -3,6 +3,7 @@ import { Search, X as XIcon, Check } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { appendScreenshotToken } from "@workspace/api-client-react";
+import type { FabricUrlMap } from "@/quilting/lib/svg-export";
 
 // ---------------------------------------------------------------------------
 // Lightweight structural type — avoids importing generated API types from
@@ -72,10 +73,8 @@ export function computeFabricTally(
  * Build a map from fabric ID → signed image URL for SVG <pattern> rendering.
  * Fabrics without an image URL are omitted.
  */
-export function buildFabricUrlMap(
-  fabrics: FabricItem[],
-): Record<number, string> {
-  const map: Record<number, string> = {};
+export function buildFabricUrlMap(fabrics: FabricItem[]): FabricUrlMap {
+  const map: FabricUrlMap = {};
   for (const f of fabrics) {
     // Use the full fabric photo so the pattern shows the fabric at a natural
     // zoom level (not the small zoomed-in vectorized tile). Falls back to the

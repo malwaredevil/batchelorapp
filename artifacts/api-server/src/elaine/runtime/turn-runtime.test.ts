@@ -121,6 +121,107 @@ describe("ElaineTurnRuntime", () => {
     expect(second.verification.status).toBe("blocked");
   });
 
+  it("does not consume a re-plan when no concrete verification route exists", () => {
+    const runtime = new ElaineTurnRuntime({
+      traceId: "trace-no-route",
+      requestClass: { ...requestClass, kind: "action" },
+      plan: toRuntimePlan({
+        version: 1,
+        goal: "Send an invented SMS",
+        assumptions: [],
+        completionCriteria: ["The SMS delivery result is explicit"],
+        steps: [
+          {
+            id: "send",
+            label: "Send the SMS",
+            kind: "action",
+            toolName: "message_contact",
+            dependsOn: [],
+            expectedEvidence: "A successful send or a specific channel blocker",
+            required: true,
+          },
+        ],
+      }),
+    });
+    runtime.recordModelRound();
+    runtime.registerToolCalls([
+      {
+        id: "send-call",
+        name: "message_contact",
+        consequential: true,
+        confirmationRequired: false,
+        dedupeKey: "sms:invented-recipient:invented-message",
+      },
+    ]);
+    runtime.recordObservation({
+      callId: "send-call",
+      toolName: "message_contact",
+      success: false,
+      summary: "Recipient has no verified phone number",
+      errorCategory: "http_422",
+    });
+
+    const decision = runtime.verify({
+      finalContent:
+        "The recipient needs to verify a phone number before SMS can be sent.",
+      hasPendingConfirmation: false,
+      hasConcreteReplanRoute: false,
+    });
+
+    expect(decision.shouldReplan).toBe(false);
+    expect(decision.verification.status).toBe("blocked");
+    expect(runtime.snapshot().usage).toMatchObject({
+      modelRounds: 1,
+      replans: 0,
+    });
+  });
+
+  it("allows one bounded correction for a malformed action payload, then blocks", () => {
+    const runtime = new ElaineTurnRuntime({
+      traceId: "trace-malformed-action",
+      requestClass: { ...requestClass, kind: "action" },
+      plan: toRuntimePlan({
+        version: 1,
+        goal: "Create a reminder",
+        assumptions: [],
+        completionCriteria: ["A validated reminder action is ready"],
+        steps: [
+          {
+            id: "reminder",
+            label: "Prepare the reminder",
+            kind: "action",
+            toolName: "add_reminder",
+            dependsOn: [],
+            expectedEvidence: "A validated reminder payload",
+            required: true,
+          },
+        ],
+      }),
+      budget: { maxReplans: 2 },
+    });
+    runtime.recordModelRound();
+
+    const first = runtime.verify({
+      finalContent: "I couldn't prepare that reminder yet.",
+      hasPendingConfirmation: false,
+      hasConcreteReplanRoute: false,
+      hasActionBuildRecoveryRoute: true,
+    });
+    expect(first.shouldReplan).toBe(true);
+    expect(runtime.snapshot().usage.replans).toBe(1);
+
+    runtime.recordModelRound();
+    const second = runtime.verify({
+      finalContent: "I couldn't prepare that reminder.",
+      hasPendingConfirmation: false,
+      hasConcreteReplanRoute: false,
+      hasActionBuildRecoveryRoute: false,
+    });
+    expect(second.shouldReplan).toBe(false);
+    expect(second.verification.status).toBe("blocked");
+    expect(runtime.snapshot().usage.replans).toBe(1);
+  });
+
   it("preserves completed work across a bounded re-plan", () => {
     const runtime = new ElaineTurnRuntime({
       traceId: "trace-preserve",

@@ -14,6 +14,10 @@ const {
   mockDbSelectLimit,
   mockDbInsertReturning,
   mockRichTextToPlainText,
+  mockCallsConfigured,
+  mockInitiateOutboundCall,
+  mockReconcileOutboundCallOutcome,
+  mockSendGenericReminderAlertSms,
 } = vi.hoisted(() => {
   const mockPoolQuery = vi.fn();
   const mockPoolConnect = vi.fn();
@@ -25,6 +29,12 @@ const {
   const mockDbSelectLimit = vi.fn().mockResolvedValue([]);
   const mockDbInsertReturning = vi.fn().mockResolvedValue([]);
   const mockRichTextToPlainText = vi.fn().mockReturnValue("");
+  const mockCallsConfigured = vi.fn().mockReturnValue(false);
+  const mockInitiateOutboundCall = vi.fn();
+  const mockReconcileOutboundCallOutcome = vi
+    .fn()
+    .mockResolvedValue("answered");
+  const mockSendGenericReminderAlertSms = vi.fn();
   return {
     mockFireCallContact: vi.fn(),
     mockFireMessageContact: vi.fn(),
@@ -35,6 +45,10 @@ const {
     mockDbSelectLimit,
     mockDbInsertReturning,
     mockRichTextToPlainText,
+    mockCallsConfigured,
+    mockInitiateOutboundCall,
+    mockReconcileOutboundCallOutcome,
+    mockSendGenericReminderAlertSms,
   };
 });
 
@@ -96,7 +110,7 @@ vi.mock("./email", () => ({
   resendConfigured: vi.fn().mockReturnValue(false),
 }));
 vi.mock("./sms", () => ({
-  sendGenericReminderAlertSms: vi.fn(),
+  sendGenericReminderAlertSms: mockSendGenericReminderAlertSms,
   smsConfigured: vi.fn().mockReturnValue(false),
 }));
 vi.mock("./slack", () => ({
@@ -104,8 +118,10 @@ vi.mock("./slack", () => ({
   slackConfigured: vi.fn().mockReturnValue(false),
 }));
 vi.mock("./calls", () => ({
-  callsConfigured: vi.fn().mockReturnValue(false),
-  initiateOutboundCall: vi.fn(),
+  callsConfigured: mockCallsConfigured,
+  initiateOutboundCall: mockInitiateOutboundCall,
+  reconcileOutboundCallOutcome: mockReconcileOutboundCallOutcome,
+  OutboundCallIndeterminateError: class OutboundCallIndeterminateError extends Error {},
   buildGenericReminderCallScript: vi.fn().mockReturnValue(""),
 }));
 vi.mock("./scheduler-guard", () => ({
@@ -131,9 +147,6 @@ vi.mock("./rich-text-plaintext", () => ({
   richTextToPlainText: mockRichTextToPlainText,
   richTextToSpeech: vi.fn().mockReturnValue(""),
 }));
-vi.mock("./agentphone-conversation", () => ({
-  seedOutboundCallContext: vi.fn().mockResolvedValue(undefined),
-}));
 vi.mock("drizzle-orm", () => ({
   inArray: vi.fn(),
   eq: vi.fn(),
@@ -145,6 +158,7 @@ import {
   claimAndSendDueDeliveries,
   runSchedulerTick,
 } from "./reminders-scheduler";
+import { OutboundCallIndeterminateError } from "./calls";
 
 // Re-import the mocked shouldRunScheduledTask so individual tests can
 // override its return value without affecting the default (true).
@@ -1130,6 +1144,189 @@ describe("claimAndSendDueDeliveries — messenger branch", () => {
     );
     expect(firedUpdate).toBeDefined();
     expect(firedUpdate![1][0]).toBe(801);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// claimAndSendDueDeliveries — generic call delivery integration
+// ---------------------------------------------------------------------------
+
+describe("claimAndSendDueDeliveries — generic call delivery", () => {
+  const delivery = {
+    id: 901,
+    reminder_id: 77,
+    channel: "call",
+    recipient_ref: "42",
+    reminder_title: "Leave for the airport",
+    reminder_description: null,
+    entity_type: null,
+    entity_id: null,
+    occurrence_key: "occ0:lead:5minutes",
+  };
+
+  let claimClient: {
+    query: ReturnType<typeof vi.fn>;
+    release: ReturnType<typeof vi.fn>;
+  };
+
+  function setup(outcome: string = "answered") {
+    claimClient = {
+      query: vi.fn().mockResolvedValue({ rows: [delivery], rowCount: 1 }),
+      release: vi.fn(),
+    };
+    mockPoolConnect.mockResolvedValue(claimClient);
+    mockCallsConfigured.mockReturnValue(true);
+    mockInitiateOutboundCall.mockResolvedValue({
+      callId: "call-901",
+      contextAttached: true,
+    });
+    mockReconcileOutboundCallOutcome.mockResolvedValue(outcome);
+    mockPoolQuery
+      .mockResolvedValueOnce({ rowCount: 0, rows: [] }) // recovery
+      .mockResolvedValueOnce({
+        rows: [{ id: 42, phone_number: "+12105550123" }],
+      }) // phone lookup
+      .mockResolvedValueOnce({
+        rows: [
+          { due_at: "2030-01-01T12:00:00.000Z", google_event_html_link: null },
+        ],
+      }) // reminder details
+      .mockResolvedValue({ rowCount: 1, rows: [] }); // status update(s)
+  }
+
+  function statusUpdate() {
+    return mockPoolQuery.mock.calls.find(
+      (call) =>
+        typeof call[0] === "string" &&
+        ((call[0] as string).includes("status = 'fired'") ||
+          (call[0] as string).includes("status = 'failed'")) &&
+        Array.isArray(call[1]),
+    );
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockCallsConfigured.mockReturnValue(false);
+    mockSendGenericReminderAlertSms.mockResolvedValue(undefined);
+  });
+
+  it.each([
+    ["answered", "answered"],
+    ["voicemail", "voicemail"],
+  ])("%s calls fire with no SMS fallback", async (_label, outcome) => {
+    setup(outcome);
+
+    const result = await claimAndSendDueDeliveries();
+
+    expect(mockInitiateOutboundCall).toHaveBeenCalledOnce();
+    expect(mockReconcileOutboundCallOutcome).toHaveBeenCalledWith(
+      "call-901",
+      undefined,
+    );
+    expect(mockSendGenericReminderAlertSms).not.toHaveBeenCalled();
+    expect(result).toEqual({ claimed: 1, sent: 1, failed: 0 });
+    expect(statusUpdate()![0]).toContain("status = 'fired'");
+    expect(statusUpdate()![1][0]).toBe(901);
+  });
+
+  it.each([
+    ["no-answer", "no-answer"],
+    ["error", "error"],
+  ])(
+    "%s calls use SMS fallback and fire after SMS succeeds",
+    async (_label, outcome) => {
+      setup(outcome);
+
+      const result = await claimAndSendDueDeliveries();
+
+      expect(mockInitiateOutboundCall).toHaveBeenCalledOnce();
+      expect(mockSendGenericReminderAlertSms).toHaveBeenCalledOnce();
+      expect(result).toEqual({ claimed: 1, sent: 1, failed: 0 });
+      expect(statusUpdate()![0]).toContain("status = 'fired'");
+      expect(statusUpdate()![1][0]).toBe(901);
+    },
+  );
+
+  it("accepts a pending call without SMS fallback and fires it", async () => {
+    setup("pending");
+
+    const result = await claimAndSendDueDeliveries();
+
+    expect(mockInitiateOutboundCall).toHaveBeenCalledOnce();
+    expect(mockSendGenericReminderAlertSms).not.toHaveBeenCalled();
+    expect(result).toEqual({ claimed: 1, sent: 1, failed: 0 });
+    expect(statusUpdate()![0]).toContain("status = 'fired'");
+  });
+
+  it("fires an indeterminate create outcome without SMS fallback", async () => {
+    setup();
+    mockInitiateOutboundCall.mockRejectedValueOnce(
+      new OutboundCallIndeterminateError({
+        phoneNumber: "+12105550123",
+        pendingId: "pending-901",
+      }),
+    );
+
+    const result = await claimAndSendDueDeliveries();
+
+    expect(mockInitiateOutboundCall).toHaveBeenCalledOnce();
+    expect(mockSendGenericReminderAlertSms).not.toHaveBeenCalled();
+    expect(result).toEqual({ claimed: 1, sent: 1, failed: 0 });
+    expect(statusUpdate()![0]).toContain("status = 'fired'");
+  });
+
+  it("uses SMS fallback for a definite 429-style create error", async () => {
+    setup();
+    mockInitiateOutboundCall.mockRejectedValueOnce(
+      new Error("AgentPhone: failed to initiate outbound call (status 429)"),
+    );
+
+    const result = await claimAndSendDueDeliveries();
+
+    expect(mockSendGenericReminderAlertSms).toHaveBeenCalledOnce();
+    expect(result).toEqual({ claimed: 1, sent: 1, failed: 0 });
+    expect(statusUpdate()![0]).toContain("status = 'fired'");
+  });
+
+  it("does not fire when a terminal call fallback SMS fails", async () => {
+    setup("no-answer");
+    mockSendGenericReminderAlertSms.mockRejectedValueOnce(
+      new Error("SMS provider unavailable"),
+    );
+
+    const result = await claimAndSendDueDeliveries();
+
+    expect(mockSendGenericReminderAlertSms).toHaveBeenCalledOnce();
+    expect(result).toEqual({ claimed: 1, sent: 0, failed: 1 });
+    expect(statusUpdate()![0]).toContain("status = 'failed'");
+    expect(statusUpdate()![1][0]).toBe(901);
+  });
+
+  it.each([
+    [
+      "503",
+      new OutboundCallIndeterminateError({
+        phoneNumber: "+12105550123",
+        pendingId: "pending-503",
+      }),
+    ],
+    [
+      "network",
+      new OutboundCallIndeterminateError({
+        phoneNumber: "+12105550123",
+        pendingId: "pending-network",
+      }),
+    ],
+  ])("%s create errors do not use SMS fallback", async (_label, error) => {
+    setup();
+    mockInitiateOutboundCall.mockRejectedValueOnce(error);
+
+    const result = await claimAndSendDueDeliveries();
+
+    expect(mockInitiateOutboundCall).toHaveBeenCalledOnce();
+    expect(mockSendGenericReminderAlertSms).not.toHaveBeenCalled();
+    expect(result).toEqual({ claimed: 1, sent: 1, failed: 0 });
+    expect(statusUpdate()![0]).toContain("status = 'fired'");
   });
 });
 

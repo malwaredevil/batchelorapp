@@ -132,6 +132,7 @@ vi.mock("../lib/elaine-config", () => ({
     plannerModel: "openai/gpt-4o-mini",
     plannerEnabled: false,
     responsesEnabled: false,
+    runtimeBudget: { maxModelRounds: 3 },
   }),
   invalidateElaineGlobalConfigCache: vi.fn(),
 }));

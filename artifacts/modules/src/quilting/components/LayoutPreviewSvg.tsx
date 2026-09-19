@@ -1,4 +1,9 @@
 import { SvgCell } from "./SvgCell";
+import {
+  DEFAULT_FABRIC_TILE_REPEATS,
+  getFabricPatternSize,
+  getLayoutSvgGeometry,
+} from "@/quilting/lib/layout-svg-geometry";
 
 type LayoutCell = { blockId: number | null; rotation: 0 | 90 | 180 | 270 };
 
@@ -24,7 +29,7 @@ export function LayoutPreviewSvg({
   blocks,
   size = 160,
   fabricUrlMap = {},
-  fabricTileRepeats = 1,
+  fabricTileRepeats = DEFAULT_FABRIC_TILE_REPEATS,
   patternPrefix = "",
   fill = false,
 }: {
@@ -55,11 +60,14 @@ export function LayoutPreviewSvg({
   fill?: boolean;
 }) {
   const blockMap = new Map(blocks.map((b) => [b.id, b]));
-  const sashW = layout.sashingWidthInches ?? 0;
-  const bordW = layout.borderWidthInches ?? 0;
   const sashingColor = layout.sashingColor ?? "#d4c5a9";
   const borderColor = layout.borderColor ?? "#8b6f5e";
   const cornerstoneColor = layout.cornerstoneColor ?? null;
+  const resolveFill = (value: string) => {
+    if (!value.startsWith("fab:")) return value;
+    const id = Number(value.slice(4));
+    return fabricUrlMap[id] ? `url(#${patternPrefix}fab-${id})` : "#D1D5DB";
+  };
 
   const fabIds = (() => {
     const ids = new Set<number>();
@@ -77,17 +85,16 @@ export function LayoutPreviewSvg({
         }
       }
     }
+    for (const value of [sashingColor, borderColor, cornerstoneColor ?? ""]) {
+      if (!value.startsWith("fab:")) continue;
+      const id = Number(value.slice(4));
+      if (fabricUrlMap[id]) ids.add(id);
+    }
     return Array.from(ids);
   })();
 
-  const unitW = layout.cols + sashW * (layout.cols - 1) + bordW * 2;
-  const unitH = layout.rows + sashW * (layout.rows - 1) + bordW * 2;
-  const scale = size / Math.max(unitW, unitH);
-  const cellPx = scale;
-  const sashPx = sashW * scale;
-  const borderPx = bordW * scale;
-  const W = unitW * scale;
-  const H = unitH * scale;
+  const geometry = getLayoutSvgGeometry(layout, size);
+  const { cellPx, sashPx, borderPx, width: W, height: H } = geometry;
 
   return (
     <svg
@@ -107,15 +114,15 @@ export function LayoutPreviewSvg({
               patternUnits="userSpaceOnUse"
               x="0"
               y="0"
-              width={cellPx / fabricTileRepeats}
-              height={cellPx / fabricTileRepeats}
+              width={getFabricPatternSize(cellPx, fabricTileRepeats)}
+              height={getFabricPatternSize(cellPx, fabricTileRepeats)}
             >
               <image
                 href={fabricUrlMap[id]}
                 x="0"
                 y="0"
-                width={cellPx / fabricTileRepeats}
-                height={cellPx / fabricTileRepeats}
+                width={getFabricPatternSize(cellPx, fabricTileRepeats)}
+                height={getFabricPatternSize(cellPx, fabricTileRepeats)}
                 preserveAspectRatio="xMidYMid slice"
               />
             </pattern>
@@ -123,7 +130,13 @@ export function LayoutPreviewSvg({
         </defs>
       )}
       {borderPx > 0 && (
-        <rect x={0} y={0} width={W} height={H} fill={borderColor} />
+        <rect
+          x={0}
+          y={0}
+          width={W}
+          height={H}
+          fill={resolveFill(borderColor)}
+        />
       )}
       {sashPx > 0 ? (
         <rect
@@ -131,7 +144,7 @@ export function LayoutPreviewSvg({
           y={borderPx}
           width={W - borderPx * 2}
           height={H - borderPx * 2}
-          fill={sashingColor}
+          fill={resolveFill(sashingColor)}
         />
       ) : (
         <rect
@@ -155,7 +168,7 @@ export function LayoutPreviewSvg({
                 y={cy2}
                 width={sashPx}
                 height={sashPx}
-                fill={cornerstoneColor}
+                fill={resolveFill(cornerstoneColor)}
               />
             );
           }),

@@ -7,7 +7,11 @@ const mockPostSlackMessage = vi.hoisted(() => vi.fn());
 const mockOpenDmChannel = vi.hoisted(() => vi.fn());
 const mockResendSend = vi.hoisted(() => vi.fn());
 const mockInitiateOutboundCall = vi.hoisted(() => vi.fn());
-const mockWaitForCallOutcome = vi.hoisted(() => vi.fn());
+const { mockReconcileOutboundCallOutcome, MockOutboundCallIndeterminateError } =
+  vi.hoisted(() => ({
+    mockReconcileOutboundCallOutcome: vi.fn(),
+    MockOutboundCallIndeterminateError: class extends Error {},
+  }));
 
 vi.mock("@workspace/db", async (importOriginal) => {
   const real = await importOriginal<typeof import("@workspace/db")>();
@@ -27,7 +31,8 @@ vi.mock("./slack", () => ({
 vi.mock("./calls", () => ({
   callsConfigured: vi.fn(() => true),
   initiateOutboundCall: mockInitiateOutboundCall,
-  waitForCallOutcome: mockWaitForCallOutcome,
+  reconcileOutboundCallOutcome: mockReconcileOutboundCallOutcome,
+  OutboundCallIndeterminateError: MockOutboundCallIndeterminateError,
 }));
 vi.mock("./logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -42,7 +47,10 @@ import {
   getCommCheckScheduleDecision,
   runDailyCommCheck,
   runPhoneCommCheck,
+  runChannelCheck,
+  isFullCommCheckSuccessful,
 } from "./comm-check-scheduler";
+import { logger } from "./logger";
 
 function installOwnerSelect(timezone = "Europe/Berlin") {
   mockDbSelect.mockImplementation((selection: Record<string, unknown>) => ({
@@ -64,10 +72,18 @@ function installOwnerSelect(timezone = "Europe/Berlin") {
   }));
 }
 
-type ChannelState = "pending" | "sending" | "sent" | "verified" | "error";
+type ChannelState =
+  | "pending"
+  | "sending"
+  | "sent"
+  | "verified"
+  | "error"
+  | "indeterminate"
+  | "unexpected";
 
 function installCommCheckLedger(
   initial?: Partial<Record<string, ChannelState>>,
+  phoneNoClaimState?: ChannelState,
 ) {
   const state: Record<string, ChannelState> = {
     email: initial?.email ?? "pending",
@@ -87,15 +103,37 @@ function installCommCheckLedger(
     if (!channel) return { rowCount: 1, rows: [] };
 
     if (sql.includes("RETURNING check_date")) {
-      if (state[channel] === "sent" || state[channel] === "verified") {
+      // A fresh in-flight phone attempt is not reclaimable.  The production
+      // query's stale-time predicate makes this the no-claim path.
+      if (channel === "phone" && state.phone === "sending") {
+        return { rowCount: 0, rows: [] };
+      }
+      // Some no-claim paths (for example a legacy/unexpected ledger value)
+      // are deliberately represented by a failed conditional update.
+      if (channel === "phone" && phoneNoClaimState) {
+        state.phone = phoneNoClaimState;
+        return { rowCount: 0, rows: [] };
+      }
+      if (
+        state[channel] === "sent" ||
+        state[channel] === "verified" ||
+        state[channel] === "indeterminate"
+      ) {
         return { rowCount: 0, rows: [] };
       }
       state[channel] = "sending";
       lease[channel] = String(params?.[1]);
       return { rowCount: 1, rows: [{ check_date: "2026-09-01" }] };
     }
+    if (sql.includes("SELECT phone_status")) {
+      return {
+        rowCount: 1,
+        rows: [{ phone_status: state.phone, phone_error: null }],
+      };
+    }
     const expectedLease = String(
-      sql.includes(`SET ${channel}_status = 'error'`)
+      sql.includes(`SET ${channel}_status = 'error'`) ||
+        sql.includes("phone_error = $3")
         ? params?.[2]
         : params?.[1],
     );
@@ -107,6 +145,9 @@ function installCommCheckLedger(
     }
     if (sql.includes(`SET ${channel}_status = 'sent'`)) {
       state[channel] = "sent";
+      delete lease[channel];
+    } else if (sql.includes(`SET ${channel}_status = 'indeterminate'`)) {
+      state[channel] = "indeterminate";
       delete lease[channel];
     } else if (sql.includes(`SET ${channel}_status = 'error'`)) {
       state[channel] = "error";
@@ -127,7 +168,7 @@ beforeEach(() => {
   mockOpenDmChannel.mockResolvedValue("D123");
   mockPostSlackMessage.mockResolvedValue(undefined);
   mockInitiateOutboundCall.mockResolvedValue({ callId: "call-1" });
-  mockWaitForCallOutcome.mockResolvedValue("answered");
+  mockReconcileOutboundCallOutcome.mockResolvedValue("answered");
 });
 
 describe("comm-check owner-local schedule decisions", () => {
@@ -196,6 +237,211 @@ describe("comm-check owner-local schedule decisions", () => {
 });
 
 describe("comm-check per-channel retries", () => {
+  describe("full-run aggregate success", () => {
+    const daily = { email: "sent", sms: "sent", slack: "sent" };
+
+    it("rejects a mixed daily error even when the phone lane was sent", () => {
+      expect(
+        isFullCommCheckSuccessful(
+          { ...daily, sms: "error: temporary outage" },
+          { phone: "sent" },
+        ),
+      ).toBe(false);
+    });
+
+    it.each([
+      ["sent", "sent"],
+      ["already sent", "n/a"],
+    ])("accepts all daily %s and phone %s", (dailyState, phoneState) => {
+      expect(
+        isFullCommCheckSuccessful(
+          { email: dailyState, sms: dailyState, slack: dailyState },
+          { phone: phoneState },
+        ),
+      ).toBe(true);
+    });
+
+    it.each(["unknown: outcome pending", "unknown: call pending"])(
+      "rejects an indeterminate phone outcome (%s)",
+      (phone) => {
+        expect(isFullCommCheckSuccessful(daily, { phone })).toBe(false);
+      },
+    );
+
+    it("rejects a phone lane that is still sending", () => {
+      expect(isFullCommCheckSuccessful(daily, { phone: "sending" })).toBe(
+        false,
+      );
+    });
+  });
+
+  it.each([
+    ["answered", "sent"],
+    ["voicemail", "sent"],
+  ])("manual phone marks %s as sent", async (outcome, expected) => {
+    const state = installCommCheckLedger();
+    mockReconcileOutboundCallOutcome.mockResolvedValueOnce(outcome);
+    const result = await runChannelCheck("phone");
+    expect(result.result).toBe(expected);
+    expect(state.phone).toBe("sent");
+  });
+
+  it.each(["no-answer", "error"])(
+    "manual phone marks %s as retryable error",
+    async (outcome) => {
+      const state = installCommCheckLedger();
+      mockReconcileOutboundCallOutcome.mockResolvedValueOnce(outcome);
+      const result = await runChannelCheck("phone");
+      expect(result.result).toMatch(/^error:/);
+      expect(state.phone).toBe("error");
+    },
+  );
+
+  it("manual phone keeps pending calls unknown and non-retryable", async () => {
+    const state = installCommCheckLedger();
+    mockReconcileOutboundCallOutcome.mockResolvedValueOnce("pending");
+    const result = await runChannelCheck("phone");
+    expect(result.result).toMatch(/^unknown:/);
+    expect(state.phone).toBe("indeterminate");
+    expect(mockInitiateOutboundCall).toHaveBeenCalledTimes(1);
+  });
+
+  it("scheduled phone times out as indeterminate and does not retry an existing indeterminate claim", async () => {
+    vi.useFakeTimers();
+    try {
+      const state = installCommCheckLedger();
+      const neverSettles = new Promise<never>(() => {});
+      mockInitiateOutboundCall.mockReturnValueOnce(neverSettles);
+
+      const firstRun = runPhoneCommCheck();
+      await vi.waitFor(() =>
+        expect(mockInitiateOutboundCall).toHaveBeenCalledTimes(1),
+      );
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      await expect(firstRun).resolves.toMatchObject({
+        alreadySent: false,
+        phone: expect.stringMatching(/^unknown:/),
+      });
+      expect(state.phone).toBe("indeterminate");
+      expect(mockInitiateOutboundCall).toHaveBeenCalledTimes(1);
+
+      await expect(runPhoneCommCheck()).resolves.toMatchObject({
+        alreadySent: false,
+        phone: expect.stringMatching(/^unknown:/),
+      });
+      expect(mockInitiateOutboundCall).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("manual phone times out as unknown with one provider invocation", async () => {
+    vi.useFakeTimers();
+    try {
+      installCommCheckLedger();
+      const neverSettles = new Promise<never>(() => {});
+      mockInitiateOutboundCall.mockReturnValueOnce(neverSettles);
+
+      const manualRun = runChannelCheck("phone");
+      await vi.waitFor(() =>
+        expect(mockInitiateOutboundCall).toHaveBeenCalledTimes(1),
+      );
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      await expect(manualRun).resolves.toMatchObject({
+        channel: "phone",
+        result: expect.stringMatching(/^unknown:/),
+      });
+      expect(mockInitiateOutboundCall).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reconciles a late scheduled phone resolution exactly once with its pending context", async () => {
+    vi.useFakeTimers();
+    try {
+      installCommCheckLedger();
+      let resolveCall!: (result: {
+        callId: string;
+        pendingOutboundContext: { phoneNumber: string; pendingId: string };
+      }) => void;
+      const lateCall = new Promise<{
+        callId: string;
+        pendingOutboundContext: { phoneNumber: string; pendingId: string };
+      }>((resolve) => {
+        resolveCall = resolve;
+      });
+      mockInitiateOutboundCall.mockReturnValueOnce(lateCall);
+      const pendingContext = {
+        phoneNumber: "+491234",
+        pendingId: "pending-late-1",
+      };
+
+      const scheduledRun = runPhoneCommCheck();
+      await vi.waitFor(() =>
+        expect(mockInitiateOutboundCall).toHaveBeenCalledTimes(1),
+      );
+      await vi.advanceTimersByTimeAsync(60_000);
+      await expect(scheduledRun).resolves.toMatchObject({
+        phone: expect.stringMatching(/^unknown:/),
+      });
+
+      resolveCall({
+        callId: "late-call-1",
+        pendingOutboundContext: pendingContext,
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      await vi.waitFor(() =>
+        expect(mockReconcileOutboundCallOutcome).toHaveBeenCalledTimes(1),
+      );
+      expect(mockReconcileOutboundCallOutcome).toHaveBeenCalledWith(
+        "late-call-1",
+        pendingContext,
+        { interactiveTimeoutMs: 30_000 },
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("contains and logs a late scheduled phone rejection after timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      installCommCheckLedger();
+      let rejectCall!: (reason: Error) => void;
+      const lateError = new Error("late provider failure");
+      const lateCall = new Promise<never>((_, reject) => {
+        rejectCall = reject;
+      });
+      mockInitiateOutboundCall.mockReturnValueOnce(lateCall);
+
+      const scheduledRun = runPhoneCommCheck();
+      await vi.waitFor(() =>
+        expect(mockInitiateOutboundCall).toHaveBeenCalledTimes(1),
+      );
+      await vi.advanceTimersByTimeAsync(60_000);
+      await expect(scheduledRun).resolves.toMatchObject({
+        phone: expect.stringMatching(/^unknown:/),
+      });
+
+      rejectCall(lateError);
+      await Promise.resolve();
+      await Promise.resolve();
+      await vi.waitFor(() =>
+        expect(logger.warn).toHaveBeenCalledWith(
+          { err: lateError },
+          "comm-check: late call creation failed",
+        ),
+      );
+      expect(mockReconcileOutboundCallOutcome).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("retries only a failed channel and never duplicates confirmed successes", async () => {
     const state = installCommCheckLedger();
     mockSendSms.mockRejectedValueOnce(new Error("temporary SMS outage"));
@@ -276,7 +522,86 @@ describe("comm-check per-channel retries", () => {
       phone: "n/a",
     });
     expect(mockInitiateOutboundCall).toHaveBeenCalledTimes(2);
+    expect(mockInitiateOutboundCall).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        userId: 1,
+        openingMessage: expect.stringContaining(
+          "daily Batchelor App communications check",
+        ),
+        callScreeningIdentity: "Elaine from Batchelor App",
+        callScreeningPurpose: "daily communications test",
+      }),
+    );
   });
+
+  it.each([
+    ["answered", "sent"],
+    ["voicemail", "sent"],
+    ["no-answer", "error"],
+    ["error", "error"],
+    ["pending", "indeterminate"],
+  ])("scheduled phone records %s as %s", async (outcome, expected) => {
+    const state = installCommCheckLedger();
+    mockReconcileOutboundCallOutcome.mockResolvedValueOnce(outcome);
+    const result = await runPhoneCommCheck();
+    expect(result.phone).toMatch(new RegExp(`^(sent|error|unknown)`));
+    expect(state.phone).toBe(expected);
+  });
+
+  it("does not reclaim an indeterminate provider acceptance", async () => {
+    installCommCheckLedger();
+    mockInitiateOutboundCall.mockRejectedValueOnce(
+      new MockOutboundCallIndeterminateError("provider response lost"),
+    );
+
+    const first = await runPhoneCommCheck();
+    expect(first).toMatchObject({
+      alreadySent: false,
+      phone: "unknown: provider response lost",
+    });
+    const second = await runPhoneCommCheck();
+    expect(second).toMatchObject({
+      alreadySent: false,
+      phone: "unknown: outcome pending",
+    });
+    expect(mockInitiateOutboundCall).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["sent", "verified"] as const)(
+    "does not call the provider for a confirmed %s phone ledger state",
+    async (state) => {
+      installCommCheckLedger({ phone: state });
+
+      await expect(runPhoneCommCheck()).resolves.toMatchObject({
+        alreadySent: true,
+        phone: "n/a",
+      });
+      expect(mockInitiateOutboundCall).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not call the provider when a fresh phone attempt is still sending", async () => {
+    installCommCheckLedger({ phone: "sending" });
+
+    await expect(runPhoneCommCheck()).resolves.toMatchObject({
+      alreadySent: false,
+      phone: "unknown: outcome pending",
+    });
+    expect(mockInitiateOutboundCall).not.toHaveBeenCalled();
+  });
+
+  it.each(["error", "unexpected"] as const)(
+    "reports a no-claim %s phone ledger state without calling the provider",
+    async (state) => {
+      installCommCheckLedger(undefined, state);
+
+      await expect(runPhoneCommCheck()).resolves.toMatchObject({
+        alreadySent: false,
+        phone: expect.stringMatching(/^error:/),
+      });
+      expect(mockInitiateOutboundCall).not.toHaveBeenCalled();
+    },
+  );
 
   it("does not let an expired worker overwrite a newer stale-reclaim attempt", async () => {
     const state = installCommCheckLedger();

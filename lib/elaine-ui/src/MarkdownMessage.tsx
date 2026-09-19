@@ -1,4 +1,5 @@
 import { type ReactNode } from "react";
+import { MessageCopyButton } from "./MessageCopyButton";
 
 /** Lightweight markdown renderer covering the subset Elaine uses:
  *  bold, italic, inline code, headers (h1-h3), bullet lists, numbered lists,
@@ -12,6 +13,7 @@ type Token =
   | { kind: "hr" }
   | { kind: "blank" }
   | { kind: "table"; header: string[]; rows: string[][] }
+  | { kind: "code"; text: string; language?: string }
   | { kind: "text"; text: string };
 
 /** Matches a GFM-style pipe table row, e.g. "| a | b |" or "a | b". */
@@ -39,6 +41,23 @@ function tokenize(markdown: string): Token[] {
   while (i < lines.length) {
     const raw = lines[i]!;
     const trimmed = raw.trim();
+
+    const fence = trimmed.match(/^```([\w+-]*)\s*$/);
+    if (fence) {
+      const codeLines: string[] = [];
+      i++;
+      while (i < lines.length && !/^```\s*$/.test(lines[i]!.trim())) {
+        codeLines.push(lines[i]!);
+        i++;
+      }
+      if (i < lines.length) i++;
+      tokens.push({
+        kind: "code",
+        text: codeLines.join("\n"),
+        language: fence[1] || undefined,
+      });
+      continue;
+    }
 
     // Pipe table: a row containing "|" immediately followed by a valid
     // separator row (--- / :---: etc), then zero or more data rows.
@@ -258,7 +277,24 @@ function buildNodes(tokens: Token[]): ReactNode[] {
       continue;
     }
 
-    if (t.kind === "h1") {
+    if (t.kind === "code") {
+      nodes.push(
+        <div
+          key={key++}
+          className="my-2 overflow-hidden rounded-lg border border-border bg-muted/50"
+        >
+          <div className="flex min-h-8 items-center justify-between border-b border-border/60 px-2">
+            <span className="font-mono text-[0.7rem] text-muted-foreground">
+              {t.language || "code"}
+            </span>
+            <MessageCopyButton text={t.text} kind="code" />
+          </div>
+          <pre className="overflow-x-auto p-3 text-sm leading-relaxed">
+            <code>{t.text}</code>
+          </pre>
+        </div>,
+      );
+    } else if (t.kind === "h1") {
       nodes.push(
         <p
           key={key++}

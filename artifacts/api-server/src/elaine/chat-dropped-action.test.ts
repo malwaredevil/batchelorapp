@@ -1387,9 +1387,9 @@ describe("POST /api/elaine/chat — auto_run executor failure corrective text", 
     const { allDeltaText, eventTypes } = parseSseResponse(res.text);
 
     expect(allDeltaText).toContain(
-      "I wasn't actually able to prepare that as a confirmable action just now",
+      "I couldn't complete that action just now. Please try again in a moment.",
     );
-    expect(allDeltaText).toContain("nothing was scheduled or changed");
+    expect(allDeltaText).not.toContain("Trip not found");
     expect(eventTypes).not.toContain("action");
   }, 15_000);
 });

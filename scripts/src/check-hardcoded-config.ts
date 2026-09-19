@@ -265,11 +265,12 @@ function findingContext(content: string, firstLine: number): string {
  * miss, fix the code instead.
  */
 export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
-  // Fixed protocol limits in the large Elaine dispatcher; these protect phone
-  // verification and bound internal tool loops rather than owner settings.
-  "artifacts/api-server/src/elaine/index.ts:919", // MAX_PHONE_CODE_ATTEMPTS
-  "artifacts/api-server/src/elaine/index.ts:10217", // MAX_ROUNDS
-  "artifacts/api-server/src/elaine/index.ts:10479", // MAX_ROUNDS
+  // Fixed diagnostic safety window intentionally exceeds interactive user-call
+  // polling; comm-check is an internal health probe, not owner-facing config.
+  "artifacts/api-server/src/lib/comm-check-scheduler.ts:313",
+  "artifacts/api-server/src/lib/comm-check-scheduler.ts:312",
+  // Internal delivery watchdog; not owner-facing product configuration.
+  "artifacts/api-server/src/lib/comm-check-scheduler.ts:309",
   // Client-side concurrency safeguard for an expensive image-processing
   // action, not an owner-facing collection setting.
   "artifacts/modules/src/quilting/pages/fabrics/index.tsx:567", // CREASE_BATCH_SIZE
@@ -290,6 +291,11 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   // Input-validation cap for a short internal category label, not a tunable
   // collection setting.
   "artifacts/api-server/src/routes/ornaments/ornaments.ts:119", // MAX_LABEL
+  // Fixed client-only display heuristics: collapse unusually long citation
+  // lists and load older chat messages near the scroll boundary. Neither
+  // changes Elaine's server behavior or belongs in owner-facing settings.
+  "lib/elaine-ui/src/ElaineChatPanel.tsx:354", // INLINE_CITATION_LIMIT
+  "lib/elaine-ui/src/ElaineChatPanel.tsx:547", // SCROLL_TOP_LOAD_THRESHOLD
   // Scanner heuristic that avoids treating short common strings as secrets;
   // it is a fixed detector safeguard, never product configuration.
   "scripts/src/check-public-file-secrets.ts:169", // MIN_SECRET_LENGTH
@@ -329,20 +335,20 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
 
   // ---- elaine/index.ts ----
   // Auth security: max verification-code attempts before lockout.
-  "artifacts/api-server/src/elaine/index.ts:941",
+  "artifacts/api-server/src/elaine/index.ts:942",
   // MAX_ROUNDS: fixed 3-attempt ceiling inside the restricted-channel OpenAI
   // Responses attempt loop and the SMS/email/Slack reply loop. Not
   // owner-facing — the outer RuntimeBudgetConfig controls the agentic turn
   // budget; these inner loops are implementation guards for the restricted
   // channel path that are too tightly coupled to the response-parsing logic
   // to be safely raised by the owner.
-  "artifacts/api-server/src/elaine/index.ts:10256", // MAX_ROUNDS (restricted-channel OpenAI-Responses attempt loop)
-  "artifacts/api-server/src/elaine/index.ts:10518", // MAX_ROUNDS (restricted-channel reply loop, SMS/email/Slack)
+  "artifacts/api-server/src/elaine/index.ts:10273", // MAX_ROUNDS (restricted-channel OpenAI-Responses attempt loop)
+  "artifacts/api-server/src/elaine/index.ts:10535", // MAX_ROUNDS (restricted-channel reply loop, SMS/email/Slack)
 
   // ---- lib/comm-check-scheduler.ts ----
   // Per-channel network safety timeout. This bounds a single delivery attempt
   // so one provider cannot stall the scheduler; it is not a user preference.
-  "artifacts/api-server/src/lib/comm-check-scheduler.ts:305",
+  "artifacts/api-server/src/lib/comm-check-scheduler.ts:310",
 
   // ---- routes/magnets/magnets.ts ----
   // Fixed per-request image cap that prevents oversized AI payloads.
@@ -458,6 +464,11 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   "artifacts/api-server/src/lib/agentphone-http.ts:24",
   "artifacts/api-server/src/lib/agentphone-http.ts:25",
 
+  // Fixed one-hour pending outbound-call correlation/privacy bound. This is
+  // deliberately not owner-configurable: extending it increases the window
+  // for stale call context to be disclosed to a later call.
+  "artifacts/api-server/src/lib/agentphone-conversation.ts:14",
+
   // ---- lib/circuit-breaker.ts ----
   // Circuit-breaker infrastructure defaults; per-instantiation overridable via options.
   "artifacts/api-server/src/lib/circuit-breaker.ts:31",
@@ -536,7 +547,7 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
 
   // ---- lib/reminders-scheduler.ts ----
   // Reminder claim batch size — background job implementation detail.
-  "artifacts/api-server/src/lib/reminders-scheduler.ts:418",
+  "artifacts/api-server/src/lib/reminders-scheduler.ts:419",
 
   // ---- lib/sentry-error-nudges.ts ----
   // Max Sentry issues fetched per nudge run — external API call guard.
@@ -725,12 +736,12 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   // Max recent commands shown in command palette — UI presentation.
   "lib/elaine-ui/src/CommandPalette.tsx:80",
   // Inline citation collapse threshold and scroll-triggered load threshold.
-  "lib/elaine-ui/src/ElaineChatPanel.tsx:350",
-  "lib/elaine-ui/src/ElaineChatPanel.tsx:543",
+  "lib/elaine-ui/src/ElaineChatPanel.tsx:354",
+  "lib/elaine-ui/src/ElaineChatPanel.tsx:547",
   // Widget minimum dimensions — layout constraints preventing the chat
   // window from becoming too small to use. Not owner-facing config.
-  "lib/elaine-ui/src/ElaineWidget.tsx:33",
-  "lib/elaine-ui/src/ElaineWidget.tsx:34",
+  "lib/elaine-ui/src/ElaineWidget.tsx:38",
+  "lib/elaine-ui/src/ElaineWidget.tsx:39",
   // Web Speech API rate bounds — browser API constraint.
   "lib/elaine-ui/src/useTTS.ts:8",
   "lib/elaine-ui/src/useTTS.ts:9",

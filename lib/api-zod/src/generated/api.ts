@@ -5,7 +5,7 @@
  * Unified API specification (pottery + quilting + travels + ornaments + office + hub + messenger)
  * OpenAPI spec version: 0.1.0
  */
-import * as zod from 'zod';
+import { z as zod } from 'zod';
 
 /**
  * @summary Health check

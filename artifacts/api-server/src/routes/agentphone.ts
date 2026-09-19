@@ -13,7 +13,10 @@ import {
 } from "../lib/webhook-side-effect-idempotency";
 import { runAgentphoneTurn, type AgentphoneChatMessage } from "../elaine";
 import { markCommCheckVerified } from "../lib/comm-check-scheduler";
-import { getOrCreateAgentphoneConversation } from "../lib/agentphone-conversation";
+import {
+  getAgentphoneConversation,
+  getOrCreateAgentphoneConversation,
+} from "../lib/agentphone-conversation";
 
 // ---------------------------------------------------------------------------
 // AgentPhone SMS/voice webhook (task #105). Handles three things:
@@ -29,6 +32,29 @@ import { getOrCreateAgentphoneConversation } from "../lib/agentphone-conversatio
 // ---------------------------------------------------------------------------
 
 const router: IRouter = Router();
+
+async function waitForExactOutboundCorrelation(
+  from: string,
+  callId: string,
+  conversation: Awaited<ReturnType<typeof getOrCreateAgentphoneConversation>>,
+): Promise<typeof conversation> {
+  let current = conversation;
+  const deadline = Date.now() + env.agentphoneOutboundCorrelationWindowMs;
+  while (Date.now() < deadline) {
+    if (current.pendingOutboundCallId) {
+      return current.pendingOutboundCallId === callId ? current : conversation;
+    }
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(
+        resolve,
+        env.agentphoneOutboundCorrelationIntervalMs,
+      );
+      timer.unref?.();
+    });
+    current = (await getAgentphoneConversation(from)) ?? current;
+  }
+  return current.pendingOutboundCallId === callId ? current : conversation;
+}
 
 const STOP_WORDS = new Set([
   "STOP",
@@ -153,10 +179,47 @@ async function runRestrictedTurnAndPersist(
   userId: number,
   inputText: string,
   channel: "sms" | "voice",
+  allowPendingOutboundContext = false,
+  outboundCallId?: string,
+  requireOutboundCallIdCorrelation = false,
 ): Promise<string> {
   let current = conversation;
   for (let attempt = 0; attempt < 3; attempt++) {
-    const history = (current.messages as AgentphoneChatMessage[] | null) ?? [];
+    const storedHistory =
+      (current.messages as AgentphoneChatMessage[] | null) ?? [];
+    const pendingOutboundId =
+      channel === "voice" &&
+      allowPendingOutboundContext &&
+      current.pendingOutboundExpiresAt &&
+      current.pendingOutboundExpiresAt > new Date() &&
+      (current.pendingOutboundCallId
+        ? Boolean(
+            outboundCallId && current.pendingOutboundCallId === outboundCallId,
+          )
+        : !requireOutboundCallIdCorrelation)
+        ? current.pendingOutboundId
+        : null;
+    const pendingOpening = pendingOutboundId
+      ? current.pendingOutboundOpening
+      : null;
+    const pendingPrivateContext = pendingOutboundId
+      ? current.pendingOutboundPrivateContext
+      : null;
+    const pendingInstruction = pendingOpening
+      ? {
+          role: "assistant" as const,
+          content:
+            `[Not spoken aloud — pending outbound call context: The recipient has now spoken for the first time. ` +
+            `Introduce yourself as Elaine and naturally deliver this call purpose now: "${pendingOpening}".` +
+            (pendingPrivateContext
+              ? ` After delivering it, also remember: ${pendingPrivateContext}`
+              : "") +
+            "]",
+        }
+      : null;
+    const history = pendingInstruction
+      ? [...storedHistory, pendingInstruction]
+      : storedHistory;
     let replyText: string;
     let updatedHistory: AgentphoneChatMessage[];
     try {
@@ -170,15 +233,32 @@ async function runRestrictedTurnAndPersist(
       updatedHistory = result.history;
     } catch (err) {
       logger.error({ err }, "agentphone: restricted Elaine turn failed");
-      replyText =
-        "Sorry, something went wrong on our end — please try again or use the app.";
-      updatedHistory = history;
+      // In particular, retain pending outbound context so a bounded retry can
+      // still deliver the opening. Do not persist a synthetic failure turn.
+      throw err;
     }
 
+    // The pending instruction is model-only context. Never persist it in the
+    // shared SMS/voice history, especially because it may contain private
+    // outbound-call context.
+    const persistedHistory = pendingInstruction
+      ? updatedHistory.filter(
+          (message) => message.content !== pendingInstruction.content,
+        )
+      : updatedHistory;
     const [saved] = await db
       .update(agentphoneConversations)
       .set({
-        messages: updatedHistory,
+        messages: persistedHistory,
+        ...(pendingOutboundId
+          ? {
+              pendingOutboundId: null,
+              pendingOutboundCallId: null,
+              pendingOutboundOpening: null,
+              pendingOutboundPrivateContext: null,
+              pendingOutboundExpiresAt: null,
+            }
+          : {}),
         version: current.version + 1,
         updatedAt: new Date(),
       })
@@ -186,6 +266,9 @@ async function runRestrictedTurnAndPersist(
         and(
           eq(agentphoneConversations.id, current.id),
           eq(agentphoneConversations.version, current.version),
+          pendingOutboundId
+            ? eq(agentphoneConversations.pendingOutboundId, pendingOutboundId)
+            : undefined,
         ),
       )
       .returning({ id: agentphoneConversations.id });
@@ -357,12 +440,21 @@ async function handleSms(
   );
 
   const conversation = await getOrCreateAgentphoneConversation(from, user.id);
-  const replyText = await runRestrictedTurnAndPersist(
-    conversation,
-    user.id,
-    messageText,
-    "sms",
-  );
+  let replyText: string;
+  try {
+    replyText = await runRestrictedTurnAndPersist(
+      conversation,
+      user.id,
+      messageText,
+      "sms",
+    );
+  } catch (err) {
+    // Keep the pending context and shared history untouched for a retry, but
+    // still complete this delivery with the established generic SMS fallback.
+    logger.error({ err }, "agentphone: SMS Elaine turn failed");
+    replyText =
+      "Sorry, something went wrong on our end — please try again or use the app.";
+  }
 
   const replySideEffectKey = `agentphone:sms:${deliveryKey}:assistant-reply`;
   const shouldSendReply = await claimWebhookSideEffect({
@@ -398,10 +490,26 @@ async function handleVoice(req: Request, res: Response): Promise<void> {
   const data = (req.body?.data ?? {}) as {
     from?: unknown;
     transcript?: unknown;
+    direction?: unknown;
+    callDirection?: unknown;
+    callId?: unknown;
+    call_id?: unknown;
   };
   const from = typeof data.from === "string" ? data.from : "";
   const transcript =
     typeof data.transcript === "string" ? data.transcript.trim() : "";
+  const direction =
+    typeof data.direction === "string"
+      ? data.direction
+      : typeof data.callDirection === "string"
+        ? data.callDirection
+        : "";
+  const callId =
+    typeof data.callId === "string"
+      ? data.callId
+      : typeof data.call_id === "string"
+        ? data.call_id
+        : undefined;
 
   logger.info(
     { hasFrom: Boolean(from), transcriptLength: transcript.length },
@@ -409,6 +517,31 @@ async function handleVoice(req: Request, res: Response): Promise<void> {
   );
 
   if (!transcript) {
+    const isOutboundStartup = direction.toLowerCase() === "outbound";
+    if (isOutboundStartup) {
+      if (from && callId) {
+        const [startupUser] = await db
+          .select({ id: appUsers.id })
+          .from(appUsers)
+          .where(eq(appUsers.phoneNumber, from))
+          .limit(1);
+        if (startupUser) {
+          const startupConversation = await getOrCreateAgentphoneConversation(
+            from,
+            startupUser.id,
+          );
+          await waitForExactOutboundCorrelation(
+            from,
+            callId,
+            startupConversation,
+          );
+        }
+      }
+      // Outbound calls wait for the recipient's first vocal input. An empty
+      // startup event is not permission to speak.
+      res.status(200).json({ text: "" });
+      return;
+    }
     // First turn of the call — greet instead of reacting to empty input.
     // In practice AgentPhone speaks the agent's configured `beginMessage`
     // itself without calling this webhook, so this branch is a defensive
@@ -435,7 +568,60 @@ async function handleVoice(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const conversation = await getOrCreateAgentphoneConversation(from, user.id);
+  // Stream an interim acknowledgement before any outbound correlation wait.
+  // Once headers are sent, all later failures must finish this stream rather
+  // than attempting a second JSON response.
+  const turnStartedAt = Date.now();
+  res.status(200);
+  res.setHeader("Content-Type", "application/x-ndjson");
+  res.write(`${JSON.stringify({ text: "Mm, one sec.", interim: true })}\n`);
+  (res as Response & { flush?: () => void }).flush?.();
+
+  let conversation: Awaited<
+    ReturnType<typeof getOrCreateAgentphoneConversation>
+  >;
+  try {
+    conversation = await getOrCreateAgentphoneConversation(from, user.id);
+  } catch (err) {
+    logger.error(
+      { err },
+      "agentphone: failed to load voice conversation after interim ack",
+    );
+    res.write(
+      `${JSON.stringify({ text: "Sorry, something went wrong on our end." })}\n`,
+    );
+    res.end();
+    return;
+  }
+  // Missing direction is not evidence of an outbound call. A call ID can
+  // authorize consumption only when runRestrictedTurnAndPersist confirms it
+  // matches the pending provider call ID.
+  const normalizedDirection = direction.toLowerCase();
+  const mayConsumeOutboundContext =
+    Boolean(callId?.trim()) &&
+    (normalizedDirection === "outbound" || normalizedDirection === "");
+  // Reload after the initial lookup so an attach that won the race is visible.
+  // Never infer correlation from phone number alone: a late old webhook must
+  // not consume a newer call's private opening.
+  try {
+    if (normalizedDirection === "outbound" && callId) {
+      conversation = await waitForExactOutboundCorrelation(
+        from,
+        callId,
+        conversation,
+      );
+    }
+  } catch (err) {
+    logger.error(
+      { err },
+      "agentphone: outbound correlation failed after interim ack",
+    );
+    res.write(
+      `${JSON.stringify({ text: "Sorry, something went wrong on our end." })}\n`,
+    );
+    res.end();
+    return;
+  }
 
   // Every real spoken turn runs a full LLM (and sometimes tool-calling) turn,
   // which regularly takes several seconds — well past the ~1s AgentPhone's
@@ -447,12 +633,6 @@ async function handleVoice(req: Request, res: Response): Promise<void> {
   // leaving the caller with silence on both. Streaming an interim
   // acknowledgement immediately (per AgentPhone's documented NDJSON
   // contract) keeps the turn alive so no redelivery/duplicate ever happens.
-  const turnStartedAt = Date.now();
-  res.status(200);
-  res.setHeader("Content-Type", "application/x-ndjson");
-  res.write(`${JSON.stringify({ text: "Mm, one sec.", interim: true })}\n`);
-  (res as Response & { flush?: () => void }).flush?.();
-
   let replyText: string;
   try {
     replyText = await runRestrictedTurnAndPersist(
@@ -460,6 +640,9 @@ async function handleVoice(req: Request, res: Response): Promise<void> {
       user.id,
       transcript,
       "voice",
+      mayConsumeOutboundContext,
+      mayConsumeOutboundContext ? callId : undefined,
+      mayConsumeOutboundContext,
     );
   } catch (err) {
     logger.error(

@@ -248,6 +248,9 @@ export function classifyArchitectureFindings(
 
   for (const finding of current.findings) {
     const before = baseById.get(finding.id);
+    // Findings and exceptions are separate audit results. An exception in the
+    // reviewed baseline only reviews the corresponding exception emitted by
+    // the current audit; it must never review a current finding.
     const reviewed = baselineById.has(finding.id);
     if (!before) {
       newFindings.push(finding);

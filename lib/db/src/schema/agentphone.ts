@@ -29,6 +29,13 @@ export const agentphoneConversations = pgTable("agentphone_conversations", {
   messages: jsonb("messages")
     .notNull()
     .default(sql`'[]'::jsonb`),
+  pendingOutboundId: text("pending_outbound_id"),
+  pendingOutboundCallId: text("pending_outbound_call_id"),
+  pendingOutboundOpening: text("pending_outbound_opening"),
+  pendingOutboundPrivateContext: text("pending_outbound_private_context"),
+  pendingOutboundExpiresAt: timestamp("pending_outbound_expires_at", {
+    withTimezone: true,
+  }),
   version: integer("version").notNull().default(0),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .defaultNow()

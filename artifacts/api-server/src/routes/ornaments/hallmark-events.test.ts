@@ -85,9 +85,15 @@ vi.mock("../../lib/google-calendar", () => ({
   listAllCalendarEvents: mockListAllCalendarEvents,
 }));
 
-vi.mock("../../lib/ornaments/hallmark-events-source", () => ({
-  fetchHallmarkEventsSource: mockFetchHallmarkEventsSource,
-}));
+vi.mock(
+  "../../lib/ornaments/hallmark-events-source",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("../../lib/ornaments/hallmark-events-source")
+    >()),
+    fetchHallmarkEventsSource: mockFetchHallmarkEventsSource,
+  }),
+);
 
 vi.mock("../../lib/ornaments/hallmark-events-sync", async (importOriginal) => {
   const actual =
@@ -117,6 +123,7 @@ vi.mock("@workspace/db", async (importOriginal) => {
 });
 
 import hallmarkEventsRouter from "./hallmark-events";
+import { createHallmarkSyncPlanFingerprint } from "../../lib/ornaments/hallmark-events-source";
 
 const SYNC_PATH = "/api/ornaments/hallmark-events/admin/sync";
 
@@ -204,6 +211,7 @@ describe("Hallmark sync authorization", () => {
     expect(mockRunHallmarkEventsSync).toHaveBeenCalledWith(
       "dry-run",
       undefined,
+      undefined,
     );
   });
 
@@ -217,23 +225,50 @@ describe("Hallmark sync authorization", () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual(result);
-    expect(mockRunHallmarkEventsSync).toHaveBeenCalledWith("apply", undefined);
+    expect(mockRunHallmarkEventsSync).toHaveBeenCalledWith(
+      "apply",
+      undefined,
+      undefined,
+    );
   });
 });
 
 describe("Hallmark stale preview protection", () => {
   it("rejects a stale preview before attempting any calendar write", async () => {
-    const stalePreviewFingerprint = "a".repeat(64);
+    const reviewedSource = {
+      sourceUrl: "https://www.hallmark.com/keepsake-ornament-events/",
+      complete: true,
+      year: 2026,
+      candidates: [
+        {
+          sourceKey: "ornament-debut:2026",
+          title: "Hallmark Keepsake Ornament Debut",
+          startDate: "2026-10-10",
+          endDate: "2026-10-18",
+          details: null,
+          sourceUrl: "https://www.hallmark.com/keepsake-ornament-events/",
+          year: 2026,
+        },
+      ],
+    };
+    const stalePreviewFingerprint =
+      createHallmarkSyncPlanFingerprint(reviewedSource);
     mockRunHallmarkEventsSync.mockImplementation(
-      (mode: "dry-run" | "apply", sourceFingerprint?: string) =>
+      (
+        mode: "dry-run" | "apply",
+        sourceFingerprint?: string,
+        source?: import("../../lib/ornaments/hallmark-events-sync").HallmarkSyncPlanSnapshot,
+      ) =>
         (
           realRunState.run as typeof import("../../lib/ornaments/hallmark-events-sync").runHallmarkEventsSync
-        )(mode, sourceFingerprint),
+        )(mode, sourceFingerprint, source),
     );
 
-    const response = await request(makeApp())
-      .post(SYNC_PATH)
-      .send({ dryRun: false, sourceFingerprint: stalePreviewFingerprint });
+    const response = await request(makeApp()).post(SYNC_PATH).send({
+      dryRun: false,
+      sourceFingerprint: stalePreviewFingerprint,
+      reviewedSource,
+    });
 
     expect(response.status).toBe(409);
     expect(response.body).toMatchObject({
@@ -242,6 +277,12 @@ describe("Hallmark stale preview protection", () => {
         "The Hallmark source changed after this preview. Run a new preview before applying.",
       expectedSourceFingerprint: stalePreviewFingerprint,
       actualSourceFingerprint: "b".repeat(64),
+      differences: {
+        added: [
+          expect.objectContaining({ sourceKey: "ornament-premiere:2026" }),
+        ],
+        removed: [reviewedSource.candidates[0]],
+      },
     });
     expect(mockCreateCalendarEvent).not.toHaveBeenCalled();
     expect(mockUpdateCalendarEvent).not.toHaveBeenCalled();

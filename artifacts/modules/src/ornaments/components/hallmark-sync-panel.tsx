@@ -9,6 +9,7 @@ import {
   type HallmarkSyncCandidate,
   type HallmarkSyncRejected,
   type HallmarkSyncResult,
+  type HallmarkSyncPlanDiff,
 } from "@workspace/api-client-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -123,6 +124,82 @@ function CandidateList({
   );
 }
 
+function displayDiffValue(value: string | number | boolean | null): string {
+  if (value === null) return "None";
+  if (typeof value === "boolean") return value ? "Complete" : "Incomplete";
+  return String(value);
+}
+
+function StalePreviewDifferences({
+  differences,
+}: {
+  differences: HallmarkSyncPlanDiff;
+}) {
+  const fieldLabels: Record<string, string> = {
+    sourceKey: "Identity",
+    title: "Title",
+    startDate: "Start date",
+    endDate: "End date",
+    details: "Details",
+    sourceUrl: "Source",
+    year: "Year",
+    complete: "Completeness",
+  };
+  const hasDifferences =
+    differences.added.length > 0 ||
+    differences.removed.length > 0 ||
+    differences.changed.length > 0 ||
+    differences.planChanges.length > 0;
+  if (!hasDifferences) return null;
+
+  return (
+    <div className="mt-3 space-y-3">
+      <p className="font-medium">What changed since your preview</p>
+      {differences.added.map((candidate) => (
+        <div key={`added-${candidate.sourceKey}`}>
+          <span className="font-medium">Added:</span> {candidate.title} (
+          {candidate.startDate} – {candidate.endDate}){" "}
+          <span className="font-mono text-xs">[{candidate.sourceKey}]</span>
+        </div>
+      ))}
+      {differences.removed.map((candidate) => (
+        <div key={`removed-${candidate.sourceKey}`}>
+          <span className="font-medium">Removed:</span> {candidate.title} (
+          {candidate.startDate} – {candidate.endDate}){" "}
+          <span className="font-mono text-xs">[{candidate.sourceKey}]</span>
+        </div>
+      ))}
+      {differences.changed.map((candidate) => (
+        <div key={`changed-${candidate.sourceKey}`}>
+          <p className="font-medium">Changed: {candidate.title}</p>
+          <ul className="ml-5 list-disc space-y-1">
+            {candidate.changes.map((change) => (
+              <li key={change.field}>
+                {fieldLabels[change.field] ?? change.field}:{" "}
+                <span className="line-through">
+                  {displayDiffValue(change.before)}
+                </span>{" "}
+                → {displayDiffValue(change.after)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+      {differences.planChanges.map((change) => (
+        <div key={`plan-${change.field}`}>
+          <span className="font-medium">
+            {fieldLabels[change.field] ?? change.field}:
+          </span>{" "}
+          <span className="line-through">
+            {displayDiffValue(change.before)}
+          </span>{" "}
+          → {displayDiffValue(change.after)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function DryRunResult({ result }: { result: HallmarkSyncResult }) {
   const counts = useMemo(() => countActions(result.actions), [result.actions]);
   const plannedActions = result.actions.filter(
@@ -221,6 +298,11 @@ export function HallmarkSyncPanel({ isOwner }: { isOwner: boolean }) {
     null,
   );
   const [confirmApplyOpen, setConfirmApplyOpen] = useState(false);
+  const [stalePreviewMessage, setStalePreviewMessage] = useState<string | null>(
+    null,
+  );
+  const [stalePreviewDifferences, setStalePreviewDifferences] =
+    useState<HallmarkSyncPlanDiff | null>(null);
 
   if (!isOwner) return null;
 
@@ -228,6 +310,8 @@ export function HallmarkSyncPanel({ isOwner }: { isOwner: boolean }) {
 
   const runDryRun = async () => {
     setDryRunResult(null);
+    setStalePreviewMessage(null);
+    setStalePreviewDifferences(null);
     try {
       const result = await runSync.mutateAsync({ dryRun: true });
       setDryRunResult(result);
@@ -251,6 +335,12 @@ export function HallmarkSyncPanel({ isOwner }: { isOwner: boolean }) {
       await runSync.mutateAsync({
         dryRun: false,
         sourceFingerprint: reviewedFingerprint,
+        reviewedSource: {
+          sourceUrl: dryRunResult.sourceUrl,
+          complete: dryRunResult.complete,
+          year: dryRunResult.year,
+          candidates: dryRunResult.candidates,
+        },
       });
       setDryRunResult(null);
       await queryClient.invalidateQueries({
@@ -270,10 +360,23 @@ export function HallmarkSyncPanel({ isOwner }: { isOwner: boolean }) {
         await queryClient.invalidateQueries({
           queryKey: getHallmarkEventSyncStatusQueryKey(),
         });
-        toast.error(
+        const message =
           (errorData as { error?: string }).error ??
-            "The Hallmark source changed. Preview the sync again before applying.",
-        );
+          "The Hallmark source changed. Preview the sync again before applying.";
+        setStalePreviewMessage(message);
+        const differences = (errorData as { differences?: unknown })
+          .differences;
+        if (
+          typeof differences === "object" &&
+          differences !== null &&
+          Array.isArray((differences as HallmarkSyncPlanDiff).added) &&
+          Array.isArray((differences as HallmarkSyncPlanDiff).removed) &&
+          Array.isArray((differences as HallmarkSyncPlanDiff).changed) &&
+          Array.isArray((differences as HallmarkSyncPlanDiff).planChanges)
+        ) {
+          setStalePreviewDifferences(differences as HallmarkSyncPlanDiff);
+        }
+        toast.error(message);
         return;
       }
       toast.error("Could not apply the Hallmark sync");
@@ -430,6 +533,29 @@ export function HallmarkSyncPanel({ isOwner }: { isOwner: boolean }) {
                 </Button>
               )}
             </div>
+
+            {stalePreviewMessage && (
+              <div
+                role="alert"
+                className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200"
+              >
+                <p>{stalePreviewMessage}</p>
+                {stalePreviewDifferences && (
+                  <StalePreviewDifferences
+                    differences={stalePreviewDifferences}
+                  />
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-3"
+                  onClick={() => void runDryRun()}
+                  disabled={runSync.isPending}
+                >
+                  Run fresh preview
+                </Button>
+              </div>
+            )}
 
             {dryRunResult && <DryRunResult result={dryRunResult} />}
           </>

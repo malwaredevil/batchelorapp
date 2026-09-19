@@ -126,6 +126,8 @@ const dryRunResult: HallmarkSyncResult = {
   sourceUrl: status.sourceUrl,
   sourceFingerprint: "fedcba0987654321fedcba0987654321",
   fetchedAt: "2026-09-02T12:02:00.000Z",
+  complete: true,
+  year: 2026,
   candidateCount: 2,
   rejectedCount: 0,
   candidates: [],
@@ -222,6 +224,12 @@ describe("HallmarkSyncPanel", () => {
       expect(mutateAsync).toHaveBeenCalledWith({
         dryRun: false,
         sourceFingerprint: dryRunResult.sourceFingerprint,
+        reviewedSource: {
+          sourceUrl: dryRunResult.sourceUrl,
+          complete: dryRunResult.complete,
+          year: dryRunResult.year,
+          candidates: dryRunResult.candidates,
+        },
       }),
     );
     expect(mutateAsync).toHaveBeenCalledTimes(2);
@@ -238,6 +246,35 @@ describe("HallmarkSyncPanel", () => {
             code: "STALE_PREVIEW",
             error:
               "The Hallmark source changed after this preview. Run a new preview before applying.",
+            differences: {
+              added: [
+                {
+                  ...status.candidates[0],
+                  title: "New Hallmark Event",
+                },
+              ],
+              removed: [
+                {
+                  ...status.candidates[0],
+                  sourceKey: "retired-event:2026",
+                  title: "Retired Hallmark Event",
+                },
+              ],
+              changed: [
+                {
+                  sourceKey: "ornament-premiere:2026",
+                  title: "Hallmark Keepsake Ornament Premiere",
+                  changes: [
+                    {
+                      field: "startDate",
+                      before: "2026-07-11",
+                      after: "2026-07-12",
+                    },
+                  ],
+                },
+              ],
+              planChanges: [{ field: "complete", before: true, after: false }],
+            },
           },
         }),
       );
@@ -257,6 +294,68 @@ describe("HallmarkSyncPanel", () => {
     await waitFor(() =>
       expect(screen.queryByText("Dry-run result")).not.toBeInTheDocument(),
     );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "The Hallmark source changed after this preview. Run a new preview before applying.",
+    );
+    expect(
+      screen.getByRole("button", { name: "Run fresh preview" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("What changed since your preview"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Added:/).parentElement).toHaveTextContent(
+      "New Hallmark Event",
+    );
+    expect(screen.getByText(/Removed:/).parentElement).toHaveTextContent(
+      "Retired Hallmark Event",
+    );
+    expect(
+      screen.getByText("Changed: Hallmark Keepsake Ornament Premiere"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Start date:/).parentElement).toHaveTextContent(
+      "2026-07-11 → 2026-07-12",
+    );
+    expect(screen.getByText(/Completeness:/).parentElement).toHaveTextContent(
+      "Complete → Incomplete",
+    );
     expect(mockInvalidateQueries).toHaveBeenCalled();
+  });
+
+  it("replaces stale state with a fresh preview", async () => {
+    const freshResult = {
+      ...dryRunResult,
+      sourceFingerprint: "a".repeat(64),
+    };
+    const mutateAsync = vi
+      .fn()
+      .mockResolvedValueOnce(dryRunResult)
+      .mockRejectedValueOnce(
+        Object.assign(new Error("STALE_PREVIEW"), {
+          status: 409,
+          data: {
+            code: "STALE_PREVIEW",
+            error:
+              "The Hallmark source changed after this preview. Run a new preview before applying.",
+          },
+        }),
+      )
+      .mockResolvedValueOnce(freshResult);
+    mockUseRunHallmarkEventSync.mockReturnValue({
+      isPending: false,
+      mutateAsync,
+    });
+    render(<HallmarkSyncPanel isOwner />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Preview sync" }));
+    await screen.findByText("Dry-run result");
+    fireEvent.click(screen.getByRole("button", { name: "Apply preview" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply sync" }));
+    await screen.findByRole("button", { name: "Run fresh preview" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Run fresh preview" }));
+
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(3));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByText("Dry-run result")).toBeInTheDocument();
   });
 });

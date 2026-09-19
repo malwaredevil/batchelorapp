@@ -286,11 +286,39 @@ export interface HallmarkSyncResult {
   sourceUrl: string;
   sourceFingerprint: string;
   fetchedAt: string;
+  complete: boolean;
+  year: number | null;
   candidateCount: number;
   rejectedCount: number;
   candidates: HallmarkSyncCandidate[];
   rejected: HallmarkSyncRejected[];
   actions: HallmarkSyncAction[];
+}
+
+export interface HallmarkSyncPlanSnapshot {
+  sourceUrl: string;
+  complete: boolean;
+  year: number | null;
+  candidates: HallmarkSyncCandidate[];
+}
+
+export interface HallmarkSyncPlanDiff {
+  added: HallmarkSyncCandidate[];
+  removed: HallmarkSyncCandidate[];
+  changed: Array<{
+    sourceKey: string;
+    title: string;
+    changes: Array<{
+      field: keyof HallmarkSyncCandidate;
+      before: string | number | null;
+      after: string | number | null;
+    }>;
+  }>;
+  planChanges: Array<{
+    field: "sourceUrl" | "complete" | "year";
+    before: string | number | boolean | null;
+    after: string | number | boolean | null;
+  }>;
 }
 
 const HALLMARK_SYNC_BASE = "/api/ornaments/hallmark-events/admin/sync";
@@ -333,6 +361,7 @@ export function useGetHallmarkEventSyncStatus<
 export interface RunHallmarkEventSyncInput {
   dryRun: boolean;
   sourceFingerprint?: string;
+  reviewedSource?: HallmarkSyncPlanSnapshot;
 }
 
 export function useRunHallmarkEventSync(

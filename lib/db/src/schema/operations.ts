@@ -258,7 +258,8 @@ export type InsertHouseholdActivityLog =
 // ── Daily comms check ─────────────────────────────────────────────────────────
 // One row per owner-local calendar day.
 // Tracks send + verification status for each channel independently.
-// Status values: 'pending' | 'sending' | 'sent' | 'error' | 'verified'
+// Status values: 'pending' | 'sending' | 'sent' | 'error' | 'verified' |
+// 'indeterminate' (phone outcome could not be confirmed)
 export const commChecks = pgTable("comm_checks", {
   id: serial("id").primaryKey(),
   checkDate: text("check_date").notNull().unique(),

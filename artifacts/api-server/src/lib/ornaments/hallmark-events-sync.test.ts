@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   assertHallmarkSourceFingerprint,
   buildHallmarkCalendarEventInput,
+  diffHallmarkSyncPlans,
   getHallmarkSourceKeyFromCalendarEvent,
   planHallmarkCalendarSync,
 } from "./hallmark-events-sync";
@@ -38,6 +39,64 @@ describe("Hallmark calendar reconciliation", () => {
     expect(() =>
       assertHallmarkSourceFingerprint("same-fingerprint", "same-fingerprint"),
     ).not.toThrow();
+  });
+
+  it("reports added, removed, and changed event fields between previews", () => {
+    const replacement = {
+      ...debut,
+      sourceKey: "holiday-open-house:2026",
+      title: "Holiday Open House",
+    };
+    const changedPremiere = {
+      ...premiere,
+      title: "Updated Premiere",
+      startDate: "2026-07-12",
+      details: null,
+    };
+
+    expect(
+      diffHallmarkSyncPlans(
+        {
+          sourceUrl: premiere.sourceUrl,
+          complete: true,
+          year: 2026,
+          candidates: [premiere, debut],
+        },
+        {
+          sourceUrl: premiere.sourceUrl,
+          complete: false,
+          year: 2026,
+          candidates: [changedPremiere, replacement],
+        },
+      ),
+    ).toEqual({
+      added: [replacement],
+      removed: [debut],
+      changed: [
+        {
+          sourceKey: premiere.sourceKey,
+          title: "Updated Premiere",
+          changes: [
+            {
+              field: "title",
+              before: premiere.title,
+              after: "Updated Premiere",
+            },
+            {
+              field: "startDate",
+              before: premiere.startDate,
+              after: "2026-07-12",
+            },
+            {
+              field: "details",
+              before: premiere.details,
+              after: null,
+            },
+          ],
+        },
+      ],
+      planChanges: [{ field: "complete", before: true, after: false }],
+    });
   });
 
   it("writes stable private metadata that follows a date correction", () => {

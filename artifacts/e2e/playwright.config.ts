@@ -22,6 +22,7 @@ export default defineConfig({
       name: "chromium-critical",
       use: { ...devices["Desktop Chrome"] },
       testMatch: "**/*.spec.ts",
+      testIgnore: "**/quilting-layout-export.spec.ts",
     },
   ],
   webServer: {

@@ -88,6 +88,58 @@ function report(
   assert.deepEqual(result.blockingReasons, []);
 }
 
+// A baseline exception cannot review a current finding. Exceptions are
+// validated only against current.exceptions, so stale exception metadata
+// cannot suppress an undocumented historical finding.
+{
+  const legacy = finding("duplicate-code:exception-reviewed");
+  const exception = {
+    id: `exception:${legacy.id}`,
+    category: legacy.category,
+    file: legacy.file,
+    evidence: legacy.evidence,
+    reason: "The implementations have deliberately different public contracts.",
+    metric: legacy.metric,
+  };
+  const result = classifyArchitectureFindings(
+    snapshot([legacy]),
+    snapshot([legacy]),
+    baseline([], [exception]),
+    [],
+    {
+      baselineExistsAtBase: true,
+      baselineAtBase: baseline([], [exception]),
+    },
+  );
+  assert.equal(result.newFindings.length, 0);
+  assert.deepEqual(result.undocumentedHistoricalFindings, [legacy]);
+  assert.deepEqual(result.unchangedLegacyFindings, []);
+  assert.match(
+    result.blockingReasons.join("\n"),
+    /missing from the reviewed baseline/,
+  );
+}
+
+// A current exception still validates through the exception path.
+{
+  const exception = {
+    id: "exception:duplicate-code:exception-current",
+    category: "duplicate-code" as const,
+    file: "artifacts/api-server/src/example.ts",
+    evidence: "artifacts/api-server/src/reference.ts:reference",
+    reason: "The implementations have deliberately different public contracts.",
+    metric: 1,
+  };
+  const result = classifyArchitectureFindings(
+    snapshot([], [exception]),
+    snapshot([], [exception]),
+    baseline([], [exception]),
+    [],
+  );
+  assert.deepEqual(result.undocumentedExceptions, []);
+  assert.deepEqual(result.blockingReasons, []);
+}
+
 // A cleanup removes debt from the current snapshot and reports that progress.
 {
   const legacy = finding("duplicate-code:cleanup");

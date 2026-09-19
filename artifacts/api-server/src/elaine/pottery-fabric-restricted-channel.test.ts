@@ -20,6 +20,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { buildRuntimeMock } from "./test-helpers/runtime-mock";
+import { getElaineGlobalConfig } from "../lib/elaine-config";
 import {
   sentryMockFactory,
   rateLimitMockFactory,
@@ -123,16 +124,23 @@ vi.mock("../lib/app-config", () => ({
   APP_CONFIG_DEFAULTS: [],
 }));
 
-vi.mock("../lib/elaine-config", () => ({
-  getElaineGlobalConfig: vi.fn().mockResolvedValue({
-    chatModel: "openai/gpt-4o-mini",
-    plannerModel: "openai/gpt-4o-mini",
-    plannerEnabled: false,
-    responsesEnabled: false,
-    models: { restrictedTextModel: "restricted-text-model" },
-  }),
-  invalidateElaineGlobalConfigCache: vi.fn(),
-}));
+vi.mock("../lib/elaine-config", async () => {
+  const actual = await vi.importActual<typeof import("../lib/elaine-config")>(
+    "../lib/elaine-config",
+  );
+  return {
+    getElaineGlobalConfig: vi.fn().mockResolvedValue({
+      chatModel: "openai/gpt-4o-mini",
+      plannerModel: "openai/gpt-4o-mini",
+      plannerEnabled: false,
+      responsesEnabled: false,
+      runtimeBudget: actual.ELAINE_CONFIG_DEFAULTS.runtimeBudget,
+      models: { restrictedTextModel: "restricted-text-model" },
+    }),
+    invalidateElaineGlobalConfigCache: vi.fn(),
+    DEFAULT_RUNTIME_BUDGET: actual.DEFAULT_RUNTIME_BUDGET,
+  };
+});
 
 vi.mock("../lib/elaine-memory", () => ({
   getRelevantElaineMemory: vi.fn().mockResolvedValue([]),
@@ -753,8 +761,14 @@ describe("Non-voice restricted channels — OpenAI Responses API path", () => {
     });
 
     expect(result.replyText).toBe("Synthesized answer from the tool results.");
-    // 3 tool-calling rounds (MAX_ROUNDS) + 1 forced synthesis call.
-    expect(streamOpenAIResponseRound).toHaveBeenCalledTimes(4);
+    // The real default runtime budget configures the tool-calling rounds;
+    // this adds one forced synthesis call after those rounds.
+    const loadedConfig = await vi
+      .mocked(getElaineGlobalConfig)
+      .mock.results.at(-1)!.value;
+    expect(streamOpenAIResponseRound).toHaveBeenCalledTimes(
+      loadedConfig.runtimeBudget.maxModelRounds + 1,
+    );
   });
 
   it("falls back to the OpenRouter restricted-text-model when the Responses API throws", async () => {

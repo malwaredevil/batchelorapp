@@ -10247,7 +10247,7 @@ async function executeRestrictedToolCall(
 }
 
 // Runs one restricted-channel turn's tool-calling loop against the direct
-// OpenAI Responses API (gpt-5.6-sol, the same "reasoning" role/model as main
+// OpenAI Responses API (GPT-6 Astra, the same "reasoning" role/model as main
 // web chat) instead of the OpenRouter Chat Completions fallback. Mirrors the
 // round-loop shape of main chat's per-round loop (see the streaming handler
 // above): a bounded number of tool-calling rounds chained via
@@ -10292,7 +10292,7 @@ async function runRestrictedTurnViaOpenAIResponses(params: {
     role: "reasoning" as const,
     instructions: systemPrompt,
     // A restricted-channel reply should still feel prompt for SMS/email —
-    // "medium" gets the gpt-5.6-sol quality bump without main chat's "high"
+    // "medium" gets Astra's reasoning quality without main chat's "high"
     // reasoning latency, which isn't warranted for these async channels.
     reasoningEffort: "medium" as const,
     verbosity: "medium" as const,
@@ -10548,7 +10548,7 @@ async function runRestrictedElaineTurn(params: {
 
   // SMS/Slack/email/messenger (not voice — useFastModel is true there and
   // deliberately skips this) get a first attempt on the direct OpenAI
-  // Responses API so they run on the same gpt-5.6-sol model as main web
+  // Responses API so they run on the same GPT-6 Astra model as main web
   // chat. Any failure here — outage, missing key, disabled feature flag —
   // falls straight through to the existing OpenRouter loop below, which
   // uses config.models.restrictedTextModel as a silent safety net.

@@ -5,14 +5,16 @@ existing OpenRouter implementations.
 
 ## Runtime routing
 
-- Elaine's primary authenticated web chat uses `gpt-5.6-sol` through the
+- Elaine's primary authenticated web chat uses `gpt-6-astra` through the
   Responses API when `OPENAI_API_KEY` and `enableOpenAIResponses` are present.
-- Selected high-value app workflows use the configured GPT-5.6 reasoning,
-  balanced, or fast role when `enableOpenAIAppWorkflows` is enabled.
+- Selected high-value app workflows use the configured reasoning, balanced,
+  or fast role when `enableOpenAIAppWorkflows` is enabled. The default
+  reasoning role is Astra; balanced and fast remain GPT-5.6 Terra and Luna.
 - Provider failures fall back to the existing OpenRouter implementation when
   `enableOpenAIResponsesFallback` is enabled.
-- Restricted AgentPhone, inbound email, SMS, and Slack turns retain their
-  existing bounded OpenRouter path and action exclusions.
+- Restricted AgentPhone, inbound email, SMS, and Slack turns attempt the
+  reasoning-role Responses path before their existing bounded OpenRouter
+  fallback. Real-time voice remains on the fast OpenRouter chat model.
 - Voyage, Jina, Perplexity/web search, Apify, Google APIs, and deterministic
   extraction/ranking algorithms remain specialized evidence sources.
 

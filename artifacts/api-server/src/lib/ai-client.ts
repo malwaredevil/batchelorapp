@@ -42,7 +42,7 @@ export const MODELS = {
   // ADVISOR (Anthropic) and FAST/SMART_VISION (Google) so the two opinions
   // reflect genuinely different model families, not just two calls to the
   // same underlying model.
-  EXPERT_PANEL_ALT: "openai/gpt-5.1",
+  EXPERT_PANEL_ALT: "openai/gpt-6-astra",
   // OpenAI's embedding model, accessed through OpenRouter's unified
   // embeddings endpoint (https://openrouter.ai/docs/api-reference/embeddings)
   // rather than a direct OpenAI API key.

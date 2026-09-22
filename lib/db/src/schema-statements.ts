@@ -1091,6 +1091,28 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS runtime_budget JSONB NOT NULL DEFAULT '{}'::jsonb`,
   `INSERT INTO elaine_global_config (id) VALUES (1)
      ON CONFLICT (id) DO NOTHING`,
+  // One-time default migration for the GPT-6 Astra rollout. Only replace the
+  // two exact legacy defaults on rows that predate the rollout; a later owner
+  // edit (including an intentional rollback) remains authoritative.
+  `UPDATE elaine_global_config
+     SET extra_models =
+           extra_models
+           || CASE
+                WHEN extra_models->>'openAIReasoning' = 'gpt-5.6-sol'
+                THEN '{"openAIReasoning":"gpt-6-astra"}'::jsonb
+                ELSE '{}'::jsonb
+              END
+           || CASE
+                WHEN extra_models->>'expertPanelAlt' = 'openai/gpt-5.1'
+                THEN '{"expertPanelAlt":"openai/gpt-6-astra"}'::jsonb
+                ELSE '{}'::jsonb
+              END,
+         updated_at = NOW()
+     WHERE updated_at < TIMESTAMPTZ '2026-09-22T16:58:00Z'
+       AND (
+         extra_models->>'openAIReasoning' = 'gpt-5.6-sol'
+         OR extra_models->>'expertPanelAlt' = 'openai/gpt-5.1'
+       )`,
 
   // ── Hub webmail Gmail connections ────────────────────────────────────────────
   // Separate from travels_gmail_connections — uses https://mail.google.com/

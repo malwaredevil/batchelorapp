@@ -6,7 +6,7 @@ import {
 } from "./responses-state";
 
 describe("Elaine Responses state", () => {
-  it("keeps every Elaine turn on Sol so retained state is continuous", () => {
+  it("keeps every Elaine turn on the reasoning role so retained state is continuous", () => {
     expect(
       selectElaineOpenAIRole({
         kind: "action",
@@ -31,10 +31,10 @@ describe("Elaine Responses state", () => {
       isReusableElaineResponseState({
         state: {
           responseId: "resp_123",
-          model: "gpt-5.6-sol",
+          model: "gpt-6-astra",
           updatedAt: "2026-07-29T12:00:00Z",
         },
-        expectedModel: "gpt-5.6-sol",
+        expectedModel: "gpt-6-astra",
         maxAgeDays: 29,
         now,
       }),
@@ -43,10 +43,10 @@ describe("Elaine Responses state", () => {
       isReusableElaineResponseState({
         state: {
           responseId: "resp_123",
-          model: "gpt-5.6-terra",
+          model: "gpt-5.6-sol",
           updatedAt: "2026-07-29T12:00:00Z",
         },
-        expectedModel: "gpt-5.6-sol",
+        expectedModel: "gpt-6-astra",
         maxAgeDays: 29,
         now,
       }),
@@ -55,10 +55,10 @@ describe("Elaine Responses state", () => {
       isReusableElaineResponseState({
         state: {
           responseId: "resp_123",
-          model: "gpt-5.6-sol",
+          model: "gpt-6-astra",
           updatedAt: "2026-06-01T12:00:00Z",
         },
-        expectedModel: "gpt-5.6-sol",
+        expectedModel: "gpt-6-astra",
         maxAgeDays: 29,
         now,
       }),

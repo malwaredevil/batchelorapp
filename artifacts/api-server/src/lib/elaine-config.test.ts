@@ -58,6 +58,27 @@ beforeEach(() => {
 });
 
 describe("getElaineGlobalConfig", () => {
+  it("defaults Astra only into the high-reasoning and expert-panel slots", async () => {
+    selectQueue.push([]);
+    const { DEFAULT_MODELS } = await import("./elaine-config");
+
+    expect(DEFAULT_MODELS.openAIReasoning).toBe("gpt-6-astra");
+    expect(DEFAULT_MODELS.expertPanelAlt).toBe("openai/gpt-6-astra");
+    expect(DEFAULT_MODELS.openAIBalanced).toBe("gpt-5.6-terra");
+    expect(DEFAULT_MODELS.openAIFast).toBe("gpt-5.6-luna");
+    expect(DEFAULT_MODELS.restrictedTextModel).toBe("openai/gpt-5.1");
+    expect(DEFAULT_MODELS.fastVision).toBe("google/gemini-2.5-flash");
+    expect(DEFAULT_MODELS.smartVision).toBe("google/gemini-2.5-flash");
+    expect(DEFAULT_MODELS.research).toBe("perplexity/sonar");
+    expect(DEFAULT_MODELS.embedding).toBe("openai/text-embedding-3-small");
+    expect(DEFAULT_MODELS.visualEmbed).toBe("jina-clip-v2");
+    expect(DEFAULT_MODELS.rerank).toBe("rerank-2.5");
+    expect(DEFAULT_MODELS.fusionModels).toEqual([
+      "anthropic/claude-opus-4.8",
+      "openai/gpt-5.1",
+    ]);
+  });
+
   it("falls back to hardcoded defaults only when no row exists", async () => {
     selectQueue.push([]);
     const { getElaineGlobalConfig, ELAINE_CONFIG_DEFAULTS } =
@@ -73,6 +94,22 @@ describe("getElaineGlobalConfig", () => {
     const config = await getElaineGlobalConfig();
     expect(config.chatModel).toBe("custom/model-from-db");
     expect(config.chatModel).not.toBe(ELAINE_CONFIG_DEFAULTS.chatModel);
+  });
+
+  it("honors an owner model rollback stored after the one-time migration", async () => {
+    selectQueue.push([
+      dbRow({
+        extraModels: {
+          openAIReasoning: "gpt-5.6-sol",
+          expertPanelAlt: "openai/gpt-5.1",
+        },
+      }),
+    ]);
+    const { getElaineGlobalConfig } = await import("./elaine-config");
+
+    const config = await getElaineGlobalConfig();
+    expect(config.models.openAIReasoning).toBe("gpt-5.6-sol");
+    expect(config.models.expertPanelAlt).toBe("openai/gpt-5.1");
   });
 
   it("merges stored jsonb overrides on top of defaults for nested config", async () => {

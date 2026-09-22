@@ -150,7 +150,7 @@ function generateStorage(): void {
 function generateModelSlots(): void {
   writeGenerated(
     "model-slots.md",
-    `${generatedHeader("Generated AI model slot reference")}\n| Slot | Gateway | Notes |\n|---|---|---|\n| Elaine primary chat | OpenAI Responses | GPT-5.6 Sol with retained state; OpenRouter fallback. |\n| High-value reasoning/vision | OpenAI Responses | Owner-controlled GPT-5.6 roles; OpenRouter fallback. |\n| General AI calls | OpenRouter | Existing broad model gateway. |\n| Vision embeddings | Jina | Jina CLIP visual embeddings. |\n| Reranking | Voyage | Voyage rerank calls for compare/search. |\n| Text embeddings | OpenRouter/vector | 1536-dimension pgvector fields where configured. |`,
+    `${generatedHeader("Generated AI model slot reference")}\n| Slot | Gateway | Notes |\n|---|---|---|\n| Elaine primary chat | OpenAI Responses | GPT-6 Astra with model-scoped retained state; OpenRouter fallback. |\n| High-value reasoning/vision | OpenAI Responses | Owner-controlled roles; Astra reasoning, GPT-5.6 Terra/Luna balanced and fast defaults. |\n| Expert consultation | OpenRouter | Claude Opus plus GPT-6 Astra; cheaper worker model synthesizes the opinions. |\n| General AI calls | OpenRouter | Existing broad model gateway. |\n| Vision embeddings | Jina | Jina CLIP visual embeddings. |\n| Reranking | Voyage | Voyage rerank calls for compare/search. |\n| Text embeddings | OpenRouter/vector | 1536-dimension pgvector fields where configured. |`,
   );
 }
 

@@ -634,7 +634,7 @@ describe("Channel-based model routing", () => {
 
 // ---------------------------------------------------------------------------
 // Tests: OpenAI Responses API path (SMS/Slack/email/messenger now attempt
-// the same gpt-5.6-sol Responses API as main web chat before ever touching
+// the same gpt-6-astra Responses API as main web chat before ever touching
 // the OpenRouter restricted-text-model fallback).
 // ---------------------------------------------------------------------------
 
@@ -646,8 +646,8 @@ describe("Non-voice restricted channels — OpenAI Responses API path", () => {
   it("answers directly via the Responses API with no tool calls, skipping OpenRouter entirely", async () => {
     vi.mocked(streamOpenAIResponseRound).mockResolvedValue({
       responseId: "resp_1",
-      model: "gpt-5.6-sol",
-      text: "Hello from gpt-5.6-sol.",
+      model: "gpt-6-astra",
+      text: "Hello from gpt-6-astra.",
       functionCalls: [],
       usage: { inputTokens: 10, outputTokens: 5 },
     } as never);
@@ -659,7 +659,7 @@ describe("Non-voice restricted channels — OpenAI Responses API path", () => {
       channel: "sms",
     });
 
-    expect(result.replyText).toBe("Hello from gpt-5.6-sol.");
+    expect(result.replyText).toBe("Hello from gpt-6-astra.");
     expect(mockCallModel).not.toHaveBeenCalled();
   });
 
@@ -687,7 +687,7 @@ describe("Non-voice restricted channels — OpenAI Responses API path", () => {
       if (round === 1) {
         return {
           responseId: "resp_round_1",
-          model: "gpt-5.6-sol",
+          model: "gpt-6-astra",
           text: "",
           functionCalls: [
             {
@@ -706,7 +706,7 @@ describe("Non-voice restricted channels — OpenAI Responses API path", () => {
       ).toBe(true);
       return {
         responseId: "resp_round_2",
-        model: "gpt-5.6-sol",
+        model: "gpt-6-astra",
         text: `Here is your pottery piece: ${POTTERY_ROW.name}.`,
         functionCalls: [],
         usage: { inputTokens: 10, outputTokens: 5 },
@@ -732,7 +732,7 @@ describe("Non-voice restricted channels — OpenAI Responses API path", () => {
       if (opts.toolChoice === "none") {
         return {
           responseId: "resp_final",
-          model: "gpt-5.6-sol",
+          model: "gpt-6-astra",
           text: "Synthesized answer from the tool results.",
           functionCalls: [],
           usage: { inputTokens: 10, outputTokens: 5 },
@@ -740,7 +740,7 @@ describe("Non-voice restricted channels — OpenAI Responses API path", () => {
       }
       return {
         responseId: "resp_round",
-        model: "gpt-5.6-sol",
+        model: "gpt-6-astra",
         text: "",
         functionCalls: [
           {

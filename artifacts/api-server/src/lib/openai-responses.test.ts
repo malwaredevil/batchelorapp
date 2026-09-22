@@ -31,7 +31,7 @@ const config: ElaineGlobalConfig = {
     research: "research",
     expertPanelAlt: "expert-panel-alt",
     embedding: "embedding",
-    openAIReasoning: "gpt-5.6-sol",
+    openAIReasoning: "gpt-6-astra",
     openAIBalanced: "gpt-5.6-terra",
     openAIFast: "gpt-5.6-luna",
     restrictedTextModel: "restricted-text",
@@ -93,7 +93,7 @@ const config: ElaineGlobalConfig = {
 describe("OpenAI Responses provider helpers", () => {
   it("maps semantic roles to direct OpenAI model identifiers", () => {
     expect(resolveOpenAIResponsesModel(config, "reasoning")).toBe(
-      "gpt-5.6-sol",
+      "gpt-6-astra",
     );
     expect(resolveOpenAIResponsesModel(config, "balanced")).toBe(
       "gpt-5.6-terra",

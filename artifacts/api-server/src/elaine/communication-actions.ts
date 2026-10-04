@@ -292,20 +292,6 @@ async function claimProposalBeforeExecution(
   });
 }
 
-function repeatConfirmationResult(error: RepeatConfirmationRequiredError): {
-  status: number;
-  body: unknown;
-} {
-  return {
-    status: 409,
-    body: {
-      requiresRepeatConfirmation: true,
-      receiptId: error.receiptId,
-      status: error.status,
-    },
-  };
-}
-
 async function finishCommunicationReceipt(
   receipt: Awaited<
     ReturnType<typeof createOrReadCommunicationReceipt>

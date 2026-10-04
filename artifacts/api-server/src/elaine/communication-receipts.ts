@@ -556,16 +556,6 @@ export async function updateCallCommunicationReceiptsByProviderId(
   providerId: string,
   providerCallStatus: string,
 ): Promise<void> {
-  const terminalStatuses = new Set([
-    "busy",
-    "canceled",
-    "cancelled",
-    "completed",
-    "ended",
-    "failed",
-    "no-answer",
-    "voicemail",
-  ]);
   const receipts = await db.execute<{
     id: string;
     scheduled_action_id: number | null;

@@ -11,7 +11,18 @@ describe("supporting model rollout SQL guardrails", () => {
     const roles = [
       ...(migration ?? "").matchAll(/\('(\w+)', '[^']+', '[^']+'\)/g),
     ].map((match) => match[1]);
-    expect(roles).toEqual(["fastVision", "smartVision", "advisor", "rerank"]);
+    expect(roles).toEqual([
+      "fastVision",
+      "smartVision",
+      "advisor",
+      "openAIBalanced",
+      "openAIFast",
+      "rerank",
+    ]);
+    expect(migration).toContain(
+      "('openAIBalanced', 'gpt-5.6-terra', 'gpt-6.1-sol')",
+    );
+    expect(migration).toContain("('openAIFast', 'gpt-5.6-luna', 'gpt-6-luna')");
     expect(migration).toContain("WHERE extra_models->>role = old_model");
   });
 

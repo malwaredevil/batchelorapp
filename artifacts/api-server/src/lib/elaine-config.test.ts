@@ -67,8 +67,8 @@ describe("getElaineGlobalConfig", () => {
     expect(ELAINE_CONFIG_DEFAULTS.subagentModel).toBe("z-ai/glm-5.2");
     expect(DEFAULT_MODELS.openAIReasoning).toBe("gpt-6-astra");
     expect(DEFAULT_MODELS.expertPanelAlt).toBe("openai/gpt-6-astra");
-    expect(DEFAULT_MODELS.openAIBalanced).toBe("gpt-5.6-terra");
-    expect(DEFAULT_MODELS.openAIFast).toBe("gpt-5.6-luna");
+    expect(DEFAULT_MODELS.openAIBalanced).toBe("gpt-6.1-sol");
+    expect(DEFAULT_MODELS.openAIFast).toBe("gpt-6-luna");
     expect(DEFAULT_MODELS.restrictedTextModel).toBe("openai/gpt-5.1");
     expect(DEFAULT_MODELS.fastVision).toBe("google/gemini-3.8-flash");
     expect(DEFAULT_MODELS.smartVision).toBe("google/gemini-3.8-flash");

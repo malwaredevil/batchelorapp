@@ -9,7 +9,7 @@ OpenAI seat in the two-vendor expert panel.
 
 Keep these existing defaults:
 
-- GPT-5.6 Terra and Luna for direct OpenAI balanced and fast roles
+- GPT-6.1 Sol and GPT-6 Luna for direct OpenAI balanced and fast roles
 - the fast OpenRouter chat model for real-time AgentPhone voice
 - Gemini 3.8 Flash for fast and smart vision
 - Claude Opus 5.5 for Elaine's advisor role
@@ -26,6 +26,10 @@ legacy defaults in an older config row; later owner edits remain authoritative.
 A model change also invalidates retained Responses state because the stored
 response model must match the configured model before the response ID is
 reused.
+
+The owner confirmed that the supporting-model upgrade includes GPT-6.1 Sol
+and GPT-6 Luna. These newer models remain both the saved settings and runtime
+defaults; they must not be reverted to GPT-5.6 Terra/Luna as a review fix.
 
 ## Compatibility checks
 

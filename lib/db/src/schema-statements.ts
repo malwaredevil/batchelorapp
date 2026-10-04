@@ -1130,6 +1130,8 @@ export const STATEMENTS: string[] = [
            ('fastVision', 'google/gemini-2.5-flash', 'google/gemini-3.8-flash'),
            ('smartVision', 'google/gemini-2.5-flash', 'google/gemini-3.8-flash'),
            ('advisor', 'anthropic/claude-opus-4.8', 'anthropic/claude-opus-5.5'),
+           ('openAIBalanced', 'gpt-5.6-terra', 'gpt-6.1-sol'),
+           ('openAIFast', 'gpt-5.6-luna', 'gpt-6-luna'),
            ('rerank', 'rerank-2.5', 'rerank-3')
          ) AS replacements(role, old_model, new_model)
          WHERE extra_models->>role = old_model

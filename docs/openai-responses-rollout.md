@@ -9,7 +9,7 @@ existing OpenRouter implementations.
   Responses API when `OPENAI_API_KEY` and `enableOpenAIResponses` are present.
 - Selected high-value app workflows use the configured reasoning, balanced,
   or fast role when `enableOpenAIAppWorkflows` is enabled. The default
-  reasoning role is Astra; balanced and fast remain GPT-5.6 Terra and Luna.
+  reasoning role is Astra; balanced and fast use GPT-6.1 Sol and GPT-6 Luna.
 - Provider failures fall back to the existing OpenRouter implementation when
   `enableOpenAIResponsesFallback` is enabled.
 - Restricted AgentPhone, inbound email, SMS, and Slack turns attempt the

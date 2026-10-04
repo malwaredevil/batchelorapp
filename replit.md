@@ -2,6 +2,8 @@
 
 Combined pnpm monorepo serving household collection apps under one domain (app.batchelor.app). Users log in once and access every app.
 
+**Owner-controlled PR reviews:** Never request or trigger code reviews automatically. The owner selects the reviewer(s). A completed review by Claude, Copilot, Codex, or another reviewer satisfies the review requirement; no particular reviewer or extra Codex review is mandatory. Wait for any reviews actually requested, address and reply to all findings, and verify zero unresolved threads before merging. Review fixes do not require another review request.
+
 ## Run & Operate
 
 - `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)

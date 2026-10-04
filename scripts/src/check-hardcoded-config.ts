@@ -300,7 +300,7 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   "lib/elaine-ui/src/ElaineChatPanel.tsx:697", // SCROLL_TOP_LOAD_THRESHOLD
   // Existing fixed bounds: verification-code guesses and reminder dispatch
   // batch size are safety limits, not owner-facing feature settings.
-  "artifacts/api-server/src/elaine/index.ts:953", // MAX_PHONE_CODE_ATTEMPTS
+  "artifacts/api-server/src/elaine/index.ts:952", // MAX_PHONE_CODE_ATTEMPTS
   "artifacts/api-server/src/lib/reminders-scheduler.ts:425", // CLAIM_BATCH_SIZE
   // Scanner heuristic that avoids treating short common strings as secrets;
   // it is a fixed detector safeguard, never product configuration.
@@ -340,8 +340,6 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   "artifacts/api-server/src/elaine/app-operation-tools.ts:51",
 
   // ---- elaine/index.ts ----
-  // Auth security: max verification-code attempts before lockout.
-  "artifacts/api-server/src/elaine/index.ts:942",
   // MAX_ROUNDS: fixed 3-attempt ceiling inside the restricted-channel OpenAI
   // Responses attempt loop and the SMS/email/Slack reply loop. Not
   // owner-facing — the outer RuntimeBudgetConfig controls the agentic turn

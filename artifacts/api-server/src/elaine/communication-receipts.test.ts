@@ -1,22 +1,60 @@
 import { describe, expect, it, vi } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
 
-const mockExecute = vi.hoisted(() =>
-  vi.fn().mockResolvedValue({ rows: [{ id: "cancelled-receipt" }] }),
-);
-vi.mock("@workspace/db", () => ({
-  db: { execute: mockExecute },
-  elaineCommunicationReceipts: {},
+const {
+  mockExecute,
+  mockTransaction,
+  mockSelectLimit,
+  mockUpdateSet,
+  mockUpdateWhere,
+  mockScheduledUpdateReturning,
+} = vi.hoisted(() => ({
+  mockExecute: vi
+    .fn()
+    .mockResolvedValue({ rows: [{ id: "cancelled-receipt" }] }),
+  mockTransaction: vi.fn(),
+  mockSelectLimit: vi.fn().mockResolvedValue([]),
+  mockUpdateSet: vi.fn(),
+  mockUpdateWhere: vi.fn(),
+  mockScheduledUpdateReturning: vi.fn().mockResolvedValue([]),
 }));
+vi.mock("@workspace/db", async () => {
+  const schema = await import("@workspace/db/schema");
+  return {
+    db: {
+      execute: mockExecute,
+      transaction: mockTransaction,
+      select: () => ({
+        from: () => ({ where: () => ({ limit: mockSelectLimit }) }),
+      }),
+      update: () => ({
+        set: (values: unknown) => {
+          mockUpdateSet(values);
+          return {
+            where: (condition: unknown) => {
+              mockUpdateWhere(condition);
+              return { returning: mockScheduledUpdateReturning };
+            },
+          };
+        },
+      }),
+    },
+    elaineCommunicationReceipts: schema.elaineCommunicationReceipts,
+  };
+});
 
 import {
   claimCommunicationProposal,
   cancelScheduledCommunicationReceipts,
   communicationPayloadHash,
   createCommunicationProposalId,
+  createOrReadCommunicationReceipt,
+  createOrReadCommunicationReceiptWithRepeatCheck,
+  createScheduledCommunicationReceiptContext,
   updateCallCommunicationReceiptsByProviderId,
   verifyCommunicationProposalId,
 } from "./communication-receipts";
+import { elaineCommunicationReceipts } from "@workspace/db/schema";
 
 describe("communication receipt proposals", () => {
   const secret = "test-only-secret";
@@ -112,6 +150,68 @@ describe("communication receipt proposals", () => {
   });
 });
 
+describe("scheduled communication receipt claims", () => {
+  it("reuses and claims the receipt already linked to the scheduled action", async () => {
+    const scheduledReceipt = {
+      id: "scheduled-receipt",
+      attemptKey: "scheduled-attempt",
+      payloadHash: "scheduled-payload-hash",
+      ownerUserId: 42,
+      actionType: "message_contact",
+      channel: "sms",
+      status: "scheduled",
+      conversationId: null,
+      recipientUserId: 91,
+      scheduledActionId: 77,
+    } as typeof elaineCommunicationReceipts.$inferSelect;
+    const executingReceipt = {
+      ...scheduledReceipt,
+      status: "executing",
+    } as typeof elaineCommunicationReceipts.$inferSelect;
+
+    mockSelectLimit.mockResolvedValueOnce([scheduledReceipt]);
+    const context = await createScheduledCommunicationReceiptContext({
+      scheduledActionId: 77,
+      deliveryId: 12,
+      ownerUserId: 42,
+      actionType: "message_contact",
+      payload: { contactName: "Morgan", message: "Hello" },
+      secret: "test-only-secret",
+    });
+
+    expect(context.attemptKey).toBe(scheduledReceipt.attemptKey);
+    expect(context.payloadHash).toBe(scheduledReceipt.payloadHash);
+
+    mockScheduledUpdateReturning.mockResolvedValueOnce([executingReceipt]);
+    const claim = await createOrReadCommunicationReceipt({
+      ...context,
+      channel: "sms",
+      recipientUserId: 91,
+    });
+
+    expect(claim).toEqual({ receipt: executingReceipt, claimed: true });
+    expect(mockUpdateSet).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "executing" }),
+    );
+    const update = new PgDialect().sqlToQuery(
+      mockUpdateWhere.mock.calls.at(-1)?.[0] as Parameters<
+        PgDialect["sqlToQuery"]
+      >[0],
+    );
+    expect(update.params).toEqual(
+      expect.arrayContaining([
+        77,
+        "scheduled-attempt",
+        42,
+        "message_contact",
+        91,
+        "scheduled",
+      ]),
+    );
+    expect(mockExecute).not.toHaveBeenCalled();
+  });
+});
+
 describe("scheduled communication receipt cancellation", () => {
   it("cancels only scheduled receipts belonging to the supplied owner", async () => {
     const changed = await cancelScheduledCommunicationReceipts(91, 42);
@@ -159,6 +259,92 @@ describe("proposal-level replay guard", () => {
         payloadHash: "opaque-payload-hash",
       }),
     ).resolves.toBe(false);
+  });
+});
+
+describe("acknowledged repeat receipt claims", () => {
+  it("creates a distinct repeat attempt instead of returning the original receipt", async () => {
+    const attemptKey = "proposal-attempt";
+    const recentReceiptId = "recent-receipt";
+    const originalReceipt = {
+      id: "original-receipt",
+      attemptKey,
+      payloadHash: "payload-hash",
+      ownerUserId: 42,
+      actionType: "message_contact",
+      conversationId: null,
+      recipientUserId: 91,
+      status: "accepted",
+    };
+    const recentReceipt = {
+      ...originalReceipt,
+      id: recentReceiptId,
+      attemptKey: "previous-attempt",
+    };
+    const repeatedReceipt = {
+      ...recentReceipt,
+      id: "repeated-receipt",
+      attemptKey: `${attemptKey}:repeat:${recentReceiptId}`,
+      status: "executing",
+    };
+    let queryIndex = 0;
+    const tx = {
+      execute: mockExecute,
+      select: () => {
+        return {
+          from: () => ({
+            where: (condition: Parameters<PgDialect["sqlToQuery"]>[0]) => {
+              const query = {
+                orderBy: () => query,
+                limit: async () => {
+                  const { params } = new PgDialect().sqlToQuery(condition);
+                  if (queryIndex === 0) {
+                    queryIndex++;
+                    return params.includes(attemptKey) ? [originalReceipt] : [];
+                  }
+                  if (queryIndex === 1) {
+                    queryIndex++;
+                    return [recentReceipt];
+                  }
+                  queryIndex++;
+                  return [repeatedReceipt];
+                },
+              };
+              return query;
+            },
+          }),
+        };
+      },
+    };
+    mockExecute
+      .mockClear()
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ id: repeatedReceipt.id }] });
+    mockTransaction.mockImplementation((callback) => callback(tx));
+
+    const result = await createOrReadCommunicationReceiptWithRepeatCheck({
+      attemptKey,
+      payloadHash: "payload-hash",
+      ownerUserId: 42,
+      actionType: "message_contact",
+      channel: "sms",
+      conversationId: null,
+      recipientUserId: 91,
+      acknowledgedReceiptId: recentReceiptId,
+    });
+
+    expect(result).toEqual({
+      kind: "claimed",
+      receipt: repeatedReceipt,
+      claimed: true,
+    });
+    const insertion = new PgDialect().sqlToQuery(
+      mockExecute.mock.calls[1]?.[0] as Parameters<PgDialect["sqlToQuery"]>[0],
+    );
+    expect(insertion.params).toContain(
+      `${attemptKey}:repeat:${recentReceiptId}`,
+    );
+    expect(queryIndex).toBe(3);
   });
 });
 

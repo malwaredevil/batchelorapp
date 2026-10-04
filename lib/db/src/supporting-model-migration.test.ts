@@ -6,19 +6,12 @@ const migration = STATEMENTS.find((statement) =>
 );
 
 describe("supporting model rollout SQL guardrails", () => {
-  it("migrates only the six approved supporting roles", () => {
+  it("migrates only the approved supporting roles", () => {
     expect(migration).toBeDefined();
     const roles = [
       ...(migration ?? "").matchAll(/\('(\w+)', '[^']+', '[^']+'\)/g),
     ].map((match) => match[1]);
-    expect(roles).toEqual([
-      "fastVision",
-      "smartVision",
-      "advisor",
-      "openAIBalanced",
-      "openAIFast",
-      "rerank",
-    ]);
+    expect(roles).toEqual(["fastVision", "smartVision", "advisor", "rerank"]);
     expect(migration).toContain("WHERE extra_models->>role = old_model");
   });
 

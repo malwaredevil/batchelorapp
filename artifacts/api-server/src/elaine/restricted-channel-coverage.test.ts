@@ -339,6 +339,23 @@ describe("Elaine restricted-channel tool coverage", () => {
     expect(missingFromMap).toEqual([]);
   });
 
+  it("restricted communication dispatch carries a stable turn and receipt context", () => {
+    const indexPath = fileURLToPath(new URL("./index.ts", import.meta.url));
+    const source = readFileSync(indexPath, "utf8");
+
+    expect(source).toMatch(
+      /const communicationTurnId = createHash\("sha256"\)[\s\S]*history: history\.slice\(-10\)[\s\S]*inputText/,
+    );
+    expect(source).toContain(
+      "`${communicationTurnId}:${runtimeToolDedupeKey(name, argsJson)}`",
+    );
+    expect(source).toContain(
+      "const receiptContext = buildReceiptExecutionContext({",
+    );
+    expect(source).toContain("receiptContext ?? undefined,");
+    expect(source).toContain("communicationTurnId,");
+  });
+
   it("every name in RESTRICTED_SOFT_TOOL_NAMES (not caller-handled) has a handler branch in executeRestrictedSoftTool", () => {
     // Read the source of index.ts and verify that executeRestrictedSoftTool
     // contains an `if (name === CONST_NAME)` branch for each tool it is

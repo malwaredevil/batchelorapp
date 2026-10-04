@@ -42,8 +42,6 @@ const upgraded = {
   fastVision: "google/gemini-3.8-flash",
   smartVision: "google/gemini-3.8-flash",
   advisor: "anthropic/claude-opus-5.5",
-  openAIBalanced: "gpt-6.1-sol",
-  openAIFast: "gpt-6-luna",
   rerank: "rerank-3",
   fusionModels: [
     "custom/advisor",

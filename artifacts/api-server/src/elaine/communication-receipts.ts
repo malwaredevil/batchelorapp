@@ -4,7 +4,18 @@ import {
   randomUUID,
   timingSafeEqual,
 } from "node:crypto";
-import { and, desc, eq, gt, inArray, lt, ne, or, sql } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lt,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import { db, elaineCommunicationReceipts } from "@workspace/db";
 
 export const COMMUNICATION_RECEIPT_STATUSES = [
@@ -71,7 +82,11 @@ export async function createScheduledCommunicationReceiptContext(params: {
   scheduledActionId: number;
 }> {
   const [scheduledReceipt] = await db
-    .select({ conversationId: elaineCommunicationReceipts.conversationId })
+    .select({
+      attemptKey: elaineCommunicationReceipts.attemptKey,
+      payloadHash: elaineCommunicationReceipts.payloadHash,
+      conversationId: elaineCommunicationReceipts.conversationId,
+    })
     .from(elaineCommunicationReceipts)
     .where(
       and(
@@ -90,9 +105,10 @@ export async function createScheduledCommunicationReceiptContext(params: {
     )
     .digest("hex");
   return {
-    attemptKey,
+    attemptKey: scheduledReceipt?.attemptKey ?? attemptKey,
     attemptKeyIsFinal: true,
-    payloadHash: communicationPayloadHash(params.payload),
+    payloadHash:
+      scheduledReceipt?.payloadHash ?? communicationPayloadHash(params.payload),
     ownerUserId: params.ownerUserId,
     actionType: params.actionType,
     conversationId: scheduledReceipt?.conversationId ?? null,
@@ -191,6 +207,32 @@ export async function createOrReadCommunicationReceipt(params: {
   receipt: typeof elaineCommunicationReceipts.$inferSelect;
   claimed: boolean;
 }> {
+  if (params.scheduledActionId != null) {
+    const [scheduledReceipt] = await db
+      .update(elaineCommunicationReceipts)
+      .set({ status: params.status ?? "executing", updatedAt: new Date() })
+      .where(
+        and(
+          eq(
+            elaineCommunicationReceipts.scheduledActionId,
+            params.scheduledActionId,
+          ),
+          eq(elaineCommunicationReceipts.attemptKey, params.attemptKey),
+          eq(elaineCommunicationReceipts.ownerUserId, params.ownerUserId),
+          eq(elaineCommunicationReceipts.actionType, params.actionType),
+          params.recipientUserId === null
+            ? isNull(elaineCommunicationReceipts.recipientUserId)
+            : eq(
+                elaineCommunicationReceipts.recipientUserId,
+                params.recipientUserId,
+              ),
+          eq(elaineCommunicationReceipts.status, "scheduled"),
+        ),
+      )
+      .returning();
+    if (scheduledReceipt) return { receipt: scheduledReceipt, claimed: true };
+  }
+
   const id = randomUUID();
   const result = await db.execute(
     // INSERT conflict handling is the atomic dispatch claim. The key is shared
@@ -304,16 +346,21 @@ export async function createOrReadCommunicationReceiptWithRepeatCheck(params: {
     await tx.execute(
       sql`SELECT pg_advisory_xact_lock(hashtext(${repeatLockKey})::bigint)`,
     );
+    const attemptKey = params.acknowledgedReceiptId
+      ? `${params.attemptKey}:repeat:${params.acknowledgedReceiptId}`
+      : params.attemptKey;
     const [sameProposalReceipt] = await tx
       .select()
       .from(elaineCommunicationReceipts)
       .where(
         and(
           eq(elaineCommunicationReceipts.ownerUserId, params.ownerUserId),
-          or(
-            eq(elaineCommunicationReceipts.attemptKey, params.attemptKey),
-            sql`${elaineCommunicationReceipts.attemptKey} LIKE ${`${params.attemptKey}:repeat:%`}`,
-          ),
+          params.acknowledgedReceiptId
+            ? eq(elaineCommunicationReceipts.attemptKey, attemptKey)
+            : or(
+                eq(elaineCommunicationReceipts.attemptKey, params.attemptKey),
+                sql`${elaineCommunicationReceipts.attemptKey} LIKE ${`${params.attemptKey}:repeat:%`}`,
+              ),
         ),
       )
       .orderBy(desc(elaineCommunicationReceipts.createdAt))
@@ -362,9 +409,6 @@ export async function createOrReadCommunicationReceiptWithRepeatCheck(params: {
       return { kind: "stale_acknowledgement" };
     }
 
-    const attemptKey = recent
-      ? `${params.attemptKey}:repeat:${recent.id}`
-      : params.attemptKey;
     const id = randomUUID();
     const inserted = await tx.execute<{ id: string }>(sql`
       INSERT INTO elaine_communication_receipts

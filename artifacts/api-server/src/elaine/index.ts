@@ -10207,11 +10207,18 @@ async function executeRestrictedToolCall(
   ctx: {
     userId: number;
     channelLabel: string;
+    communicationTurnId: string;
     channelAllowedExtras?: Set<string>;
     onWidget?: (w: Record<string, unknown>) => void;
   },
 ): Promise<string> {
-  const { userId, channelLabel, channelAllowedExtras, onWidget } = ctx;
+  const {
+    userId,
+    channelLabel,
+    communicationTurnId,
+    channelAllowedExtras,
+    onWidget,
+  } = ctx;
   let resultText = `That action isn't available over ${channelLabel}.`;
 
   if (name === RESTRICTED_NAVIGATE_TOOL_NAME) {
@@ -10529,12 +10536,36 @@ async function executeRestrictedToolCall(
     channelAllowedExtras?.has(name)
   ) {
     try {
-      const finalAction = await tryBuildAction(name, argsJson, userId);
+      const finalAction = await tryBuildAction(
+        name,
+        argsJson,
+        userId,
+        undefined,
+        `${communicationTurnId}:${runtimeToolDedupeKey(name, argsJson)}`,
+        null,
+      );
       if (finalAction) {
         const executor = ACTION_EXECUTORS[finalAction.type as ActionType];
+        const receiptContext = buildReceiptExecutionContext({
+          action: finalAction,
+          ownerUserId: userId,
+          conversationId: null,
+        });
+        if (
+          RECEIPT_ACTION_TYPES.some(
+            (actionType) => actionType === finalAction.type,
+          ) &&
+          !receiptContext
+        ) {
+          throw new Error(
+            "Restricted communication proposal could not be verified",
+          );
+        }
         const { status, body } = await executor(
           finalAction.payload as never,
           userId,
+          undefined,
+          receiptContext ?? undefined,
         );
         resultText =
           status < 400
@@ -10574,6 +10605,7 @@ async function runRestrictedTurnViaOpenAIResponses(params: {
   channelTools: OpenAI.Chat.Completions.ChatCompletionTool[];
   userId: number;
   channelLabel: string;
+  communicationTurnId: string;
   channelAllowedExtras?: Set<string>;
   onWidget?: (w: Record<string, unknown>) => void;
   /** Formatted plan note produced by generateElainePlan — injected as a
@@ -10589,6 +10621,7 @@ async function runRestrictedTurnViaOpenAIResponses(params: {
     channelTools,
     userId,
     channelLabel,
+    communicationTurnId,
     channelAllowedExtras,
     onWidget,
     planNote,
@@ -10647,7 +10680,13 @@ async function runRestrictedTurnViaOpenAIResponses(params: {
       const resultText = await executeRestrictedToolCall(
         call.name,
         call.arguments,
-        { userId, channelLabel, channelAllowedExtras, onWidget },
+        {
+          userId,
+          channelLabel,
+          communicationTurnId,
+          channelAllowedExtras,
+          onWidget,
+        },
       );
       outputs.push({
         type: "function_call_output",
@@ -10714,6 +10753,16 @@ async function runRestrictedElaineTurn(params: {
     channelAllowedExtras,
     useFastModel,
   } = params;
+  const communicationTurnId = createHash("sha256")
+    .update(
+      JSON.stringify({
+        userId,
+        channelLabel,
+        history: history.slice(-10),
+        inputText,
+      }),
+    )
+    .digest("hex");
   // Group all model calls in this restricted turn under one Sentry AI
   // Conversation keyed by channel + user so threads stay stable over time.
   Sentry.setConversationId(`${channelLabel}-user-${userId}`);
@@ -10874,6 +10923,7 @@ async function runRestrictedElaineTurn(params: {
         channelTools,
         userId,
         channelLabel,
+        communicationTurnId,
         channelAllowedExtras,
         onWidget,
         planNote: restrictedPlanNote,
@@ -10920,7 +10970,13 @@ async function runRestrictedElaineTurn(params: {
         const resultText = await executeRestrictedToolCall(
           call.function.name,
           call.function.arguments,
-          { userId, channelLabel, channelAllowedExtras, onWidget },
+          {
+            userId,
+            channelLabel,
+            communicationTurnId,
+            channelAllowedExtras,
+            onWidget,
+          },
         );
         messages.push({
           role: "tool",

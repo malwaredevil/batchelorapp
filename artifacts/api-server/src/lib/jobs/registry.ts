@@ -181,6 +181,7 @@ export const JOB_REGISTRY = [
               userId,
               inputText,
               history,
+              inboundMessageId: slackEventId,
             });
             replyText = result.replyText;
             updatedHistory = result.history;

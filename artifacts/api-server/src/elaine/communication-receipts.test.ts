@@ -8,6 +8,7 @@ const {
   mockUpdateSet,
   mockUpdateWhere,
   mockScheduledUpdateReturning,
+  mockSelectOrderBy,
 } = vi.hoisted(() => ({
   mockExecute: vi
     .fn()
@@ -17,6 +18,7 @@ const {
   mockUpdateSet: vi.fn(),
   mockUpdateWhere: vi.fn(),
   mockScheduledUpdateReturning: vi.fn().mockResolvedValue([]),
+  mockSelectOrderBy: vi.fn().mockResolvedValue([]),
 }));
 vi.mock("@workspace/db", async () => {
   const schema = await import("@workspace/db/schema");
@@ -25,7 +27,12 @@ vi.mock("@workspace/db", async () => {
       execute: mockExecute,
       transaction: mockTransaction,
       select: () => ({
-        from: () => ({ where: () => ({ limit: mockSelectLimit }) }),
+        from: () => ({
+          where: () => ({
+            limit: mockSelectLimit,
+            orderBy: mockSelectOrderBy,
+          }),
+        }),
       }),
       update: () => ({
         set: (values: unknown) => {
@@ -51,6 +58,10 @@ import {
   createOrReadCommunicationReceipt,
   createOrReadCommunicationReceiptWithRepeatCheck,
   createScheduledCommunicationReceiptContext,
+  hasUncorrelatedVoiceReceiptSince,
+  isCommunicationReceiptPending,
+  listProposalCommunicationReceipts,
+  restrictedCommunicationTurnId,
   updateCallCommunicationReceiptsByProviderId,
   verifyCommunicationProposalId,
 } from "./communication-receipts";
@@ -372,5 +383,156 @@ describe("monotonic provider call updates", () => {
     expect(compiled.sql).toContain("RETURNING id, scheduled_action_id");
     expect(compiled.params).toContain("ringing");
     expect(compiled.params).toContain("provider-call-id");
+  });
+});
+
+describe("restricted communication turn identity", () => {
+  it("is stable for a redelivery of the same inbound message", () => {
+    const params = {
+      userId: 4,
+      channelLabel: "SMS/voice",
+      inboundMessageId: "delivery-hash-1",
+    };
+    expect(restrictedCommunicationTurnId(params)).toBe(
+      restrictedCommunicationTurnId({ ...params }),
+    );
+  });
+
+  it("differs for a new inbound message even with identical text and history", () => {
+    // Regression: the key used to hash text + recent history, so a recurring
+    // request collided with an already-claimed proposal and was suppressed.
+    expect(
+      restrictedCommunicationTurnId({
+        userId: 4,
+        channelLabel: "SMS/voice",
+        inboundMessageId: "delivery-hash-1",
+      }),
+    ).not.toBe(
+      restrictedCommunicationTurnId({
+        userId: 4,
+        channelLabel: "SMS/voice",
+        inboundMessageId: "delivery-hash-2",
+      }),
+    );
+  });
+
+  it("never collides when the caller has no inbound identity", () => {
+    const params = { userId: 4, channelLabel: "email" };
+    expect(restrictedCommunicationTurnId(params)).not.toBe(
+      restrictedCommunicationTurnId(params),
+    );
+  });
+});
+
+describe("isCommunicationReceiptPending", () => {
+  const now = new Date("2026-10-04T12:00:00Z");
+  const windowMs = 60 * 60 * 1000;
+  const recent = new Date("2026-10-04T11:59:00Z");
+
+  it("keeps in-flight sends and unsettled calls pending", () => {
+    expect(
+      isCommunicationReceiptPending(
+        {
+          status: "executing",
+          channel: "sms",
+          callStatus: null,
+          updatedAt: recent,
+        },
+        now,
+        windowMs,
+      ),
+    ).toBe(true);
+    expect(
+      isCommunicationReceiptPending(
+        {
+          status: "accepted",
+          channel: "voice",
+          callStatus: "in-progress",
+          updatedAt: recent,
+        },
+        now,
+        windowMs,
+      ),
+    ).toBe(true);
+  });
+
+  it("settles message receipts that will never receive a delivery update", () => {
+    for (const status of ["accepted", "unknown", "completed", "failed"]) {
+      expect(
+        isCommunicationReceiptPending(
+          { status, channel: "sms", callStatus: null, updatedAt: recent },
+          now,
+          windowMs,
+        ),
+      ).toBe(false);
+    }
+  });
+
+  it("settles calls with a final call status or an expired window", () => {
+    expect(
+      isCommunicationReceiptPending(
+        {
+          status: "accepted",
+          channel: "voice",
+          callStatus: "ended",
+          updatedAt: recent,
+        },
+        now,
+        windowMs,
+      ),
+    ).toBe(false);
+    expect(
+      isCommunicationReceiptPending(
+        {
+          status: "executing",
+          channel: "voice",
+          callStatus: null,
+          updatedAt: new Date("2026-10-04T10:00:00Z"),
+        },
+        now,
+        windowMs,
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("listProposalCommunicationReceipts", () => {
+  const rows = [
+    { id: "original", attemptKey: "proposal-key:2" },
+    { id: "fanout", attemptKey: "proposal-key:3:sms" },
+    { id: "repeat", attemptKey: "proposal-key:2:repeat:receipt-a" },
+    { id: "other-repeat", attemptKey: "proposal-key:2:repeat:receipt-b" },
+  ];
+
+  it("returns only the original attempts for an ordinary duplicate", async () => {
+    mockSelectOrderBy.mockResolvedValueOnce(rows);
+    const receipts = await listProposalCommunicationReceipts({
+      attemptKey: "proposal-key",
+      ownerUserId: 1,
+    });
+    expect(receipts.map((r) => r.id)).toEqual(["original", "fanout"]);
+  });
+
+  it("returns only that repeat's attempts for an acknowledged repeat", async () => {
+    mockSelectOrderBy.mockResolvedValueOnce(rows);
+    const receipts = await listProposalCommunicationReceipts({
+      attemptKey: "proposal-key",
+      ownerUserId: 1,
+      acknowledgedReceiptId: "receipt-a",
+    });
+    expect(receipts.map((r) => r.id)).toEqual(["repeat"]);
+  });
+});
+
+describe("hasUncorrelatedVoiceReceiptSince", () => {
+  it("reports whether an Elaine call is still awaiting its provider ID", async () => {
+    mockSelectLimit.mockResolvedValueOnce([{ id: "pending-call" }]);
+    await expect(hasUncorrelatedVoiceReceiptSince(new Date())).resolves.toBe(
+      true,
+    );
+    mockSelectLimit.mockResolvedValueOnce([]);
+    await expect(hasUncorrelatedVoiceReceiptSince(new Date())).resolves.toBe(
+      false,
+    );
   });
 });

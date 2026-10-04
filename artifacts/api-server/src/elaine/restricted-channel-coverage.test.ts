@@ -343,8 +343,14 @@ describe("Elaine restricted-channel tool coverage", () => {
     const indexPath = fileURLToPath(new URL("./index.ts", import.meta.url));
     const source = readFileSync(indexPath, "utf8");
 
+    // Keyed by the inbound message identity, never by text/history: a
+    // recurring request with identical text and history must not collide
+    // with an earlier, already-claimed proposal.
     expect(source).toMatch(
-      /const communicationTurnId = createHash\("sha256"\)[\s\S]*history: history\.slice\(-10\)[\s\S]*inputText/,
+      /const communicationTurnId = restrictedCommunicationTurnId\(\{[\s\S]*?inboundMessageId,[\s\S]*?\}\);/,
+    );
+    expect(source).not.toMatch(
+      /communicationTurnId[\s\S]{0,200}history\.slice\(-10\)/,
     );
     expect(source).toContain(
       "`${communicationTurnId}:${runtimeToolDedupeKey(name, argsJson)}`",

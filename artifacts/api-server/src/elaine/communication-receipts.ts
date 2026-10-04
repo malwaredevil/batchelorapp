@@ -116,6 +116,29 @@ export async function createScheduledCommunicationReceiptContext(params: {
   };
 }
 
+/**
+ * Stable key for one restricted-channel turn's communication proposals.
+ * Never derived from message text/history: a recurring request (same text,
+ * same recent exchange) would collide with an earlier, already-claimed
+ * proposal and be suppressed. Without an inbound identity, fall back to a
+ * unique key — losing redelivery dedupe is safer than blocking a new request.
+ */
+export function restrictedCommunicationTurnId(params: {
+  userId: number;
+  channelLabel: string;
+  inboundMessageId?: string;
+}): string {
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        userId: params.userId,
+        channelLabel: params.channelLabel,
+        inboundMessageId: params.inboundMessageId ?? randomUUID(),
+      }),
+    )
+    .digest("hex");
+}
+
 function sign(payload: string, secret: string): string {
   return createHmac("sha256", secret).update(payload).digest("base64url");
 }
@@ -459,6 +482,40 @@ export async function createOrReadCommunicationReceiptWithRepeatCheck(params: {
   });
 }
 
+/**
+ * Receipts created from one consumed proposal, used to answer a duplicate
+ * approval with the prior outcome instead of an error. Recipient/channel
+ * fanout appends `:<suffix>` to the proposal key; an acknowledged repeat is
+ * matched only by its own `:repeat:<receiptId>` attempts.
+ */
+export async function listProposalCommunicationReceipts(params: {
+  attemptKey: string;
+  ownerUserId: number;
+  acknowledgedReceiptId?: string;
+}): Promise<Array<typeof elaineCommunicationReceipts.$inferSelect>> {
+  const rows = await db
+    .select()
+    .from(elaineCommunicationReceipts)
+    .where(
+      and(
+        eq(elaineCommunicationReceipts.ownerUserId, params.ownerUserId),
+        or(
+          eq(elaineCommunicationReceipts.attemptKey, params.attemptKey),
+          sql`${elaineCommunicationReceipts.attemptKey} LIKE ${`${params.attemptKey}:%`}`,
+        ),
+      ),
+    )
+    .orderBy(desc(elaineCommunicationReceipts.createdAt));
+  const repeatSuffix = params.acknowledgedReceiptId
+    ? `:repeat:${params.acknowledgedReceiptId}`
+    : null;
+  return rows.filter((receipt) =>
+    repeatSuffix
+      ? receipt.attemptKey.endsWith(repeatSuffix)
+      : !receipt.attemptKey.includes(":repeat:"),
+  );
+}
+
 export async function listRecentCommunicationReceiptsForRecipientChannels(params: {
   ownerUserId: number;
   recipientUserId: number;
@@ -665,6 +722,30 @@ export async function updateCallCommunicationReceiptsByProviderId(
   return receipts.rows.length;
 }
 
+/**
+ * True while an outbound voice receipt has been claimed but not yet linked to
+ * its provider call ID — the only window in which a call-ended webhook that
+ * matched no receipt may still belong to an Elaine call. Calls Elaine never
+ * placed (inbound calls, comm checks, reminder calls) have no such receipt.
+ */
+export async function hasUncorrelatedVoiceReceiptSince(
+  since: Date,
+): Promise<boolean> {
+  const [receipt] = await db
+    .select({ id: elaineCommunicationReceipts.id })
+    .from(elaineCommunicationReceipts)
+    .where(
+      and(
+        eq(elaineCommunicationReceipts.channel, "voice"),
+        eq(elaineCommunicationReceipts.status, "executing"),
+        isNull(elaineCommunicationReceipts.providerId),
+        gt(elaineCommunicationReceipts.updatedAt, since),
+      ),
+    )
+    .limit(1);
+  return Boolean(receipt);
+}
+
 export async function cancelScheduledCommunicationReceipts(
   scheduledActionId: number,
   ownerUserId: number,
@@ -691,6 +772,43 @@ export async function pruneOldCommunicationReceipts(
     DELETE FROM elaine_communication_proposal_claims
     WHERE created_at < ${cutoff}
   `);
+}
+
+const SETTLED_CALL_STATUSES = new Set([
+  "busy",
+  "canceled",
+  "cancelled",
+  "completed",
+  "ended",
+  "failed",
+  "no-answer",
+  "voicemail",
+]);
+
+/**
+ * Whether a receipt's status can still change, so clients know when to stop
+ * polling. Only an in-flight send or an accepted call without a settled call
+ * status can still move; message receipts stay "accepted" (there is no
+ * delivery callback) and "unknown" is final unless a late webhook arrives.
+ * Bounded by `windowMs` so a receipt orphaned by a restart stops polling.
+ */
+export function isCommunicationReceiptPending(
+  receipt: {
+    status: string;
+    channel: string;
+    callStatus: string | null;
+    updatedAt: Date;
+  },
+  now: Date,
+  windowMs: number,
+): boolean {
+  if (receipt.updatedAt.getTime() <= now.getTime() - windowMs) return false;
+  if (receipt.status === "executing") return true;
+  return (
+    receipt.channel === "voice" &&
+    receipt.status === "accepted" &&
+    !SETTLED_CALL_STATUSES.has(receipt.callStatus ?? "")
+  );
 }
 
 export async function listCommunicationReceipts(params: {

@@ -443,6 +443,8 @@ describe("slack.turn job handler — worker execution", () => {
       userId: 7,
       inputText: "Hello Elaine",
       history: [],
+      // The Slack event ID keys communication proposals for this turn.
+      inboundMessageId: "Ev001",
     });
     expect(mockPostSlackMessage).toHaveBeenCalledWith(
       "D456",

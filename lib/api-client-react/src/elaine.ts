@@ -289,6 +289,8 @@ export interface ElaineCommunicationReceipt {
   recipientUserId: number | null;
   callStatus?: string | null;
   providerId?: string | null;
+  /** True while the server can still change this receipt's status. */
+  pending?: boolean;
 }
 
 export async function getElaineCommunicationReceipts(

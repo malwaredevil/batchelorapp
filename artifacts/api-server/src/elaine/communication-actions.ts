@@ -43,6 +43,7 @@ import {
   createOrReadCommunicationReceipt,
   createOrReadCommunicationReceiptWithRepeatCheck,
   findRecentCommunicationReceiptById,
+  listProposalCommunicationReceipts,
   listRecentCommunicationReceiptsForRecipientChannels,
   removeUnstartedCommunicationReceipts,
   updateCallCommunicationReceiptsByProviderId,
@@ -279,6 +280,67 @@ export class StaleRepeatAcknowledgementError extends Error {
     super("The repeat confirmation is stale");
     this.name = "StaleRepeatAcknowledgementError";
   }
+}
+
+/**
+ * A consumed proposal is answered with the receipts it already produced, so
+ * a duplicate approval (double-click, retry after a lost response) reports
+ * the real prior outcome rather than an error. Only a proposal that produced
+ * no receipt (it failed before dispatch) is rejected.
+ */
+async function proposalAlreadyUsedResult(
+  actionType: CommunicationActionType,
+  context: CommunicationReceiptContext | undefined,
+): Promise<{ status: number; body: unknown }> {
+  const receipts = context
+    ? await listProposalCommunicationReceipts({
+        attemptKey: context.attemptKey,
+        ownerUserId: context.ownerUserId,
+        ...(context.acknowledgeRepeat
+          ? { acknowledgedReceiptId: context.acknowledgeRepeat }
+          : {}),
+      })
+    : [];
+  if (receipts.length === 0) {
+    return {
+      status: 409,
+      body: { error: "This communication proposal has already been used." },
+    };
+  }
+  if (receipts.length === 1) {
+    return receiptDuplicateResult(actionType, {
+      receipt: receipts[0]!,
+      claimed: false,
+    });
+  }
+  return {
+    status: 200,
+    body: {
+      type: actionType,
+      result: {
+        receipts: receipts.map((receipt) => ({
+          id: receipt.id,
+          status: receipt.status,
+          recipientUserId: receipt.recipientUserId,
+          channel: receipt.channel,
+        })),
+      },
+    },
+  };
+}
+
+/** Tool result for a restricted-channel send blocked by a recent attempt. */
+export function restrictedRepeatConfirmationResult(status: string): string {
+  const meaning =
+    status === "accepted"
+      ? "the provider accepted it, which does not confirm delivery"
+      : status === "executing"
+        ? "it is still being sent"
+        : "its outcome is unknown — it may or may not have gone out";
+  return (
+    `Not sent: this recipient already has a recent attempt on this channel with recorded status "${status}" (${meaning}). ` +
+    "Nothing new was sent. Tell the user that status exactly, do not say it failed, and explain that another attempt this soon needs explicit confirmation in the Elaine app, where they can approve a repeat."
+  );
 }
 
 async function claimProposalBeforeExecution(
@@ -1573,10 +1635,7 @@ export const communicationActionExecutors: Record<
     receiptContext?: CommunicationReceiptContext,
   ) => {
     if (!(await claimProposalBeforeExecution(receiptContext))) {
-      return {
-        status: 409,
-        body: { error: "This communication proposal has already been used." },
-      };
+      return proposalAlreadyUsedResult("call_contact", receiptContext);
     }
     if (payload.scheduleAt) {
       const tz = await resolveEffectiveTimezone(userId, payload.timezone);
@@ -1696,10 +1755,7 @@ export const communicationActionExecutors: Record<
     receiptContext?: CommunicationReceiptContext,
   ) => {
     if (!(await claimProposalBeforeExecution(receiptContext))) {
-      return {
-        status: 409,
-        body: { error: "This communication proposal has already been used." },
-      };
+      return proposalAlreadyUsedResult("message_contact", receiptContext);
     }
     // Normalize contactName to an array so the rest of the executor is uniform.
     const names = Array.isArray(payload.contactName)
@@ -2237,10 +2293,7 @@ export const communicationActionExecutors: Record<
       };
     }
     if (!(await claimProposalBeforeExecution(receiptContext))) {
-      return {
-        status: 409,
-        body: { error: "This communication proposal has already been used." },
-      };
+      return proposalAlreadyUsedResult("broadcast_message", receiptContext);
     }
 
     // Look up the user's own contact details.

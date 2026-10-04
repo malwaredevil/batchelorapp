@@ -215,13 +215,16 @@ import {
   LIST_SCHEDULED_CONTACTS_TOOL_NAME,
   RECEIPT_ACTION_TYPES,
   RepeatConfirmationRequiredError,
+  restrictedRepeatConfirmationResult,
   StaleRepeatAcknowledgementError,
   type CommunicationReceiptContext,
   type CommunicationActionType,
 } from "./communication-actions";
 import {
   createCommunicationProposalId,
+  isCommunicationReceiptPending,
   listCommunicationReceipts,
+  restrictedCommunicationTurnId,
   verifyCommunicationProposalId,
 } from "./communication-receipts";
 import {
@@ -8304,6 +8307,7 @@ router.get("/communication-receipts", async (req, res): Promise<void> => {
     conversationId: query.data.conversationId,
     limit: query.data.limit,
   });
+  const now = new Date();
   res.json({
     receipts: rows.map((receipt) => ({
       id: receipt.id,
@@ -8316,6 +8320,11 @@ router.get("/communication-receipts", async (req, res): Promise<void> => {
       recipientUserId: receipt.recipientUserId,
       providerId: receipt.providerId,
       callStatus: receipt.callStatus,
+      pending: isCommunicationReceiptPending(
+        receipt,
+        now,
+        env.agentphonePendingAttachmentRetryMaxLifetimeMs,
+      ),
     })),
   });
 });
@@ -10576,12 +10585,26 @@ async function executeRestrictedToolCall(
           "Couldn't understand that request clearly enough to act — ask the user to clarify.";
       }
     } catch (err) {
-      logger.error(
-        { err, name },
-        `${channelLabel} restricted action execution failed`,
-      );
-      resultText =
-        "That action failed on our end — tell the user to try again or use the app.";
+      if (err instanceof RepeatConfirmationRequiredError) {
+        // Restricted channels have no confirmation card, so a repeat can
+        // never be acknowledged here. Report the earlier attempt honestly
+        // instead of a generic failure the user would just retry.
+        logger.info(
+          { name, receiptId: err.receiptId, receiptStatus: err.status },
+          `${channelLabel} restricted communication needs repeat confirmation`,
+        );
+        resultText = restrictedRepeatConfirmationResult(err.status);
+      } else if (err instanceof StaleRepeatAcknowledgementError) {
+        resultText =
+          "Not sent: the repeat confirmation no longer matches the latest attempt. Nothing new was sent — ask the user to check the latest status in the Elaine app.";
+      } else {
+        logger.error(
+          { err, name },
+          `${channelLabel} restricted action execution failed`,
+        );
+        resultText =
+          "That action failed on our end — tell the user to try again or use the app.";
+      }
     }
   }
 
@@ -10736,6 +10759,12 @@ async function runRestrictedElaineTurn(params: {
    *  channel (SMS, Slack, email, group messenger) is text-based and async
    *  enough to afford `models.restrictedTextModel`'s stronger reasoning. */
   useFastModel?: boolean;
+  /** Stable identity of the inbound message that started this turn (webhook
+   *  delivery key, email ID, Slack event ID, messenger message ID). It keys
+   *  communication proposals, so a provider redelivery of the same message
+   *  cannot dispatch twice while a genuinely new message — even one with
+   *  identical text and history — always gets a fresh proposal. */
+  inboundMessageId?: string;
 }): Promise<{
   replyText: string;
   history: Array<{ role: "user" | "assistant"; content: string }>;
@@ -10752,17 +10781,13 @@ async function runRestrictedElaineTurn(params: {
     overrideTools,
     channelAllowedExtras,
     useFastModel,
+    inboundMessageId,
   } = params;
-  const communicationTurnId = createHash("sha256")
-    .update(
-      JSON.stringify({
-        userId,
-        channelLabel,
-        history: history.slice(-10),
-        inputText,
-      }),
-    )
-    .digest("hex");
+  const communicationTurnId = restrictedCommunicationTurnId({
+    userId,
+    channelLabel,
+    inboundMessageId,
+  });
   // Group all model calls in this restricted turn under one Sentry AI
   // Conversation keyed by channel + user so threads stay stable over time.
   Sentry.setConversationId(`${channelLabel}-user-${userId}`);
@@ -11053,6 +11078,7 @@ export async function runAgentphoneTurn(params: {
    *  budget); "sms" (the default) is text-based and gets the stronger
    *  `models.restrictedTextModel` instead. */
   channel?: "sms" | "voice";
+  inboundMessageId?: string;
 }): Promise<{ replyText: string; history: AgentphoneChatMessage[] }> {
   const { channel = "sms", ...turnParams } = params;
   return runRestrictedElaineTurn({
@@ -11094,6 +11120,7 @@ export async function runElaineEmailTurn(params: {
   userId: number;
   inputText: string;
   history: ElaineEmailChatMessage[];
+  inboundMessageId?: string;
 }): Promise<{ replyText: string; history: ElaineEmailChatMessage[] }> {
   return runRestrictedElaineTurn({
     ...params,
@@ -11121,6 +11148,7 @@ export async function runMessengerElaineTurn(params: {
   conversationId: number;
   inputText: string;
   senderName: string;
+  inboundMessageId?: string;
 }): Promise<{ replyText: string; widgets: Record<string, unknown>[] }> {
   // Tag Sentry trace so messenger turns appear in AI Conversations grouped
   // by the messenger conversation thread.
@@ -11160,6 +11188,9 @@ export async function runMessengerElaineTurn(params: {
     history,
     maxTokens: 500,
     channelLabel: "the group messenger",
+    ...(params.inboundMessageId
+      ? { inboundMessageId: params.inboundMessageId }
+      : {}),
     channelAddendum: `CHANNEL: You are in the Batchelor household group messenger — ${params.senderName} has @mentioned you. Keep replies friendly and concise (under 200 words unless detail is truly needed). Markdown renders in the messenger, so you may use it lightly. Use share_app_link to give direct URLs when a request needs a screen.`,
     onWidget: (w) => widgets.push(w),
   });
@@ -11188,6 +11219,7 @@ export async function runElaineSlackTurn(params: {
   userId: number;
   inputText: string;
   history: ElaineSlackChatMessage[];
+  inboundMessageId?: string;
 }): Promise<{ replyText: string; history: ElaineSlackChatMessage[] }> {
   return runRestrictedElaineTurn({
     ...params,

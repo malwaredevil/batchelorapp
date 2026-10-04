@@ -53,9 +53,13 @@ vi.mock("../lib/env", () => ({
 const mockUpdateCallReceiptByProviderId = vi.hoisted(() =>
   vi.fn().mockResolvedValue(undefined),
 );
+const mockHasUncorrelatedVoiceReceiptSince = vi.hoisted(() =>
+  vi.fn().mockResolvedValue(false),
+);
 vi.mock("../elaine/communication-receipts", () => ({
   updateCallCommunicationReceiptsByProviderId:
     mockUpdateCallReceiptByProviderId,
+  hasUncorrelatedVoiceReceiptSince: mockHasUncorrelatedVoiceReceiptSince,
 }));
 
 // ── DB mock ──────────────────────────────────────────────────────────────────
@@ -422,6 +426,8 @@ describe("POST /api/agentphone/webhook — signed call-ended events", () => {
     mockUpdateCallReceiptByProviderId
       .mockResolvedValueOnce(0)
       .mockResolvedValueOnce(1);
+    // An Elaine outbound call is claimed but not yet linked to its call ID.
+    mockHasUncorrelatedVoiceReceiptSince.mockResolvedValueOnce(true);
     const body = JSON.stringify({
       event: "agent.call_ended",
       channel: "voice",
@@ -449,6 +455,31 @@ describe("POST /api/agentphone/webhook — signed call-ended events", () => {
 
     expect(retry.status).toBe(200);
     expect(mockUpdateCallReceiptByProviderId).toHaveBeenCalledTimes(2);
+  });
+
+  it("acknowledges call-ended for calls Elaine never placed instead of deferring forever", async () => {
+    // Inbound calls, comm checks, and reminder calls have no receipt and no
+    // pending Elaine call can claim them later.
+    mockUpdateCallReceiptByProviderId.mockResolvedValueOnce(0);
+    mockHasUncorrelatedVoiceReceiptSince.mockResolvedValueOnce(false);
+    const body = JSON.stringify({
+      event: "agent.call_ended",
+      channel: "voice",
+      data: { callId: "inbound-call-1", status: "completed" },
+    });
+    const ts = freshTimestamp();
+    const app = await buildApp();
+
+    const res = await request(app)
+      .post("/api/agentphone/webhook")
+      .set(buildHeaders(ts, body, "call-ended-uncorrelated"))
+      .set("Content-Type", "application/json")
+      .send(body);
+
+    expect(res.status).toBe(200);
+    expect(mockHasUncorrelatedVoiceReceiptSince).toHaveBeenCalledWith(
+      expect.any(Date),
+    );
   });
 
   it("does not attempt a receipt update when the signed event has no provider call id", async () => {
@@ -675,6 +706,9 @@ describe("POST /api/agentphone/webhook — 10DLC keyword handling", () => {
       expect.objectContaining({
         channel: "sms",
         history: [],
+        // The delivery's content hash keys communication proposals so a new
+        // message with identical text/history is never treated as a replay.
+        inboundMessageId: expect.stringMatching(/\S/),
       }),
     );
     expect(

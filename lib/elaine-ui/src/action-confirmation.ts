@@ -119,19 +119,17 @@ export interface RepeatConfirmationDetails {
   status: string;
 }
 
-const RECEIPT_STATUSES_TO_POLL = new Set([
-  "executing",
-  "accepted",
-  "provider_accepted",
-  "provider_accepted_outcome_pending",
-  "provider_accepted_pending",
-  "unknown",
-  "unknown_after_ambiguous_response",
-  "pending",
-]);
-
-export function shouldPollCommunicationReceipt(status: string): boolean {
-  return RECEIPT_STATUSES_TO_POLL.has(status);
+/**
+ * Poll only receipts the server says can still change. Message receipts stay
+ * "accepted"/"unknown" for good (there is no delivery callback), so polling
+ * by status alone would refresh every few seconds for the receipt's whole
+ * retention period. Without a server flag, only an in-flight send polls.
+ */
+export function shouldPollCommunicationReceipt(receipt: {
+  status: string;
+  pending?: boolean;
+}): boolean {
+  return receipt.pending ?? receipt.status === "executing";
 }
 
 /** Reads the structured safety conflict without exposing provider details. */

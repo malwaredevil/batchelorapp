@@ -300,7 +300,7 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   "lib/elaine-ui/src/ElaineChatPanel.tsx:697", // SCROLL_TOP_LOAD_THRESHOLD
   // Existing fixed bounds: verification-code guesses and reminder dispatch
   // batch size are safety limits, not owner-facing feature settings.
-  "artifacts/api-server/src/elaine/index.ts:952", // MAX_PHONE_CODE_ATTEMPTS
+  "artifacts/api-server/src/elaine/index.ts:955", // MAX_PHONE_CODE_ATTEMPTS
   "artifacts/api-server/src/lib/reminders-scheduler.ts:425", // CLAIM_BATCH_SIZE
   // Scanner heuristic that avoids treating short common strings as secrets;
   // it is a fixed detector safeguard, never product configuration.

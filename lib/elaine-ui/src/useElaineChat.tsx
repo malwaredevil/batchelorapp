@@ -310,7 +310,7 @@ export function useElaineChat({
     if (!active || conversationId === null) return;
     if (
       !communicationReceipts.some((receipt) =>
-        shouldPollCommunicationReceipt(receipt.status),
+        shouldPollCommunicationReceipt(receipt),
       )
     ) {
       return;

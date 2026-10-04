@@ -153,6 +153,7 @@ vi.mock("./communication-receipts", () => ({
   findRecentCommunicationReceiptById: mockFindRecentReceiptById,
   removeUnstartedCommunicationReceipts: vi.fn().mockResolvedValue(undefined),
   updateCommunicationReceipt: mockUpdateCommunicationReceipt,
+  listProposalCommunicationReceipts: vi.fn().mockResolvedValue([]),
 }));
 
 // drizzle-orm: sql is used as a tagged template literal; we return an object

@@ -433,6 +433,7 @@ router.post(
         userId: user.id,
         inputText: effectiveInputText,
         history,
+        inboundMessageId: emailId || deliveryId,
       });
       replyText = result.replyText;
       updatedHistory = result.history;

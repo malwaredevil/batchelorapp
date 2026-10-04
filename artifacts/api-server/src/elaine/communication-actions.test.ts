@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Hoist mocks so vi.fn() refs are available inside vi.mock() factories
@@ -21,6 +21,7 @@ const {
   mockFindRecentReceiptById,
   mockListRecentReceipts,
   mockRemoveUnstartedReceipts,
+  mockListProposalReceipts,
   mockWhere,
   mockEq,
   mockAnd,
@@ -49,6 +50,7 @@ const {
   mockFindRecentReceiptById: vi.fn(),
   mockListRecentReceipts: vi.fn().mockResolvedValue([]),
   mockRemoveUnstartedReceipts: vi.fn().mockResolvedValue(undefined),
+  mockListProposalReceipts: vi.fn().mockResolvedValue([]),
   mockWhere: vi.fn(),
   mockEq: vi.fn((column: unknown, value: unknown) => ({ column, value })),
   mockAnd: vi.fn((...conditions: unknown[]) => conditions),
@@ -122,6 +124,7 @@ vi.mock("./communication-receipts", () => ({
   findRecentCommunicationReceiptById: mockFindRecentReceiptById,
   listRecentCommunicationReceiptsForRecipientChannels: mockListRecentReceipts,
   removeUnstartedCommunicationReceipts: mockRemoveUnstartedReceipts,
+  listProposalCommunicationReceipts: mockListProposalReceipts,
   updateCallCommunicationReceiptsByProviderId: vi.fn(),
   updateCommunicationReceipt: vi.fn(),
 }));
@@ -160,7 +163,10 @@ vi.mock("drizzle-orm", () => ({
   sql: vi.fn(),
 }));
 
-import { communicationActionExecutors } from "./communication-actions";
+import {
+  communicationActionExecutors,
+  restrictedRepeatConfirmationResult,
+} from "./communication-actions";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -410,6 +416,124 @@ describe("recent communication repeat challenge", () => {
     expect(replay.status).toBe(409);
     expect(mockSelect).toHaveBeenCalledTimes(1);
     expect(mockSendSms).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("duplicate approval of a consumed proposal", () => {
+  const context = {
+    attemptKey: "used-proposal-key",
+    proposalClaimKey: "used-proposal-key",
+    payloadHash: "payload-hash",
+    ownerUserId: 1,
+    actionType: "call_contact",
+    conversationId: 8,
+  };
+
+  beforeEach(() => {
+    mockSelect.mockClear();
+    mockSendSms.mockClear();
+    mockListProposalReceipts.mockClear();
+    mockClaimCommunicationProposal.mockResolvedValue(false);
+  });
+
+  afterEach(() => {
+    mockClaimCommunicationProposal.mockResolvedValue(true);
+    mockListProposalReceipts.mockResolvedValue([]);
+  });
+
+  it("returns the prior receipt instead of an error when the first attempt dispatched", async () => {
+    mockListProposalReceipts.mockResolvedValueOnce([
+      {
+        id: "prior-call-receipt",
+        status: "accepted",
+        channel: "voice",
+        providerId: "provider-call-9",
+        callStatus: "in-progress",
+        recipientUserId: 2,
+      },
+    ]);
+
+    const result = await communicationActionExecutors.call_contact(
+      { contactName: "Jane", message: "Dinner is ready" } as never,
+      1,
+      context,
+    );
+
+    expect(result.status).toBe(200);
+    expect(result.body).toEqual({
+      type: "call_contact",
+      result: {
+        receiptId: "prior-call-receipt",
+        receiptStatus: "accepted",
+        channel: "voice",
+        providerId: "provider-call-9",
+        callStatus: "in-progress",
+      },
+    });
+    expect(mockListProposalReceipts).toHaveBeenCalledWith({
+      attemptKey: "used-proposal-key",
+      ownerUserId: 1,
+    });
+    expect(mockSelect).not.toHaveBeenCalled();
+  });
+
+  it("returns every fanout receipt for a multi-recipient proposal", async () => {
+    mockListProposalReceipts.mockResolvedValueOnce([
+      { id: "r-1", status: "accepted", channel: "sms", recipientUserId: 2 },
+      { id: "r-2", status: "failed", channel: "sms", recipientUserId: 3 },
+    ]);
+
+    const result = await communicationActionExecutors.message_contact(
+      { contactName: ["Jane", "Sam"], message: "Hi", channel: "sms" } as never,
+      1,
+      { ...context, actionType: "message_contact" },
+    );
+
+    expect(result.status).toBe(200);
+    expect(
+      (result.body as { result: { receipts: unknown[] } }).result.receipts,
+    ).toEqual([
+      { id: "r-1", status: "accepted", recipientUserId: 2, channel: "sms" },
+      { id: "r-2", status: "failed", recipientUserId: 3, channel: "sms" },
+    ]);
+    expect(mockSendSms).not.toHaveBeenCalled();
+  });
+
+  it("scopes an acknowledged repeat replay to that repeat's receipts", async () => {
+    const result = await communicationActionExecutors.message_contact(
+      { contactName: "Jane", message: "Hi again", channel: "sms" } as never,
+      1,
+      {
+        ...context,
+        actionType: "message_contact",
+        proposalClaimKey:
+          "used-proposal-key:repeat:11111111-1111-4111-8111-111111111111",
+        acknowledgeRepeat: "11111111-1111-4111-8111-111111111111",
+      },
+    );
+
+    // The repeat produced no receipt yet, so the replay is rejected.
+    expect(result.status).toBe(409);
+
+    expect(mockListProposalReceipts).toHaveBeenCalledWith({
+      attemptKey: "used-proposal-key",
+      ownerUserId: 1,
+      acknowledgedReceiptId: "11111111-1111-4111-8111-111111111111",
+    });
+  });
+});
+
+describe("restrictedRepeatConfirmationResult", () => {
+  it("reports the earlier attempt's status instead of claiming a failure", () => {
+    const accepted = restrictedRepeatConfirmationResult("accepted");
+    expect(accepted).toContain("Nothing new was sent");
+    expect(accepted).toContain('"accepted"');
+    expect(accepted).toContain("does not confirm delivery");
+    expect(accepted).toContain("do not say it failed");
+    expect(accepted).not.toMatch(/failed on our end/i);
+    expect(restrictedRepeatConfirmationResult("unknown")).toContain(
+      "may or may not have gone out",
+    );
   });
 });
 

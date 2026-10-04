@@ -700,7 +700,7 @@ router.post("/conversations/:id/messages", async (req, res) => {
 
   if (/@elaine\b/i.test(body)) {
     const senderName = senderRow[0]?.displayName ?? "a household member";
-    generateElaineReply(convId, body, senderName, userId).catch((err) =>
+    generateElaineReply(convId, body, senderName, userId, msg.id).catch((err) =>
       logger.error(err, "messenger: @elaine reply error"),
     );
   }
@@ -711,6 +711,7 @@ async function generateElaineReply(
   userMessage: string,
   senderName: string,
   userId: number,
+  inboundMessageId?: number,
 ): Promise<void> {
   const cleanMsg = userMessage.replace(/@elaine\b/gi, "").trim();
 
@@ -722,6 +723,9 @@ async function generateElaineReply(
       conversationId,
       inputText: cleanMsg || "Hello!",
       senderName,
+      ...(inboundMessageId !== undefined
+        ? { inboundMessageId: `messenger-message:${inboundMessageId}` }
+        : {}),
     });
     replyText = result.replyText;
     widgets = result.widgets;

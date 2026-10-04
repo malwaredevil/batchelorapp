@@ -174,18 +174,23 @@ describe("action confirmation", () => {
     expect(getRepeatConfirmationDetails(new Error("Network error"))).toBeNull();
   });
 
-  it("polls unresolved receipt statuses and stops on terminal statuses", () => {
-    for (const status of [
-      "executing",
-      "accepted",
-      "unknown",
-      "pending",
-      "provider_accepted",
-    ]) {
-      expect(shouldPollCommunicationReceipt(status)).toBe(true);
-    }
-    for (const status of ["completed", "failed", "scheduled", "cancelled"]) {
-      expect(shouldPollCommunicationReceipt(status)).toBe(false);
+  it("polls only receipts the server marks as still pending", () => {
+    expect(
+      shouldPollCommunicationReceipt({ status: "accepted", pending: true }),
+    ).toBe(true);
+    // A sent message stays "accepted" forever; it must not poll indefinitely.
+    expect(
+      shouldPollCommunicationReceipt({ status: "accepted", pending: false }),
+    ).toBe(false);
+    expect(
+      shouldPollCommunicationReceipt({ status: "unknown", pending: false }),
+    ).toBe(false);
+  });
+
+  it("falls back to polling only in-flight sends without a server flag", () => {
+    expect(shouldPollCommunicationReceipt({ status: "executing" })).toBe(true);
+    for (const status of ["accepted", "unknown", "completed", "failed"]) {
+      expect(shouldPollCommunicationReceipt({ status })).toBe(false);
     }
   });
 

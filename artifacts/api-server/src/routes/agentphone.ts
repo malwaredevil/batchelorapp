@@ -13,7 +13,10 @@ import {
 } from "../lib/webhook-side-effect-idempotency";
 import { runAgentphoneTurn, type AgentphoneChatMessage } from "../elaine";
 import { markCommCheckVerified } from "../lib/comm-check-scheduler";
-import { updateCallCommunicationReceiptsByProviderId } from "../elaine/communication-receipts";
+import {
+  hasUncorrelatedVoiceReceiptSince,
+  updateCallCommunicationReceiptsByProviderId,
+} from "../elaine/communication-receipts";
 import {
   getAgentphoneConversation,
   getOrCreateAgentphoneConversation,
@@ -211,6 +214,7 @@ async function runRestrictedTurnAndPersist(
   allowPendingOutboundContext = false,
   outboundCallId?: string,
   requireOutboundCallIdCorrelation = false,
+  inboundMessageId?: string,
 ): Promise<string> {
   let current = conversation;
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -257,6 +261,7 @@ async function runRestrictedTurnAndPersist(
         inputText,
         history,
         channel,
+        ...(inboundMessageId ? { inboundMessageId } : {}),
       });
       replyText = result.replyText;
       updatedHistory = result.history;
@@ -476,6 +481,10 @@ async function handleSms(
       user.id,
       messageText,
       "sms",
+      false,
+      undefined,
+      false,
+      deliveryKey,
     );
   } catch (err) {
     // Keep the pending context and shared history untouched for a retry, but
@@ -515,7 +524,11 @@ async function handleSms(
   res.status(200).json({ ok: true });
 }
 
-async function handleVoice(req: Request, res: Response): Promise<void> {
+async function handleVoice(
+  req: Request,
+  res: Response,
+  deliveryKey: string,
+): Promise<void> {
   const data = (req.body?.data ?? {}) as {
     from?: unknown;
     transcript?: unknown;
@@ -657,6 +670,7 @@ async function handleVoice(req: Request, res: Response): Promise<void> {
       mayConsumeOutboundContext,
       mayConsumeOutboundContext ? callId : undefined,
       mayConsumeOutboundContext,
+      deliveryKey,
     );
   } catch (err) {
     logger.error(
@@ -775,7 +789,17 @@ router.post("/webhook", webhookLimiter, async (req: Request, res: Response) => {
         callId,
         callEndedProviderStatus(callData),
       );
-      if (updatedReceipts === 0) {
+      // Defer only while an Elaine outbound call may still be awaiting its
+      // provider ID. Calls without a receipt (inbound, comm checks, reminder
+      // calls) are acknowledged so the provider does not retry them forever.
+      if (
+        updatedReceipts === 0 &&
+        (await hasUncorrelatedVoiceReceiptSince(
+          new Date(
+            Date.now() - env.agentphonePendingAttachmentRetryMaxLifetimeMs,
+          ),
+        ))
+      ) {
         await releaseDeliveryClaim(contentHash);
         logger.info(
           { callId },
@@ -789,6 +813,9 @@ router.post("/webhook", webhookLimiter, async (req: Request, res: Response) => {
         { errorType: err instanceof Error ? err.name : "UnknownError", callId },
         "agentphone: failed to persist call-ended receipt status",
       );
+      // Release the claim so the provider's retry is processed rather than
+      // rejected as an in-flight duplicate.
+      await releaseDeliveryClaim(contentHash).catch(() => undefined);
       res.status(503).json({ error: "Service unavailable" });
       return;
     }
@@ -810,7 +837,7 @@ router.post("/webhook", webhookLimiter, async (req: Request, res: Response) => {
       return;
     }
     if (channel === "voice") {
-      await handleVoice(req, res);
+      await handleVoice(req, res, contentHash);
       void markDeliveryProcessed(contentHash);
       return;
     }

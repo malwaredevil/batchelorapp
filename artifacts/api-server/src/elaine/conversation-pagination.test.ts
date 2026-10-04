@@ -1055,6 +1055,8 @@ describe("GET /api/elaine/communication-receipts", () => {
         ...ownerReceipt,
         createdAt: ownerReceipt.createdAt.toISOString(),
         updatedAt: ownerReceipt.updatedAt.toISOString(),
+        // A completed call can no longer change, so clients stop polling.
+        pending: false,
       },
     ]);
     expect(dbMock.delete).not.toHaveBeenCalled();

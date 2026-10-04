@@ -216,7 +216,7 @@ beforeEach(() => {
   dbMock.execute.mockImplementation(executeImpl);
   runAgentphoneTurn.mockResolvedValue({ replyText: "Mock reply", history: [] });
   sendSms.mockResolvedValue(undefined);
-  mockUpdateCallReceiptByProviderId.mockResolvedValue(undefined);
+  mockUpdateCallReceiptByProviderId.mockResolvedValue(1);
 });
 
 describe("POST /api/agentphone/webhook — signature verification", () => {
@@ -416,6 +416,39 @@ describe("POST /api/agentphone/webhook — signed call-ended events", () => {
       "provider-call-ended",
       "ended",
     );
+  });
+
+  it("releases an unmatched call-ended delivery so provider retries can reconcile it", async () => {
+    mockUpdateCallReceiptByProviderId
+      .mockResolvedValueOnce(0)
+      .mockResolvedValueOnce(1);
+    const body = JSON.stringify({
+      event: "agent.call_ended",
+      channel: "voice",
+      data: { callId: "provider-call-race", status: "completed" },
+    });
+    const ts = freshTimestamp();
+    const deliveryId = "call-ended-before-receipt";
+    const app = await buildApp();
+
+    const first = await request(app)
+      .post("/api/agentphone/webhook")
+      .set(buildHeaders(ts, body, deliveryId))
+      .set("Content-Type", "application/json")
+      .send(body);
+
+    expect(first.status).toBe(503);
+    expect(first.body.error).toContain("not correlated");
+    expect(dbMock.execute).toHaveBeenCalledTimes(2);
+
+    const retry = await request(app)
+      .post("/api/agentphone/webhook")
+      .set(buildHeaders(ts, body, deliveryId))
+      .set("Content-Type", "application/json")
+      .send(body);
+
+    expect(retry.status).toBe(200);
+    expect(mockUpdateCallReceiptByProviderId).toHaveBeenCalledTimes(2);
   });
 
   it("does not attempt a receipt update when the signed event has no provider call id", async () => {

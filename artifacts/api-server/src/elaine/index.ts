@@ -222,7 +222,6 @@ import {
 import {
   createCommunicationProposalId,
   listCommunicationReceipts,
-  pruneOldCommunicationReceipts,
   verifyCommunicationProposalId,
 } from "./communication-receipts";
 import {
@@ -7693,7 +7692,6 @@ router.post("/chat", async (req, res) => {
             if (!parsed.success) {
               resultText = "Invalid receipt lookup parameters.";
             } else {
-              await pruneOldCommunicationReceipts();
               const receipts = await listCommunicationReceipts({
                 ownerUserId: userId,
                 limit: parsed.data.limit,
@@ -8301,7 +8299,6 @@ router.get("/communication-receipts", async (req, res): Promise<void> => {
     return;
   }
   const userId = req.session.userId!;
-  await pruneOldCommunicationReceipts();
   const rows = await listCommunicationReceipts({
     ownerUserId: userId,
     conversationId: query.data.conversationId,

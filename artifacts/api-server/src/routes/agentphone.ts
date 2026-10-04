@@ -195,6 +195,14 @@ async function markDeliveryProcessed(id: string): Promise<void> {
   }
 }
 
+async function releaseDeliveryClaim(id: string): Promise<void> {
+  await db.execute(sql`
+    DELETE FROM agentphone_webhook_deliveries
+    WHERE id = ${id}
+      AND status = 'processing'
+  `);
+}
+
 async function runRestrictedTurnAndPersist(
   conversation: Awaited<ReturnType<typeof getOrCreateAgentphoneConversation>>,
   userId: number,
@@ -763,10 +771,19 @@ router.post("/webhook", webhookLimiter, async (req: Request, res: Response) => {
       return;
     }
     try {
-      await updateCallCommunicationReceiptsByProviderId(
+      const updatedReceipts = await updateCallCommunicationReceiptsByProviderId(
         callId,
         callEndedProviderStatus(callData),
       );
+      if (updatedReceipts === 0) {
+        await releaseDeliveryClaim(contentHash);
+        logger.info(
+          { callId },
+          "agentphone: call-ended webhook deferred until receipt correlation",
+        );
+        res.status(503).json({ error: "Call receipt is not correlated yet" });
+        return;
+      }
     } catch (err) {
       logger.error(
         { errorType: err instanceof Error ? err.name : "UnknownError", callId },

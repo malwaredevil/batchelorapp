@@ -14,6 +14,7 @@ import { startBirthdayScheduler } from "./lib/birthday-scheduler";
 import { startMonitoringScheduler } from "./lib/monitoring-scheduler";
 import { startCommCheckScheduler } from "./lib/comm-check-scheduler";
 import { startWebhookSideEffectCleanupScheduler } from "./lib/webhook-side-effect-idempotency";
+import { startCommunicationReceiptCleanupScheduler } from "./elaine/communication-receipts-scheduler";
 import {
   startSchedulerHeartbeat,
   reconcileSchedulerRuns,
@@ -91,6 +92,7 @@ async function initializeRuntime(): Promise<void> {
     startMonitoringScheduler(),
     startCommCheckScheduler(),
     startWebhookSideEffectCleanupScheduler(),
+    startCommunicationReceiptCleanupScheduler(),
     startIntegrationsHealthNudgeScheduler(),
     startSentryErrorNudgeScheduler(),
     startSchedulerHeartbeat(),

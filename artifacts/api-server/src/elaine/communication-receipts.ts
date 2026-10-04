@@ -191,7 +191,6 @@ export async function createOrReadCommunicationReceipt(params: {
   receipt: typeof elaineCommunicationReceipts.$inferSelect;
   claimed: boolean;
 }> {
-  await pruneOldCommunicationReceipts();
   const id = randomUUID();
   const result = await db.execute(
     // INSERT conflict handling is the atomic dispatch claim. The key is shared
@@ -297,7 +296,6 @@ export async function createOrReadCommunicationReceiptWithRepeatCheck(params: {
     }
   | { kind: "stale_acknowledgement" }
 > {
-  await pruneOldCommunicationReceipts();
   return db.transaction(async (tx) => {
     // Serialize repeat detection and this attempt's receipt claim for a single
     // owner/recipient/channel. Different proposals cannot both observe an
@@ -555,7 +553,7 @@ export async function updateCommunicationReceipt(
 export async function updateCallCommunicationReceiptsByProviderId(
   providerId: string,
   providerCallStatus: string,
-): Promise<void> {
+): Promise<number> {
   const receipts = await db.execute<{
     id: string;
     scheduled_action_id: number | null;
@@ -613,6 +611,7 @@ export async function updateCallCommunicationReceiptsByProviderId(
         ),
       );
   }
+  return receipts.rows.length;
 }
 
 export async function cancelScheduledCommunicationReceipts(

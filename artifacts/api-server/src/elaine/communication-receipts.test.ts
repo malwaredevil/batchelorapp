@@ -164,10 +164,12 @@ describe("proposal-level replay guard", () => {
 
 describe("monotonic provider call updates", () => {
   it("uses atomic terminal-state predicates to prevent regression", async () => {
-    await updateCallCommunicationReceiptsByProviderId(
-      "provider-call-id",
-      "ringing",
-    );
+    await expect(
+      updateCallCommunicationReceiptsByProviderId(
+        "provider-call-id",
+        "ringing",
+      ),
+    ).resolves.toBe(1);
     const statement = mockExecute.mock.calls.at(-1)?.[0] as Parameters<
       PgDialect["sqlToQuery"]
     >[0];

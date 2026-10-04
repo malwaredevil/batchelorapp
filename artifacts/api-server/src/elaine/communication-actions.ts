@@ -1056,11 +1056,12 @@ export async function fireCallMe(
     // without it, waitForCallOutcome clears only by the provider callId.
     const reconciliation = claimed
       ? reconcileOutboundCallOutcome(call.callId, call.pendingOutboundContext, {
-          onProviderStatus: (providerCallStatus) =>
-            updateCallCommunicationReceiptsByProviderId(
+          onProviderStatus: async (providerCallStatus) => {
+            await updateCallCommunicationReceiptsByProviderId(
               call.callId,
               providerCallStatus,
-            ),
+            );
+          },
         })
       : reconcileOutboundCallOutcome(call.callId, call.pendingOutboundContext);
     void reconciliation.catch((err) =>

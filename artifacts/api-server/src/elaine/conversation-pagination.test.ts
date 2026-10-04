@@ -98,6 +98,7 @@ function makeUpdateBuilder() {
 // ---------------------------------------------------------------------------
 
 const selectQueue: unknown[][] = [];
+const mockListCommunicationReceipts = vi.hoisted(() => vi.fn());
 
 const dbMock = {
   select: vi.fn(() => makeQueuedSelectBuilder(selectQueue)),
@@ -344,6 +345,15 @@ vi.mock("./communication-actions", () => ({
   LIST_CONTACT_CHANNELS_TOOL_NAME: "list_contact_channels",
   LIST_SCHEDULED_CONTACTS_TOOL_NAME: "list_scheduled_contacts",
 }));
+
+vi.mock("./communication-receipts", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("./communication-receipts")>();
+  return {
+    ...actual,
+    listCommunicationReceipts: mockListCommunicationReceipts,
+  };
+});
 
 vi.mock("../lib/elaine-cross-channel", () => ({
   loadCrossChannelContext: vi.fn().mockResolvedValue([]),
@@ -1004,5 +1014,74 @@ describe("Hub aggregate counts", () => {
       ),
       [1],
     );
+  });
+});
+
+describe("GET /api/elaine/communication-receipts", () => {
+  const ownerReceipt = {
+    id: "receipt-owner",
+    actionType: "call_contact",
+    channel: "voice",
+    status: "completed",
+    createdAt: new Date("2026-10-04T10:00:00.000Z"),
+    updatedAt: new Date("2026-10-04T10:01:00.000Z"),
+    conversationId: 31,
+    recipientUserId: 42,
+    providerId: "provider-call-42",
+    callStatus: "completed",
+  };
+
+  beforeEach(() => {
+    mockListCommunicationReceipts.mockImplementation(
+      ({ ownerUserId }: { ownerUserId: number }) =>
+        Promise.resolve(ownerUserId === 42 ? [ownerReceipt] : []),
+    );
+  });
+
+  it("returns serialized receipts scoped to the authenticated owner", async () => {
+    const app = buildApp({ userId: 42 });
+    const res = await request(app).get(
+      "/api/elaine/communication-receipts?conversationId=31&limit=10",
+    );
+
+    expect(res.status).toBe(200);
+    expect(mockListCommunicationReceipts).toHaveBeenCalledWith({
+      ownerUserId: 42,
+      conversationId: 31,
+      limit: 10,
+    });
+    expect(res.body.receipts).toEqual([
+      {
+        ...ownerReceipt,
+        createdAt: ownerReceipt.createdAt.toISOString(),
+        updatedAt: ownerReceipt.updatedAt.toISOString(),
+      },
+    ]);
+    expect(dbMock.delete).not.toHaveBeenCalled();
+    expect(dbMock.execute).not.toHaveBeenCalled();
+  });
+
+  it("does not expose another owner's receipts", async () => {
+    const app = buildApp({ userId: 43 });
+    const res = await request(app).get("/api/elaine/communication-receipts");
+
+    expect(res.status).toBe(200);
+    expect(mockListCommunicationReceipts).toHaveBeenCalledWith({
+      ownerUserId: 43,
+      conversationId: undefined,
+      limit: 50,
+    });
+    expect(res.body).toEqual({ receipts: [] });
+  });
+
+  it("rejects invalid query parameters before listing receipts", async () => {
+    const app = buildApp({ userId: 42 });
+    const res = await request(app).get(
+      "/api/elaine/communication-receipts?limit=0",
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: "Invalid receipt query." });
+    expect(mockListCommunicationReceipts).not.toHaveBeenCalled();
   });
 });

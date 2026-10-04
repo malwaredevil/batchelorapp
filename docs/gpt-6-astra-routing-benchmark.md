@@ -11,11 +11,12 @@ Keep these existing defaults:
 
 - GPT-5.6 Terra and Luna for direct OpenAI balanced and fast roles
 - the fast OpenRouter chat model for real-time AgentPhone voice
-- Gemini 2.5 Flash for fast and smart vision
+- Gemini 3.8 Flash for fast and smart vision
+- Claude Opus 5.5 for Elaine's advisor role
 - Perplexity Sonar for research
 - OpenAI `text-embedding-3-small` for text embeddings
 - Jina CLIP v2 for visual embeddings
-- Voyage `rerank-2.5` for reranking
+- Voyage `rerank-3` for reranking
 - the existing Anthropic/OpenAI fusion panel, which is a separate expensive
   escalation path
 

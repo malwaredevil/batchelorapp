@@ -479,7 +479,7 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
 
   // ---- lib/crease-removal.ts ----
   // OpenAI image-edit call options: provider timeout and SDK retry config.
-  "artifacts/api-server/src/lib/crease-removal.ts:200",
+  "artifacts/api-server/src/lib/crease-removal.ts:201",
 
   // ---- lib/document-generation.ts ----
   // Max rows in a generated document table — output-size guard.

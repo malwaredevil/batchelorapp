@@ -21,7 +21,7 @@ import {
   stripMetadata,
 } from "@workspace/upload-validation";
 import { getConfig } from "../../lib/app-config";
-import { callModel, MODELS } from "../../lib/ai-client";
+import { callModel, getModels } from "../../lib/ai-client";
 import {
   serializeFabrics,
   serializePatterns,
@@ -111,32 +111,30 @@ async function extractPaletteFromUpload(
   const cleanBuffer = await stripMetadata(file.buffer, contentType);
   const dataUrl = toDataUrl(cleanBuffer, contentType);
 
-  const completion = await callModel(
-    MODELS.FAST_VISION,
-    async (client, model) => {
-      return client.chat.completions.create({
-        model,
-        max_tokens: await getConfig(
-          "quilting",
-          "color_suggestion_max_tokens",
-          200,
-        ),
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "image_url", image_url: { url: dataUrl, detail: "low" } },
-              {
-                type: "text",
-                text: `Identify the 5 to 7 most dominant colours in this image. Use ONLY names from this fixed list: ${PALETTE_LIST}. Pick the closest match for each colour you see. Return STRICT JSON only: {"colors":["name1","name2","name3",...]}`,
-              },
-            ],
-          },
-        ],
-      });
-    },
-  );
+  const { fastVision } = await getModels();
+  const completion = await callModel(fastVision, async (client, model) => {
+    return client.chat.completions.create({
+      model,
+      max_tokens: await getConfig(
+        "quilting",
+        "color_suggestion_max_tokens",
+        200,
+      ),
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "image_url", image_url: { url: dataUrl, detail: "low" } },
+            {
+              type: "text",
+              text: `Identify the 5 to 7 most dominant colours in this image. Use ONLY names from this fixed list: ${PALETTE_LIST}. Pick the closest match for each colour you see. Return STRICT JSON only: {"colors":["name1","name2","name3",...]}`,
+            },
+          ],
+        },
+      ],
+    });
+  });
 
   let extractedColors: string[] = [];
   try {

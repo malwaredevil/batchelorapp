@@ -210,7 +210,11 @@ export async function createOrReadCommunicationReceipt(params: {
   if (params.scheduledActionId != null) {
     const [scheduledReceipt] = await db
       .update(elaineCommunicationReceipts)
-      .set({ status: params.status ?? "executing", updatedAt: new Date() })
+      .set({
+        status: params.status ?? "executing",
+        recipientUserId: params.recipientUserId,
+        updatedAt: new Date(),
+      })
       .where(
         and(
           eq(
@@ -222,9 +226,12 @@ export async function createOrReadCommunicationReceipt(params: {
           eq(elaineCommunicationReceipts.actionType, params.actionType),
           params.recipientUserId === null
             ? isNull(elaineCommunicationReceipts.recipientUserId)
-            : eq(
-                elaineCommunicationReceipts.recipientUserId,
-                params.recipientUserId,
+            : or(
+                isNull(elaineCommunicationReceipts.recipientUserId),
+                eq(
+                  elaineCommunicationReceipts.recipientUserId,
+                  params.recipientUserId,
+                ),
               ),
           eq(elaineCommunicationReceipts.status, "scheduled"),
         ),

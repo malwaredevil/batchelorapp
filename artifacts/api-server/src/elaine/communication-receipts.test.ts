@@ -161,11 +161,12 @@ describe("scheduled communication receipt claims", () => {
       channel: "sms",
       status: "scheduled",
       conversationId: null,
-      recipientUserId: 91,
+      recipientUserId: null,
       scheduledActionId: 77,
     } as typeof elaineCommunicationReceipts.$inferSelect;
     const executingReceipt = {
       ...scheduledReceipt,
+      recipientUserId: 91,
       status: "executing",
     } as typeof elaineCommunicationReceipts.$inferSelect;
 
@@ -191,7 +192,10 @@ describe("scheduled communication receipt claims", () => {
 
     expect(claim).toEqual({ receipt: executingReceipt, claimed: true });
     expect(mockUpdateSet).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "executing" }),
+      expect.objectContaining({
+        status: "executing",
+        recipientUserId: 91,
+      }),
     );
     const update = new PgDialect().sqlToQuery(
       mockUpdateWhere.mock.calls.at(-1)?.[0] as Parameters<

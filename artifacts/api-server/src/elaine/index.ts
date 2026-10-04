@@ -210,10 +210,21 @@ import {
   executeListContactChannels,
   executeListScheduledContacts,
   formatScheduledTime,
+  GET_COMMUNICATION_RECEIPTS_TOOL_NAME,
   LIST_CONTACT_CHANNELS_TOOL_NAME,
   LIST_SCHEDULED_CONTACTS_TOOL_NAME,
+  RECEIPT_ACTION_TYPES,
+  RepeatConfirmationRequiredError,
+  StaleRepeatAcknowledgementError,
+  type CommunicationReceiptContext,
   type CommunicationActionType,
 } from "./communication-actions";
+import {
+  createCommunicationProposalId,
+  listCommunicationReceipts,
+  pruneOldCommunicationReceipts,
+  verifyCommunicationProposalId,
+} from "./communication-receipts";
 import {
   buildReminderActionLabel,
   reminderActionExecutors,
@@ -1571,6 +1582,7 @@ type ActionExecutor = (
   payload: never,
   userId: number,
   context?: AppOperationExecutionContext,
+  receiptContext?: CommunicationReceiptContext,
 ) => Promise<{ status: number; body: unknown }>;
 
 function appOperationContextFromRequest(
@@ -2925,6 +2937,18 @@ const TRAVEL_ACTION_EXECUTORS: Record<TravelActionType, ActionExecutor> = {
   }) as ActionExecutor,
 };
 
+const communicationActionExecutorAdapters = Object.fromEntries(
+  Object.entries(communicationActionExecutors).map(([type, executor]) => [
+    type,
+    (
+      payload: never,
+      userId: number,
+      _operationContext?: AppOperationExecutionContext,
+      receiptContext?: CommunicationReceiptContext,
+    ) => executor(payload, userId, receiptContext),
+  ]),
+) as Record<CommunicationActionType, ActionExecutor>;
+
 const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
   ...TRAVEL_ACTION_EXECUTORS,
   ...potteryActionExecutors,
@@ -2933,7 +2957,7 @@ const ACTION_EXECUTORS: Record<ActionType, ActionExecutor> = {
   ...magnetActionExecutors,
   ...universalActionExecutors,
   ...adaptiveActionExecutors,
-  ...communicationActionExecutors,
+  ...communicationActionExecutorAdapters,
   ...reminderActionExecutors,
   [EXECUTE_APP_OPERATION_TOOL_NAME]:
     executeAppOperationAction as ActionExecutor,
@@ -3221,6 +3245,45 @@ function runtimeToolDedupeKey(name: string, args: string): string {
   return createHash("sha256").update(`${name}:${args}`).digest("hex");
 }
 
+function buildReceiptExecutionContext(params: {
+  action: {
+    type: string;
+    payload: unknown;
+    proposalId?: string;
+    acknowledgeRepeat?: string;
+  };
+  ownerUserId: number;
+  conversationId: number | null;
+  onClaimed?: CommunicationReceiptContext["onClaimed"];
+}): CommunicationReceiptContext | null {
+  const { action, ownerUserId, conversationId, onClaimed } = params;
+  if (!RECEIPT_ACTION_TYPES.some((type) => type === action.type)) return null;
+  if (!action.proposalId) return null;
+  const claims = verifyCommunicationProposalId({
+    proposalId: action.proposalId,
+    ownerUserId,
+    actionType: action.type,
+    payload: action.payload,
+    secret: env.sessionSecret,
+    conversationId,
+  });
+  if (!claims) return null;
+  return {
+    attemptKey: claims.key,
+    proposalClaimKey: action.acknowledgeRepeat
+      ? `${claims.key}:repeat:${action.acknowledgeRepeat}`
+      : claims.key,
+    payloadHash: claims.payloadHash,
+    ownerUserId,
+    actionType: action.type,
+    conversationId,
+    ...(action.acknowledgeRepeat
+      ? { acknowledgeRepeat: action.acknowledgeRepeat }
+      : {}),
+    ...(onClaimed ? { onClaimed } : {}),
+  };
+}
+
 function formatPlanForModel(trace: ElaineRuntimeTrace): string {
   const steps = trace.plan.steps
     .map(
@@ -3353,7 +3416,14 @@ async function fetchConversationMessagePage(
   return { messages, hasMore };
 }
 
-type ProposedAction = { type: string; label: string; payload: unknown };
+type ProposedAction = {
+  type: string;
+  label: string;
+  payload: unknown;
+  proposalId?: string;
+  acknowledgeRepeat?: string;
+  conversationId?: number | null;
+};
 
 // Attempts to turn an accumulated tool-call argument buffer into a fully
 // validated, ready-to-confirm action. Returns null while the JSON is still
@@ -3386,6 +3456,8 @@ async function tryBuildAction(
   argsBuffer: string,
   userId: number,
   currentImageUrls?: Set<string>,
+  stableCommunicationKey?: string,
+  conversationId?: number | null,
 ): Promise<ProposedAction | null> {
   if (!ACTION_TOOL_NAMES.has(name)) return null;
   // Every `return null` below logs WHY, including the (truncated) raw args
@@ -3442,10 +3514,30 @@ async function tryBuildAction(
   }
 
   try {
+    const proposalId = RECEIPT_ACTION_TYPES.some(
+      (actionType) => actionType === parsedAction.data.type,
+    )
+      ? createCommunicationProposalId({
+          ownerUserId: userId,
+          actionType: parsedAction.data.type,
+          payload: parsedAction.data.payload,
+          secret: env.sessionSecret,
+          conversationId: conversationId ?? null,
+          ...(stableCommunicationKey
+            ? { stableKey: stableCommunicationKey }
+            : {}),
+        })
+      : undefined;
     return {
       type: parsedAction.data.type,
       label: await buildActionLabel(parsedAction.data, userId),
       payload: parsedAction.data.payload,
+      ...(proposalId ? { proposalId } : {}),
+      ...(RECEIPT_ACTION_TYPES.some(
+        (actionType) => actionType === parsedAction.data.type,
+      )
+        ? { conversationId: conversationId ?? null }
+        : {}),
     };
   } catch (err) {
     logger.warn(
@@ -5224,6 +5316,13 @@ router.post("/chat", async (req, res) => {
   // prompt instruction in confirmationModeSection (which instructs Elaine to
   // call the tools but cannot guarantee the model always does so).
   const nextForcedToolQueue: string[] = [];
+  if (
+    /\b(did (?:you|elaine) (?:call|text|message|email)|did (?:it|that) go through|was (?:it|that) sent|have you (?:called|texted|messaged|emailed)|was anyone called)\b/i.test(
+      message,
+    )
+  ) {
+    nextForcedToolQueue.push(GET_COMMUNICATION_RECEIPTS_TOOL_NAME);
+  }
   if (isSchedulingDoubtMessage(message)) {
     nextForcedToolQueue.push(LIST_SCHEDULED_CONTACTS_TOOL_NAME);
     // Record a lesson so the same doubt shape is retrievable next time via
@@ -5309,6 +5408,7 @@ router.post("/chat", async (req, res) => {
     // appended once the round finishes — see its use below.
     const droppedActionAttempts: string[] = [];
     let autoRunExecutorFailureCount = 0;
+    let autoRunRepeatConfirmationCount = 0;
     // Accumulates streamed tool-call fragments by their index. `arguments`
     // arrives as growing string fragments across multiple chunks — this is
     // the standard OpenAI/OpenRouter streaming tool-call shape. `id` only
@@ -5837,6 +5937,8 @@ router.post("/chat", async (req, res) => {
           args,
           userId,
           new Set(attachmentUrls ?? []),
+          `${liveTurn.turnId}:${schedule.id}`,
+          histConvId,
         );
         if (!finalAction) {
           req.log.warn(
@@ -5858,11 +5960,97 @@ router.post("/chat", async (req, res) => {
           continue;
         }
         const executor = ACTION_EXECUTORS[finalAction.type as ActionType];
-        const { status, body } = await executor(
-          finalAction.payload as never,
-          userId,
-          appOperationContextFromRequest(req),
-        );
+        const receiptContext = buildReceiptExecutionContext({
+          action: finalAction,
+          ownerUserId: userId,
+          conversationId: histConvId,
+          onClaimed: (receipt) =>
+            sendEvent("communication_progress", {
+              id: receipt.id,
+              actionType: receipt.actionType,
+              channel: receipt.channel,
+              status: receipt.status,
+              conversationId: receipt.conversationId,
+            }),
+        });
+        if (
+          RECEIPT_ACTION_TYPES.some(
+            (actionType) => actionType === finalAction.type,
+          ) &&
+          !receiptContext
+        ) {
+          req.log.error(
+            { traceId, tool: name },
+            "Elaine auto-run proposal could not be verified",
+          );
+          droppedActionAttempts.push(name);
+          continue;
+        }
+        let status: number;
+        let body: unknown;
+        try {
+          ({ status, body } = await executor(
+            finalAction.payload as never,
+            userId,
+            appOperationContextFromRequest(req),
+            receiptContext ?? undefined,
+          ));
+        } catch (err) {
+          if (err instanceof RepeatConfirmationRequiredError) {
+            // Auto-run is never permission to repeat a contact action. Surface
+            // the original proposal as a confirmable card; the client must
+            // submit a second action request with acknowledgeRepeat set to
+            // this exact receipt ID before another provider call is allowed.
+            sendEvent("action", {
+              ...finalAction,
+              requiresRepeatConfirmation: true,
+              receiptId: err.receiptId,
+              status: err.status,
+            });
+            droppedActionAttempts.push(name);
+            autoRunRepeatConfirmationCount++;
+            runtime.recordObservation({
+              callId: schedule.id,
+              toolName: name,
+              success: true,
+              waitingConfirmation: true,
+              summary:
+                "A recent communication requires explicit repeat approval",
+            });
+            continue;
+          }
+          throw err;
+        }
+        const resultObj =
+          body && typeof body === "object"
+            ? ((body as { result?: Record<string, unknown> }).result ?? null)
+            : null;
+        if (resultObj?.receiptId && resultObj.receiptStatus) {
+          sendEvent("communication_progress", {
+            id: resultObj.receiptId,
+            actionType: finalAction.type,
+            channel: resultObj.channel ?? "unknown",
+            status: resultObj.receiptStatus,
+            conversationId: histConvId,
+          });
+        }
+        if (resultObj && Array.isArray(resultObj.receipts)) {
+          for (const receipt of resultObj.receipts) {
+            if (!receipt || typeof receipt !== "object") continue;
+            const item = receipt as Record<string, unknown>;
+            const id = item.id ?? item.receiptId;
+            const status = item.status ?? item.receiptStatus;
+            if (typeof id !== "string" || typeof status !== "string") continue;
+            sendEvent("communication_progress", {
+              id,
+              actionType: finalAction.type,
+              channel:
+                typeof item.channel === "string" ? item.channel : "unknown",
+              status,
+              conversationId: histConvId,
+            });
+          }
+        }
         const executedOk = status >= 200 && status < 400;
         // Executor bodies are implementation details. In particular, a
         // failed provider/storage/DB response may put its raw error in
@@ -5905,6 +6093,8 @@ router.post("/chat", async (req, res) => {
         args,
         userId,
         new Set(attachmentUrls ?? []),
+        undefined,
+        histConvId,
       );
       if (finalAction) {
         sendEvent("action", finalAction);
@@ -5985,6 +6175,7 @@ router.post("/chat", async (req, res) => {
         const noteText = buildAutoRunActionFailureCorrection({
           droppedActionCount: droppedActionAttempts.length,
           executorFailureCount: autoRunExecutorFailureCount,
+          repeatConfirmationCount: autoRunRepeatConfirmationCount,
         });
         if (noteText) {
           const noteDelta = rawContent.trim() ? `\n\n${noteText}` : noteText;
@@ -7493,6 +7684,35 @@ router.post("/chat", async (req, res) => {
               "Unsupported app data tool.";
           } else if (call.name === LIST_SCHEDULED_CONTACTS_TOOL_NAME) {
             resultText = await executeListScheduledContacts(userId);
+          } else if (call.name === GET_COMMUNICATION_RECEIPTS_TOOL_NAME) {
+            const parsed = z
+              .object({
+                limit: z.coerce.number().int().min(1).max(20).default(10),
+              })
+              .safeParse(JSON.parse(call.args || "{}"));
+            if (!parsed.success) {
+              resultText = "Invalid receipt lookup parameters.";
+            } else {
+              await pruneOldCommunicationReceipts();
+              const receipts = await listCommunicationReceipts({
+                ownerUserId: userId,
+                limit: parsed.data.limit,
+              });
+              resultText = JSON.stringify({
+                receipts: receipts.map((receipt) => ({
+                  id: receipt.id,
+                  actionType: receipt.actionType,
+                  channel: receipt.channel,
+                  status: receipt.status,
+                  createdAt: receipt.createdAt.toISOString(),
+                  updatedAt: receipt.updatedAt.toISOString(),
+                  conversationId: receipt.conversationId,
+                  recipientUserId: receipt.recipientUserId,
+                  providerId: receipt.providerId,
+                  callStatus: receipt.callStatus,
+                })),
+              });
+            }
           } else if (call.name === LIST_CONTACT_CHANNELS_TOOL_NAME) {
             const parsed = JSON.parse(call.args ?? "{}") as {
               contactName?: unknown;
@@ -7996,17 +8216,111 @@ function runMiddleware(
 router.post("/action", async (req, res) => {
   const userId = req.session.userId!;
   const action = ActionBody.parse(req.body);
+  const isReceiptAction = RECEIPT_ACTION_TYPES.some(
+    (actionType) => actionType === action.type,
+  );
+  let receiptContext: CommunicationReceiptContext | null = null;
+  if (isReceiptAction) {
+    receiptContext = buildReceiptExecutionContext({
+      action: action as ProposedAction,
+      ownerUserId: userId,
+      conversationId:
+        "conversationId" in action && typeof action.conversationId === "number"
+          ? action.conversationId
+          : null,
+    });
+    if (!receiptContext) {
+      res.status(409).json({
+        error:
+          "This communication proposal is missing, expired, or no longer matches its approved details. Reopen the proposal before trying again.",
+      });
+      return;
+    }
+    if (receiptContext.conversationId !== null) {
+      const [conversation] = await db
+        .select({ id: elaineHistoryConversations.id })
+        .from(elaineHistoryConversations)
+        .where(
+          and(
+            eq(elaineHistoryConversations.id, receiptContext.conversationId),
+            eq(elaineHistoryConversations.userId, userId),
+          ),
+        )
+        .limit(1);
+      if (!conversation) {
+        res.status(409).json({
+          error:
+            "The communication proposal conversation is no longer available.",
+        });
+        return;
+      }
+    }
+  }
   if (SMS_RATE_LIMITED_ACTION_TYPES.has(action.type)) {
     await runMiddleware(phoneVerifyLimiter, req, res);
     if (res.headersSent) return; // limiter already sent a 429
   }
   const executor = ACTION_EXECUTORS[action.type];
-  const { status, body } = await executor(
-    action.payload as never,
-    userId,
-    appOperationContextFromRequest(req),
-  );
-  res.status(status).json(body);
+  try {
+    const { status, body } = await executor(
+      action.payload as never,
+      userId,
+      appOperationContextFromRequest(req),
+      receiptContext ?? undefined,
+    );
+    res.status(status).json(body);
+  } catch (err) {
+    if (err instanceof RepeatConfirmationRequiredError) {
+      res.status(409).json({
+        requiresRepeatConfirmation: true,
+        receiptId: err.receiptId,
+        status: err.status,
+      });
+      return;
+    }
+    if (err instanceof StaleRepeatAcknowledgementError) {
+      res.status(409).json({
+        error:
+          "This repeat confirmation is stale. Review the latest communication status and confirm again if you still want another attempt.",
+      });
+      return;
+    }
+    throw err;
+  }
+});
+
+router.get("/communication-receipts", async (req, res): Promise<void> => {
+  const query = z
+    .object({
+      conversationId: z.coerce.number().int().positive().optional(),
+      limit: z.coerce.number().int().min(1).max(100).default(50),
+    })
+    .safeParse(req.query);
+  if (!query.success) {
+    res.status(400).json({ error: "Invalid receipt query." });
+    return;
+  }
+  const userId = req.session.userId!;
+  await pruneOldCommunicationReceipts();
+  const rows = await listCommunicationReceipts({
+    ownerUserId: userId,
+    conversationId: query.data.conversationId,
+    limit: query.data.limit,
+  });
+  res.json({
+    receipts: rows.map((receipt) => ({
+      id: receipt.id,
+      actionType: receipt.actionType,
+      channel: receipt.channel,
+      status: receipt.status,
+      createdAt: receipt.createdAt,
+      updatedAt: receipt.updatedAt,
+      conversationId: receipt.conversationId,
+      recipientUserId: receipt.recipientUserId,
+      providerId: receipt.providerId,
+      callStatus: receipt.callStatus,
+    })),
+  });
 });
 
 router.get("/tasks", async (req, res) => {
@@ -10247,7 +10561,7 @@ async function executeRestrictedToolCall(
 }
 
 // Runs one restricted-channel turn's tool-calling loop against the direct
-// OpenAI Responses API (gpt-5.6-sol, the same "reasoning" role/model as main
+// OpenAI Responses API (GPT-6 Astra, the same "reasoning" role/model as main
 // web chat) instead of the OpenRouter Chat Completions fallback. Mirrors the
 // round-loop shape of main chat's per-round loop (see the streaming handler
 // above): a bounded number of tool-calling rounds chained via
@@ -10292,7 +10606,7 @@ async function runRestrictedTurnViaOpenAIResponses(params: {
     role: "reasoning" as const,
     instructions: systemPrompt,
     // A restricted-channel reply should still feel prompt for SMS/email —
-    // "medium" gets the gpt-5.6-sol quality bump without main chat's "high"
+    // "medium" gets Astra's reasoning quality without main chat's "high"
     // reasoning latency, which isn't warranted for these async channels.
     reasoningEffort: "medium" as const,
     verbosity: "medium" as const,
@@ -10548,7 +10862,7 @@ async function runRestrictedElaineTurn(params: {
 
   // SMS/Slack/email/messenger (not voice — useFastModel is true there and
   // deliberately skips this) get a first attempt on the direct OpenAI
-  // Responses API so they run on the same gpt-5.6-sol model as main web
+  // Responses API so they run on the same GPT-6 Astra model as main web
   // chat. Any failure here — outage, missing key, disabled feature flag —
   // falls straight through to the existing OpenRouter loop below, which
   // uses config.models.restrictedTextModel as a silent safety net.

@@ -17,22 +17,30 @@ import {
   getListElaineConversationsQueryKey,
   getUploadErrorMessage,
   getElaineConversationMessagesFn,
+  getElaineCommunicationReceipts,
   signalElaineTurnHandoff,
   resumeElaineTurnStream,
   type AssistantMessage,
   type AssistantAction,
+  type AssistantChatStreamCallbacks,
   type ExecutedAssistantAction,
   type ElaineAppId,
   type ConversationMessage,
   type ElaineAttachmentUploadResult,
   type ElaineRuntimeTrace,
+  type ElaineCommunicationReceipt,
 } from "@workspace/api-client-react";
 import { ElaineName } from "./ElaineAvatar";
 import { type ChatWidget } from "./ChatWidgets";
 import { useElainePageContextReader } from "./ElainePageContext";
 import {
+  getActionExecutionBody,
+  getActionExecutionBodyWithRepeatAcknowledgement,
   getActionErrorMessage,
+  getActionProgressLabel,
+  getRepeatConfirmationDetails,
   removeSubmittedAction,
+  shouldPollCommunicationReceipt,
 } from "./action-confirmation";
 import {
   LARGE_ATTACHMENT_UPLOAD,
@@ -49,6 +57,12 @@ export interface PendingAttachment {
   fileName: string;
   extractedText?: string;
 }
+
+export type CommunicationReceipt = ElaineCommunicationReceipt;
+
+type CommunicationProgressEvent = Parameters<
+  NonNullable<AssistantChatStreamCallbacks["onCommunicationProgress"]>
+>[0];
 
 /** A user message captured while a prior turn was still streaming — held
  *  here until it's this message's turn to actually be sent. */
@@ -121,6 +135,13 @@ export function useElaineChat({
     reason: string;
   } | null>(null);
   const [pendingActions, setPendingActions] = useState<AssistantAction[]>([]);
+  const [repeatConfirmations, setRepeatConfirmations] = useState<
+    Map<AssistantAction, { receiptId: string; status: string }>
+  >(new Map());
+  const actionRequestInFlightRef = useRef(false);
+  const [actionProgress, setActionProgress] = useState<
+    Map<AssistantAction, string>
+  >(new Map());
   const [confirmingAll, setConfirmingAll] = useState(false);
   const [executedActions, setExecutedActions] = useState<
     ExecutedAssistantAction[]
@@ -195,6 +216,126 @@ export function useElaineChat({
 
   // Active named conversation ID (null = use the rolling single-thread history)
   const [conversationId, setConversationId] = useState<number | null>(null);
+  const [communicationReceipts, setCommunicationReceipts] = useState<
+    CommunicationReceipt[]
+  >([]);
+  const [automaticCommunicationProgress, setAutomaticCommunicationProgress] =
+    useState<CommunicationProgressEvent[]>([]);
+  const [receiptLoadError, setReceiptLoadError] = useState(false);
+  const receiptRequestsRef = useRef(new Map<number, Promise<void>>());
+  const receiptConversationIdRef = useRef(conversationId);
+  const previousReceiptConversationIdRef = useRef(conversationId);
+  const receiptActiveRef = useRef(active);
+  receiptConversationIdRef.current = conversationId;
+  receiptActiveRef.current = active;
+
+  const refreshCommunicationReceipts = useCallback(
+    (id: number | null): Promise<void> => {
+      if (id === null) {
+        setCommunicationReceipts([]);
+        setReceiptLoadError(false);
+        return Promise.resolve();
+      }
+      const inFlight = receiptRequestsRef.current.get(id);
+      if (inFlight) return inFlight;
+      let request: Promise<void>;
+      request = getElaineCommunicationReceipts(id)
+        .then((receipts) => {
+          if (
+            !receiptActiveRef.current ||
+            (receiptConversationIdRef.current !== id &&
+              !(
+                receiptConversationIdRef.current === null &&
+                currentTurnConversationIdRef.current === id
+              ))
+          )
+            return;
+          setCommunicationReceipts(receipts);
+          setReceiptLoadError(false);
+        })
+        .catch(() => {
+          if (
+            !receiptActiveRef.current ||
+            (receiptConversationIdRef.current !== id &&
+              !(
+                receiptConversationIdRef.current === null &&
+                currentTurnConversationIdRef.current === id
+              ))
+          )
+            return;
+          setReceiptLoadError(true);
+        })
+        .finally(() => {
+          if (receiptRequestsRef.current.get(id) === request) {
+            receiptRequestsRef.current.delete(id);
+          }
+        });
+      receiptRequestsRef.current.set(id, request);
+      return request;
+    },
+    [],
+  );
+
+  const handleCommunicationProgress = useCallback(
+    (event: CommunicationProgressEvent) => {
+      setAutomaticCommunicationProgress((current) => {
+        const index = current.findIndex((entry) => entry.id === event.id);
+        if (index === -1) return [...current, event];
+        return current.map((entry, i) => (i === index ? event : entry));
+      });
+      if (event.conversationId != null) {
+        void refreshCommunicationReceipts(event.conversationId);
+      } else if (event.status !== "executing") {
+        void refreshCommunicationReceipts(conversationId);
+      }
+    },
+    [conversationId, refreshCommunicationReceipts],
+  );
+
+  useEffect(() => {
+    if (previousReceiptConversationIdRef.current !== conversationId) {
+      previousReceiptConversationIdRef.current = conversationId;
+      setCommunicationReceipts([]);
+      setReceiptLoadError(false);
+    }
+    if (active) void refreshCommunicationReceipts(conversationId);
+    else {
+      setCommunicationReceipts([]);
+      setAutomaticCommunicationProgress([]);
+      setReceiptLoadError(false);
+    }
+  }, [active, conversationId, refreshCommunicationReceipts]);
+
+  useEffect(() => {
+    if (!active || conversationId === null) return;
+    if (
+      !communicationReceipts.some((receipt) =>
+        shouldPollCommunicationReceipt(receipt.status),
+      )
+    ) {
+      return;
+    }
+
+    const poll = () => {
+      if (document.visibilityState === "visible") {
+        void refreshCommunicationReceipts(conversationId);
+      }
+    };
+    const interval = window.setInterval(poll, 5000);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") poll();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [
+    active,
+    communicationReceipts,
+    conversationId,
+    refreshCommunicationReceipts,
+  ]);
 
   // Pagination for "load older messages" (infinite-scroll-up). The initial
   // page comes from GET /conversation (or from picking a conversation in the
@@ -458,8 +599,18 @@ export function useElaineChat({
             streamingContentRef.current = "";
             setStreamingContent("");
           },
-          onAction: (action) => setPendingActions((prev) => [...prev, action]),
+          onAction: (action) => {
+            setActionDone(false);
+            setPendingActions((prev) => [...prev, action]);
+            const repeat = getRepeatConfirmationDetails(action);
+            if (repeat) {
+              setRepeatConfirmations((current) =>
+                new Map(current).set(action, repeat),
+              );
+            }
+          },
           onStatus: (msg) => setStatusMessage(msg),
+          onCommunicationProgress: handleCommunicationProgress,
           onWidget: (widget) => pendingWidgets.push(widget as ChatWidget),
           onRuntime: ({ trace }) => setRuntimeTrace(trace),
           onDone: (res) => {
@@ -513,9 +664,12 @@ export function useElaineChat({
               });
             }
             if (res.navigate) setPendingNavigate(res.navigate);
-            if (res.actions.length > 0) setPendingActions(res.actions);
+            if (res.actions.length > 0) {
+              setActionDone(false);
+              setPendingActions(res.actions);
+            }
             if (res.executedActions.length > 0) {
-              setExecutedActions(res.executedActions);
+              applyExecutedActionOutcomes(res.executedActions);
               invalidateActionQueries();
             }
             // Skip conversation-ID update when a new chat was requested —
@@ -692,6 +846,9 @@ export function useElaineChat({
     setMessages([]);
     setPendingNavigate(null);
     setPendingActions([]);
+    setRepeatConfirmations(new Map());
+    setActionProgress(new Map());
+    setAutomaticCommunicationProgress([]);
     setExecutedActions([]);
     setActionDone(false);
     setMessageWidgets(new Map());
@@ -729,9 +886,12 @@ export function useElaineChat({
     hasMore = false,
   ) {
     setConversationId(id);
+    setRepeatConfirmations(new Map());
+    setActionProgress(new Map());
     setPendingAttachments([]);
     setPendingNavigate(null);
     setPendingActions([]);
+    setAutomaticCommunicationProgress([]);
     setExecutedActions([]);
     setActionDone(false);
     setMessageWidgets(new Map());
@@ -862,6 +1022,8 @@ export function useElaineChat({
     );
     setPendingNavigate(null);
     setPendingActions([]);
+    setRepeatConfirmations(new Map());
+    setActionProgress(new Map());
     setExecutedActions([]);
     setActionDone(false);
     setStreamingContent("");
@@ -923,8 +1085,18 @@ export function useElaineChat({
             streamingContentRef.current = "";
             setStreamingContent("");
           },
-          onAction: (action) => setPendingActions((prev) => [...prev, action]),
+          onAction: (action) => {
+            setActionDone(false);
+            setPendingActions((prev) => [...prev, action]);
+            const repeat = getRepeatConfirmationDetails(action);
+            if (repeat) {
+              setRepeatConfirmations((current) =>
+                new Map(current).set(action, repeat),
+              );
+            }
+          },
           onStatus: (msg) => setStatusMessage(msg),
+          onCommunicationProgress: handleCommunicationProgress,
           onWidget: (widget) => pendingWidgets.push(widget as ChatWidget),
           onRuntime: ({ trace }) => setRuntimeTrace(trace),
           onDone: (res) => {
@@ -991,9 +1163,12 @@ export function useElaineChat({
               });
             }
             if (res.navigate) setPendingNavigate(res.navigate);
-            if (res.actions.length > 0) setPendingActions(res.actions);
+            if (res.actions.length > 0) {
+              setActionDone(false);
+              setPendingActions(res.actions);
+            }
             if (res.executedActions.length > 0) {
-              setExecutedActions(res.executedActions);
+              applyExecutedActionOutcomes(res.executedActions);
               invalidateActionQueries();
             }
             if (
@@ -1050,6 +1225,8 @@ export function useElaineChat({
           },
         ]);
         setPendingActions([]);
+        setRepeatConfirmations(new Map());
+        setActionProgress(new Map());
         setRuntimeTrace(null);
       } else {
         // The request died without a server response — most commonly the
@@ -1076,6 +1253,8 @@ export function useElaineChat({
           </>,
         );
         setPendingActions([]);
+        setRepeatConfirmations(new Map());
+        setActionProgress(new Map());
         setRuntimeTrace(null);
       }
     } finally {
@@ -1274,80 +1453,241 @@ export function useElaineChat({
     }
   }
 
-  function handleConfirmAction() {
-    const action = pendingActions[0];
-    if (!action || executeAction.isPending) return;
-    executeAction.mutate(
-      { type: action.type, payload: action.payload },
-      {
-        onSuccess: () => {
-          // Keep the confirmation card visible while there are more actions
-          // waiting. The next action should become actionable immediately.
-          setPendingActions((current) => {
-            const remaining = removeSubmittedAction(current, action);
-            // Derive completion from the queue at resolution time. A new
-            // action may have arrived while this mutation was in flight.
-            setActionDone(remaining.length === 0);
-            return remaining;
-          });
-          invalidateActionQueries();
-          toast.success("Done!");
-        },
-        onError: (error) => {
-          // Confirmation is a one-shot authorization. Do not leave the same
-          // consequential action available to submit again after an
-          // ambiguous network/provider failure.
-          setPendingActions((current) => {
-            const remaining = removeSubmittedAction(current, action);
-            setActionDone(remaining.length === 0);
-            return remaining;
-          });
-          const message = getActionErrorMessage(error);
-          toast.error(
-            message || (
-              <>
-                <ElaineName /> couldn't do that just now.
-              </>
+  function applyExecutedActionOutcomes(actions: ExecutedAssistantAction[]) {
+    const completed: ExecutedAssistantAction[] = [];
+    const repeatBlocked: Array<{
+      action: AssistantAction;
+      details: { receiptId: string; status: string };
+    }> = [];
+    for (const action of actions) {
+      const repeatDetails = getRepeatConfirmationDetails(action.result);
+      if (repeatDetails) {
+        const matchingProposal = action.proposalId
+          ? pendingActions.find(
+              (pending) => pending.proposalId === action.proposalId,
+            )
+          : undefined;
+        repeatBlocked.push({
+          action: matchingProposal ?? {
+            type: action.type,
+            label: action.label,
+            payload: action.payload,
+            ...(action.proposalId ? { proposalId: action.proposalId } : {}),
+            ...(action.conversationId !== undefined
+              ? { conversationId: action.conversationId }
+              : {}),
+          },
+          details: repeatDetails,
+        });
+      } else {
+        completed.push(action);
+      }
+    }
+    setExecutedActions(completed);
+    if (repeatBlocked.length === 0) return;
+    setRepeatConfirmations((current) => {
+      const next = new Map(current);
+      for (const blocked of repeatBlocked)
+        next.set(blocked.action, blocked.details);
+      return next;
+    });
+    setPendingActions((current) => {
+      const additions = repeatBlocked
+        .map(({ action }) => action)
+        .filter(
+          (action) =>
+            !current.some(
+              (existing) =>
+                existing === action ||
+                (action.proposalId &&
+                  existing.proposalId === action.proposalId),
             ),
-          );
-        },
-      },
+        );
+      return [...current, ...additions];
+    });
+  }
+
+  function handleConfirmAction(actionArg?: AssistantAction) {
+    const action = actionArg ?? pendingActions[0];
+    if (!action || executeAction.isPending || actionRequestInFlightRef.current)
+      return;
+    actionRequestInFlightRef.current = true;
+    const repeat = repeatConfirmations.get(action);
+    const body = repeat
+      ? getActionExecutionBodyWithRepeatAcknowledgement(
+          action,
+          repeat.receiptId,
+        )
+      : getActionExecutionBody(action);
+    setActionProgress((current) =>
+      new Map(current).set(action, getActionProgressLabel(action)),
     );
+    executeAction.mutate(body, {
+      onSuccess: (result) => {
+        actionRequestInFlightRef.current = false;
+        setRepeatConfirmations((current) => {
+          const next = new Map(current);
+          next.delete(action);
+          return next;
+        });
+        setExecutedActions((current) => [
+          ...current,
+          { ...action, status: 200, result },
+        ]);
+        setActionProgress((current) => {
+          const next = new Map(current);
+          next.delete(action);
+          return next;
+        });
+        // Keep the confirmation card visible while there are more actions
+        // waiting. The next action should become actionable immediately.
+        setPendingActions((current) => {
+          const remaining = removeSubmittedAction(current, action);
+          // Derive completion from the queue at resolution time. A new
+          // action may have arrived while this mutation was in flight.
+          setActionDone(remaining.length === 0);
+          return remaining;
+        });
+        invalidateActionQueries();
+        void refreshCommunicationReceipts(conversationId);
+      },
+      onError: (error) => {
+        actionRequestInFlightRef.current = false;
+        const repeatConflict = getRepeatConfirmationDetails(error);
+        if (repeatConflict) {
+          setRepeatConfirmations((current) =>
+            new Map(current).set(action, repeatConflict),
+          );
+          setActionProgress((current) => {
+            const next = new Map(current);
+            next.delete(action);
+            return next;
+          });
+          void refreshCommunicationReceipts(conversationId);
+          return;
+        }
+        // Confirmation is a one-shot authorization. Do not leave the same
+        // consequential action available to submit again after an
+        // ambiguous network/provider failure.
+        setPendingActions((current) => {
+          const remaining = removeSubmittedAction(current, action);
+          setActionDone(remaining.length === 0);
+          return remaining;
+        });
+        setExecutedActions((current) => [
+          ...current,
+          {
+            ...action,
+            status: 0,
+            result: {
+              error: getActionErrorMessage(error),
+              receiptStatus: "unknown",
+            },
+          },
+        ]);
+        setActionProgress((current) => {
+          const next = new Map(current);
+          next.delete(action);
+          return next;
+        });
+        void refreshCommunicationReceipts(conversationId);
+        const message = getActionErrorMessage(error);
+        toast.error(
+          message || (
+            <>
+              <ElaineName /> couldn't do that just now.
+            </>
+          ),
+        );
+      },
+    });
   }
 
   function handleSkipAction() {
+    const skipped = pendingActions[0];
+    if (skipped) {
+      setRepeatConfirmations((current) => {
+        const next = new Map(current);
+        next.delete(skipped);
+        return next;
+      });
+    }
     setPendingActions((prev) => prev.slice(1));
   }
 
   async function handleConfirmAll() {
-    if (pendingActions.length === 0 || confirmingAll) return;
+    if (
+      pendingActions.length === 0 ||
+      confirmingAll ||
+      executeAction.isPending ||
+      actionRequestInFlightRef.current
+    )
+      return;
     setConfirmingAll(true);
-    let failed = 0;
-    for (const action of pendingActions) {
+    const actions = [...pendingActions].filter(
+      (action) => !repeatConfirmations.has(action),
+    );
+    for (const action of actions) {
+      setActionProgress((current) =>
+        new Map(current).set(action, getActionProgressLabel(action)),
+      );
+      let repeatNeedsConfirmation = false;
+      actionRequestInFlightRef.current = true;
       try {
-        await executeAction.mutateAsync({
-          type: action.type,
-          payload: action.payload,
+        const result = await executeAction.mutateAsync(
+          getActionExecutionBody(action),
+        );
+        setExecutedActions((current) => [
+          ...current,
+          { ...action, status: 200, result },
+        ]);
+      } catch (error) {
+        const repeatConflict = getRepeatConfirmationDetails(error);
+        if (repeatConflict) {
+          repeatNeedsConfirmation = true;
+          setRepeatConfirmations((current) =>
+            new Map(current).set(action, repeatConflict),
+          );
+          continue;
+        }
+        setExecutedActions((current) => [
+          ...current,
+          {
+            ...action,
+            status: 0,
+            result: {
+              error: getActionErrorMessage(error),
+              receiptStatus: "unknown",
+            },
+          },
+        ]);
+      } finally {
+        actionRequestInFlightRef.current = false;
+        setActionProgress((current) => {
+          const next = new Map(current);
+          next.delete(action);
+          return next;
         });
-      } catch {
-        failed += 1;
+        if (!repeatNeedsConfirmation) {
+          setPendingActions((current) =>
+            removeSubmittedAction(current, action),
+          );
+        }
+        void refreshCommunicationReceipts(conversationId);
       }
     }
     invalidateActionQueries();
     setConfirmingAll(false);
-    setPendingActions([]);
-    if (failed > 0) {
-      toast.error(
-        `${failed} of ${pendingActions.length} action(s) couldn't be done.`,
-      );
-    } else {
-      setActionDone(true);
-      toast.success("Done!");
-    }
+    setPendingActions((current) => {
+      setActionDone(current.length === 0);
+      return current;
+    });
   }
 
   function handleCancelAll() {
     setPendingActions([]);
+    setActionProgress(new Map());
+    setRepeatConfirmations(new Map());
   }
 
   /** Called by the widget's maximize button right before navigating to the
@@ -1425,9 +1765,14 @@ export function useElaineChat({
     pendingNavigate,
     setPendingNavigate,
     pendingActions,
+    actionProgress,
+    repeatConfirmations,
     confirmingAll,
     executedActions,
     actionDone,
+    communicationReceipts,
+    automaticCommunicationProgress,
+    receiptLoadError,
     isStreaming,
     streamingContent,
     streamingReasoningSummary,

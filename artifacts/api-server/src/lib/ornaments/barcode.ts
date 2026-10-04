@@ -1,7 +1,7 @@
 import { logger } from "../logger";
 import { env } from "../env";
 import { getEbayAppToken } from "../ebay/oauth";
-import { callModel, MODELS } from "../ai-client";
+import { callModel, getModels } from "../ai-client";
 
 /**
  * Live barcode identification for ornament intake. Exact eBay GTIN results are
@@ -173,7 +173,8 @@ async function fetchFromAI(barcode: string): Promise<UpcFetchResult> {
     `Do not guess — only set found:true if you are confident.`,
   ].join(" ");
 
-  const raw = await callModel(MODELS.FAST_VISION, async (client, model) => {
+  const models = await getModels();
+  const raw = await callModel(models.fastVision, async (client, model) => {
     const completion = await client.chat.completions.create({
       model,
       messages: [{ role: "user", content: prompt }],

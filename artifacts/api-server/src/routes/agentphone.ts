@@ -13,6 +13,7 @@ import {
 } from "../lib/webhook-side-effect-idempotency";
 import { runAgentphoneTurn, type AgentphoneChatMessage } from "../elaine";
 import { markCommCheckVerified } from "../lib/comm-check-scheduler";
+import { updateCallCommunicationReceiptsByProviderId } from "../elaine/communication-receipts";
 import {
   getAgentphoneConversation,
   getOrCreateAgentphoneConversation,
@@ -66,6 +67,26 @@ const STOP_WORDS = new Set([
 ]);
 const HELP_WORDS = new Set(["HELP", "INFO"]);
 const START_WORDS = new Set(["START", "UNSTOP", "YES"]);
+const TERMINAL_AGENTPHONE_CALL_STATUSES = new Set([
+  "busy",
+  "canceled",
+  "cancelled",
+  "completed",
+  "failed",
+  "no-answer",
+  "voicemail",
+]);
+
+function callEndedProviderStatus(data: Record<string, unknown>): string {
+  const status =
+    typeof data.status === "string"
+      ? data.status.toLowerCase().replace(/_/g, "-")
+      : "";
+  // Only persist an explicit terminal status supplied by AgentPhone. The
+  // signed event name itself authoritatively says the call ended, but does not
+  // establish whether it was answered.
+  return TERMINAL_AGENTPHONE_CALL_STATUSES.has(status) ? status : "ended";
+}
 
 // Rejects a signature whose timestamp is stale, even if the HMAC itself is
 // valid — bounds how long a captured request could be replayed.
@@ -721,6 +742,41 @@ router.post("/webhook", webhookLimiter, async (req: Request, res: Response) => {
       "agentphone: duplicate webhook delivery rejected",
     );
     res.status(200).json({ ok: true, duplicate: true });
+    return;
+  }
+
+  if (event === "agent.call_ended") {
+    const callData = (req.body?.data ?? {}) as Record<string, unknown>;
+    const callId =
+      typeof callData.callId === "string"
+        ? callData.callId.trim()
+        : typeof callData.call_id === "string"
+          ? callData.call_id.trim()
+          : "";
+    if (!callId) {
+      logger.warn(
+        { event },
+        "agentphone: call-ended webhook missing provider call id",
+      );
+      void markDeliveryProcessed(contentHash);
+      res.status(200).json({ ok: true });
+      return;
+    }
+    try {
+      await updateCallCommunicationReceiptsByProviderId(
+        callId,
+        callEndedProviderStatus(callData),
+      );
+    } catch (err) {
+      logger.error(
+        { errorType: err instanceof Error ? err.name : "UnknownError", callId },
+        "agentphone: failed to persist call-ended receipt status",
+      );
+      res.status(503).json({ error: "Service unavailable" });
+      return;
+    }
+    void markDeliveryProcessed(contentHash);
+    res.status(200).json({ ok: true });
     return;
   }
 

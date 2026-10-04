@@ -34,4 +34,14 @@ describe("buildAutoRunActionFailureCorrection", () => {
       }),
     ).toContain("nothing was scheduled or changed");
   });
+
+  it("states that auto-run repeat attempts await explicit confirmation", () => {
+    expect(
+      buildAutoRunActionFailureCorrection({
+        droppedActionCount: 1,
+        executorFailureCount: 0,
+        repeatConfirmationCount: 1,
+      }),
+    ).toContain("explicit confirmation");
+  });
 });

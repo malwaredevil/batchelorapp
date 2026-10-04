@@ -2690,7 +2690,7 @@ export const KNOWN_EXECUTOR_PREFIXES: ReadonlySet<string> = new Set([
   "quiltingAction", // quiltingActionExecutors
   "ornamentAction", // ornamentActionExecutors
   "magnetAction", // magnetActionExecutors
-  "communicationAction", // communicationActionExecutors
+  "communicationAction", // communicationActionExecutorAdapters
   "reminderAction", // reminderActionExecutors
   "memoryAction", // universalActionExecutors (correct_memory, forget_memory)
   "researchTaskAction", // adaptiveActionExecutors (queue_research_task, cancel_elaine_task)
@@ -2745,7 +2745,7 @@ export const ACTION_CLASS_EXECUTOR_MAP: ReadonlyMap<string, string> = new Map([
   ["quiltingAction", "quiltingActionExecutors"],
   ["ornamentAction", "ornamentActionExecutors"],
   ["magnetAction", "magnetActionExecutors"],
-  ["communicationAction", "communicationActionExecutors"],
+  ["communicationAction", "communicationActionExecutorAdapters"],
   ["reminderAction", "reminderActionExecutors"],
   // memoryAction routes through universalActionExecutors (correct_memory, forget_memory)
   ["memoryAction", "universalActionExecutors"],

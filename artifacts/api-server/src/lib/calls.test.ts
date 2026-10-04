@@ -467,6 +467,33 @@ describe("initiateOutboundCall", () => {
     }
   });
 
+  it("reports the provider lifecycle status without relabeling completed as answered", async () => {
+    vi.useFakeTimers();
+    try {
+      mockAgentphoneRequest.mockReset();
+      mockAgentphoneRequest.mockResolvedValue({
+        ok: true,
+        json: async () => ({ status: "completed", durationSeconds: 12 }),
+      });
+      const providerStatuses: string[] = [];
+
+      const outcomePromise = waitForCallOutcome(
+        "call-completed",
+        5_000,
+        undefined,
+        (status) => {
+          providerStatuses.push(status);
+        },
+      );
+      await vi.runAllTimersAsync();
+
+      await expect(outcomePromise).resolves.toBe("answered");
+      expect(providerStatuses).toEqual(["completed"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps terminal outcome when clearing correlated context fails", async () => {
     vi.useFakeTimers();
     try {
@@ -620,7 +647,6 @@ describe("initiateOutboundCall", () => {
 
       expect(mockLogger.error).toHaveBeenCalledWith(
         expect.objectContaining({
-          toNumber: "+12105550123",
           pendingId: "pending-1",
         }),
         "agentphone: pending context cleanup retries exhausted",

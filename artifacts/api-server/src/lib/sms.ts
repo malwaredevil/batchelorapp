@@ -37,9 +37,8 @@ async function getFromNumber(): Promise<string> {
     { op: "list-numbers" },
   );
   if (!response.ok) {
-    const text = await response.text().catch(() => "");
     logger.error(
-      { status: response.status, text },
+      { status: response.status },
       "agentphone: failed to list phone numbers",
     );
     throw new Error(
@@ -146,10 +145,7 @@ export async function sendSms(
       .limit(1);
 
     if (recipient?.smsOptedOutAt) {
-      logger.info(
-        { toNumber },
-        "agentphone: skipping send to opted-out number",
-      );
+      logger.info({}, "agentphone: skipping send to opted-out number");
       throw new SmsOptedOutError();
     }
 
@@ -169,6 +165,7 @@ export async function sendSms(
     "/v1/messages",
     {
       method: "POST",
+      retry: false,
       body: {
         to_number: toNumber,
         from_number: from,
@@ -179,10 +176,7 @@ export async function sendSms(
   );
   if (!response.ok) {
     const text = await response.text().catch(() => "");
-    logger.error(
-      { status: response.status, text },
-      "agentphone: failed to send sms",
-    );
+    logger.error({ status: response.status }, "agentphone: failed to send sms");
     if (response.status === 403 && text.includes("10DLC")) {
       throw new SmsRegistrationPendingError();
     }
@@ -199,7 +193,7 @@ export async function sendSms(
       .where(eq(appUsers.phoneNumber, toNumber))
       .catch((err) =>
         logger.error(
-          { err, toNumber },
+          { errorType: err instanceof Error ? err.name : "UnknownError" },
           "agentphone: failed to record first outbound SMS timestamp",
         ),
       );

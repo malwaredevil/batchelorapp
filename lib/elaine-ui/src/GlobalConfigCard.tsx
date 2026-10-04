@@ -438,7 +438,7 @@ export function GlobalConfigCard() {
           />
           <ToggleField
             label="Enable Responses for app workflows"
-            hint="Uses GPT-5.6 for selected research, document, pottery, and quilting tasks."
+            hint="Uses the configured OpenAI reasoning, balanced, and fast roles for selected research, document, pottery, and quilting tasks."
             checked={features.enableOpenAIAppWorkflows}
             onChange={(v) =>
               setFeatures({ ...features, enableOpenAIAppWorkflows: v })

@@ -31,9 +31,9 @@ const config: ElaineGlobalConfig = {
     research: "research",
     expertPanelAlt: "expert-panel-alt",
     embedding: "embedding",
-    openAIReasoning: "gpt-5.6-sol",
-    openAIBalanced: "gpt-5.6-terra",
-    openAIFast: "gpt-5.6-luna",
+    openAIReasoning: "gpt-6-astra",
+    openAIBalanced: "gpt-6.1-sol",
+    openAIFast: "gpt-6-luna",
     restrictedTextModel: "restricted-text",
     rerank: "rerank",
     visualEmbed: "visual-embed",
@@ -93,12 +93,10 @@ const config: ElaineGlobalConfig = {
 describe("OpenAI Responses provider helpers", () => {
   it("maps semantic roles to direct OpenAI model identifiers", () => {
     expect(resolveOpenAIResponsesModel(config, "reasoning")).toBe(
-      "gpt-5.6-sol",
+      "gpt-6-astra",
     );
-    expect(resolveOpenAIResponsesModel(config, "balanced")).toBe(
-      "gpt-5.6-terra",
-    );
-    expect(resolveOpenAIResponsesModel(config, "fast")).toBe("gpt-5.6-luna");
+    expect(resolveOpenAIResponsesModel(config, "balanced")).toBe("gpt-6.1-sol");
+    expect(resolveOpenAIResponsesModel(config, "fast")).toBe("gpt-6-luna");
   });
 
   it("resolves response storage policy from role, scope, then default", () => {

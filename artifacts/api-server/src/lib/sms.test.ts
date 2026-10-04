@@ -89,8 +89,10 @@ function makeOkResponse(body: unknown = {}) {
 
 describe("sendSms() — opt-out enforcement", () => {
   beforeEach(() => {
+    vi.resetModules();
     selectQueue.length = 0;
     vi.clearAllMocks();
+    mockFetch.mockReset();
     // Mock the number-list call used by getFromNumber() on first send.
     mockFetch.mockResolvedValue(
       makeOkResponse({ data: [{ phoneNumber: "+15550001111" }] }),
@@ -140,6 +142,27 @@ describe("sendSms() — opt-out enforcement", () => {
 
     const { sendSms } = await import("./sms");
     await expect(sendSms("+15551234567", "Hello")).resolves.not.toThrow();
+  });
+
+  it("does not retry a message POST after an ambiguous provider response", async () => {
+    selectQueue.push([
+      { smsOptedOutAt: null, smsFirstOutboundSentAt: new Date() },
+    ]);
+    mockFetch
+      .mockResolvedValueOnce(
+        makeOkResponse({ data: [{ phoneNumber: "+15550001111" }] }),
+      )
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        text: () => Promise.resolve("temporary provider error"),
+      });
+
+    const { sendSms } = await import("./sms");
+    await expect(sendSms("+15551234567", "Hello")).rejects.toThrow(
+      "Failed to send SMS (status 503)",
+    );
+    expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 
   it("skips the opt-out check when bypassOptOutCheck is true", async () => {

@@ -1,6 +1,10 @@
 import OpenAI from "openai";
 import { env } from "./env";
-import { getElaineGlobalConfig } from "./elaine-config";
+import {
+  DEFAULT_MODELS,
+  ELAINE_CONFIG_DEFAULTS,
+  getElaineGlobalConfig,
+} from "./elaine-config";
 import { getConfig } from "./app-config";
 import { logger } from "./logger";
 import { circuitBreaker } from "./circuit-breaker";
@@ -24,29 +28,29 @@ export const MODELS = {
   // fallback tier (gpt-4o-mini vs gpt-4o). Kept as separate constants so call
   // sites can be re-tiered independently later (e.g. bump SMART_VISION to a
   // stronger OpenRouter model) without touching every caller.
-  FAST_VISION: "google/gemini-2.5-flash",
-  SMART_VISION: "google/gemini-2.5-flash",
+  FAST_VISION: DEFAULT_MODELS.fastVision,
+  SMART_VISION: DEFAULT_MODELS.smartVision,
   // Frontier model consulted by the `openrouter:advisor` server tool when a
   // cheap/fast model hits an ambiguous case mid-generation. Only ever reached
   // when the executing model actually decides it's stuck — most requests
   // never invoke it, so normal-case cost stays at the FAST/SMART_VISION rate.
-  ADVISOR: "anthropic/claude-opus-4.8",
+  ADVISOR: DEFAULT_MODELS.advisor,
   // Cheap worker model handed routine sub-tasks by the `openrouter:subagent`
   // server tool (summarizing, extracting, reformatting) so a frontier
   // orchestrator model doesn't burn its own (expensive) tokens on busywork.
-  SUBAGENT_WORKER: "z-ai/glm-5.2",
+  SUBAGENT_WORKER: ELAINE_CONFIG_DEFAULTS.subagentModel,
   // Web-search-grounded model used for factual lookups (designer bios, etc).
-  RESEARCH: "perplexity/sonar",
+  RESEARCH: DEFAULT_MODELS.research,
   // Second, independent voice for the `consultExperts()` multi-model advice
   // panel (see lib/expert-consult.ts). Deliberately a different vendor from
   // ADVISOR (Anthropic) and FAST/SMART_VISION (Google) so the two opinions
   // reflect genuinely different model families, not just two calls to the
   // same underlying model.
-  EXPERT_PANEL_ALT: "openai/gpt-5.1",
+  EXPERT_PANEL_ALT: DEFAULT_MODELS.expertPanelAlt,
   // OpenAI's embedding model, accessed through OpenRouter's unified
   // embeddings endpoint (https://openrouter.ai/docs/api-reference/embeddings)
   // rather than a direct OpenAI API key.
-  EMBEDDING: "openai/text-embedding-3-small",
+  EMBEDDING: DEFAULT_MODELS.embedding,
 } as const;
 
 /**
@@ -76,8 +80,7 @@ export type OpenRouterServerTool =
       };
     };
 
-// Default per-request timeout (ms). Gemini 2.5 Flash vision calls normally
-// return in 1-4s. This must stay well UNDER the reverse proxy's hard ~30s
+// Default per-request timeout (ms). This must stay well UNDER the reverse proxy's hard ~30s
 // request budget: the bulk-reanalyze path runs several AI calls synchronously
 // within a single proxied request. maxRetries is 0 so a timeout/failure
 // doesn't multiply latency — callers should surface the error rather than
@@ -292,10 +295,10 @@ export async function getModels(): Promise<ResolvedModels> {
       research: MODELS.RESEARCH,
       expertPanelAlt: MODELS.EXPERT_PANEL_ALT,
       embedding: MODELS.EMBEDDING,
-      rerank: "rerank-2.5",
-      visualEmbed: "jina-clip-v2",
-      fusionModels: ["anthropic/claude-opus-4.8", "openai/gpt-5.1"],
-      fusionJudge: "z-ai/glm-5.2",
+      rerank: DEFAULT_MODELS.rerank,
+      visualEmbed: DEFAULT_MODELS.visualEmbed,
+      fusionModels: DEFAULT_MODELS.fusionModels,
+      fusionJudge: DEFAULT_MODELS.fusionJudge,
     };
   }
 }
@@ -336,7 +339,7 @@ export async function callFusion(
   const panel =
     config.models.fusionModels.length > 0
       ? config.models.fusionModels
-      : DEFAULT_MODELS_FALLBACK.fusionModels;
+      : DEFAULT_MODELS.fusionModels;
   const client = await getOpenRouterClient();
 
   const settled = await Promise.allSettled(
@@ -402,7 +405,3 @@ export async function callFusion(
   }
   return opinions[0];
 }
-
-const DEFAULT_MODELS_FALLBACK = {
-  fusionModels: ["anthropic/claude-opus-4.8", "openai/gpt-5.1"],
-};

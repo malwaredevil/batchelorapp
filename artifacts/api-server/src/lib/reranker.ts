@@ -8,14 +8,9 @@
 import { env } from "./env";
 import { withRetry } from "./retry";
 import { getConfig } from "./app-config";
+import { getElaineGlobalConfig } from "./elaine-config";
 
 const VOYAGE_RERANK_URL = "https://api.voyageai.com/v1/rerank";
-// rerank-2.5 is Voyage's current generalist model: better retrieval quality
-// than the legacy rerank-2 we used to call, plus a 32k-token context limit
-// (vs 16k) and instruction-following support. Our per-document text is short
-// (a few structured attribute lines), so we're nowhere near either limit —
-// the win here is purely ranking quality on the same requests we already make.
-const RERANK_MODEL = "rerank-2.5";
 
 interface VoyageRerankResponse {
   data: Array<{
@@ -26,7 +21,8 @@ interface VoyageRerankResponse {
 }
 
 /**
- * Re-score a list of candidates against a text query using Voyage rerank-2.
+ * Re-score candidates using the owner's configured Voyage reranker.
+ * rerank-3 is API-compatible with the previous model; no re-indexing is needed.
  *
  * @param query     Text description of the uploaded (candidate) fabric.
  * @param documents Ordered list of {id, text} — one per existing fabric.
@@ -46,6 +42,7 @@ export async function rerankCandidates(
   }
 
   try {
+    const config = await getElaineGlobalConfig();
     const rerankerTimeoutMs = await getConfig(
       "quilting",
       "reranker_timeout_ms",
@@ -60,7 +57,7 @@ export async function rerankCandidates(
             Authorization: `Bearer ${env.voyageApiKey}`,
           },
           body: JSON.stringify({
-            model: RERANK_MODEL,
+            model: config.models.rerank,
             query,
             documents: documents.map((d) => d.text),
             top_k: Math.min(topK, documents.length),

@@ -15,6 +15,17 @@ const {
   mockOpenDmChannel,
   mockPostSlackMessage,
   mockSlackConfigured,
+  mockCancelScheduledCommunicationReceipts,
+  mockClaimCommunicationProposal,
+  mockReceiptWithRepeatCheck,
+  mockFindRecentReceiptById,
+  mockListRecentReceipts,
+  mockRemoveUnstartedReceipts,
+  mockWhere,
+  mockEq,
+  mockAnd,
+  mockUpdateReturning,
+  remindersTable,
   MockOutboundCallIndeterminateError,
 } = vi.hoisted(() => ({
   mockSelect: vi.fn(),
@@ -32,6 +43,25 @@ const {
   mockOpenDmChannel: vi.fn(),
   mockPostSlackMessage: vi.fn(),
   mockSlackConfigured: vi.fn().mockReturnValue(false),
+  mockCancelScheduledCommunicationReceipts: vi.fn().mockResolvedValue(0),
+  mockClaimCommunicationProposal: vi.fn().mockResolvedValue(true),
+  mockReceiptWithRepeatCheck: vi.fn(),
+  mockFindRecentReceiptById: vi.fn(),
+  mockListRecentReceipts: vi.fn().mockResolvedValue([]),
+  mockRemoveUnstartedReceipts: vi.fn().mockResolvedValue(undefined),
+  mockWhere: vi.fn(),
+  mockEq: vi.fn((column: unknown, value: unknown) => ({ column, value })),
+  mockAnd: vi.fn((...conditions: unknown[]) => conditions),
+  mockUpdateReturning: vi.fn(),
+  remindersTable: {
+    id: "reminder-id",
+    status: "reminder-status",
+    elaineActionType: "action-type",
+    elaineActionPayload: "action-payload",
+    dueAt: "due-at",
+    createdByUserId: "owner-user-id",
+    entityType: "entity-type",
+  },
   MockOutboundCallIndeterminateError: class extends Error {},
 }));
 
@@ -50,14 +80,21 @@ vi.mock("@workspace/db", () => ({
         //   - fireCallMe()/continue_in_channel() await the .where(...) result
         //     directly with no .limit() call.
         // Support both by returning a thenable that also exposes .limit().
-        where: () => ({
-          limit: () =>
-            table === "reminders-table" ? mockDuplicateSelect() : mockSelect(),
-          then: (
-            resolve: (v: unknown) => unknown,
-            reject: (e: unknown) => unknown,
-          ) => mockSelect().then(resolve, reject),
-        }),
+        where: (condition: unknown) => {
+          mockWhere(condition);
+          return {
+            limit: () =>
+              table === remindersTable ? mockDuplicateSelect() : mockSelect(),
+            then: (
+              resolve: (v: unknown) => unknown,
+              reject: (e: unknown) => unknown,
+            ) =>
+              (table === remindersTable
+                ? mockDuplicateSelect()
+                : mockSelect()
+              ).then(resolve, reject),
+          };
+        },
       }),
     }),
     insert: () => ({
@@ -65,9 +102,28 @@ vi.mock("@workspace/db", () => ({
         returning: () => mockInsertReturning(),
       }),
     }),
+    update: () => ({
+      set: () => ({
+        where: () => ({
+          returning: () => mockUpdateReturning(),
+        }),
+      }),
+    }),
   },
   appUsers: {},
-  reminders: "reminders-table",
+  reminders: remindersTable,
+}));
+vi.mock("./communication-receipts", () => ({
+  claimCommunicationProposal: mockClaimCommunicationProposal,
+  cancelScheduledCommunicationReceipts:
+    mockCancelScheduledCommunicationReceipts,
+  createOrReadCommunicationReceipt: vi.fn(),
+  createOrReadCommunicationReceiptWithRepeatCheck: mockReceiptWithRepeatCheck,
+  findRecentCommunicationReceiptById: mockFindRecentReceiptById,
+  listRecentCommunicationReceiptsForRecipientChannels: mockListRecentReceipts,
+  removeUnstartedCommunicationReceipts: mockRemoveUnstartedReceipts,
+  updateCallCommunicationReceiptsByProviderId: vi.fn(),
+  updateCommunicationReceipt: vi.fn(),
 }));
 vi.mock("../lib/calls", () => ({
   initiateOutboundCall: mockInitiateOutboundCall,
@@ -94,8 +150,8 @@ vi.mock("../lib/slack", () => ({
 // here, or building that expression throws before the mock ever sees it.
 vi.mock("drizzle-orm", () => ({
   ilike: vi.fn(),
-  and: vi.fn(),
-  eq: vi.fn(),
+  and: mockAnd,
+  eq: mockEq,
   gt: vi.fn(),
   isNull: vi.fn(),
   lte: vi.fn(),
@@ -188,6 +244,175 @@ describe("call_contact executor", () => {
   });
 });
 
+describe("recent communication repeat challenge", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockReceiptWithRepeatCheck.mockResolvedValue({
+      kind: "repeat_confirmation",
+      receipt: {
+        id: "11111111-1111-4111-8111-111111111111",
+        status: "unknown",
+      },
+    });
+  });
+
+  it("blocks SMS dispatch until the latest receipt is explicitly acknowledged", async () => {
+    mockSelect.mockResolvedValue(makeContact());
+    const { RepeatConfirmationRequiredError } =
+      await import("./communication-actions");
+    await expect(
+      communicationActionExecutors.message_contact(
+        {
+          contactName: "Jane",
+          message: "A repeated message",
+          channel: "sms",
+        } as never,
+        1,
+        {
+          attemptKey: "proposal-key",
+          proposalClaimKey: "proposal-key",
+          payloadHash: "payload-hash",
+          ownerUserId: 1,
+          actionType: "message_contact",
+          conversationId: 8,
+        },
+      ),
+    ).rejects.toBeInstanceOf(RepeatConfirmationRequiredError);
+    expect(mockSendSms).not.toHaveBeenCalled();
+    expect(mockReceiptWithRepeatCheck).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ownerUserId: 1,
+        recipientUserId: 2,
+        channel: "sms",
+      }),
+    );
+  });
+
+  it("rejects an acknowledgement when its receipt is no longer recent", async () => {
+    mockSelect.mockResolvedValue(makeContact());
+    mockReceiptWithRepeatCheck.mockResolvedValue({
+      kind: "stale_acknowledgement",
+    });
+    const { StaleRepeatAcknowledgementError } =
+      await import("./communication-actions");
+    await expect(
+      communicationActionExecutors.message_contact(
+        {
+          contactName: "Jane",
+          message: "A repeated message",
+          channel: "sms",
+        } as never,
+        1,
+        {
+          attemptKey: "proposal-key",
+          proposalClaimKey:
+            "proposal-key:repeat:22222222-2222-4222-8222-222222222222",
+          acknowledgeRepeat: "22222222-2222-4222-8222-222222222222",
+          payloadHash: "payload-hash",
+          ownerUserId: 1,
+          actionType: "message_contact",
+          conversationId: 8,
+        },
+      ),
+    ).rejects.toBeInstanceOf(StaleRepeatAcknowledgementError);
+    expect(mockSendSms).not.toHaveBeenCalled();
+  });
+
+  it("requires repeat confirmation for continue_in_channel before self-directed delivery", async () => {
+    mockSelect.mockResolvedValue([
+      {
+        email: "owner@example.invalid",
+        phoneNumber: "+12105559999",
+        phoneVerified: true,
+        smsConsentAt: new Date("2024-01-01"),
+        smsOptedOutAt: null,
+        slackUserId: null,
+        displayName: "Owner",
+      },
+    ]);
+    mockReceiptWithRepeatCheck.mockResolvedValue({
+      kind: "repeat_confirmation",
+      receipt: {
+        id: "77777777-7777-4777-8777-777777777777",
+        status: "executing",
+      },
+    });
+    const { RepeatConfirmationRequiredError } =
+      await import("./communication-actions");
+
+    await expect(
+      communicationActionExecutors.continue_in_channel(
+        {
+          targetChannel: "sms",
+          message: "Continue this conversation",
+        } as never,
+        1,
+        {
+          attemptKey: "continue-proposal",
+          proposalClaimKey: "continue-proposal",
+          payloadHash: "payload-hash",
+          ownerUserId: 1,
+          actionType: "continue_in_channel",
+          conversationId: 9,
+        },
+      ),
+    ).rejects.toBeInstanceOf(RepeatConfirmationRequiredError);
+    expect(mockSendSms).not.toHaveBeenCalled();
+  });
+
+  it("blocks replay of one proposal before resolving the contact again", async () => {
+    mockSlackConfigured.mockReturnValue(false);
+    mockSendSms.mockResolvedValue(undefined);
+    mockSelect.mockResolvedValue(makeContact());
+    mockClaimCommunicationProposal
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+    mockReceiptWithRepeatCheck.mockResolvedValue({
+      kind: "claimed",
+      claimed: true,
+      receipt: {
+        id: "receipt-first-recipient",
+        actionType: "message_contact",
+        channel: "sms",
+        status: "executing",
+        conversationId: 8,
+      },
+    });
+    const context = {
+      attemptKey: "same-proposal-key",
+      proposalClaimKey: "same-proposal-key",
+      payloadHash: "payload-hash",
+      ownerUserId: 1,
+      actionType: "message_contact",
+      conversationId: 8,
+    };
+    const action = {
+      contactName: "Jane",
+      message: "One approved message",
+      channel: "sms",
+    };
+
+    const first = await communicationActionExecutors.message_contact(
+      action as never,
+      1,
+      context,
+    );
+    mockSelect.mockResolvedValue(
+      makeContact({ id: 3, displayName: "Different Jane" }),
+    );
+    const replay = await communicationActionExecutors.message_contact(
+      action as never,
+      1,
+      context,
+    );
+
+    expect(first.status).toBe(200);
+    expect(replay.status).toBe(409);
+    expect(mockSelect).toHaveBeenCalledTimes(1);
+    expect(mockSendSms).toHaveBeenCalledTimes(1);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // call_me
 // ---------------------------------------------------------------------------
@@ -266,6 +491,35 @@ describe("call_me executor — immediate path (no scheduleAt)", () => {
     );
     expect(mockInsertReturning).not.toHaveBeenCalled();
     expect(JSON.stringify(result.body)).not.toContain("scheduled");
+  });
+
+  it("requires repeat confirmation before calling after a recent self-call receipt", async () => {
+    mockSelect.mockResolvedValue(makeSelfUser());
+    mockReceiptWithRepeatCheck.mockResolvedValue({
+      kind: "repeat_confirmation",
+      receipt: {
+        id: "33333333-3333-4333-8333-333333333333",
+        status: "accepted",
+      },
+    });
+    const { RepeatConfirmationRequiredError } =
+      await import("./communication-actions");
+
+    await expect(
+      communicationActionExecutors.call_me(
+        { greeting: "Please call me" } as never,
+        1,
+        {
+          attemptKey: "call-me-proposal",
+          proposalClaimKey: "call-me-proposal",
+          payloadHash: "payload-hash",
+          ownerUserId: 1,
+          actionType: "call_me",
+          conversationId: 9,
+        },
+      ),
+    ).rejects.toBeInstanceOf(RepeatConfirmationRequiredError);
+    expect(mockInitiateOutboundCall).not.toHaveBeenCalled();
   });
 
   it("polls an attached call for terminal outcomes without pending context", async () => {
@@ -590,5 +844,63 @@ describe("message_contact executor — Slack path", () => {
       channel: "slack",
     });
     expect(mockSendSms).not.toHaveBeenCalled();
+  });
+});
+
+describe("cancel_scheduled_contact executor", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockDuplicateSelect.mockResolvedValue([
+      {
+        id: 77,
+        status: "active",
+        elaineActionType: "call_contact",
+        elaineActionPayload: { contactName: "Jane", message: "Call me" },
+        dueAt: new Date("2026-08-20T18:00:00.000Z"),
+      },
+    ]);
+    mockUpdateReturning.mockResolvedValue([{ id: 77 }]);
+    mockCancelScheduledCommunicationReceipts.mockResolvedValue(1);
+  });
+
+  it("cancels only an owned reminder and marks its linked receipt cancelled", async () => {
+    const result = await communicationActionExecutors.cancel_scheduled_contact(
+      { scheduledActionId: 77 } as never,
+      42,
+    );
+
+    expect(result.status).toBe(200);
+    expect(mockWhere).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ column: "reminder-id", value: 77 }),
+        expect.objectContaining({ column: "owner-user-id", value: 42 }),
+        expect.objectContaining({
+          column: "entity-type",
+          value: "elaine_action",
+        }),
+      ]),
+    );
+    expect(mockCancelScheduledCommunicationReceipts).toHaveBeenCalledWith(
+      77,
+      42,
+    );
+  });
+
+  it("does not cancel or alter receipts for a reminder not owned by the caller", async () => {
+    mockDuplicateSelect.mockResolvedValueOnce([]);
+
+    const result = await communicationActionExecutors.cancel_scheduled_contact(
+      { scheduledActionId: 77 } as never,
+      42,
+    );
+
+    expect(result.status).toBe(404);
+    expect(mockWhere).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ column: "owner-user-id", value: 42 }),
+      ]),
+    );
+    expect(mockUpdateReturning).not.toHaveBeenCalled();
+    expect(mockCancelScheduledCommunicationReceipts).not.toHaveBeenCalled();
   });
 });

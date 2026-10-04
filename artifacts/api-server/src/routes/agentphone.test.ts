@@ -50,6 +50,14 @@ vi.mock("../lib/env", () => ({
   },
 }));
 
+const mockUpdateCallReceiptByProviderId = vi.hoisted(() =>
+  vi.fn().mockResolvedValue(undefined),
+);
+vi.mock("../elaine/communication-receipts", () => ({
+  updateCallCommunicationReceiptsByProviderId:
+    mockUpdateCallReceiptByProviderId,
+}));
+
 // ── DB mock ──────────────────────────────────────────────────────────────────
 // nextInsertThrows: simulates a duplicate delivery (claimDelivery returns false)
 // nextInsertThrowsDbError: simulates a real DB error (connection refused, etc.)
@@ -208,6 +216,7 @@ beforeEach(() => {
   dbMock.execute.mockImplementation(executeImpl);
   runAgentphoneTurn.mockResolvedValue({ replyText: "Mock reply", history: [] });
   sendSms.mockResolvedValue(undefined);
+  mockUpdateCallReceiptByProviderId.mockResolvedValue(undefined);
 });
 
 describe("POST /api/agentphone/webhook — signature verification", () => {
@@ -357,6 +366,75 @@ describe("POST /api/agentphone/webhook — signature verification", () => {
     } finally {
       (env as Record<string, unknown>).agentphoneWebhookSecret = originalSecret;
     }
+  });
+});
+
+describe("POST /api/agentphone/webhook — signed call-ended events", () => {
+  it("updates the provider-id-matched receipt with an explicit provider status", async () => {
+    const body = JSON.stringify({
+      event: "agent.call_ended",
+      channel: "voice",
+      data: { callId: "provider-call-123", status: "no_answer" },
+    });
+    const ts = freshTimestamp();
+    const app = await buildApp();
+
+    const res = await request(app)
+      .post("/api/agentphone/webhook")
+      .set(buildHeaders(ts, body, "call-ended-no-answer"))
+      .set("Content-Type", "application/json")
+      .send(body);
+
+    expect(res.status).toBe(200);
+    expect(mockUpdateCallReceiptByProviderId).toHaveBeenCalledWith(
+      "provider-call-123",
+      "no-answer",
+    );
+    expect(mockUpdateCallReceiptByProviderId).not.toHaveBeenCalledWith(
+      "provider-call-123",
+      "answered",
+    );
+  });
+
+  it("records ended with answer unknown when no authoritative status is supplied", async () => {
+    const body = JSON.stringify({
+      event: "agent.call_ended",
+      channel: "voice",
+      data: { call_id: "provider-call-ended" },
+    });
+    const ts = freshTimestamp();
+    const app = await buildApp();
+
+    const res = await request(app)
+      .post("/api/agentphone/webhook")
+      .set(buildHeaders(ts, body, "call-ended-no-status"))
+      .set("Content-Type", "application/json")
+      .send(body);
+
+    expect(res.status).toBe(200);
+    expect(mockUpdateCallReceiptByProviderId).toHaveBeenCalledWith(
+      "provider-call-ended",
+      "ended",
+    );
+  });
+
+  it("does not attempt a receipt update when the signed event has no provider call id", async () => {
+    const body = JSON.stringify({
+      event: "agent.call_ended",
+      channel: "voice",
+      data: { status: "completed" },
+    });
+    const ts = freshTimestamp();
+    const app = await buildApp();
+
+    const res = await request(app)
+      .post("/api/agentphone/webhook")
+      .set(buildHeaders(ts, body, "call-ended-missing-id"))
+      .set("Content-Type", "application/json")
+      .send(body);
+
+    expect(res.status).toBe(200);
+    expect(mockUpdateCallReceiptByProviderId).not.toHaveBeenCalled();
   });
 });
 

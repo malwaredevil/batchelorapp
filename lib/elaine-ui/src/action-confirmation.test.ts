@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
 import type { AssistantAction } from "@workspace/api-client-react";
 import {
+  getActionExecutionBody,
+  getActionExecutionBodyWithRepeatAcknowledgement,
+  getActionProgressLabel,
+  getCommunicationReceiptLabel,
   getActionErrorMessage,
+  getRepeatConfirmationDetails,
+  isCommunicationActionType,
   removeFirstPendingAction,
   removeSubmittedAction,
+  shouldPollCommunicationReceipt,
 } from "./action-confirmation";
 
 describe("action confirmation", () => {
@@ -55,5 +62,177 @@ describe("action confirmation", () => {
     // cause B (the new queue head) to be removed.
     expect(removeSubmittedAction([second], first)).toEqual([second]);
     expect(removeSubmittedAction([first, second], first)).toEqual([second]);
+  });
+
+  it("shows channel-specific active progress for confirmed communications", () => {
+    expect(
+      getActionProgressLabel({
+        type: "call_contact",
+        payload: {},
+        label: "Call Pat",
+      }),
+    ).toBe("Calling…");
+    expect(
+      getActionProgressLabel({
+        type: "message_contact",
+        payload: { channel: "sms" },
+        label: "Text Pat",
+      }),
+    ).toBe("Sending SMS…");
+    expect(
+      getActionProgressLabel({
+        type: "message_contact",
+        payload: { channel: "email" },
+        label: "Email Pat",
+      }),
+    ).toBe("Sending email…");
+    expect(
+      getActionProgressLabel({
+        type: "message_contact",
+        payload: { channel: "slack" },
+        label: "Slack Pat",
+      }),
+    ).toBe("Sending Slack DM…");
+    expect(
+      getActionProgressLabel({
+        type: "message_contact",
+        payload: { channel: "elaine_chat" },
+        label: "Message Pat",
+      }),
+    ).toBe("Sending Elaine message…");
+    expect(
+      getActionProgressLabel({
+        type: "call_me",
+        payload: {},
+        label: "Call me",
+      }),
+    ).toBe("Calling…");
+    expect(
+      getActionProgressLabel({
+        type: "continue_in_channel",
+        payload: { targetChannel: "slack" },
+        label: "Continue on Slack",
+      }),
+    ).toBe("Sending Slack DM…");
+    expect(
+      getActionProgressLabel({
+        type: "broadcast_message",
+        payload: {},
+        label: "Broadcast",
+      }),
+    ).toBe("Sending to connected channels…");
+  });
+
+  it("sends the server-issued proposal identity with action approval", () => {
+    const proposedAction = {
+      type: "message_contact",
+      payload: { message: "hello", channel: "sms" },
+      label: "Text Pat",
+      proposalId: "proposal-token",
+      conversationId: 42,
+    } as AssistantAction;
+    expect(getActionExecutionBody(proposedAction)).toEqual({
+      type: "message_contact",
+      payload: { message: "hello", channel: "sms" },
+      proposalId: "proposal-token",
+      conversationId: 42,
+    });
+  });
+
+  it("acknowledges a repeat only with the same proposal and payload", () => {
+    const action: AssistantAction = {
+      type: "call_contact",
+      payload: { contactId: 7, purpose: "check in" },
+      label: "Call Pat",
+      proposalId: "proposal-7",
+      conversationId: 42,
+    };
+    expect(
+      getActionExecutionBodyWithRepeatAcknowledgement(action, "receipt-9"),
+    ).toEqual({
+      type: "call_contact",
+      payload: { contactId: 7, purpose: "check in" },
+      proposalId: "proposal-7",
+      conversationId: 42,
+      acknowledgeRepeat: "receipt-9",
+    });
+  });
+
+  it("recognizes the structured repeat-attempt conflict but not generic errors", () => {
+    const error = Object.assign(new Error("HTTP 409"), {
+      status: 409,
+      data: {
+        requiresRepeatConfirmation: true,
+        receiptId: "receipt-9",
+        status: "unknown",
+      },
+    });
+    expect(getRepeatConfirmationDetails(error)).toEqual({
+      receiptId: "receipt-9",
+      status: "unknown",
+    });
+    expect(getRepeatConfirmationDetails(new Error("Network error"))).toBeNull();
+  });
+
+  it("polls unresolved receipt statuses and stops on terminal statuses", () => {
+    for (const status of [
+      "executing",
+      "accepted",
+      "unknown",
+      "pending",
+      "provider_accepted",
+    ]) {
+      expect(shouldPollCommunicationReceipt(status)).toBe(true);
+    }
+    for (const status of ["completed", "failed", "scheduled", "cancelled"]) {
+      expect(shouldPollCommunicationReceipt(status)).toBe(false);
+    }
+  });
+
+  it("does not equate provider acceptance with message delivery or call outcome", () => {
+    expect(
+      getCommunicationReceiptLabel("executing", "message_contact", null, "sms"),
+    ).toBe("Sending SMS…");
+    expect(
+      getCommunicationReceiptLabel("executing", "call_contact", null, "voice"),
+    ).toBe("Calling…");
+    expect(
+      getCommunicationReceiptLabel("executing", "call_me", null, "voice"),
+    ).toBe("Calling…");
+    expect(
+      getCommunicationReceiptLabel(
+        "executing",
+        "continue_in_channel",
+        null,
+        "email",
+      ),
+    ).toBe("Sending email…");
+    expect(
+      getCommunicationReceiptLabel(
+        "executing",
+        "broadcast_message",
+        null,
+        "slack",
+      ),
+    ).toBe("Sending Slack DM…");
+    expect(getCommunicationReceiptLabel("accepted", "message_contact")).toBe(
+      "Provider accepted; delivery pending",
+    );
+    expect(getCommunicationReceiptLabel("completed", "message_contact")).toBe(
+      "Confirmed completed",
+    );
+    expect(getCommunicationReceiptLabel("pending", "call_contact")).toBe(
+      "Call initiated; outcome pending",
+    );
+    expect(getCommunicationReceiptLabel("unknown", "call_contact")).toBe(
+      "Call status unknown",
+    );
+    expect(
+      getCommunicationReceiptLabel("confirmed_completed", "call_contact"),
+    ).toBe("Call ended; answer unknown");
+    expect(isCommunicationActionType("call_me")).toBe(true);
+    expect(isCommunicationActionType("continue_in_channel")).toBe(true);
+    expect(isCommunicationActionType("broadcast_message")).toBe(true);
+    expect(isCommunicationActionType("correct_memory")).toBe(false);
   });
 });

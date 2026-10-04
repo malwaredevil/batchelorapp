@@ -6,7 +6,7 @@ Do not edit by hand.
 
 | Package                        |                              Manifest | Version | Runtime deps | Dev deps |
 | ------------------------------ | ------------------------------------: | ------: | -----------: | -------: |
-| @workspace/api-server          |     artifacts/api-server/package.json |   0.0.0 |           41 |       19 |
+| @workspace/api-server          |     artifacts/api-server/package.json |   0.0.0 |           42 |       19 |
 | @workspace/e2e                 |            artifacts/e2e/package.json |   0.0.0 |            0 |        2 |
 | @workspace/elaine              |         artifacts/elaine/package.json |   0.0.0 |            0 |       71 |
 | @workspace/mockup-sandbox      | artifacts/mockup-sandbox/package.json |   0.0.0 |            0 |       61 |

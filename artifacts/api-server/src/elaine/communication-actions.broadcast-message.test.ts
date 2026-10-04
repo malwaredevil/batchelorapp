@@ -6,6 +6,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const {
   mockDbWhere,
+  mockClaimCommunicationProposal,
+  mockRepeatCheckReceipt,
+  mockFindRecentReceiptById,
+  mockListRecentReceipts,
+  mockUpdateCommunicationReceipt,
   broadcastLog,
   mockSendSms,
   mockOpenDmChannel,
@@ -28,6 +33,11 @@ const {
   }
   return {
     mockDbWhere: vi.fn(),
+    mockClaimCommunicationProposal: vi.fn().mockResolvedValue(true),
+    mockRepeatCheckReceipt: vi.fn(),
+    mockFindRecentReceiptById: vi.fn(),
+    mockListRecentReceipts: vi.fn().mockResolvedValue([]),
+    mockUpdateCommunicationReceipt: vi.fn().mockResolvedValue(undefined),
     // In-memory store that mirrors the elaine_broadcast_log table. Each entry
     // is the Date the broadcast was reserved. Tests use unique userIds so
     // entries from different tests never collide.
@@ -134,6 +144,15 @@ vi.mock("../lib/calls", () => ({
 
 vi.mock("../lib/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
+vi.mock("./communication-receipts", () => ({
+  claimCommunicationProposal: mockClaimCommunicationProposal,
+  createOrReadCommunicationReceiptWithRepeatCheck: mockRepeatCheckReceipt,
+  listRecentCommunicationReceiptsForRecipientChannels: mockListRecentReceipts,
+  findRecentCommunicationReceiptById: mockFindRecentReceiptById,
+  removeUnstartedCommunicationReceipts: vi.fn().mockResolvedValue(undefined),
+  updateCommunicationReceipt: mockUpdateCommunicationReceipt,
 }));
 
 // drizzle-orm: sql is used as a tagged template literal; we return an object
@@ -251,6 +270,123 @@ describe("broadcast_message executor — happy path (all channels)", () => {
       expect.any(String),
       msg,
     );
+  });
+});
+
+describe("broadcast_message repeat confirmation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSlackConfigured.mockReturnValue(true);
+    mockResendConfigured.mockReturnValue(true);
+    mockOpenDmChannel.mockResolvedValue("C100");
+    mockPostSlackMessage.mockResolvedValue(undefined);
+    mockSendSms.mockResolvedValue(undefined);
+    mockSendAssistantEmail.mockResolvedValue(undefined);
+  });
+
+  const proposalContext = {
+    attemptKey: "broadcast-proposal-key",
+    proposalClaimKey: "broadcast-proposal-key",
+    payloadHash: "broadcast-payload-hash",
+    ownerUserId: 1100,
+    actionType: "broadcast_message",
+    conversationId: 4,
+  };
+
+  it("challenges before contacting any channel when any channel has a recent receipt", async () => {
+    mockDbWhere.mockResolvedValue(makeUser());
+    mockListRecentReceipts.mockResolvedValueOnce([
+      {
+        id: "44444444-4444-4444-8444-444444444444",
+        status: "unknown",
+        channel: "sms",
+      },
+    ]);
+    const { RepeatConfirmationRequiredError } =
+      await import("./communication-actions");
+
+    await expect(
+      communicationActionExecutors.broadcast_message(
+        { message: "Broadcast safely" } as never,
+        1100,
+        proposalContext,
+      ),
+    ).rejects.toBeInstanceOf(RepeatConfirmationRequiredError);
+    expect(mockPostSlackMessage).not.toHaveBeenCalled();
+    expect(mockSendSms).not.toHaveBeenCalled();
+    expect(mockSendAssistantEmail).not.toHaveBeenCalled();
+  });
+
+  it("an acknowledged broadcast repeat dispatches only to the acknowledged channel", async () => {
+    mockDbWhere.mockResolvedValue(makeUser());
+    const receiptId = "55555555-5555-4555-8555-555555555555";
+    mockFindRecentReceiptById.mockResolvedValueOnce({
+      id: receiptId,
+      status: "accepted",
+      channel: "slack",
+    });
+    mockRepeatCheckReceipt.mockResolvedValueOnce({
+      kind: "claimed",
+      claimed: true,
+      receipt: {
+        id: "66666666-6666-4666-8666-666666666666",
+        actionType: "broadcast_message",
+        channel: "slack",
+        status: "executing",
+        conversationId: 4,
+      },
+    });
+
+    const result = await communicationActionExecutors.broadcast_message(
+      { message: "Broadcast safely" } as never,
+      1100,
+      {
+        ...proposalContext,
+        proposalClaimKey: `${proposalContext.attemptKey}:repeat:${receiptId}`,
+        acknowledgeRepeat: receiptId,
+      },
+    );
+
+    expect(result.status).toBe(200);
+    expect(mockPostSlackMessage).toHaveBeenCalledTimes(1);
+    expect(mockSendSms).not.toHaveBeenCalled();
+    expect(mockSendAssistantEmail).not.toHaveBeenCalled();
+  });
+
+  it("blocks a replay before a newly available broadcast channel is resolved", async () => {
+    mockDbWhere.mockResolvedValue(makeUser());
+    mockResendConfigured.mockReturnValue(false);
+    mockClaimCommunicationProposal
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+    mockRepeatCheckReceipt.mockResolvedValue({
+      kind: "claimed",
+      claimed: true,
+      receipt: {
+        id: "88888888-8888-4888-8888-888888888888",
+        actionType: "broadcast_message",
+        channel: "sms",
+        status: "executing",
+        conversationId: 4,
+      },
+    });
+
+    const first = await communicationActionExecutors.broadcast_message(
+      { message: "Same signed broadcast proposal" } as never,
+      1101,
+      proposalContext,
+    );
+    mockResendConfigured.mockReturnValue(true);
+    const replay = await communicationActionExecutors.broadcast_message(
+      { message: "Same signed broadcast proposal" } as never,
+      1101,
+      proposalContext,
+    );
+
+    expect(first.status).toBe(200);
+    expect(replay.status).toBe(409);
+    expect(mockDbWhere).toHaveBeenCalledTimes(1);
+    expect(mockSendAssistantEmail).not.toHaveBeenCalled();
   });
 });
 

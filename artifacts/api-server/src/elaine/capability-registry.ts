@@ -430,6 +430,17 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
     retry: "read_only",
     channels: ["web"] as const,
   }),
+  ...policies(["get_recent_communication_receipts"], {
+    domain: "office",
+    kind: "read",
+    risk: "none",
+    auth: "session",
+    confirmation: "never",
+    executorPrefix: "communicationRead",
+    audit: "runtime_observation",
+    retry: "read_only",
+    channels: ["web"] as const,
+  }),
   ...policies(
     [
       "update_notification_state",

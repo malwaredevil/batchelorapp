@@ -8,11 +8,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
+import { env } from "../../lib/env";
 
 // ── Infrastructure mocks ─────────────────────────────────────────────────────
 
 vi.mock("../../lib/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
+vi.mock("../../lib/elaine-config", () => ({
+  getElaineGlobalConfig: vi.fn(async () => ({
+    models: { rerank: "owner-selected-reranker" },
+  })),
 }));
 
 vi.mock("../../middleware/rateLimit", () => ({
@@ -77,6 +84,7 @@ vi.mock("../../middleware/owner", () => ({
 import integrationsHealthRouter, {
   _setTestCache,
   _runCheckForTest,
+  runAllChecks,
 } from "./integrations-health";
 
 // ── App builder ───────────────────────────────────────────────────────────────
@@ -99,6 +107,30 @@ const MOCK_CACHED_RESULT = {
   data: { checks: MOCK_CHECKS, cachedAt: "2026-08-01T10:00:00.000Z" },
   expiresAt: Date.now() + 5 * 60 * 1000, // 5 minutes from now — not expired
 };
+
+it("checks the owner's effective Voyage model rather than a hardcoded model", async () => {
+  env.voyageApiKey = "test-voyage-key";
+  const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+    ok: true,
+    json: async () => ({}),
+  } as Response);
+  try {
+    const result = await runAllChecks();
+    const voyageCall = fetchSpy.mock.calls.find(
+      ([url]) => url === "https://api.voyageai.com/v1/rerank",
+    );
+    expect(voyageCall).toBeDefined();
+    expect(JSON.parse(String(voyageCall?.[1]?.body)).model).toBe(
+      "owner-selected-reranker",
+    );
+    expect(
+      result.checks.find((check) => check.service === "Voyage AI")?.status,
+    ).toBe("ok");
+  } finally {
+    env.voyageApiKey = undefined;
+    fetchSpy.mockRestore();
+  }
+});
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 

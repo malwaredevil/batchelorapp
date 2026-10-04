@@ -157,15 +157,17 @@ describe("webhookLimiter — namespace / key prefix", () => {
       await vi.importMock<typeof import("./pgRateLimitStore")>(
         "./pgRateLimitStore",
       );
-    const MockStore = vi.fn().mockImplementation((prefix: string) => ({
-      prefix,
-      init: vi.fn(),
-      increment: vi
-        .fn()
-        .mockResolvedValue({ totalHits: 1, resetTime: new Date() }),
-      decrement: vi.fn(),
-      resetKey: vi.fn(),
-    }));
+    const MockStore = vi.fn().mockImplementation(function (prefix: string) {
+      return {
+        prefix,
+        init: vi.fn(),
+        increment: vi
+          .fn()
+          .mockResolvedValue({ totalHits: 1, resetTime: new Date() }),
+        decrement: vi.fn(),
+        resetKey: vi.fn(),
+      };
+    });
     vi.doMock("./pgRateLimitStore", () => ({
       PostgresRateLimitStore: MockStore,
     }));

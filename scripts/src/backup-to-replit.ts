@@ -39,7 +39,8 @@
  *              messenger_link_previews, messenger_reactions
  *   Elaine:   elaine_conversations, elaine_settings, elaine_memory, elaine_nudges,
  *             elaine_lessons, elaine_code_suggestions,
- *             elaine_global_config, elaine_history_conversations, elaine_history_messages
+ *             elaine_global_config, elaine_history_conversations, elaine_history_messages,
+ *             elaine_communication_receipts, elaine_communication_proposal_claims
  *             (shared assistant, not namespaced per-app)
  *
  * What is intentionally skipped:
@@ -1813,6 +1814,32 @@ CREATE TABLE IF NOT EXISTS elaine_scheduled_actions (
   fired_at             TIMESTAMPTZ,
   error                TEXT,
   created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Elaine outbound communication receipts (privacy-minimal attempt records)
+CREATE TABLE IF NOT EXISTS elaine_communication_receipts (
+  id                  UUID PRIMARY KEY,
+  attempt_key         TEXT NOT NULL UNIQUE,
+  payload_hash        TEXT NOT NULL,
+  owner_user_id       INTEGER NOT NULL,
+  action_type         TEXT NOT NULL,
+  channel             TEXT NOT NULL,
+  status              TEXT NOT NULL,
+  conversation_id     INTEGER,
+  recipient_user_id   INTEGER,
+  scheduled_action_id INTEGER,
+  provider_id         TEXT,
+  call_status         TEXT,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS elaine_communication_proposal_claims (
+  proposal_key  TEXT NOT NULL,
+  owner_user_id INTEGER NOT NULL,
+  payload_hash  TEXT NOT NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (owner_user_id, proposal_key)
 );
 `;
 
@@ -4043,6 +4070,37 @@ async function main() {
     jsonbColumns: ["action_payload"],
   });
   await resetSequence(dest, "elaine_scheduled_actions", "id");
+
+  // ── Elaine communication receipts ─────────────────────────────────────────
+  summary["elaine_communication_receipts"] = await copyTable(source, dest, {
+    table: "elaine_communication_receipts",
+    columns: [
+      "id",
+      "attempt_key",
+      "payload_hash",
+      "owner_user_id",
+      "action_type",
+      "channel",
+      "status",
+      "conversation_id",
+      "recipient_user_id",
+      "scheduled_action_id",
+      "provider_id",
+      "call_status",
+      "created_at",
+      "updated_at",
+    ],
+    orderBy: "created_at",
+  });
+  summary["elaine_communication_proposal_claims"] = await copyTable(
+    source,
+    dest,
+    {
+      table: "elaine_communication_proposal_claims",
+      columns: ["proposal_key", "owner_user_id", "payload_hash", "created_at"],
+      orderBy: "created_at",
+    },
+  );
 
   // ── Record backup history ─────────────────────────────────────────────────
   const note = Object.entries(summary)

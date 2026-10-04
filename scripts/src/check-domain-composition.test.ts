@@ -5276,7 +5276,7 @@ test("extractActionExecutorSpreads: real index.ts contains the expected executor
     "ornamentActionExecutors",
     "universalActionExecutors",
     "adaptiveActionExecutors",
-    "communicationActionExecutors",
+    "communicationActionExecutorAdapters",
     "reminderActionExecutors",
   ];
   for (const name of expected) {

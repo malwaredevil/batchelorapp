@@ -6,9 +6,20 @@
 export function buildAutoRunActionFailureCorrection(params: {
   droppedActionCount: number;
   executorFailureCount: number;
+  repeatConfirmationCount?: number;
 }): string | null {
-  const { droppedActionCount, executorFailureCount } = params;
+  const {
+    droppedActionCount,
+    executorFailureCount,
+    repeatConfirmationCount = 0,
+  } = params;
   if (droppedActionCount <= 0) return null;
+
+  if (repeatConfirmationCount > 0) {
+    return repeatConfirmationCount === 1
+      ? "I haven't made another attempt because a recent receipt shows the earlier attempt may already have reached the recipient. I've prepared this repeat for your explicit confirmation."
+      : "I haven't made those repeat attempts because recent receipts show earlier attempts may already have reached the recipients. I've prepared the repeats for your explicit confirmation.";
+  }
 
   if (executorFailureCount > 0) {
     return droppedActionCount === 1

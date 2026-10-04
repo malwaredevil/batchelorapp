@@ -16,6 +16,7 @@ import { requireAuth } from "../../middleware/auth";
 import { requireOwner } from "../../middleware/owner";
 import { adminLimiter } from "../../middleware/rateLimit";
 import { env } from "../../lib/env";
+import { getElaineGlobalConfig } from "../../lib/elaine-config";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 
@@ -280,6 +281,7 @@ async function checkJinaAI(): Promise<ServiceCheckResult> {
 
 async function checkVoyageAI(): Promise<ServiceCheckResult> {
   return runCheck("Voyage AI", env.voyageApiKey, async (key) => {
+    const config = await getElaineGlobalConfig();
     const resp = await fetch("https://api.voyageai.com/v1/rerank", {
       method: "POST",
       headers: {
@@ -287,7 +289,7 @@ async function checkVoyageAI(): Promise<ServiceCheckResult> {
         Authorization: `Bearer ${key}`,
       },
       body: JSON.stringify({
-        model: "rerank-2.5",
+        model: config.models.rerank,
         query: "health",
         documents: ["check"],
         top_k: 1,

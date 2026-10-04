@@ -544,6 +544,11 @@ describe("POST /api/elaine/email-webhook — event type routing", () => {
 
     expect(res.status).toBe(200);
     expect(runElaineEmailTurn).toHaveBeenCalledOnce();
+    // Without a Resend email ID, the Svix delivery ID keys the turn's
+    // communication proposals.
+    expect(runElaineEmailTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ inboundMessageId: svixId }),
+    );
   });
 });
 

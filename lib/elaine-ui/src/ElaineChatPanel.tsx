@@ -52,12 +52,18 @@ import {
   DropdownMenuSeparator,
 } from "@workspace/ui";
 import { ElaineAvatar, ElaineName } from "./ElaineAvatar";
-import type { ElaineChat } from "./useElaineChat";
+import type { CommunicationReceipt, ElaineChat } from "./useElaineChat";
 import { MarkdownMessage } from "./MarkdownMessage";
 import { ChatWidget } from "./ChatWidgets";
 import { LinkPreviewCard } from "./LinkPreviewCard";
 import { ElainePlanProgress } from "./ElainePlanProgress";
 import { MessageCopyButton } from "./MessageCopyButton";
+import {
+  getCommunicationReceiptLabel,
+  isCallActionType,
+  isCommunicationActionType,
+  repeatConfirmationPrompt,
+} from "./action-confirmation";
 
 // ─── Communication action result helpers ─────────────────────────────────────
 
@@ -111,30 +117,95 @@ function parseCommunicationResult(result: unknown): {
   channel?: string;
   contactName?: string;
   callId?: string;
+  receiptId?: string;
+  receiptStatus?: string;
+  callStatus?: string;
+  ok?: boolean;
   recipients?: Array<{
     name: string;
     channel: string | null;
     ok: boolean;
     error: string | null;
+    status?: string;
+    receiptStatus?: string;
+    receiptId?: string;
+  }>;
+  receipts?: Array<{
+    receiptId: string;
+    channel: string;
+    status: string;
   }>;
   error?: string;
 } {
   if (!result || typeof result !== "object") return {};
   const body = result as Record<string, unknown>;
-  if (typeof body.error === "string") return { error: body.error };
-  const inner = body.result as Record<string, unknown> | undefined;
+  const bodyReceiptStatus =
+    typeof body.receiptStatus === "string" ? body.receiptStatus : undefined;
+  const inner =
+    body.result && typeof body.result === "object"
+      ? (body.result as Record<string, unknown>)
+      : undefined;
+  if (typeof body.error === "string") {
+    return {
+      error: "The action could not be completed safely.",
+      receiptStatus:
+        bodyReceiptStatus ??
+        (typeof inner?.receiptStatus === "string"
+          ? inner.receiptStatus
+          : undefined),
+      receiptId:
+        typeof body.receiptId === "string"
+          ? body.receiptId
+          : typeof inner?.receiptId === "string"
+            ? inner.receiptId
+            : undefined,
+    };
+  }
   if (!inner) return {};
   return {
     channel: typeof inner.channel === "string" ? inner.channel : undefined,
     contactName:
       typeof inner.contactName === "string" ? inner.contactName : undefined,
     callId: typeof inner.callId === "string" ? inner.callId : undefined,
+    receiptId:
+      typeof body.receiptId === "string"
+        ? body.receiptId
+        : typeof inner.receiptId === "string"
+          ? inner.receiptId
+          : undefined,
+    receiptStatus:
+      bodyReceiptStatus ??
+      (typeof inner.receiptStatus === "string"
+        ? inner.receiptStatus
+        : undefined),
+    callStatus:
+      typeof body.callStatus === "string"
+        ? body.callStatus
+        : typeof inner.callStatus === "string"
+          ? inner.callStatus
+          : undefined,
+    ok:
+      typeof body.ok === "boolean"
+        ? body.ok
+        : typeof inner.ok === "boolean"
+          ? inner.ok
+          : undefined,
     recipients: Array.isArray(inner.recipients)
       ? (inner.recipients as Array<{
           name: string;
           channel: string | null;
           ok: boolean;
           error: string | null;
+          status?: string;
+          receiptStatus?: string;
+          receiptId?: string;
+        }>)
+      : undefined,
+    receipts: Array.isArray(inner.receipts)
+      ? (inner.receipts as Array<{
+          receiptId: string;
+          channel: string;
+          status: string;
         }>)
       : undefined,
   };
@@ -225,6 +296,36 @@ function formatMessageTime(iso: string): string {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+function CommunicationReceiptRows({
+  receipts,
+}: {
+  receipts: CommunicationReceipt[];
+}) {
+  return (
+    <div className="space-y-1 rounded-lg border border-border/60 bg-muted/40 px-2.5 py-2">
+      {receipts.map((receipt) => (
+        <p
+          key={receipt.id}
+          data-testid={`status-communication-receipt-${receipt.id}`}
+          className="text-xs text-muted-foreground"
+        >
+          {isCallActionType(receipt.actionType) ? "Call" : "Message"}
+          {receipt.channel ? ` · ${channelDisplayLabel(receipt.channel)}` : ""}
+          {" — "}
+          {getCommunicationReceiptLabel(
+            receipt.status,
+            receipt.actionType,
+            receipt.callStatus,
+            receipt.channel,
+          )}
+          {" · "}
+          {formatMessageTime(receipt.createdAt)}
+        </p>
+      ))}
+    </div>
+  );
 }
 
 // ─── Chat item model ──────────────────────────────────────────────────────────
@@ -505,9 +606,15 @@ export function ElaineChatPanel({
     pendingNavigate,
     setPendingNavigate,
     pendingActions,
+    actionProgress,
+    repeatConfirmations,
     confirmingAll,
     executedActions,
     actionDone,
+    communicationReceipts,
+    automaticCommunicationProgress,
+    receiptLoadError,
+    conversationId,
     isStreaming,
     streamingContent,
     streamingReasoningSummary,
@@ -535,6 +642,49 @@ export function ElaineChatPanel({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const knownReceiptIds = new Set(
+    communicationReceipts.map((receipt) => receipt.id),
+  );
+  const liveAutomaticProgress = automaticCommunicationProgress.filter(
+    (progress) => !knownReceiptIds.has(progress.id),
+  );
+  const receiptAnchors = new Map<number, CommunicationReceipt[]>();
+  const anchoredReceiptIds = new Set<string>();
+  for (const receipt of communicationReceipts) {
+    const receiptTime = Date.parse(receipt.createdAt);
+    const assistantCandidates = messages
+      .map((message, index) => ({ message, index }))
+      .filter(
+        ({ message }) =>
+          message.role === "assistant" &&
+          message.createdAt &&
+          Number.isFinite(Date.parse(message.createdAt)),
+      );
+    if (!Number.isFinite(receiptTime) || assistantCandidates.length === 0) {
+      continue;
+    }
+    const preceding = assistantCandidates
+      .filter(({ message }) => Date.parse(message.createdAt!) <= receiptTime)
+      .sort(
+        (a, b) =>
+          Date.parse(b.message.createdAt!) - Date.parse(a.message.createdAt!),
+      )[0];
+    const nearest =
+      preceding ??
+      assistantCandidates.reduce((best, current) =>
+        Math.abs(Date.parse(current.message.createdAt!) - receiptTime) <
+        Math.abs(Date.parse(best.message.createdAt!) - receiptTime)
+          ? current
+          : best,
+      );
+    const entries = receiptAnchors.get(nearest.index) ?? [];
+    entries.push(receipt);
+    receiptAnchors.set(nearest.index, entries);
+    anchoredReceiptIds.add(receipt.id);
+  }
+  const unanchoredReceipts = communicationReceipts.filter(
+    (receipt) => !anchoredReceiptIds.has(receipt.id),
+  );
 
   // ── Infinite scroll-up (load older messages) ──────────────────────────────
   // Scrolling near the top of the message list fetches the previous page and
@@ -946,6 +1096,9 @@ export function ElaineChatPanel({
                     </span>
                   )}
                 </div>
+                {receiptAnchors.has(i) && (
+                  <CommunicationReceiptRows receipts={receiptAnchors.get(i)!} />
+                )}
               </div>
             </div>
           );
@@ -1059,31 +1212,60 @@ export function ElaineChatPanel({
           <div className="ml-8 flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50/60 p-3 dark:border-amber-800 dark:bg-amber-950/30">
             {settings?.actionConfirmationMode === "one_by_one" ? (
               <>
+                {repeatConfirmations.has(pendingActions[0]!) && (
+                  <p
+                    data-testid="warning-repeat-confirmation"
+                    className="text-xs font-medium text-amber-900 dark:text-amber-200"
+                  >
+                    A previous attempt may already have reached the recipient.{" "}
+                    Only confirm if you want another call or message.
+                  </p>
+                )}
                 <p className="text-xs font-medium text-foreground">
                   {pendingActions[0]!.label}
                 </p>
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="default"
-                    className="h-7 text-xs"
-                    disabled={executeAction.isPending}
-                    onClick={handleConfirmAction}
+                {repeatConfirmations.has(pendingActions[0]!) && (
+                  <p
+                    data-testid="warning-repeat-confirmation"
+                    className="text-xs font-medium text-amber-900 dark:text-amber-200"
                   >
-                    <Check className="h-3.5 w-3.5" />
-                    Confirm
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 text-xs"
-                    disabled={executeAction.isPending}
-                    onClick={handleSkipAction}
+                    A previous attempt may already have reached the recipient.
+                    Confirm only if you want an additional attempt.
+                  </p>
+                )}
+                {actionProgress.has(pendingActions[0]!) ? (
+                  <p
+                    data-testid="status-action-progress"
+                    className="text-xs font-medium text-amber-800 dark:text-amber-300"
                   >
-                    <X className="h-3.5 w-3.5" />
-                    Skip
-                  </Button>
-                </div>
+                    {actionProgress.get(pendingActions[0]!)}
+                  </p>
+                ) : (
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="default"
+                      className="h-7 text-xs"
+                      disabled={executeAction.isPending}
+                      onClick={() => handleConfirmAction()}
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                      {repeatConfirmations.has(pendingActions[0]!)
+                        ? repeatConfirmationPrompt(pendingActions[0]!)
+                        : "Confirm"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs"
+                      disabled={executeAction.isPending}
+                      onClick={handleSkipAction}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                      Skip
+                    </Button>
+                  </div>
+                )}
                 {pendingActions.length > 1 && (
                   <p className="text-xs text-muted-foreground">
                     +{pendingActions.length - 1} more
@@ -1093,31 +1275,68 @@ export function ElaineChatPanel({
             ) : (
               <>
                 <p className="text-xs font-medium text-foreground">
-                  {pendingActions.length} action
-                  {pendingActions.length > 1 ? "s" : ""} ready
+                  {confirmingAll
+                    ? "Sending approved actions"
+                    : `${pendingActions.length} action${pendingActions.length > 1 ? "s" : ""} ready`}
                 </p>
                 <ul className="space-y-1">
-                  {pendingActions.map((action, i) => (
-                    <li key={i} className="text-xs text-muted-foreground">
-                      • {action.label}
-                    </li>
-                  ))}
+                  {pendingActions.map((action, i) => {
+                    const repeat = repeatConfirmations.get(action);
+                    return (
+                      <li
+                        key={i}
+                        data-testid={`status-action-row-${i}`}
+                        className="space-y-1 text-xs text-muted-foreground"
+                      >
+                        • {actionProgress.get(action) ?? action.label}
+                        {repeat && (
+                          <div className="ml-3 space-y-1">
+                            <p
+                              data-testid="warning-repeat-confirmation"
+                              className="font-medium text-amber-900 dark:text-amber-200"
+                            >
+                              A previous attempt may already have reached the
+                              recipient. Confirm only if you want an additional
+                              attempt.
+                            </p>
+                            <Button
+                              size="sm"
+                              variant="default"
+                              className="h-7 text-xs"
+                              disabled={
+                                confirmingAll || executeAction.isPending
+                              }
+                              onClick={() => handleConfirmAction(action)}
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                              {repeatConfirmationPrompt(action)}
+                            </Button>
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
                 <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="default"
-                    className="h-7 text-xs"
-                    disabled={confirmingAll}
-                    onClick={handleConfirmAll}
-                  >
-                    <Check className="h-3.5 w-3.5" />
-                    Confirm all
-                  </Button>
+                  {pendingActions.some(
+                    (action) => !repeatConfirmations.has(action),
+                  ) && (
+                    <Button
+                      size="sm"
+                      variant="default"
+                      className="h-7 text-xs"
+                      disabled={confirmingAll}
+                      onClick={handleConfirmAll}
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                      {confirmingAll ? "Sending…" : "Confirm all"}
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="ghost"
                     className="h-7 text-xs"
+                    disabled={confirmingAll}
                     onClick={handleCancelAll}
                   >
                     <X className="h-3.5 w-3.5" />
@@ -1129,21 +1348,26 @@ export function ElaineChatPanel({
           </div>
         )}
 
-        {actionDone &&
-          executedActions.length > 0 &&
+        {executedActions.length > 0 &&
           (() => {
             // Separate communication actions from generic ones
-            const commActions = executedActions.filter(
-              (a) => a.type === "message_contact" || a.type === "call_contact",
+            const commActions = executedActions.filter((a) =>
+              isCommunicationActionType(a.type),
             );
             const otherActions = executedActions.filter(
-              (a) => a.type !== "message_contact" && a.type !== "call_contact",
+              (a) => !isCommunicationActionType(a.type),
+            );
+            const completedOtherActions = otherActions.filter(
+              (action) => action.status >= 200 && action.status < 400,
+            );
+            const failedOtherActions = otherActions.filter(
+              (action) => action.status < 200 || action.status >= 400,
             );
 
             return (
               <>
-                {/* Generic "Done" for non-communication actions */}
-                {otherActions.length > 0 && (
+                {/* Keep generic actions separate from communication evidence. */}
+                {actionDone && completedOtherActions.length > 0 && (
                   <div className="ml-8 rounded-xl border border-green-200 bg-green-50/60 px-3 py-2 dark:border-green-800 dark:bg-green-950/30">
                     <p className="text-xs font-medium text-green-800 dark:text-green-300">
                       <Check className="mr-1 inline h-3.5 w-3.5" />
@@ -1151,10 +1375,33 @@ export function ElaineChatPanel({
                     </p>
                   </div>
                 )}
+                {actionDone && failedOtherActions.length > 0 && (
+                  <div className="ml-8 rounded-xl border border-red-200 bg-red-50/60 px-3 py-2 dark:border-red-800 dark:bg-red-950/30">
+                    <p className="text-xs font-medium text-red-800 dark:text-red-300">
+                      <AlertCircle className="mr-1 inline h-3.5 w-3.5" />
+                      The action could not be completed safely.
+                    </p>
+                  </div>
+                )}
 
                 {/* Rich result cards for communication actions */}
                 {commActions.map((action, idx) => {
                   const parsed = parseCommunicationResult(action.result);
+                  const visibleRecipients = parsed.recipients?.filter(
+                    (recipient) =>
+                      !recipient.receiptId ||
+                      !knownReceiptIds.has(recipient.receiptId),
+                  );
+                  const visibleBroadcastReceipts = parsed.receipts?.filter(
+                    (receipt) => !knownReceiptIds.has(receipt.receiptId),
+                  );
+
+                  if (
+                    parsed.receiptId &&
+                    knownReceiptIds.has(parsed.receiptId)
+                  ) {
+                    return null;
+                  }
 
                   // Error result
                   if (parsed.error) {
@@ -1165,22 +1412,32 @@ export function ElaineChatPanel({
                       >
                         <p className="text-xs font-medium text-red-800 dark:text-red-300 flex items-center gap-1">
                           <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                          {parsed.error}
+                          {parsed.receiptStatus
+                            ? getCommunicationReceiptLabel(
+                                parsed.receiptStatus,
+                                action.type,
+                              )
+                            : parsed.error}
                         </p>
                       </div>
                     );
                   }
 
                   // call_contact result
-                  if (action.type === "call_contact") {
+                  if (isCallActionType(action.type)) {
                     return (
                       <div
                         key={idx}
-                        className="ml-8 rounded-xl border border-green-200 bg-green-50/60 px-3 py-2 dark:border-green-800 dark:bg-green-950/30"
+                        className="ml-8 rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2 dark:border-amber-800 dark:bg-amber-950/30"
                       >
-                        <p className="text-xs font-medium text-green-800 dark:text-green-300 flex items-center gap-1">
+                        <p className="text-xs font-medium text-amber-800 dark:text-amber-300 flex items-center gap-1">
                           <Phone className="h-3.5 w-3.5 shrink-0" />
-                          Call initiated
+                          {getCommunicationReceiptLabel(
+                            parsed.receiptStatus ??
+                              (parsed.callId ? "pending" : "unknown"),
+                            action.type,
+                            parsed.callStatus,
+                          )}
                           {parsed.contactName
                             ? ` to ${parsed.contactName}`
                             : ""}
@@ -1190,21 +1447,19 @@ export function ElaineChatPanel({
                   }
 
                   // message_contact multi-recipient
-                  if (parsed.recipients && parsed.recipients.length > 0) {
-                    const delivered = parsed.recipients.filter((r) => r.ok);
-                    const failed = parsed.recipients.filter((r) => !r.ok);
+                  if (visibleRecipients && visibleRecipients.length > 0) {
                     return (
                       <div
                         key={idx}
-                        className="ml-8 rounded-xl border border-green-200 bg-green-50/60 px-3 py-2 dark:border-green-800 dark:bg-green-950/30"
+                        className="ml-8 rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2 dark:border-amber-800 dark:bg-amber-950/30"
                       >
-                        <p className="text-xs font-medium text-green-800 dark:text-green-300 flex items-center gap-1 mb-1.5">
+                        <p className="text-xs font-medium text-amber-800 dark:text-amber-300 flex items-center gap-1 mb-1.5">
                           <Users className="h-3.5 w-3.5 shrink-0" />
-                          Message sent to {delivered.length}/
-                          {parsed.recipients.length}
+                          Message outcomes for {visibleRecipients.length}{" "}
+                          recipient{visibleRecipients.length === 1 ? "" : "s"}
                         </p>
                         <ul className="space-y-0.5">
-                          {parsed.recipients.map((r, ri) => (
+                          {visibleRecipients.map((r, ri) => (
                             <li
                               key={ri}
                               className="flex items-center gap-1.5 text-xs"
@@ -1213,71 +1468,182 @@ export function ElaineChatPanel({
                                 <>
                                   <ChannelIcon
                                     channel={r.channel}
-                                    className="h-3 w-3 shrink-0 text-green-600 dark:text-green-400"
+                                    className="h-3 w-3 shrink-0 text-amber-700 dark:text-amber-300"
                                   />
-                                  <span className="text-green-800 dark:text-green-300">
-                                    {r.name} — {channelDisplayLabel(r.channel)}
+                                  <span className="text-amber-800 dark:text-amber-300">
+                                    {r.name} —{" "}
+                                    {(r.receiptStatus ?? r.status)
+                                      ? getCommunicationReceiptLabel(
+                                          r.receiptStatus ?? r.status!,
+                                          action.type,
+                                          null,
+                                          r.channel,
+                                        )
+                                      : `Provider accepted via ${channelDisplayLabel(r.channel)}; delivery pending`}
                                   </span>
                                 </>
                               ) : (
                                 <>
                                   <AlertCircle className="h-3 w-3 shrink-0 text-red-500" />
                                   <span className="text-red-700 dark:text-red-400">
-                                    {r.name}: {r.error ?? "Failed"}
+                                    {r.name}:{" "}
+                                    {(r.receiptStatus ?? r.status)
+                                      ? getCommunicationReceiptLabel(
+                                          r.receiptStatus ?? r.status!,
+                                          action.type,
+                                          null,
+                                          r.channel,
+                                        )
+                                      : "Failed"}
                                   </span>
                                 </>
                               )}
                             </li>
                           ))}
                         </ul>
-                        {failed.length > 0 && delivered.length === 0 && (
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            Check each contact's profile to add a reachable
-                            channel.
-                          </p>
-                        )}
                       </div>
                     );
+                  }
+
+                  if (
+                    visibleBroadcastReceipts &&
+                    visibleBroadcastReceipts.length > 0
+                  ) {
+                    return (
+                      <div
+                        key={idx}
+                        className="ml-8 rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2 dark:border-amber-800 dark:bg-amber-950/30"
+                      >
+                        <p className="mb-1.5 flex items-center gap-1 text-xs font-medium text-amber-800 dark:text-amber-300">
+                          <Users className="h-3.5 w-3.5 shrink-0" />
+                          Channel outcomes
+                        </p>
+                        <ul className="space-y-0.5">
+                          {visibleBroadcastReceipts.map((receipt) => (
+                            <li
+                              key={receipt.receiptId}
+                              className="flex items-center gap-1.5 text-xs text-amber-800 dark:text-amber-300"
+                            >
+                              <ChannelIcon
+                                channel={receipt.channel}
+                                className="h-3 w-3 shrink-0"
+                              />
+                              {channelDisplayLabel(receipt.channel)} —{" "}
+                              {getCommunicationReceiptLabel(
+                                receipt.status,
+                                action.type,
+                                null,
+                                receipt.channel,
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    );
+                  }
+
+                  if (
+                    (parsed.recipients?.length ?? 0) > 0 &&
+                    visibleRecipients?.length === 0
+                  ) {
+                    return null;
+                  }
+                  if (
+                    (parsed.receipts?.length ?? 0) > 0 &&
+                    visibleBroadcastReceipts?.length === 0
+                  ) {
+                    return null;
                   }
 
                   // message_contact single recipient
                   return (
                     <div
                       key={idx}
-                      className="ml-8 rounded-xl border border-green-200 bg-green-50/60 px-3 py-2 dark:border-green-800 dark:bg-green-950/30"
+                      className="ml-8 rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2 dark:border-amber-800 dark:bg-amber-950/30"
                     >
-                      <p className="text-xs font-medium text-green-800 dark:text-green-300 flex items-center gap-1">
+                      <p
+                        data-testid={`status-communication-action-${idx}`}
+                        className="text-xs font-medium text-amber-800 dark:text-amber-300 flex items-center gap-1"
+                      >
                         {parsed.channel ? (
                           <ChannelIcon
                             channel={parsed.channel}
                             className="h-3.5 w-3.5 shrink-0"
                           />
                         ) : (
-                          <Check className="h-3.5 w-3.5 shrink-0" />
+                          <MessageSquare className="h-3.5 w-3.5 shrink-0" />
+                        )}
+                        {getCommunicationReceiptLabel(
+                          parsed.receiptStatus ??
+                            (isCallActionType(action.type)
+                              ? parsed.callId
+                                ? "pending"
+                                : "unknown"
+                              : parsed.ok === true
+                                ? "provider_accepted"
+                                : parsed.ok === false
+                                  ? "failed"
+                                  : "unknown"),
+                          action.type,
+                          parsed.callStatus,
                         )}
                         {parsed.channel
-                          ? `Sent via ${channelDisplayLabel(parsed.channel)}`
-                          : "Sent"}
+                          ? ` via ${channelDisplayLabel(parsed.channel)}`
+                          : ""}
                         {parsed.contactName ? ` to ${parsed.contactName}` : ""}
                       </p>
                     </div>
                   );
                 })}
-
-                {/* If ALL executed actions were communication and all errored,
-                  there may be nothing else shown — show a fallback Done for
-                  any remaining non-error comm actions with no rich data */}
-                {commActions.length === 0 && otherActions.length === 0 && (
-                  <div className="ml-8 rounded-xl border border-green-200 bg-green-50/60 px-3 py-2 dark:border-green-800 dark:bg-green-950/30">
-                    <p className="text-xs font-medium text-green-800 dark:text-green-300">
-                      <Check className="mr-1 inline h-3.5 w-3.5" />
-                      Done
-                    </p>
-                  </div>
-                )}
               </>
             );
           })()}
+
+        {unanchoredReceipts.length > 0 && (
+          <section
+            aria-label="Unassociated communication receipts"
+            data-testid="list-communication-receipts"
+            className="ml-8 space-y-1 rounded-xl border border-border bg-muted/40 p-3"
+          >
+            <p className="text-xs font-medium text-foreground">
+              Recent communication status
+            </p>
+            <CommunicationReceiptRows receipts={unanchoredReceipts} />
+          </section>
+        )}
+        {liveAutomaticProgress.length > 0 && (
+          <section
+            aria-label="Automatic communication progress"
+            data-testid="list-automatic-communication-progress"
+            className="ml-8 space-y-1 rounded-xl border border-amber-200 bg-amber-50/60 p-3 dark:border-amber-800 dark:bg-amber-950/30"
+          >
+            {liveAutomaticProgress.map((progress) => (
+              <p
+                key={progress.id}
+                data-testid={`status-auto-communication-${progress.id}`}
+                className="text-xs font-medium text-amber-800 dark:text-amber-300"
+              >
+                {getCommunicationReceiptLabel(
+                  progress.status,
+                  progress.actionType,
+                  null,
+                  progress.channel,
+                )}
+                {progress.channel
+                  ? ` · ${channelDisplayLabel(progress.channel)}`
+                  : ""}
+              </p>
+            ))}
+          </section>
+        )}
+        {receiptLoadError && conversationId != null && (
+          <p
+            data-testid="status-communication-receipts-error"
+            className="ml-8 text-xs text-destructive"
+          >
+            Communication status couldn't be loaded.
+          </p>
+        )}
 
         <div ref={endRef} />
       </div>

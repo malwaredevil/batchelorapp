@@ -43,6 +43,10 @@ const CREDENTIALS_TTL_MS = 10 * 60 * 1_000;
 
 let cachedCredentials: CachedCredentials | null = null;
 
+function safeErrorType(err: unknown): string {
+  return err instanceof Error ? err.name : "UnknownError";
+}
+
 // Lazily fetches and caches the AgentPhone agent ID and its current phone
 // number for this workspace. The cache has a 10-minute TTL so that number
 // changes (e.g. after an account upgrade) are picked up automatically without
@@ -57,9 +61,8 @@ async function getAgentCredentials(): Promise<AgentCredentials> {
     { op: "list-agents" },
   );
   if (!response.ok) {
-    const text = await response.text().catch(() => "");
     logger.error(
-      { status: response.status, text },
+      { status: response.status },
       "agentphone: failed to list agents",
     );
     throw new Error(
@@ -105,7 +108,7 @@ async function clearPendingOutboundCallContextBestEffort(
     } catch (err) {
       if (attempt === 1) {
         logger.error(
-          { err, toNumber, pendingId },
+          { errorType: safeErrorType(err), pendingId },
           "agentphone: failed to clear outbound call context after provider failure",
         );
       }
@@ -134,18 +137,18 @@ function retryPendingOutboundContextCleanup(
         return;
       } catch (err) {
         logger.warn(
-          { err, toNumber, pendingId },
+          { errorType: safeErrorType(err), pendingId },
           "agentphone: pending context cleanup retry failed",
         );
       }
     }
     logger.error(
-      { toNumber, pendingId },
+      { pendingId },
       "agentphone: pending context cleanup retries exhausted",
     );
   })().catch((err) =>
     logger.error(
-      { err, toNumber, pendingId },
+      { errorType: safeErrorType(err), pendingId },
       "agentphone: pending context cleanup retry crashed",
     ),
   );
@@ -179,19 +182,19 @@ function retryPendingOutboundCallAttachment(
       } catch (err) {
         if (err instanceof PendingOutboundContextChangedError) {
           logger.info(
-            { err, callId, pendingId },
+            { callId, pendingId },
             "agentphone: stopping outbound context attachment after row changed or expired",
           );
           return;
         }
         if (Date.now() >= deadline) {
           logger.error(
-            { err, callId, pendingId },
+            { errorType: safeErrorType(err), callId, pendingId },
             "agentphone: background outbound call context attachment exhausted",
           );
         } else {
           logger.warn(
-            { err, callId, pendingId, attempt },
+            { errorType: safeErrorType(err), callId, pendingId, attempt },
             "agentphone: background outbound call context attachment retry failed",
           );
         }
@@ -200,7 +203,7 @@ function retryPendingOutboundCallAttachment(
   })().catch((err) => {
     // Keep a defensive containment boundary around fire-and-forget work.
     logger.error(
-      { err, callId, pendingId },
+      { errorType: safeErrorType(err), callId, pendingId },
       "agentphone: background outbound call context attachment crashed",
     );
   });
@@ -283,7 +286,10 @@ export async function initiateOutboundCall(
   } catch (err) {
     // Never place a call without its correlated purpose. The scheduler can
     // retry through its normal fallback path.
-    logger.error({ err }, "agentphone: failed to seed outbound call context");
+    logger.error(
+      { errorType: safeErrorType(err) },
+      "agentphone: failed to seed outbound call context",
+    );
     throw err;
   }
 
@@ -317,7 +323,7 @@ export async function initiateOutboundCall(
       retryPendingOutboundContextCleanup(opts.toNumber, pendingId);
     }
     logger.warn(
-      { err, callId: "unknown", toNumber: opts.toNumber },
+      { errorType: safeErrorType(err), callId: "unknown" },
       "agentphone: outbound call acceptance is indeterminate; cleared uncorrelatable context",
     );
     throw new OutboundCallIndeterminateError(
@@ -334,7 +340,6 @@ export async function initiateOutboundCall(
       if (!cleared)
         retryPendingOutboundContextCleanup(opts.toNumber, pendingId);
     }
-    const text = await response.text().catch(() => "");
     if (response.status === 408 || response.status >= 500) {
       throw new OutboundCallIndeterminateError(
         { phoneNumber: opts.toNumber, pendingId: pendingId ?? "" },
@@ -342,7 +347,7 @@ export async function initiateOutboundCall(
       );
     }
     logger.error(
-      { status: response.status, text },
+      { status: response.status },
       "agentphone: failed to initiate outbound call",
     );
     throw new Error(
@@ -404,7 +409,7 @@ export async function initiateOutboundCall(
       // place so the first outbound webhook can atomically self-attach it;
       // there is no assumed cancellation endpoint.
       logger.warn(
-        { err: attachError, callId },
+        { errorType: safeErrorType(attachError), callId },
         "agentphone: failed to attach outbound call context; webhook recovery will retry",
       );
       retryPendingOutboundCallAttachment(opts.toNumber, pendingId, callId);
@@ -514,6 +519,7 @@ export async function waitForCallOutcome(
   callId: string,
   timeoutMs = 12_000,
   pendingContext?: PendingOutboundContext,
+  onProviderStatus?: (status: string) => Promise<void> | void,
 ): Promise<CallOutcome> {
   const deadline = Date.now() + timeoutMs;
   let delay = 1_000;
@@ -534,6 +540,19 @@ export async function waitForCallOutcome(
         durationSeconds?: number;
       };
       const status = (data.status ?? "").toLowerCase().replace(/_/g, "-");
+      if (status && onProviderStatus) {
+        try {
+          await onProviderStatus(status);
+        } catch (err) {
+          logger.warn(
+            {
+              callId,
+              errorType: err instanceof Error ? err.name : "UnknownError",
+            },
+            "agentphone: failed to persist outbound call status",
+          );
+        }
+      }
       const duration = data.durationSeconds ?? 0;
       // AgentPhone marks immediately-ended calls as "completed" with 0 duration
       // (e.g. call blocked by screening). Only treat it as answered if the call
@@ -585,7 +604,7 @@ async function clearPendingOutcomeContext(
     }
   } catch (err) {
     logger.warn(
-      { err, callId },
+      { errorType: safeErrorType(err), callId },
       "agentphone: failed to clear terminal outbound call context",
     );
     if (pendingContext) {
@@ -602,12 +621,16 @@ async function clearPendingOutcomeContext(
 export async function reconcileOutboundCallOutcome(
   callId: string,
   pendingContext?: PendingOutboundContext,
-  options?: { interactiveTimeoutMs?: number },
+  options?: {
+    interactiveTimeoutMs?: number;
+    onProviderStatus?: (status: string) => Promise<void> | void;
+  },
 ): Promise<CallOutcome> {
   const outcome = await waitForCallOutcome(
     callId,
     options?.interactiveTimeoutMs,
     pendingContext,
+    options?.onProviderStatus,
   );
   if (outcome !== "pending") return outcome;
   void (async () => {
@@ -639,6 +662,19 @@ export async function reconcileOutboundCallOutcome(
           durationSeconds?: number;
         };
         const status = (data.status ?? "").toLowerCase().replace(/_/g, "-");
+        if (status && options?.onProviderStatus) {
+          try {
+            await options.onProviderStatus(status);
+          } catch (err) {
+            logger.warn(
+              {
+                callId,
+                errorType: err instanceof Error ? err.name : "UnknownError",
+              },
+              "agentphone: failed to persist outbound call status",
+            );
+          }
+        }
         const terminal =
           status === "no-answer" ||
           status === "busy" ||
@@ -654,7 +690,7 @@ export async function reconcileOutboundCallOutcome(
         return;
       } catch (err) {
         logger.warn(
-          { err, callId },
+          { errorType: safeErrorType(err), callId },
           "agentphone: lifecycle outcome reconciliation failed; retrying",
         );
         continue;
@@ -662,7 +698,7 @@ export async function reconcileOutboundCallOutcome(
     }
   })().catch((err) =>
     logger.warn(
-      { err, callId },
+      { errorType: safeErrorType(err), callId },
       "agentphone: lifecycle outcome reconciliation crashed",
     ),
   );

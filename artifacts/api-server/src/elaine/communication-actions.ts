@@ -37,6 +37,19 @@ import {
   type RelativeTimeSpec,
 } from "../lib/relative-time-resolver";
 import { isValidIanaTimeZone } from "../lib/timezone";
+import {
+  claimCommunicationProposal,
+  cancelScheduledCommunicationReceipts,
+  createOrReadCommunicationReceipt,
+  createOrReadCommunicationReceiptWithRepeatCheck,
+  findRecentCommunicationReceiptById,
+  listProposalCommunicationReceipts,
+  listRecentCommunicationReceiptsForRecipientChannels,
+  removeUnstartedCommunicationReceipts,
+  updateCallCommunicationReceiptsByProviderId,
+  updateCommunicationReceipt,
+  type CommunicationReceiptStatus,
+} from "./communication-receipts";
 
 // ---------------------------------------------------------------------------
 // Schemas
@@ -90,6 +103,10 @@ function normalizeExactIsoForDisplay(iso: string, tz: string): string {
   } catch {
     return iso;
   }
+}
+
+function safeErrorType(err: unknown): string {
+  return err instanceof Error ? err.name : "UnknownError";
 }
 
 // Picks the timezone to use for BOTH resolving a scheduled time and
@@ -153,6 +170,248 @@ const MessageContactPayload = z.object({
 const CancelScheduledContactPayload = z.object({
   scheduledActionId: z.number().int().positive(),
 });
+
+export interface CommunicationReceiptContext {
+  attemptKey: string;
+  attemptKeyIsFinal?: boolean;
+  proposalClaimKey?: string;
+  payloadHash: string;
+  ownerUserId: number;
+  actionType: string;
+  conversationId: number | null;
+  acknowledgeRepeat?: string;
+  status?: CommunicationReceiptStatus;
+  scheduledActionId?: number;
+  onClaimed?: (receipt: {
+    id: string;
+    actionType: string;
+    channel: string;
+    status: string;
+    conversationId: number | null;
+  }) => void;
+}
+
+async function claimCommunicationReceipt(
+  context: CommunicationReceiptContext | undefined,
+  recipientUserId: number | null,
+  channel: string,
+): Promise<Awaited<
+  ReturnType<typeof createOrReadCommunicationReceipt>
+> | null> {
+  if (!context) return null;
+  let attemptKey = context.attemptKeyIsFinal
+    ? context.attemptKey
+    : `${context.attemptKey}:${recipientUserId ?? "none"}` +
+      (context.actionType === "broadcast_message" ? `:${channel}` : "");
+  if (
+    context.proposalClaimKey &&
+    recipientUserId !== null &&
+    context.status !== "scheduled"
+  ) {
+    const result = await createOrReadCommunicationReceiptWithRepeatCheck({
+      attemptKey,
+      payloadHash: context.payloadHash,
+      ownerUserId: context.ownerUserId,
+      actionType: context.actionType,
+      channel,
+      conversationId: context.conversationId,
+      recipientUserId,
+      ...(context.acknowledgeRepeat
+        ? { acknowledgedReceiptId: context.acknowledgeRepeat }
+        : {}),
+    });
+    if (result.kind === "repeat_confirmation") {
+      throw new RepeatConfirmationRequiredError(
+        result.receipt.id,
+        result.receipt.status,
+      );
+    }
+    if (result.kind === "stale_acknowledgement") {
+      throw new StaleRepeatAcknowledgementError();
+    }
+    if (result.claimed) {
+      context.onClaimed?.({
+        id: result.receipt.id,
+        actionType: result.receipt.actionType,
+        channel: result.receipt.channel,
+        status: result.receipt.status,
+        conversationId: result.receipt.conversationId,
+      });
+    }
+    return result;
+  }
+  const result = await createOrReadCommunicationReceipt({
+    attemptKey,
+    payloadHash: context.payloadHash,
+    ownerUserId: context.ownerUserId,
+    actionType: context.actionType,
+    channel,
+    ...(context.status ? { status: context.status } : {}),
+    conversationId: context.conversationId,
+    recipientUserId,
+    ...(context.scheduledActionId !== undefined
+      ? { scheduledActionId: context.scheduledActionId }
+      : {}),
+  });
+  if (result.claimed) {
+    context.onClaimed?.({
+      id: result.receipt.id,
+      actionType: result.receipt.actionType,
+      channel: result.receipt.channel,
+      status: result.receipt.status,
+      conversationId: result.receipt.conversationId,
+    });
+  }
+  return result;
+}
+
+export class RepeatConfirmationRequiredError extends Error {
+  constructor(
+    readonly receiptId: string,
+    readonly status: string,
+  ) {
+    super("This recipient has a recent communication receipt");
+    this.name = "RepeatConfirmationRequiredError";
+  }
+}
+
+export class StaleRepeatAcknowledgementError extends Error {
+  constructor() {
+    super("The repeat confirmation is stale");
+    this.name = "StaleRepeatAcknowledgementError";
+  }
+}
+
+/**
+ * A consumed proposal is answered with the receipts it already produced, so
+ * a duplicate approval (double-click, retry after a lost response) reports
+ * the real prior outcome rather than an error. Only a proposal that produced
+ * no receipt (it failed before dispatch) is rejected.
+ */
+async function proposalAlreadyUsedResult(
+  actionType: CommunicationActionType,
+  context: CommunicationReceiptContext | undefined,
+): Promise<{ status: number; body: unknown }> {
+  const receipts = context
+    ? await listProposalCommunicationReceipts({
+        attemptKey: context.attemptKey,
+        ownerUserId: context.ownerUserId,
+        ...(context.acknowledgeRepeat
+          ? { acknowledgedReceiptId: context.acknowledgeRepeat }
+          : {}),
+      })
+    : [];
+  if (receipts.length === 0) {
+    return {
+      status: 409,
+      body: { error: "This communication proposal has already been used." },
+    };
+  }
+  if (receipts.length === 1) {
+    return receiptDuplicateResult(actionType, {
+      receipt: receipts[0]!,
+      claimed: false,
+    });
+  }
+  return {
+    status: 200,
+    body: {
+      type: actionType,
+      result: {
+        receipts: receipts.map((receipt) => ({
+          id: receipt.id,
+          status: receipt.status,
+          recipientUserId: receipt.recipientUserId,
+          channel: receipt.channel,
+        })),
+      },
+    },
+  };
+}
+
+/** Tool result for a restricted-channel send blocked by a recent attempt. */
+export function restrictedRepeatConfirmationResult(status: string): string {
+  const meaning =
+    status === "accepted"
+      ? "the provider accepted it, which does not confirm delivery"
+      : status === "executing"
+        ? "it is still being sent"
+        : "its outcome is unknown — it may or may not have gone out";
+  return (
+    `Not sent: this recipient already has a recent attempt on this channel with recorded status "${status}" (${meaning}). ` +
+    "Nothing new was sent. Tell the user that status exactly, do not say it failed, and explain that another attempt this soon needs explicit confirmation in the Elaine app, where they can approve a repeat."
+  );
+}
+
+async function claimProposalBeforeExecution(
+  context: CommunicationReceiptContext | undefined,
+): Promise<boolean> {
+  if (!context?.proposalClaimKey) return true;
+  return claimCommunicationProposal({
+    proposalKey: context.proposalClaimKey,
+    ownerUserId: context.ownerUserId,
+    payloadHash: context.payloadHash,
+  });
+}
+
+async function finishCommunicationReceipt(
+  receipt: Awaited<
+    ReturnType<typeof createOrReadCommunicationReceipt>
+  >["receipt"],
+  status: CommunicationReceiptStatus,
+  details?: {
+    channel?: string;
+    providerId?: string | null;
+    callStatus?: string | null;
+  },
+): Promise<void> {
+  await updateCommunicationReceipt(receipt.id, { status, ...details });
+}
+
+function receiptDuplicateResult(
+  actionType: string,
+  claimed: Awaited<ReturnType<typeof createOrReadCommunicationReceipt>>,
+): { status: number; body: unknown } {
+  return {
+    status: 200,
+    body: {
+      type: actionType,
+      result: {
+        receiptId: claimed.receipt.id,
+        receiptStatus: claimed.receipt.status,
+        channel: claimed.receipt.channel,
+        ...(claimed.receipt.providerId
+          ? { providerId: claimed.receipt.providerId }
+          : {}),
+        ...(claimed.receipt.callStatus
+          ? { callStatus: claimed.receipt.callStatus }
+          : {}),
+      },
+    },
+  };
+}
+
+function addReceiptToResult(
+  result: { status: number; body: unknown },
+  receiptId: string,
+  receiptStatus: CommunicationReceiptStatus,
+): { status: number; body: unknown } {
+  if (!result.body || typeof result.body !== "object") return result;
+  const body = result.body as Record<string, unknown>;
+  const inner = body.result;
+  if (!inner || typeof inner !== "object") return result;
+  return {
+    ...result,
+    body: {
+      ...body,
+      result: {
+        ...(inner as Record<string, unknown>),
+        receiptId,
+        receiptStatus,
+      },
+    },
+  };
+}
 
 // Canonical channel enum values for continue_in_channel. Exported so the JSON
 // tool-schema enum and the Zod schema share a single array — same drift-
@@ -460,10 +719,16 @@ export const communicationActionSchemas = [
   z.object({
     type: z.literal("call_contact"),
     payload: CallContactPayload,
+    proposalId: z.string().min(1).max(2048).optional(),
+    acknowledgeRepeat: z.string().uuid().optional(),
+    conversationId: z.number().int().positive().nullable().optional(),
   }),
   z.object({
     type: z.literal("message_contact"),
     payload: MessageContactPayload,
+    proposalId: z.string().min(1).max(2048).optional(),
+    acknowledgeRepeat: z.string().uuid().optional(),
+    conversationId: z.number().int().positive().nullable().optional(),
   }),
   z.object({
     type: z.literal("cancel_scheduled_contact"),
@@ -472,14 +737,23 @@ export const communicationActionSchemas = [
   z.object({
     type: z.literal("continue_in_channel"),
     payload: ContinueInChannelPayload,
+    proposalId: z.string().min(1).max(2048).optional(),
+    acknowledgeRepeat: z.string().uuid().optional(),
+    conversationId: z.number().int().positive().nullable().optional(),
   }),
   z.object({
     type: z.literal("call_me"),
     payload: CallMePayload,
+    proposalId: z.string().min(1).max(2048).optional(),
+    acknowledgeRepeat: z.string().uuid().optional(),
+    conversationId: z.number().int().positive().nullable().optional(),
   }),
   z.object({
     type: z.literal("broadcast_message"),
     payload: BroadcastMessagePayload,
+    proposalId: z.string().min(1).max(2048).optional(),
+    acknowledgeRepeat: z.string().uuid().optional(),
+    conversationId: z.number().int().positive().nullable().optional(),
   }),
 ] as const;
 
@@ -491,6 +765,40 @@ export const COMMUNICATION_ACTION_TYPES = [
   "call_me",
   "broadcast_message",
 ] as const;
+
+export const RECEIPT_ACTION_TYPES = [
+  "call_contact",
+  "message_contact",
+  "continue_in_channel",
+  "call_me",
+  "broadcast_message",
+] as const;
+
+export const GET_COMMUNICATION_RECEIPTS_TOOL_NAME =
+  "get_recent_communication_receipts";
+
+export const communicationReceiptsReadTool: OpenAI.Chat.Completions.ChatCompletionTool =
+  {
+    type: "function",
+    function: {
+      name: GET_COMMUNICATION_RECEIPTS_TOOL_NAME,
+      description:
+        "Read recent communication execution receipts for this user. MUST call this when asked whether Elaine called, texted, emailed, or otherwise sent something, or whether an attempt went through. Report the recorded status exactly; accepted/pending is not delivered. If no receipt is returned, say there is no recorded execution.",
+      parameters: {
+        type: "object",
+        properties: {
+          limit: {
+            type: "integer",
+            minimum: 1,
+            maximum: 20,
+            description: "Maximum recent receipts to return; defaults to 10.",
+          },
+        },
+        required: [],
+        additionalProperties: false,
+      },
+    },
+  };
 
 export type CommunicationActionType =
   (typeof COMMUNICATION_ACTION_TYPES)[number];
@@ -547,6 +855,7 @@ async function resolveContact(name: string): Promise<ResolvedContact | null> {
 export async function fireCallContact(
   contactName: string,
   message: string,
+  receiptContext?: CommunicationReceiptContext,
 ): Promise<{ status: number; body: unknown }> {
   const contact = await resolveContact(contactName);
   if (!contact) {
@@ -584,6 +893,27 @@ export async function fireCallContact(
       },
     };
   }
+  const claimed = await claimCommunicationReceipt(
+    receiptContext,
+    contact.id,
+    "voice",
+  );
+  if (claimed && !claimed.claimed) {
+    return {
+      status: 200,
+      body: {
+        type: "call_contact",
+        result: {
+          channel: "voice",
+          receiptId: claimed.receipt.id,
+          receiptStatus: claimed.receipt.status,
+          callStatus: claimed.receipt.callStatus,
+          callId: claimed.receipt.providerId,
+          contactName: contact.displayName ?? contactName,
+        },
+      },
+    };
+  }
   try {
     const { callId, pendingOutboundContext } = await initiateOutboundCall({
       toNumber: contact.phoneNumber,
@@ -591,28 +921,52 @@ export async function fireCallContact(
       openingMessage: message,
       callScreeningPurpose: "household message",
     });
-    logger.info(
-      { callId, toNumber: contact.phoneNumber },
-      "elaine: initiated outbound call",
-    );
+    logger.info({ callId }, "elaine: initiated outbound call");
+    if (claimed) {
+      await finishCommunicationReceipt(claimed.receipt, "accepted", {
+        providerId: callId,
+        callStatus: "pending",
+      });
+    }
 
     // Poll for a terminal status (answered / voicemail / no-answer / error).
     // Returns "pending" if the 12-second window closes without a terminal
     // status — callers should treat "pending" as "call initiated, outcome unknown".
-    const callStatus = await reconcileOutboundCallOutcome(
+    let providerCallStatus = "pending";
+    const callOutcome = await reconcileOutboundCallOutcome(
       callId,
       pendingOutboundContext,
+      {
+        onProviderStatus: async (status) => {
+          providerCallStatus = status;
+          if (claimed) {
+            await updateCallCommunicationReceiptsByProviderId(callId, status);
+          }
+        },
+      },
     );
-    logger.info({ callId, callStatus }, "elaine: outbound call outcome");
+    logger.info({ callId, callOutcome }, "elaine: outbound call outcome");
 
     return {
       status: 200,
       body: {
         type: "call_contact",
         result: {
+          channel: "voice",
           callId,
-          callStatus,
+          callStatus: providerCallStatus,
           contactName: contact.displayName ?? contactName,
+          ...(claimed
+            ? {
+                receiptId: claimed.receipt.id,
+                receiptStatus:
+                  callOutcome === "pending"
+                    ? "accepted"
+                    : callOutcome === "error"
+                      ? "failed"
+                      : "completed",
+              }
+            : {}),
         },
       },
     };
@@ -621,8 +975,13 @@ export async function fireCallContact(
       typeof OutboundCallIndeterminateError === "function" &&
       err instanceof OutboundCallIndeterminateError
     ) {
+      if (claimed) {
+        await finishCommunicationReceipt(claimed.receipt, "unknown", {
+          callStatus: "pending",
+        });
+      }
       logger.warn(
-        { err, toNumber: contact.phoneNumber },
+        { errorType: safeErrorType(err) },
         "elaine: outbound call acceptance indeterminate; avoiding duplicate fallback",
       );
       return {
@@ -630,17 +989,43 @@ export async function fireCallContact(
         body: {
           type: "call_contact",
           result: {
+            channel: "voice",
             callId: null,
             callStatus: "pending",
             contactName: contact.displayName ?? contactName,
+            ...(claimed
+              ? {
+                  receiptId: claimed.receipt.id,
+                  receiptStatus: "unknown",
+                }
+              : {}),
           },
         },
       };
     }
-    logger.error({ err }, "elaine: failed to initiate outbound call");
+    if (claimed) {
+      await finishCommunicationReceipt(claimed.receipt, "unknown");
+    }
+    logger.error(
+      { errorType: safeErrorType(err) },
+      "elaine: failed to initiate outbound call",
+    );
     return {
       status: 500,
-      body: { error: "Failed to place the call. Please try again." },
+      body: {
+        error: claimed
+          ? "Call status is unknown; check its receipt before retrying."
+          : "Failed to place the call. Please try again.",
+        ...(claimed
+          ? {
+              result: {
+                receiptId: claimed.receipt.id,
+                receiptStatus: "unknown",
+                channel: "voice",
+              },
+            }
+          : {}),
+      },
     };
   }
 }
@@ -657,6 +1042,7 @@ export async function fireCallContact(
 export async function fireCallMe(
   userId: number,
   greeting?: string,
+  receiptContext?: CommunicationReceiptContext,
 ): Promise<{ status: number; body: unknown }> {
   const [user] = await db
     .select({
@@ -705,6 +1091,14 @@ export async function fireCallMe(
       ? `Hi ${user.displayName}, it's Elaine from the Batchelor app calling. How can I help you?`
       : "Hi, it's Elaine from the Batchelor app. How can I help you?");
 
+  const claimed = await claimCommunicationReceipt(
+    receiptContext,
+    userId,
+    "voice",
+  );
+  if (claimed && !claimed.claimed) {
+    return receiptDuplicateResult("call_me", claimed);
+  }
   try {
     const call = await initiateOutboundCall({
       toNumber: user.phoneNumber,
@@ -712,21 +1106,34 @@ export async function fireCallMe(
       openingMessage: resolvedGreeting,
       callScreeningPurpose: "Elaine callback request",
     });
+    if (claimed) {
+      await finishCommunicationReceipt(claimed.receipt, "accepted", {
+        providerId: call.callId,
+        callStatus: "pending",
+      });
+    }
     // Reconcile every accepted call in the background so terminal outcomes
     // clear stored context even when the immediate attach already succeeded.
     // When attach raced a transient failure, retain the exact pending token;
     // without it, waitForCallOutcome clears only by the provider callId.
-    void reconcileOutboundCallOutcome(
-      call.callId,
-      call.pendingOutboundContext,
-    ).catch((err) =>
+    const reconciliation = claimed
+      ? reconcileOutboundCallOutcome(call.callId, call.pendingOutboundContext, {
+          onProviderStatus: async (providerCallStatus) => {
+            await updateCallCommunicationReceiptsByProviderId(
+              call.callId,
+              providerCallStatus,
+            );
+          },
+        })
+      : reconcileOutboundCallOutcome(call.callId, call.pendingOutboundContext);
+    void reconciliation.catch((err) =>
       logger.warn(
-        { err, callId: call.callId, userId },
+        { errorType: safeErrorType(err), callId: call.callId, userId },
         "elaine: failed to reconcile self-callback context",
       ),
     );
     logger.info(
-      { callId: call.callId, toNumber: user.phoneNumber, userId },
+      { callId: call.callId, userId },
       "elaine: initiated self-callback call",
     );
     return {
@@ -734,8 +1141,16 @@ export async function fireCallMe(
       body: {
         type: "call_me",
         result: {
+          channel: "voice",
           callId: call.callId,
           confirmationMessage: "Calling you now — pick up in a moment!",
+          ...(claimed
+            ? {
+                receiptId: claimed.receipt.id,
+                receiptStatus: "accepted",
+                callStatus: "pending",
+              }
+            : {}),
         },
       },
     };
@@ -744,8 +1159,13 @@ export async function fireCallMe(
       typeof OutboundCallIndeterminateError === "function" &&
       err instanceof OutboundCallIndeterminateError
     ) {
+      if (claimed) {
+        await finishCommunicationReceipt(claimed.receipt, "unknown", {
+          callStatus: "pending",
+        });
+      }
       logger.warn(
-        { err, toNumber: user.phoneNumber, userId },
+        { errorType: safeErrorType(err), userId },
         "elaine: self-callback acceptance indeterminate; avoiding duplicate retry",
       );
       return {
@@ -753,18 +1173,41 @@ export async function fireCallMe(
         body: {
           type: "call_me",
           result: {
+            channel: "voice",
             callId: null,
             callStatus: "pending",
             confirmationMessage:
               "Your call may already be connecting. Please wait a moment before trying again.",
+            ...(claimed
+              ? { receiptId: claimed.receipt.id, receiptStatus: "unknown" }
+              : {}),
           },
         },
       };
     }
-    logger.error({ err }, "elaine: failed to initiate self-callback call");
+    logger.error(
+      { errorType: safeErrorType(err) },
+      "elaine: failed to initiate self-callback call",
+    );
+    if (claimed) {
+      await finishCommunicationReceipt(claimed.receipt, "unknown");
+    }
     return {
       status: 500,
-      body: { error: "Failed to place the call. Please try again shortly." },
+      body: {
+        error: claimed
+          ? "Call status is unknown; check its receipt before retrying."
+          : "Failed to place the call. Please try again shortly.",
+        ...(claimed
+          ? {
+              result: {
+                receiptId: claimed.receipt.id,
+                receiptStatus: "unknown",
+                channel: "voice",
+              },
+            }
+          : {}),
+      },
     };
   }
 }
@@ -773,6 +1216,7 @@ export async function fireMessageContact(
   contactName: string,
   message: string,
   channel: "auto" | "sms" | "slack" | "email" | "elaine_chat",
+  receiptContext?: CommunicationReceiptContext,
 ): Promise<{ status: number; body: unknown }> {
   const contact = await resolveContact(contactName);
   if (!contact) {
@@ -781,7 +1225,13 @@ export async function fireMessageContact(
       body: { error: `No household member named "${contactName}" found.` },
     };
   }
-  return fireMessageContactToResolved(contact, message, channel, contactName);
+  return fireMessageContactToResolved(
+    contact,
+    message,
+    channel,
+    contactName,
+    receiptContext,
+  );
 }
 
 /**
@@ -793,12 +1243,27 @@ async function fireMessageContactToResolved(
   message: string,
   channel: "auto" | "sms" | "slack" | "email" | "elaine_chat",
   originalName: string,
+  receiptContext?: CommunicationReceiptContext,
 ): Promise<{ status: number; body: unknown }> {
   const name = contact.displayName ?? originalName;
 
   // ── elaine_chat: write to the contact's Elaine conversation history ───────
   if (channel === "elaine_chat") {
-    return deliverElaineChat(contact, message);
+    const claimed = await claimCommunicationReceipt(
+      receiptContext,
+      contact.id,
+      "elaine_chat",
+    );
+    if (claimed && !claimed.claimed) {
+      return receiptDuplicateResult("message_contact", claimed);
+    }
+    const result = await deliverElaineChat(contact, message);
+    if (!claimed) return result;
+    const receiptStatus = result.status < 400 ? "completed" : "failed";
+    await finishCommunicationReceipt(claimed.receipt, receiptStatus, {
+      channel: "elaine_chat",
+    });
+    return addReceiptToResult(result, claimed.receipt.id, receiptStatus);
   }
 
   // ── email: send to the contact's account email address via Resend ─────────
@@ -809,21 +1274,58 @@ async function fireMessageContactToResolved(
         body: { error: "Email delivery is not configured on this server." },
       };
     }
+    const claimed = await claimCommunicationReceipt(
+      receiptContext,
+      contact.id,
+      "email",
+    );
+    if (claimed && !claimed.claimed) {
+      return receiptDuplicateResult("message_contact", claimed);
+    }
     try {
       await sendAssistantEmail(contact.email, "Message from Elaine", message);
+      if (claimed) {
+        await finishCommunicationReceipt(claimed.receipt, "accepted", {
+          channel: "email",
+        });
+      }
       return {
         status: 200,
         body: {
           type: "message_contact",
-          result: { channel: "email", contactName: name },
+          result: {
+            channel: "email",
+            contactName: name,
+            ...(claimed
+              ? { receiptId: claimed.receipt.id, receiptStatus: "accepted" }
+              : {}),
+          },
         },
       };
     } catch (err) {
       logger.error(
-        { err, contactId: contact.id },
+        { errorType: safeErrorType(err), contactId: contact.id },
         "elaine: email to contact failed",
       );
-      return { status: 500, body: { error: "Failed to send the email." } };
+      if (claimed) {
+        await finishCommunicationReceipt(claimed.receipt, "unknown", {
+          channel: "email",
+        });
+      }
+      return {
+        status: 500,
+        body: {
+          error: "Email status is unknown; check its receipt before retrying.",
+          ...(claimed
+            ? {
+                result: {
+                  receiptId: claimed.receipt.id,
+                  receiptStatus: "unknown",
+                },
+              }
+            : {}),
+        },
+      };
     }
   }
 
@@ -855,33 +1357,84 @@ async function fireMessageContactToResolved(
     channel !== "sms" && !!contact.slackUserId && slackConfigured();
 
   if (trySlack && contact.slackUserId) {
+    const claimed = await claimCommunicationReceipt(
+      receiptContext,
+      contact.id,
+      "slack",
+    );
+    if (claimed && !claimed.claimed) {
+      return receiptDuplicateResult("message_contact", claimed);
+    }
     try {
       const channelId = await openDmChannel(contact.slackUserId);
       await postSlackMessage(channelId, message);
+      if (claimed) {
+        await finishCommunicationReceipt(claimed.receipt, "accepted", {
+          channel: "slack",
+        });
+      }
       return {
         status: 200,
         body: {
           type: "message_contact",
-          result: { channel: "slack", contactName: name },
+          result: {
+            channel: "slack",
+            contactName: name,
+            ...(claimed
+              ? { receiptId: claimed.receipt.id, receiptStatus: "accepted" }
+              : {}),
+          },
         },
       };
     } catch (err) {
       if (channel === "slack") {
         // send failed mid-flight — don't fall back
         logger.error(
-          { err, contactId: contact.id },
+          { errorType: safeErrorType(err), contactId: contact.id },
           "elaine: explicit slack DM failed",
         );
+        if (claimed) {
+          await finishCommunicationReceipt(claimed.receipt, "unknown", {
+            channel: "slack",
+          });
+        }
         return {
           status: 500,
           body: {
             error:
-              "Failed to send the Slack message. Slack may be temporarily unavailable.",
+              "Slack status is unknown; check its receipt before retrying.",
+            ...(claimed
+              ? {
+                  result: {
+                    receiptId: claimed.receipt.id,
+                    receiptStatus: "unknown",
+                  },
+                }
+              : {}),
           },
         };
       }
-      logger.warn({ err }, "elaine: slack DM failed, falling back to SMS");
-      // fall through to SMS for "auto"
+      if (claimed) {
+        await finishCommunicationReceipt(claimed.receipt, "unknown", {
+          channel: "slack",
+        });
+      }
+      logger.warn(
+        { errorType: safeErrorType(err) },
+        "elaine: Slack status is unknown; avoiding SMS fallback",
+      );
+      return {
+        status: 202,
+        body: {
+          type: "message_contact",
+          result: {
+            channel: "slack",
+            ...(claimed
+              ? { receiptId: claimed.receipt.id, receiptStatus: "unknown" }
+              : {}),
+          },
+        },
+      };
     }
   }
 
@@ -932,17 +1485,41 @@ async function fireMessageContactToResolved(
     };
   }
 
+  const claimed = await claimCommunicationReceipt(
+    receiptContext,
+    contact.id,
+    "sms",
+  );
+  if (claimed && !claimed.claimed) {
+    return receiptDuplicateResult("message_contact", claimed);
+  }
   try {
     await sendSms(contact.phoneNumber, message);
+    if (claimed) {
+      await finishCommunicationReceipt(claimed.receipt, "accepted", {
+        channel: "sms",
+      });
+    }
     return {
       status: 200,
       body: {
         type: "message_contact",
-        result: { channel: "sms", contactName: name },
+        result: {
+          channel: "sms",
+          contactName: name,
+          ...(claimed
+            ? { receiptId: claimed.receipt.id, receiptStatus: "accepted" }
+            : {}),
+        },
       },
     };
   } catch (err) {
     if (err instanceof SmsOptedOutError) {
+      if (claimed) {
+        await finishCommunicationReceipt(claimed.receipt, "failed", {
+          channel: "sms",
+        });
+      }
       return {
         status: 409,
         body: {
@@ -951,6 +1528,11 @@ async function fireMessageContactToResolved(
       };
     }
     if (err instanceof SmsRegistrationPendingError) {
+      if (claimed) {
+        await finishCommunicationReceipt(claimed.receipt, "failed", {
+          channel: "sms",
+        });
+      }
       return {
         status: 503,
         body: {
@@ -959,8 +1541,29 @@ async function fireMessageContactToResolved(
         },
       };
     }
-    logger.error({ err }, "elaine: failed to send contact message");
-    return { status: 500, body: { error: "Failed to send the message." } };
+    logger.error(
+      { errorType: safeErrorType(err) },
+      "elaine: failed to send contact message",
+    );
+    if (claimed) {
+      await finishCommunicationReceipt(claimed.receipt, "unknown", {
+        channel: "sms",
+      });
+    }
+    return {
+      status: 500,
+      body: {
+        error: "Message status is unknown; check its receipt before retrying.",
+        ...(claimed
+          ? {
+              result: {
+                receiptId: claimed.receipt.id,
+                receiptStatus: "unknown",
+              },
+            }
+          : {}),
+      },
+    };
   }
 }
 
@@ -971,6 +1574,7 @@ async function fireMessageContactToResolved(
 type ActionExecutor = (
   payload: never,
   userId: number,
+  context?: CommunicationReceiptContext,
 ) => Promise<{ status: number; body: unknown }>;
 
 // Formats a Date for human-readable confirmation: "3:45 PM" or "Jan 15 at 3:45 PM"
@@ -1028,7 +1632,11 @@ export const communicationActionExecutors: Record<
   call_contact: (async (
     payload: z.infer<typeof CallContactPayload>,
     userId: number,
+    receiptContext?: CommunicationReceiptContext,
   ) => {
+    if (!(await claimProposalBeforeExecution(receiptContext))) {
+      return proposalAlreadyUsedResult("call_contact", receiptContext);
+    }
     if (payload.scheduleAt) {
       const tz = await resolveEffectiveTimezone(userId, payload.timezone);
       let scheduledFor: string;
@@ -1061,6 +1669,28 @@ export const communicationActionExecutors: Record<
         message: payload.message,
         dueAt: new Date(scheduledFor),
       });
+      const scheduledReceipt = await claimCommunicationReceipt(
+        receiptContext ? { ...receiptContext, status: "scheduled" } : undefined,
+        contact?.id ?? null,
+        "voice",
+      );
+      if (scheduledReceipt && !scheduledReceipt.claimed) {
+        return {
+          status: 200,
+          body: {
+            type: "call_contact",
+            result: {
+              channel: "voice",
+              scheduled: true,
+              scheduledActionId:
+                scheduledReceipt.receipt.scheduledActionId ?? undefined,
+              receiptId: scheduledReceipt.receipt.id,
+              receiptStatus: scheduledReceipt.receipt.status,
+              contactName: contact?.displayName ?? payload.contactName,
+            },
+          },
+        };
+      }
       const [row] = await db
         .insert(reminders)
         .values({
@@ -1073,6 +1703,11 @@ export const communicationActionExecutors: Record<
           elaineActionPayload: storedPayload,
         })
         .returning({ id: reminders.id });
+      if (scheduledReceipt && row?.id) {
+        await updateCommunicationReceipt(scheduledReceipt.receipt.id, {
+          scheduledActionId: row.id,
+        });
+      }
       const formattedTime = formatScheduledTime(scheduledFor, tz);
       logger.info(
         {
@@ -1090,8 +1725,15 @@ export const communicationActionExecutors: Record<
         body: {
           type: "call_contact",
           result: {
+            channel: "voice",
             scheduled: true,
             scheduledActionId: row?.id,
+            ...(scheduledReceipt
+              ? {
+                  receiptId: scheduledReceipt.receipt.id,
+                  receiptStatus: "scheduled",
+                }
+              : {}),
             scheduledFor,
             contactName: contact?.displayName ?? payload.contactName,
             ...(duplicate ? { duplicateOfReminderId: duplicate.id } : {}),
@@ -1100,13 +1742,21 @@ export const communicationActionExecutors: Record<
         },
       };
     }
-    return fireCallContact(payload.contactName, payload.message);
+    return fireCallContact(
+      payload.contactName,
+      payload.message,
+      receiptContext,
+    );
   }) as ActionExecutor,
 
   message_contact: (async (
     payload: z.infer<typeof MessageContactPayload>,
     userId: number,
+    receiptContext?: CommunicationReceiptContext,
   ) => {
+    if (!(await claimProposalBeforeExecution(receiptContext))) {
+      return proposalAlreadyUsedResult("message_contact", receiptContext);
+    }
     // Normalize contactName to an array so the rest of the executor is uniform.
     const names = Array.isArray(payload.contactName)
       ? payload.contactName
@@ -1135,6 +1785,23 @@ export const communicationActionExecutors: Record<
       const rows = await Promise.all(
         names.map(async (name) => {
           const contact = await resolveContact(name);
+          const scheduledReceipt = await claimCommunicationReceipt(
+            receiptContext
+              ? { ...receiptContext, status: "scheduled" }
+              : undefined,
+            contact?.id ?? null,
+            payload.channel,
+          );
+          if (scheduledReceipt && !scheduledReceipt.claimed) {
+            return {
+              name: contact?.displayName ?? name,
+              id: scheduledReceipt.receipt.scheduledActionId ?? undefined,
+              duplicate: null,
+              receiptId: scheduledReceipt.receipt.id,
+              receiptStatus: scheduledReceipt.receipt.status,
+              channel: payload.channel,
+            };
+          }
           const storedPayload = {
             contactName: name,
             message: payload.message,
@@ -1159,6 +1826,11 @@ export const communicationActionExecutors: Record<
               elaineActionPayload: storedPayload,
             })
             .returning({ id: reminders.id });
+          if (scheduledReceipt && row?.id) {
+            await updateCommunicationReceipt(scheduledReceipt.receipt.id, {
+              scheduledActionId: row.id,
+            });
+          }
           logger.info(
             {
               scheduledActionId: row?.id,
@@ -1170,7 +1842,14 @@ export const communicationActionExecutors: Record<
               ? "elaine: scheduled contact message — near-duplicate of an existing reminder"
               : "elaine: scheduled contact message",
           );
-          return { name: contact?.displayName ?? name, id: row?.id, duplicate };
+          return {
+            name: contact?.displayName ?? name,
+            id: row?.id,
+            duplicate,
+            receiptId: scheduledReceipt?.receipt.id,
+            receiptStatus: scheduledReceipt ? "scheduled" : undefined,
+            channel: payload.channel,
+          };
         }),
       );
 
@@ -1192,6 +1871,13 @@ export const communicationActionExecutors: Record<
           result: {
             scheduled: true,
             scheduledActionIds: rows.map((r) => r.id),
+            receipts: rows
+              .filter((row) => row.receiptId)
+              .map((row) => ({
+                id: row.receiptId,
+                status: row.receiptStatus,
+                channel: row.channel,
+              })),
             scheduledFor,
             recipients: rows.map((r) => r.name),
             ...(duplicates.length > 0
@@ -1208,7 +1894,12 @@ export const communicationActionExecutors: Record<
     // Immediate delivery — resolve all contacts concurrently then deliver.
     if (names.length === 1) {
       // Single recipient: return errors directly so Elaine can relay them.
-      return fireMessageContact(names[0]!, payload.message, payload.channel);
+      return fireMessageContact(
+        names[0]!,
+        payload.message,
+        payload.channel,
+        receiptContext,
+      );
     }
 
     // Multi-recipient: fan out, collect per-recipient results.
@@ -1221,6 +1912,9 @@ export const communicationActionExecutors: Record<
             channel: null as string | null,
             ok: false,
             error: `No household member named "${name}" found.`,
+            receiptId: undefined,
+            receiptStatus: undefined,
+            recipientUserId: undefined,
           };
         }
         const result = await fireMessageContactToResolved(
@@ -1228,24 +1922,39 @@ export const communicationActionExecutors: Record<
           payload.message,
           payload.channel,
           name,
+          receiptContext,
         );
-        if (result.status >= 400) {
-          const body = result.body as { error?: string } | null;
+        const resultBody = result.body as {
+          error?: string;
+          result?: {
+            receiptId?: string;
+            receiptStatus?: string;
+            channel?: string;
+          };
+        } | null;
+        const outcomeUnknown = resultBody?.result?.receiptStatus === "unknown";
+        if (result.status >= 400 || outcomeUnknown) {
           return {
             name: contact.displayName ?? name,
             channel: null as string | null,
             ok: false,
-            error: body?.error ?? "Failed.",
+            error: outcomeUnknown
+              ? "The provider outcome is unknown; check its receipt before retrying."
+              : (resultBody?.error ?? "Failed."),
+            receiptId: resultBody?.result?.receiptId,
+            receiptStatus: resultBody?.result?.receiptStatus,
+            recipientUserId: contact.id,
           };
         }
-        const body = result.body as {
-          result?: { channel?: string };
-        } | null;
+        const body = resultBody;
         return {
           name: contact.displayName ?? name,
           channel: body?.result?.channel ?? null,
           ok: true,
           error: null as string | null,
+          receiptId: body?.result?.receiptId,
+          receiptStatus: body?.result?.receiptStatus,
+          recipientUserId: contact.id,
         };
       }),
     );
@@ -1260,7 +1969,7 @@ export const communicationActionExecutors: Record<
 
     const summaryLines = recipientResults.map((r) =>
       r.ok
-        ? `  • ${r.name}: delivered via ${r.channel} ✓`
+        ? `  • ${r.name}: provider accepted via ${r.channel} ✓`
         : `  • ${r.name}: ${r.error} ✗`,
     );
 
@@ -1270,6 +1979,14 @@ export const communicationActionExecutors: Record<
         type: "message_contact",
         result: {
           recipients: recipientResults,
+          receipts: recipientResults
+            .filter((result) => result.receiptId)
+            .map((result) => ({
+              id: result.receiptId,
+              status: result.receiptStatus,
+              recipientUserId: result.recipientUserId,
+              channel: result.channel,
+            })),
           confirmationMessage:
             `Message sent to ${delivered.length}/${recipientResults.length} recipient(s).\n` +
             summaryLines.join("\n"),
@@ -1281,6 +1998,7 @@ export const communicationActionExecutors: Record<
   continue_in_channel: (async (
     payload: z.infer<typeof ContinueInChannelPayload>,
     userId: number,
+    receiptContext?: CommunicationReceiptContext,
   ) => {
     // Look up the requesting user's OWN contact details (not a household member).
     const [user] = await db
@@ -1318,21 +2036,59 @@ export const communicationActionExecutors: Record<
           body: { error: "Slack isn't configured on this installation." },
         };
       }
+      const claimed = await claimCommunicationReceipt(
+        receiptContext,
+        userId,
+        "slack",
+      );
+      if (claimed && !claimed.claimed) {
+        return receiptDuplicateResult("continue_in_channel", claimed);
+      }
       try {
         const channelId = await openDmChannel(user.slackUserId);
         await postSlackMessage(channelId, message);
+        if (claimed) {
+          await finishCommunicationReceipt(claimed.receipt, "accepted", {
+            channel: "slack",
+          });
+        }
         return {
           status: 200,
           body: {
             type: "continue_in_channel",
-            result: { channel: "slack", sent: true },
+            result: {
+              channel: "slack",
+              sent: true,
+              ...(claimed
+                ? { receiptId: claimed.receipt.id, receiptStatus: "accepted" }
+                : {}),
+            },
           },
         };
       } catch (err) {
-        logger.error({ err }, "elaine: continue_in_channel slack send failed");
+        logger.error(
+          { errorType: safeErrorType(err) },
+          "elaine: continue_in_channel slack send failed",
+        );
+        if (claimed) {
+          await finishCommunicationReceipt(claimed.receipt, "unknown", {
+            channel: "slack",
+          });
+        }
         return {
           status: 500,
-          body: { error: "Failed to send the Slack message. Try again." },
+          body: {
+            error:
+              "Slack message status is unknown; check its receipt before retrying.",
+            ...(claimed
+              ? {
+                  result: {
+                    receiptId: claimed.receipt.id,
+                    receiptStatus: "unknown",
+                  },
+                }
+              : {}),
+          },
         };
       }
     }
@@ -1374,17 +2130,41 @@ export const communicationActionExecutors: Record<
           },
         };
       }
+      const claimed = await claimCommunicationReceipt(
+        receiptContext,
+        userId,
+        "sms",
+      );
+      if (claimed && !claimed.claimed) {
+        return receiptDuplicateResult("continue_in_channel", claimed);
+      }
       try {
         await sendSms(user.phoneNumber, message);
+        if (claimed) {
+          await finishCommunicationReceipt(claimed.receipt, "accepted", {
+            channel: "sms",
+          });
+        }
         return {
           status: 200,
           body: {
             type: "continue_in_channel",
-            result: { channel: "sms", sent: true },
+            result: {
+              channel: "sms",
+              sent: true,
+              ...(claimed
+                ? { receiptId: claimed.receipt.id, receiptStatus: "accepted" }
+                : {}),
+            },
           },
         };
       } catch (err) {
         if (err instanceof SmsOptedOutError) {
+          if (claimed) {
+            await finishCommunicationReceipt(claimed.receipt, "failed", {
+              channel: "sms",
+            });
+          }
           return {
             status: 409,
             body: {
@@ -1394,6 +2174,11 @@ export const communicationActionExecutors: Record<
           };
         }
         if (err instanceof SmsRegistrationPendingError) {
+          if (claimed) {
+            await finishCommunicationReceipt(claimed.receipt, "failed", {
+              channel: "sms",
+            });
+          }
           return {
             status: 503,
             body: {
@@ -1402,33 +2187,89 @@ export const communicationActionExecutors: Record<
             },
           };
         }
-        logger.error({ err }, "elaine: continue_in_channel sms send failed");
+        logger.error(
+          { errorType: safeErrorType(err) },
+          "elaine: continue_in_channel sms send failed",
+        );
+        if (claimed) {
+          await finishCommunicationReceipt(claimed.receipt, "unknown", {
+            channel: "sms",
+          });
+        }
         return {
           status: 500,
-          body: { error: "Failed to send the SMS. Try again." },
+          body: {
+            error: "SMS status is unknown; check its receipt before retrying.",
+            ...(claimed
+              ? {
+                  result: {
+                    receiptId: claimed.receipt.id,
+                    receiptStatus: "unknown",
+                  },
+                }
+              : {}),
+          },
         };
       }
     }
 
     if (targetChannel === "email") {
+      const claimed = await claimCommunicationReceipt(
+        receiptContext,
+        userId,
+        "email",
+      );
+      if (claimed && !claimed.claimed) {
+        return receiptDuplicateResult("continue_in_channel", claimed);
+      }
       try {
         await sendAssistantEmail(
           user.email,
           "From Elaine — continued conversation",
           message,
         );
+        if (claimed) {
+          await finishCommunicationReceipt(claimed.receipt, "accepted", {
+            channel: "email",
+          });
+        }
         return {
           status: 200,
           body: {
             type: "continue_in_channel",
-            result: { channel: "email", sent: true },
+            result: {
+              channel: "email",
+              sent: true,
+              ...(claimed
+                ? { receiptId: claimed.receipt.id, receiptStatus: "accepted" }
+                : {}),
+            },
           },
         };
       } catch (err) {
-        logger.error({ err }, "elaine: continue_in_channel email send failed");
+        logger.error(
+          { errorType: safeErrorType(err) },
+          "elaine: continue_in_channel email send failed",
+        );
+        if (claimed) {
+          await finishCommunicationReceipt(claimed.receipt, "unknown", {
+            channel: "email",
+          });
+        }
         return {
           status: 500,
-          body: { error: "Failed to send the email. Try again." },
+          body: {
+            error:
+              "Email status is unknown; check its receipt before retrying.",
+            ...(claimed
+              ? {
+                  result: {
+                    receiptId: claimed.receipt.id,
+                    receiptStatus: "unknown",
+                  },
+                }
+              : {}),
+          },
         };
       }
     }
@@ -1439,6 +2280,7 @@ export const communicationActionExecutors: Record<
   broadcast_message: (async (
     payload: z.infer<typeof BroadcastMessagePayload>,
     userId: number,
+    receiptContext?: CommunicationReceiptContext,
   ) => {
     // Rate-limit check first — inserts a log row if allowed, queries count if not.
     const rateCheck = await checkBroadcastRateLimit(userId);
@@ -1449,6 +2291,9 @@ export const communicationActionExecutors: Record<
           error: `You've sent 3 broadcasts in the last hour. You can send another in about ${rateCheck.resetInMinutes} minute${rateCheck.resetInMinutes === 1 ? "" : "s"}.`,
         },
       };
+    }
+    if (!(await claimProposalBeforeExecution(receiptContext))) {
+      return proposalAlreadyUsedResult("broadcast_message", receiptContext);
     }
 
     // Look up the user's own contact details.
@@ -1472,6 +2317,89 @@ export const communicationActionExecutors: Record<
     const { message } = payload;
     const results: string[] = [];
     const skipped: string[] = [];
+    const receiptOutcomes: Array<{
+      receiptId: string;
+      channel: string;
+      status: string;
+    }> = [];
+
+    const channelAvailable = {
+      slack: slackConfigured() && Boolean(user.slackUserId),
+      sms:
+        Boolean(user.phoneNumber) &&
+        user.phoneVerified &&
+        Boolean(user.smsConsentAt) &&
+        !user.smsOptedOutAt,
+      email: resendConfigured(),
+    };
+    let channelsToDispatch = Object.entries(channelAvailable)
+      .filter(([, available]) => available)
+      .map(([channel]) => channel);
+    if (receiptContext?.acknowledgeRepeat) {
+      const acknowledgedReceipt = await findRecentCommunicationReceiptById({
+        ownerUserId: userId,
+        recipientUserId: userId,
+        receiptId: receiptContext.acknowledgeRepeat,
+      });
+      if (
+        !acknowledgedReceipt ||
+        !channelAvailable[
+          acknowledgedReceipt.channel as keyof typeof channelAvailable
+        ]
+      ) {
+        throw new StaleRepeatAcknowledgementError();
+      }
+      // A broadcast repeat confirmation authorizes only the acknowledged
+      // recipient/channel pair. In particular, don't send to a newly available
+      // channel merely because the same proposal is being replayed.
+      channelsToDispatch = [acknowledgedReceipt.channel];
+    } else if (receiptContext?.proposalClaimKey) {
+      const recentReceipts =
+        await listRecentCommunicationReceiptsForRecipientChannels({
+          ownerUserId: userId,
+          recipientUserId: userId,
+          channels: channelsToDispatch,
+        });
+      if (recentReceipts[0]) {
+        throw new RepeatConfirmationRequiredError(
+          recentReceipts[0].id,
+          recentReceipts[0].status,
+        );
+      }
+    }
+
+    const stagedClaims = new Map<
+      string,
+      Awaited<ReturnType<typeof claimCommunicationReceipt>>
+    >();
+    const stagedReceiptIds: string[] = [];
+    try {
+      for (const channel of channelsToDispatch) {
+        const claim = await claimCommunicationReceipt(
+          receiptContext
+            ? { ...receiptContext, onClaimed: undefined }
+            : undefined,
+          userId,
+          channel,
+        );
+        stagedClaims.set(channel, claim);
+        if (claim?.claimed) stagedReceiptIds.push(claim.receipt.id);
+      }
+    } catch (err) {
+      await removeUnstartedCommunicationReceipts(stagedReceiptIds);
+      throw err;
+    }
+    for (const claim of stagedClaims.values()) {
+      if (claim?.claimed && receiptContext?.onClaimed) {
+        receiptContext.onClaimed({
+          id: claim.receipt.id,
+          actionType: claim.receipt.actionType,
+          channel: claim.receipt.channel,
+          status: claim.receipt.status,
+          conversationId: claim.receipt.conversationId,
+        });
+      }
+    }
 
     // Fan out concurrently to all configured channels.
     await Promise.all([
@@ -1481,13 +2409,50 @@ export const communicationActionExecutors: Record<
           skipped.push("Slack (not connected)");
           return;
         }
+        if (!channelsToDispatch.includes("slack")) {
+          skipped.push("Slack (repeat not acknowledged)");
+          return;
+        }
+        const claimed = stagedClaims.get("slack") ?? null;
+        if (claimed && !claimed.claimed) {
+          receiptOutcomes.push({
+            receiptId: claimed.receipt.id,
+            channel: "slack",
+            status: claimed.receipt.status,
+          });
+          results.push(`Slack (${claimed.receipt.status})`);
+          return;
+        }
         try {
           const channelId = await openDmChannel(user.slackUserId);
           await postSlackMessage(channelId, message);
+          if (claimed) {
+            await finishCommunicationReceipt(claimed.receipt, "accepted", {
+              channel: "slack",
+            });
+            receiptOutcomes.push({
+              receiptId: claimed.receipt.id,
+              channel: "slack",
+              status: "accepted",
+            });
+          }
           results.push("Slack ✓");
         } catch (err) {
-          logger.warn({ err, userId }, "elaine: broadcast Slack DM failed");
-          results.push("Slack ✗ (failed)");
+          logger.warn(
+            { errorType: safeErrorType(err), userId },
+            "elaine: broadcast Slack DM failed",
+          );
+          if (claimed) {
+            await finishCommunicationReceipt(claimed.receipt, "unknown", {
+              channel: "slack",
+            });
+            receiptOutcomes.push({
+              receiptId: claimed.receipt.id,
+              channel: "slack",
+              status: "unknown",
+            });
+          }
+          results.push("Slack ? (status unknown)");
         }
       })(),
 
@@ -1501,17 +2466,74 @@ export const communicationActionExecutors: Record<
           skipped.push("SMS (opted out)");
           return;
         }
+        if (!channelsToDispatch.includes("sms")) {
+          skipped.push("SMS (repeat not acknowledged)");
+          return;
+        }
+        const claimed = stagedClaims.get("sms") ?? null;
+        if (claimed && !claimed.claimed) {
+          receiptOutcomes.push({
+            receiptId: claimed.receipt.id,
+            channel: "sms",
+            status: claimed.receipt.status,
+          });
+          results.push(`SMS (${claimed.receipt.status})`);
+          return;
+        }
         try {
           await sendSms(user.phoneNumber, message);
+          if (claimed) {
+            await finishCommunicationReceipt(claimed.receipt, "accepted", {
+              channel: "sms",
+            });
+            receiptOutcomes.push({
+              receiptId: claimed.receipt.id,
+              channel: "sms",
+              status: "accepted",
+            });
+          }
           results.push("SMS ✓");
         } catch (err) {
           if (err instanceof SmsOptedOutError) {
+            if (claimed) {
+              await finishCommunicationReceipt(claimed.receipt, "failed", {
+                channel: "sms",
+              });
+              receiptOutcomes.push({
+                receiptId: claimed.receipt.id,
+                channel: "sms",
+                status: "failed",
+              });
+            }
             skipped.push("SMS (opted out)");
           } else if (err instanceof SmsRegistrationPendingError) {
+            if (claimed) {
+              await finishCommunicationReceipt(claimed.receipt, "failed", {
+                channel: "sms",
+              });
+              receiptOutcomes.push({
+                receiptId: claimed.receipt.id,
+                channel: "sms",
+                status: "failed",
+              });
+            }
             skipped.push("SMS (carrier registration pending)");
           } else {
-            logger.warn({ err, userId }, "elaine: broadcast SMS failed");
-            results.push("SMS ✗ (failed)");
+            logger.warn(
+              { errorType: safeErrorType(err), userId },
+              "elaine: broadcast SMS failed",
+            );
+            if (claimed) {
+              await finishCommunicationReceipt(claimed.receipt, "unknown", {
+                channel: "sms",
+              });
+              receiptOutcomes.push({
+                receiptId: claimed.receipt.id,
+                channel: "sms",
+                status: "unknown",
+              });
+            }
+            results.push("SMS ? (status unknown)");
           }
         }
       })(),
@@ -1522,16 +2544,53 @@ export const communicationActionExecutors: Record<
           skipped.push("Email (not configured)");
           return;
         }
+        if (!channelsToDispatch.includes("email")) {
+          skipped.push("Email (repeat not acknowledged)");
+          return;
+        }
+        const claimed = stagedClaims.get("email") ?? null;
+        if (claimed && !claimed.claimed) {
+          receiptOutcomes.push({
+            receiptId: claimed.receipt.id,
+            channel: "email",
+            status: claimed.receipt.status,
+          });
+          results.push(`Email (${claimed.receipt.status})`);
+          return;
+        }
         try {
           await sendAssistantEmail(
             user.email,
             "From Elaine — broadcast message",
             message,
           );
+          if (claimed) {
+            await finishCommunicationReceipt(claimed.receipt, "accepted", {
+              channel: "email",
+            });
+            receiptOutcomes.push({
+              receiptId: claimed.receipt.id,
+              channel: "email",
+              status: "accepted",
+            });
+          }
           results.push("Email ✓");
         } catch (err) {
-          logger.warn({ err, userId }, "elaine: broadcast email failed");
-          results.push("Email ✗ (failed)");
+          logger.warn(
+            { errorType: safeErrorType(err), userId },
+            "elaine: broadcast email failed",
+          );
+          if (claimed) {
+            await finishCommunicationReceipt(claimed.receipt, "unknown", {
+              channel: "email",
+            });
+            receiptOutcomes.push({
+              receiptId: claimed.receipt.id,
+              channel: "email",
+              status: "unknown",
+            });
+          }
+          results.push("Email ? (status unknown)");
         }
       })(),
     ]);
@@ -1547,6 +2606,9 @@ export const communicationActionExecutors: Record<
         status: 422,
         body: {
           error: `No channels were available to broadcast to (${skippedList}). Connect more channels in your account settings.`,
+          ...(receiptOutcomes.length > 0
+            ? { result: { receipts: receiptOutcomes } }
+            : {}),
         },
       };
     }
@@ -1561,13 +2623,18 @@ export const communicationActionExecutors: Record<
         result: {
           sent: results,
           skipped,
+          receipts: receiptOutcomes,
           confirmationMessage: `Sent to ${sentSummary}${skippedNote}.`,
         },
       },
     };
   }) as ActionExecutor,
 
-  call_me: (async (payload: z.infer<typeof CallMePayload>, userId: number) => {
+  call_me: (async (
+    payload: z.infer<typeof CallMePayload>,
+    userId: number,
+    receiptContext?: CommunicationReceiptContext,
+  ) => {
     if (payload.scheduleAt) {
       const tz = await resolveEffectiveTimezone(userId, payload.timezone);
       let scheduledFor: string;
@@ -1590,6 +2657,27 @@ export const communicationActionExecutors: Record<
       // verification/opt-out checks via fireCallMe at fire time, not just
       // now — see dispatchElaineActionReminder in reminders-scheduler.ts.
       const storedPayload = { greeting: payload.greeting };
+      const scheduledReceipt = await claimCommunicationReceipt(
+        receiptContext ? { ...receiptContext, status: "scheduled" } : undefined,
+        userId,
+        "voice",
+      );
+      if (scheduledReceipt && !scheduledReceipt.claimed) {
+        return {
+          status: 200,
+          body: {
+            type: "call_me",
+            result: {
+              channel: "voice",
+              scheduled: true,
+              scheduledActionId:
+                scheduledReceipt.receipt.scheduledActionId ?? undefined,
+              receiptId: scheduledReceipt.receipt.id,
+              receiptStatus: scheduledReceipt.receipt.status,
+            },
+          },
+        };
+      }
       const [row] = await db
         .insert(reminders)
         .values({
@@ -1602,6 +2690,11 @@ export const communicationActionExecutors: Record<
           elaineActionPayload: storedPayload,
         })
         .returning({ id: reminders.id });
+      if (scheduledReceipt && row?.id) {
+        await updateCommunicationReceipt(scheduledReceipt.receipt.id, {
+          scheduledActionId: row.id,
+        });
+      }
       const formattedTime = formatScheduledTime(scheduledFor, tz);
       logger.info(
         { scheduledActionId: row?.id, scheduledFor, userId },
@@ -1612,15 +2705,22 @@ export const communicationActionExecutors: Record<
         body: {
           type: "call_me",
           result: {
+            channel: "voice",
             scheduled: true,
             scheduledActionId: row?.id,
+            ...(scheduledReceipt
+              ? {
+                  receiptId: scheduledReceipt.receipt.id,
+                  receiptStatus: "scheduled",
+                }
+              : {}),
             scheduledFor,
             confirmationMessage: `Got it — I'll call you at ${formattedTime}.`,
           },
         },
       };
     }
-    return fireCallMe(userId, payload.greeting);
+    return fireCallMe(userId, payload.greeting, receiptContext);
   }) as ActionExecutor,
 
   cancel_scheduled_contact: (async (
@@ -1684,6 +2784,11 @@ export const communicationActionExecutors: Record<
         },
       };
     }
+
+    await cancelScheduledCommunicationReceipts(
+      payload.scheduledActionId,
+      userId,
+    );
 
     const { contactName } = describeScheduledElaineAction(
       existing.elaineActionType,

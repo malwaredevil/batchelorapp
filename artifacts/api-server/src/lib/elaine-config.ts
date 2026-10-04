@@ -179,19 +179,19 @@ export interface ElaineGlobalConfig {
 }
 
 export const DEFAULT_MODELS: ExtraModelsConfig = {
-  fastVision: "google/gemini-2.5-flash",
-  smartVision: "google/gemini-2.5-flash",
-  advisor: "anthropic/claude-opus-4.8",
+  fastVision: "google/gemini-3.8-flash",
+  smartVision: "google/gemini-3.8-flash",
+  advisor: "anthropic/claude-opus-5.5",
   research: "perplexity/sonar",
-  expertPanelAlt: "openai/gpt-5.1",
+  expertPanelAlt: "openai/gpt-6-astra",
   embedding: "openai/text-embedding-3-small",
-  openAIReasoning: "gpt-5.6-sol",
-  openAIBalanced: "gpt-5.6-terra",
-  openAIFast: "gpt-5.6-luna",
+  openAIReasoning: "gpt-6-astra",
+  openAIBalanced: "gpt-6.1-sol",
+  openAIFast: "gpt-6-luna",
   restrictedTextModel: "openai/gpt-5.1",
-  rerank: "rerank-2.5",
+  rerank: "rerank-3",
   visualEmbed: "jina-clip-v2",
-  fusionModels: ["anthropic/claude-opus-4.8", "openai/gpt-5.1"],
+  fusionModels: ["anthropic/claude-opus-5.5", "openai/gpt-5.1"],
   fusionJudge: "z-ai/glm-5.2",
 };
 

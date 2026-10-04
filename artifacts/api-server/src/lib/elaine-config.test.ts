@@ -58,6 +58,32 @@ beforeEach(() => {
 });
 
 describe("getElaineGlobalConfig", () => {
+  it("upgrades supporting roles without changing voice, Astra, or embeddings", async () => {
+    selectQueue.push([]);
+    const { DEFAULT_MODELS, ELAINE_CONFIG_DEFAULTS } =
+      await import("./elaine-config");
+
+    expect(ELAINE_CONFIG_DEFAULTS.chatModel).toBe("google/gemini-2.5-flash");
+    expect(ELAINE_CONFIG_DEFAULTS.subagentModel).toBe("z-ai/glm-5.2");
+    expect(DEFAULT_MODELS.openAIReasoning).toBe("gpt-6-astra");
+    expect(DEFAULT_MODELS.expertPanelAlt).toBe("openai/gpt-6-astra");
+    expect(DEFAULT_MODELS.openAIBalanced).toBe("gpt-6.1-sol");
+    expect(DEFAULT_MODELS.openAIFast).toBe("gpt-6-luna");
+    expect(DEFAULT_MODELS.restrictedTextModel).toBe("openai/gpt-5.1");
+    expect(DEFAULT_MODELS.fastVision).toBe("google/gemini-3.8-flash");
+    expect(DEFAULT_MODELS.smartVision).toBe("google/gemini-3.8-flash");
+    expect(DEFAULT_MODELS.advisor).toBe("anthropic/claude-opus-5.5");
+    expect(DEFAULT_MODELS.fusionJudge).toBe("z-ai/glm-5.2");
+    expect(DEFAULT_MODELS.research).toBe("perplexity/sonar");
+    expect(DEFAULT_MODELS.embedding).toBe("openai/text-embedding-3-small");
+    expect(DEFAULT_MODELS.visualEmbed).toBe("jina-clip-v2");
+    expect(DEFAULT_MODELS.rerank).toBe("rerank-3");
+    expect(DEFAULT_MODELS.fusionModels).toEqual([
+      "anthropic/claude-opus-5.5",
+      "openai/gpt-5.1",
+    ]);
+  });
+
   it("falls back to hardcoded defaults only when no row exists", async () => {
     selectQueue.push([]);
     const { getElaineGlobalConfig, ELAINE_CONFIG_DEFAULTS } =
@@ -73,6 +99,37 @@ describe("getElaineGlobalConfig", () => {
     const config = await getElaineGlobalConfig();
     expect(config.chatModel).toBe("custom/model-from-db");
     expect(config.chatModel).not.toBe(ELAINE_CONFIG_DEFAULTS.chatModel);
+  });
+
+  it("honors an owner model rollback stored after the one-time migration", async () => {
+    selectQueue.push([
+      dbRow({
+        extraModels: {
+          openAIReasoning: "gpt-5.6-sol",
+          expertPanelAlt: "openai/gpt-5.1",
+        },
+      }),
+    ]);
+    const { getElaineGlobalConfig } = await import("./elaine-config");
+
+    const config = await getElaineGlobalConfig();
+    expect(config.models.openAIReasoning).toBe("gpt-5.6-sol");
+    expect(config.models.expertPanelAlt).toBe("openai/gpt-5.1");
+  });
+
+  it("honors supporting-role custom choices and intentional rollbacks", async () => {
+    const stored = {
+      fastVision: "google/gemini-2.5-flash",
+      smartVision: "custom/vision",
+      advisor: "anthropic/claude-opus-4.8",
+      openAIBalanced: "gpt-5.6-terra",
+      openAIFast: "gpt-5.6-luna",
+      rerank: "rerank-2.5",
+      fusionModels: ["openai/gpt-5.1", "custom/advisor"],
+    };
+    selectQueue.push([dbRow({ extraModels: stored })]);
+    const { getElaineGlobalConfig } = await import("./elaine-config");
+    expect((await getElaineGlobalConfig()).models).toMatchObject(stored);
   });
 
   it("merges stored jsonb overrides on top of defaults for nested config", async () => {

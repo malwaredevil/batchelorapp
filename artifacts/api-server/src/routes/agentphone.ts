@@ -14,6 +14,10 @@ import {
 import { runAgentphoneTurn, type AgentphoneChatMessage } from "../elaine";
 import { markCommCheckVerified } from "../lib/comm-check-scheduler";
 import {
+  hasUncorrelatedVoiceReceiptSince,
+  updateCallCommunicationReceiptsByProviderId,
+} from "../elaine/communication-receipts";
+import {
   getAgentphoneConversation,
   getOrCreateAgentphoneConversation,
 } from "../lib/agentphone-conversation";
@@ -66,6 +70,26 @@ const STOP_WORDS = new Set([
 ]);
 const HELP_WORDS = new Set(["HELP", "INFO"]);
 const START_WORDS = new Set(["START", "UNSTOP", "YES"]);
+const TERMINAL_AGENTPHONE_CALL_STATUSES = new Set([
+  "busy",
+  "canceled",
+  "cancelled",
+  "completed",
+  "failed",
+  "no-answer",
+  "voicemail",
+]);
+
+function callEndedProviderStatus(data: Record<string, unknown>): string {
+  const status =
+    typeof data.status === "string"
+      ? data.status.toLowerCase().replace(/_/g, "-")
+      : "";
+  // Only persist an explicit terminal status supplied by AgentPhone. The
+  // signed event name itself authoritatively says the call ended, but does not
+  // establish whether it was answered.
+  return TERMINAL_AGENTPHONE_CALL_STATUSES.has(status) ? status : "ended";
+}
 
 // Rejects a signature whose timestamp is stale, even if the HMAC itself is
 // valid — bounds how long a captured request could be replayed.
@@ -174,6 +198,14 @@ async function markDeliveryProcessed(id: string): Promise<void> {
   }
 }
 
+async function releaseDeliveryClaim(id: string): Promise<void> {
+  await db.execute(sql`
+    DELETE FROM agentphone_webhook_deliveries
+    WHERE id = ${id}
+      AND status = 'processing'
+  `);
+}
+
 async function runRestrictedTurnAndPersist(
   conversation: Awaited<ReturnType<typeof getOrCreateAgentphoneConversation>>,
   userId: number,
@@ -182,6 +214,7 @@ async function runRestrictedTurnAndPersist(
   allowPendingOutboundContext = false,
   outboundCallId?: string,
   requireOutboundCallIdCorrelation = false,
+  inboundMessageId?: string,
 ): Promise<string> {
   let current = conversation;
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -228,6 +261,7 @@ async function runRestrictedTurnAndPersist(
         inputText,
         history,
         channel,
+        ...(inboundMessageId ? { inboundMessageId } : {}),
       });
       replyText = result.replyText;
       updatedHistory = result.history;
@@ -447,6 +481,10 @@ async function handleSms(
       user.id,
       messageText,
       "sms",
+      false,
+      undefined,
+      false,
+      deliveryKey,
     );
   } catch (err) {
     // Keep the pending context and shared history untouched for a retry, but
@@ -486,7 +524,11 @@ async function handleSms(
   res.status(200).json({ ok: true });
 }
 
-async function handleVoice(req: Request, res: Response): Promise<void> {
+async function handleVoice(
+  req: Request,
+  res: Response,
+  deliveryKey: string,
+): Promise<void> {
   const data = (req.body?.data ?? {}) as {
     from?: unknown;
     transcript?: unknown;
@@ -628,6 +670,7 @@ async function handleVoice(req: Request, res: Response): Promise<void> {
       mayConsumeOutboundContext,
       mayConsumeOutboundContext ? callId : undefined,
       mayConsumeOutboundContext,
+      deliveryKey,
     );
   } catch (err) {
     logger.error(
@@ -724,6 +767,63 @@ router.post("/webhook", webhookLimiter, async (req: Request, res: Response) => {
     return;
   }
 
+  if (event === "agent.call_ended") {
+    const callData = (req.body?.data ?? {}) as Record<string, unknown>;
+    const callId =
+      typeof callData.callId === "string"
+        ? callData.callId.trim()
+        : typeof callData.call_id === "string"
+          ? callData.call_id.trim()
+          : "";
+    if (!callId) {
+      logger.warn(
+        { event },
+        "agentphone: call-ended webhook missing provider call id",
+      );
+      void markDeliveryProcessed(contentHash);
+      res.status(200).json({ ok: true });
+      return;
+    }
+    try {
+      const updatedReceipts = await updateCallCommunicationReceiptsByProviderId(
+        callId,
+        callEndedProviderStatus(callData),
+      );
+      // Defer only while an Elaine outbound call may still be awaiting its
+      // provider ID. Calls without a receipt (inbound, comm checks, reminder
+      // calls) are acknowledged so the provider does not retry them forever.
+      if (
+        updatedReceipts === 0 &&
+        (await hasUncorrelatedVoiceReceiptSince(
+          new Date(
+            Date.now() - env.agentphonePendingAttachmentRetryMaxLifetimeMs,
+          ),
+        ))
+      ) {
+        await releaseDeliveryClaim(contentHash);
+        logger.info(
+          { callId },
+          "agentphone: call-ended webhook deferred until receipt correlation",
+        );
+        res.status(503).json({ error: "Call receipt is not correlated yet" });
+        return;
+      }
+    } catch (err) {
+      logger.error(
+        { errorType: err instanceof Error ? err.name : "UnknownError", callId },
+        "agentphone: failed to persist call-ended receipt status",
+      );
+      // Release the claim so the provider's retry is processed rather than
+      // rejected as an in-flight duplicate.
+      await releaseDeliveryClaim(contentHash).catch(() => undefined);
+      res.status(503).json({ error: "Service unavailable" });
+      return;
+    }
+    void markDeliveryProcessed(contentHash);
+    res.status(200).json({ ok: true });
+    return;
+  }
+
   if (event !== "agent.message") {
     void markDeliveryProcessed(contentHash);
     res.status(200).json({ ok: true });
@@ -737,7 +837,7 @@ router.post("/webhook", webhookLimiter, async (req: Request, res: Response) => {
       return;
     }
     if (channel === "voice") {
-      await handleVoice(req, res);
+      await handleVoice(req, res, contentHash);
       void markDeliveryProcessed(contentHash);
       return;
     }

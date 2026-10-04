@@ -1091,6 +1091,73 @@ export const STATEMENTS: string[] = [
   `ALTER TABLE elaine_global_config ADD COLUMN IF NOT EXISTS runtime_budget JSONB NOT NULL DEFAULT '{}'::jsonb`,
   `INSERT INTO elaine_global_config (id) VALUES (1)
      ON CONFLICT (id) DO NOTHING`,
+  // One-time default migration for the GPT-6 Astra rollout. Only replace the
+  // two exact legacy defaults on rows that predate the rollout; a later owner
+  // edit (including an intentional rollback) remains authoritative.
+  // Preserve the original owner-edit timestamp: subsequent cutoff-based
+  // migrations must still see it. Exact-value matching makes this idempotent;
+  // actual owner saves advance updated_at and protect intentional rollbacks.
+  `UPDATE elaine_global_config
+     SET extra_models =
+           extra_models
+           || CASE
+                WHEN extra_models->>'openAIReasoning' = 'gpt-5.6-sol'
+                THEN '{"openAIReasoning":"gpt-6-astra"}'::jsonb
+                ELSE '{}'::jsonb
+              END
+           || CASE
+                WHEN extra_models->>'expertPanelAlt' = 'openai/gpt-5.1'
+                THEN '{"expertPanelAlt":"openai/gpt-6-astra"}'::jsonb
+                ELSE '{}'::jsonb
+               END
+     WHERE updated_at < TIMESTAMPTZ '2026-09-22T16:58:00Z'
+       AND (
+         extra_models->>'openAIReasoning' = 'gpt-5.6-sol'
+         OR extra_models->>'expertPanelAlt' = 'openai/gpt-5.1'
+       )`,
+
+  // Supporting-model rollout: upgrade exact legacy defaults only on rows
+  // predating approval. Later owner edits/rollbacks remain authoritative.
+  // The projection preserves custom roles, fusion order, and unrelated config.
+  // Like the Astra rollout, preserve the owner-edit timestamp so future
+  // migrations can compose against the same original eligibility timestamp.
+  `WITH upgraded AS (
+     SELECT id,
+       extra_models
+       || COALESCE((
+         SELECT jsonb_object_agg(role, new_model)
+         FROM (VALUES
+           ('fastVision', 'google/gemini-2.5-flash', 'google/gemini-3.8-flash'),
+           ('smartVision', 'google/gemini-2.5-flash', 'google/gemini-3.8-flash'),
+           ('advisor', 'anthropic/claude-opus-4.8', 'anthropic/claude-opus-5.5'),
+           ('openAIBalanced', 'gpt-5.6-terra', 'gpt-6.1-sol'),
+           ('openAIFast', 'gpt-5.6-luna', 'gpt-6-luna'),
+           ('rerank', 'rerank-2.5', 'rerank-3')
+         ) AS replacements(role, old_model, new_model)
+         WHERE extra_models->>role = old_model
+       ), '{}'::jsonb)
+       || CASE
+         WHEN jsonb_typeof(extra_models->'fusionModels') = 'array'
+           AND extra_models->'fusionModels' @> '["anthropic/claude-opus-4.8"]'::jsonb
+         THEN jsonb_build_object('fusionModels', (
+           SELECT jsonb_agg(
+             CASE WHEN model = '"anthropic/claude-opus-4.8"'::jsonb
+               THEN '"anthropic/claude-opus-5.5"'::jsonb ELSE model END
+             ORDER BY ordinal
+           )
+           FROM jsonb_array_elements(extra_models->'fusionModels')
+             WITH ORDINALITY AS panel(model, ordinal)
+         ))
+         ELSE '{}'::jsonb
+       END AS models
+     FROM elaine_global_config
+     WHERE id = 1 AND updated_at < TIMESTAMPTZ '2026-10-03T10:52:22Z'
+   )
+   UPDATE elaine_global_config AS config
+   SET extra_models = upgraded.models
+   FROM upgraded
+   WHERE config.id = upgraded.id
+     AND config.extra_models IS DISTINCT FROM upgraded.models`,
 
   // ── Hub webmail Gmail connections ────────────────────────────────────────────
   // Separate from travels_gmail_connections — uses https://mail.google.com/
@@ -3207,6 +3274,48 @@ END $$`,
      ON elaine_scheduled_actions (status, scheduled_for)`,
   `CREATE INDEX IF NOT EXISTS elaine_scheduled_actions_user_id_idx
      ON elaine_scheduled_actions (initiated_by_user_id)`,
+
+  // ── Elaine outbound communication receipts ───────────────────────────────
+  // Receipt rows intentionally exclude all message/contact payload data.
+  `CREATE TABLE IF NOT EXISTS elaine_communication_receipts (
+     id UUID PRIMARY KEY,
+     attempt_key TEXT NOT NULL UNIQUE,
+     payload_hash TEXT NOT NULL,
+     owner_user_id INTEGER NOT NULL,
+     action_type TEXT NOT NULL,
+     channel TEXT NOT NULL,
+     status TEXT NOT NULL,
+     conversation_id INTEGER,
+     recipient_user_id INTEGER,
+     scheduled_action_id INTEGER,
+     provider_id TEXT,
+     call_status TEXT,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   )`,
+  `CREATE TABLE IF NOT EXISTS elaine_communication_proposal_claims (
+     proposal_key TEXT NOT NULL,
+     owner_user_id INTEGER NOT NULL,
+     payload_hash TEXT NOT NULL,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     PRIMARY KEY (owner_user_id, proposal_key)
+   )`,
+  `ALTER TABLE elaine_communication_proposal_claims ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS elaine_comm_proposal_claims_retention_idx
+     ON elaine_communication_proposal_claims (created_at)`,
+  `ALTER TABLE elaine_communication_receipts
+     ADD COLUMN IF NOT EXISTS scheduled_action_id INTEGER`,
+  `ALTER TABLE elaine_communication_receipts ENABLE ROW LEVEL SECURITY`,
+  `CREATE INDEX IF NOT EXISTS elaine_comm_receipts_owner_created_idx
+     ON elaine_communication_receipts (owner_user_id, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS elaine_comm_receipts_owner_conversation_created_idx
+     ON elaine_communication_receipts (owner_user_id, conversation_id, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS elaine_comm_receipts_repeat_check_idx
+     ON elaine_communication_receipts (owner_user_id, recipient_user_id, channel, created_at DESC)`,
+  `CREATE INDEX IF NOT EXISTS elaine_comm_receipts_scheduled_action_idx
+     ON elaine_communication_receipts (scheduled_action_id)`,
+  `CREATE INDEX IF NOT EXISTS elaine_comm_receipts_retention_idx
+     ON elaine_communication_receipts (created_at)`,
 
   // ── Elaine reasoning-summary column (Task #541) ──────────────────────────────
   // Persists the model's reasoning summary so the "Thinking…" disclosure

@@ -18,6 +18,7 @@ const {
   mockInitiateOutboundCall,
   mockReconcileOutboundCallOutcome,
   mockSendGenericReminderAlertSms,
+  mockCreateScheduledReceiptContext,
 } = vi.hoisted(() => {
   const mockPoolQuery = vi.fn();
   const mockPoolConnect = vi.fn();
@@ -35,6 +36,7 @@ const {
     .fn()
     .mockResolvedValue("answered");
   const mockSendGenericReminderAlertSms = vi.fn();
+  const mockCreateScheduledReceiptContext = vi.fn();
   return {
     mockFireCallContact: vi.fn(),
     mockFireMessageContact: vi.fn(),
@@ -49,6 +51,7 @@ const {
     mockInitiateOutboundCall,
     mockReconcileOutboundCallOutcome,
     mockSendGenericReminderAlertSms,
+    mockCreateScheduledReceiptContext,
   };
 });
 
@@ -57,44 +60,42 @@ const {
 // ---------------------------------------------------------------------------
 
 // @workspace/db — same pattern as communication-actions.test.ts
-vi.mock("@workspace/db", () => ({
-  pool: {
-    query: mockPoolQuery,
-    connect: mockPoolConnect,
-  },
-  db: {
-    select: vi.fn().mockReturnValue({
-      from: vi.fn().mockReturnValue({
-        // mockDbSelectWhere is reset + given a default in the messenger
-        // describe's beforeEach so per-test overrides via mockReturnValueOnce
-        // don't leak across tests.  The default returns the { limit, then }
-        // chain object; overriding it with a bare thenable lets
-        // resolveEntityContextLabel (which awaits .where() directly, no
-        // .limit()) return a real trip row.
-        where: mockDbSelectWhere,
+vi.mock("@workspace/db", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@workspace/db")>();
+  return {
+    ...actual,
+    pool: {
+      query: mockPoolQuery,
+      connect: mockPoolConnect,
+    },
+    db: {
+      select: vi.fn().mockReturnValue({
+        from: vi.fn().mockReturnValue({
+          // The default returns the { limit, then } chain object; overriding
+          // with a bare thenable supports resolver queries without .limit().
+          where: mockDbSelectWhere,
+        }),
       }),
-    }),
-    insert: vi.fn().mockReturnValue({
-      values: vi.fn().mockReturnValue({
-        // mockDbInsertReturning is overridden per-test for auto-create
-        // scenarios; awaiting values() directly (message insert, no
-        // .returning()) resolves via the thenable below.
-        returning: mockDbInsertReturning,
-        then: (
-          resolve: (v: unknown) => unknown,
-          reject: (e: unknown) => unknown,
-        ) => Promise.resolve(undefined).then(resolve, reject),
+      insert: vi.fn().mockReturnValue({
+        values: vi.fn().mockReturnValue({
+          returning: mockDbInsertReturning,
+          then: (
+            resolve: (v: unknown) => unknown,
+            reject: (e: unknown) => unknown,
+          ) => Promise.resolve(undefined).then(resolve, reject),
+        }),
       }),
-    }),
-    update: vi.fn().mockReturnValue({
-      set: vi.fn().mockReturnValue({
-        where: vi.fn().mockResolvedValue(undefined),
+      update: vi.fn().mockReturnValue({
+        set: vi.fn().mockReturnValue({
+          where: vi.fn().mockResolvedValue(undefined),
+        }),
       }),
-    }),
-  },
-  travelsTrips: {},
-  elaineHistoryConversations: {},
-  elaineHistoryMessages: {},
+    },
+  };
+});
+
+vi.mock("../elaine/communication-receipts", () => ({
+  createScheduledCommunicationReceiptContext: mockCreateScheduledReceiptContext,
 }));
 
 // The executors being dispatched to — these are what we're asserting on
@@ -147,11 +148,15 @@ vi.mock("./rich-text-plaintext", () => ({
   richTextToPlainText: mockRichTextToPlainText,
   richTextToSpeech: vi.fn().mockReturnValue(""),
 }));
-vi.mock("drizzle-orm", () => ({
-  inArray: vi.fn(),
-  eq: vi.fn(),
-  and: vi.fn(),
-}));
+vi.mock("drizzle-orm", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("drizzle-orm")>();
+  return {
+    ...actual,
+    inArray: vi.fn(),
+    eq: vi.fn(),
+    and: vi.fn(),
+  };
+});
 
 import {
   dispatchElaineActionReminder,
@@ -412,6 +417,26 @@ describe("claimAndSendDueDeliveries — elaine_action branch", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockDbSelectWhere.mockReset();
+    mockDbSelectWhere.mockReturnValue({
+      limit: vi.fn().mockResolvedValue([]),
+    });
+    mockCreateScheduledReceiptContext.mockImplementation(
+      async (params: {
+        scheduledActionId: number;
+        deliveryId: number;
+        ownerUserId: number;
+        actionType: string;
+      }) => ({
+        attemptKey: `test-delivery-${params.deliveryId}`,
+        attemptKeyIsFinal: true,
+        payloadHash: "test-payload-hash",
+        ownerUserId: params.ownerUserId,
+        actionType: params.actionType,
+        conversationId: null,
+        scheduledActionId: params.scheduledActionId,
+      }),
+    );
     mockClaimClient = { query: vi.fn(), release: vi.fn() };
     mockPoolConnect.mockResolvedValue(mockClaimClient);
     mockFireCallContact.mockResolvedValue({ status: 200, body: { ok: true } });
@@ -447,7 +472,14 @@ describe("claimAndSendDueDeliveries — elaine_action branch", () => {
     const result = await claimAndSendDueDeliveries();
 
     expect(mockFireCallContact).toHaveBeenCalledOnce();
-    expect(mockFireCallContact).toHaveBeenCalledWith("Jane", "Time to leave!");
+    expect(mockFireCallContact).toHaveBeenCalledWith(
+      "Jane",
+      "Time to leave!",
+      expect.objectContaining({
+        attemptKeyIsFinal: true,
+        scheduledActionId: 55,
+      }),
+    );
     expect(result).toEqual({ claimed: 1, sent: 1, failed: 0 });
   });
 

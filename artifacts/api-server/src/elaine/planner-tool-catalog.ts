@@ -30,6 +30,7 @@ import { universalReadTools } from "./universal-read-tools";
 import {
   listScheduledContactsTool,
   listContactChannelsTool,
+  communicationReceiptsReadTool,
   communicationActionTools,
 } from "./communication-actions";
 import { reminderActionTools, reminderReadTools } from "./reminder-actions";
@@ -1375,6 +1376,7 @@ export const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   ...appOperationReadTools,
   listScheduledContactsTool,
   listContactChannelsTool,
+  communicationReceiptsReadTool,
   {
     type: "function",
     function: {

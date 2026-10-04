@@ -42,3 +42,10 @@ updates:
       time: "06:00"
       timezone: "UTC"
     rebase-strategy: "auto"
+    groups:
+      codeql-action:
+        patterns:
+          - "github/codeql-action/*"
+        update-types:
+          - "minor"
+          - "patch"

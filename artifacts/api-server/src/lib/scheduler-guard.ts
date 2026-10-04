@@ -355,6 +355,7 @@ type SchedulerRunRow = {
  */
 export const KNOWN_SCHEDULER_NAMES = new Set([
   "birthday-emails",
+  "communication-receipt-cleanup",
   "gmail-scan",
   "hallmark-events-sync",
   "integrations-health-nudges",

@@ -22,6 +22,7 @@ import {
   recordScheduledTaskFailure,
 } from "./scheduler-guard";
 import { logger } from "./logger";
+import { env } from "./env";
 import { getValidAccessToken } from "./google-calendar-tokens";
 import { getCalendarEvent } from "./google-calendar";
 import {
@@ -29,6 +30,7 @@ import {
   fireMessageContact,
   fireCallMe,
 } from "../elaine/communication-actions";
+import { createScheduledCommunicationReceiptContext } from "../elaine/communication-receipts";
 import { richTextToPlainText, richTextToSpeech } from "./rich-text-plaintext";
 
 /**
@@ -371,13 +373,17 @@ export async function dispatchElaineActionReminder(
   actionType: string | null,
   payload: unknown,
   createdByUserId: number,
+  receiptContext?: Awaited<
+    ReturnType<typeof createScheduledCommunicationReceiptContext>
+  >,
 ): Promise<{ status: number; body: unknown }> {
   const p = (payload ?? {}) as Record<string, unknown>;
   if (actionType === "call_contact") {
-    return fireCallContact(
-      String(p.contactName ?? ""),
-      String(p.message ?? ""),
-    );
+    const contactName = String(p.contactName ?? "");
+    const message = String(p.message ?? "");
+    return receiptContext
+      ? fireCallContact(contactName, message, receiptContext)
+      : fireCallContact(contactName, message);
   }
   if (actionType === "message_contact") {
     const channel = (p.channel ?? "auto") as
@@ -386,17 +392,17 @@ export async function dispatchElaineActionReminder(
       | "slack"
       | "email"
       | "elaine_chat";
-    return fireMessageContact(
-      String(p.contactName ?? ""),
-      String(p.message ?? ""),
-      channel,
-    );
+    const contactName = String(p.contactName ?? "");
+    const message = String(p.message ?? "");
+    return receiptContext
+      ? fireMessageContact(contactName, message, channel, receiptContext)
+      : fireMessageContact(contactName, message, channel);
   }
   if (actionType === "call_me") {
-    return fireCallMe(
-      createdByUserId,
-      typeof p.greeting === "string" ? p.greeting : undefined,
-    );
+    const greeting = typeof p.greeting === "string" ? p.greeting : undefined;
+    return receiptContext
+      ? fireCallMe(createdByUserId, greeting, receiptContext)
+      : fireCallMe(createdByUserId, greeting);
   }
   return {
     status: 500,
@@ -760,10 +766,23 @@ export async function claimAndSendDueDeliveries(): Promise<{
             [delivery.reminder_id],
           )
         ).rows;
+        const receiptContext =
+          actionType &&
+          ["call_contact", "message_contact", "call_me"].includes(actionType)
+            ? await createScheduledCommunicationReceiptContext({
+                scheduledActionId: delivery.reminder_id,
+                deliveryId: delivery.id,
+                ownerUserId: createdByUserId,
+                actionType,
+                payload,
+                secret: env.sessionSecret,
+              })
+            : undefined;
         const result = await dispatchElaineActionReminder(
           actionType,
           payload,
           createdByUserId,
+          receiptContext,
         );
         if (result.status >= 400) {
           const errBody = result.body as { error?: string } | null;

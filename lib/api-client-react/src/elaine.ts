@@ -274,6 +274,34 @@ export interface AssistantAction {
   type: AssistantActionType;
   label: string;
   payload: Record<string, unknown>;
+  proposalId?: string;
+  conversationId?: number | null;
+}
+
+export interface ElaineCommunicationReceipt {
+  id: string;
+  actionType: string;
+  channel: string | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  conversationId: number | null;
+  recipientUserId: number | null;
+  callStatus?: string | null;
+  providerId?: string | null;
+  /** True while the server can still change this receipt's status. */
+  pending?: boolean;
+}
+
+export async function getElaineCommunicationReceipts(
+  conversationId: number,
+): Promise<ElaineCommunicationReceipt[]> {
+  const query = new URLSearchParams({ conversationId: String(conversationId) });
+  const response = await customFetch<{ receipts?: ElaineCommunicationReceipt[] }>(
+    `/api/elaine/communication-receipts?${query.toString()}`,
+    { method: "GET" },
+  );
+  return Array.isArray(response.receipts) ? response.receipts : [];
 }
 
 export interface AssistantActionResult {
@@ -595,6 +623,20 @@ export interface AssistantChatStreamCallbacks {
   onResponseReset?: () => void;
   onAction?: (action: AssistantAction) => void;
   onStatus?: (message: string) => void;
+  onCommunicationProgress?: (event: {
+    id: string;
+    actionType: string;
+    channel: string | null;
+    status:
+      | "executing"
+      | "accepted"
+      | "completed"
+      | "failed"
+      | "unknown"
+      | "scheduled"
+      | "cancelled";
+    conversationId: number | null;
+  }) => void;
   onWidget?: (widget: ChatWidget) => void;
   onRuntime?: (event: ElaineRuntimeEventEnvelope) => void;
   onDone?: (result: AssistantChatResponse) => void;
@@ -751,6 +793,13 @@ async function readElaineSseStream(
         case "status":
           callbacks.onStatus?.((data as { message: string }).message);
           break;
+        case "communication_progress":
+          callbacks.onCommunicationProgress?.(
+            data as Parameters<
+              NonNullable<AssistantChatStreamCallbacks["onCommunicationProgress"]>
+            >[0],
+          );
+          break;
         case "widget":
           callbacks.onWidget?.(data as ChatWidget);
           break;
@@ -837,7 +886,10 @@ export function useNewElaineConversation(options?: {
 }
 
 const executeElaineActionFn = (
-  body: Pick<AssistantAction, "type" | "payload">,
+  body: Pick<AssistantAction, "type" | "payload"> &
+    Pick<AssistantAction, "proposalId" | "conversationId"> & {
+      acknowledgeRepeat?: string;
+    },
 ): Promise<AssistantActionResult> =>
   customFetch<AssistantActionResult>("/api/elaine/action", {
     method: "POST",
@@ -849,10 +901,18 @@ export function useExecuteElaineAction(options?: {
   mutation?: UseMutationOptions<
     AssistantActionResult,
     unknown,
-    Pick<AssistantAction, "type" | "payload">
+      Pick<AssistantAction, "type" | "payload"> &
+        Pick<AssistantAction, "proposalId" | "conversationId"> & {
+          acknowledgeRepeat?: string;
+        }
   >;
 }) {
-  const mutationFn = (body: Pick<AssistantAction, "type" | "payload">) =>
+  const mutationFn = (
+    body: Pick<AssistantAction, "type" | "payload"> &
+      Pick<AssistantAction, "proposalId" | "conversationId"> & {
+        acknowledgeRepeat?: string;
+      },
+  ) =>
     executeElaineActionFn(body);
   return useMutation({ mutationFn, ...options?.mutation });
 }

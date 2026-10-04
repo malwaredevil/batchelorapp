@@ -353,6 +353,7 @@ vi.mock("./adaptive-actions", () => ({
 }));
 
 vi.mock("./communication-actions", () => ({
+  RECEIPT_ACTION_TYPES: [],
   communicationActionSchemas: [],
   communicationActionExecutors: {},
   buildCommunicationActionLabel: vi.fn().mockResolvedValue(""),
@@ -1220,7 +1221,7 @@ describe("POST /api/elaine/chat — dropped-action corrective text", () => {
 });
 
 describe("POST /api/elaine/chat — Responses-to-OpenRouter tool fallback", () => {
-  it("replays every action call and output before the fallback model completes the reply", async () => {
+  it("replays consequential and read-only calls without duplicating the action", async () => {
     primeDbForFreshChat();
     mockIsOpenAIResponsesConfigured.mockReturnValue(true);
     mockHardToolNames.add("discover_app_operations");
@@ -1248,12 +1249,12 @@ describe("POST /api/elaine/chat — Responses-to-OpenRouter tool fallback", () =
     });
     mockRegisterToolCalls.mockReturnValue([
       {
-        id: "call_mode",
-        name: "set_mode",
+        id: "call_trip",
+        name: "create_trip",
         allowed: true,
-        stepId: "step-mode",
-        consequential: false,
-        confirmationRequired: false,
+        stepId: "step-trip",
+        consequential: true,
+        confirmationRequired: true,
       },
       {
         id: "call_discover",
@@ -1271,9 +1272,12 @@ describe("POST /api/elaine/chat — Responses-to-OpenRouter tool fallback", () =
         text: "",
         functionCalls: [
           {
-            callId: "call_mode",
-            name: "set_mode",
-            arguments: JSON.stringify({ mode: "auto_run" }),
+            callId: "call_trip",
+            name: "create_trip",
+            arguments: JSON.stringify({
+              title: "Test Trip",
+              destination: "Paris",
+            }),
           },
           {
             callId: "call_discover",
@@ -1316,21 +1320,31 @@ describe("POST /api/elaine/chat — Responses-to-OpenRouter tool fallback", () =
                 role: "assistant",
                 tool_calls: expect.arrayContaining([
                   expect.objectContaining({
-                    id: "call_mode",
-                    function: expect.objectContaining({ name: "set_mode" }),
+                    id: "call_trip",
+                    function: expect.objectContaining({ name: "create_trip" }),
+                  }),
+                  expect.objectContaining({
+                    id: "call_discover",
+                    function: expect.objectContaining({
+                      name: "discover_app_operations",
+                    }),
                   }),
                 ]),
               }),
               expect.objectContaining({
                 role: "tool",
-                tool_call_id: "call_mode",
+                tool_call_id: "call_trip",
                 content: expect.stringContaining(
                   "server handled this UI/action tool",
                 ),
               }),
+              expect.objectContaining({
+                role: "tool",
+                tool_call_id: "call_discover",
+              }),
             ]),
           );
-          return makeContentStream("The mode change is saved.");
+          return makeContentStream("The trip is ready for confirmation.");
         });
         await callback({ chat: { completions: { create } } }, "mock-model", []);
       },
@@ -1338,12 +1352,16 @@ describe("POST /api/elaine/chat — Responses-to-OpenRouter tool fallback", () =
 
     const res = await request(buildApp())
       .post("/api/elaine/chat")
-      .send({ message: "Automatically run actions from now on", appId: "hub" })
+      .send({ message: "Create a trip to Paris", appId: "hub" })
       .buffer(true);
 
     expect(res.status).toBe(200);
-    expect(parseSseResponse(res.text).allDeltaText).toContain(
-      "The mode change is saved.",
+    const parsed = parseSseResponse(res.text);
+    expect(parsed.allDeltaText).toContain(
+      "The trip is ready for confirmation.",
+    );
+    expect(parsed.eventTypes.filter((type) => type === "action")).toHaveLength(
+      1,
     );
     expect(mockStreamOpenAIResponseRound).toHaveBeenCalledTimes(2);
     expect(mockCallModelWithSubagent).toHaveBeenCalledTimes(1);

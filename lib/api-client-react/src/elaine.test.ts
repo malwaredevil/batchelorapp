@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { streamElaineMessage, type ElaineRuntimeTrace } from "./elaine";
+import {
+  getElaineCommunicationReceipts,
+  streamElaineMessage,
+  type ElaineRuntimeTrace,
+} from "./elaine";
 
 const TRACE: ElaineRuntimeTrace = {
   version: 1,
@@ -102,5 +106,74 @@ describe("streamElaineMessage runtime SSE", () => {
       "done",
     ]);
     expect(result.content).toBe("Grounded final answer");
+  });
+});
+
+describe("streamElaineMessage communication progress", () => {
+  it("dispatches an executing receipt before the terminal response", async () => {
+    const progress = {
+      id: "receipt-1",
+      actionType: "call_contact",
+      channel: "voice",
+      status: "executing",
+      conversationId: 12,
+    };
+    const finalResponse = {
+      content: "The call was initiated.",
+      actions: [],
+      executedActions: [],
+      actionConfirmationMode: "auto",
+      messages: [],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          `event: communication_progress\ndata: ${JSON.stringify(progress)}\n\n` +
+            `event: done\ndata: ${JSON.stringify(finalResponse)}\n\n`,
+          { status: 200, headers: { "Content-Type": "text/event-stream" } },
+        ),
+      ),
+    );
+    const observed: string[] = [];
+    await streamElaineMessage(
+      { message: "Call my contact", appId: "elaine" },
+      {
+        onCommunicationProgress: (event) =>
+          observed.push(`${event.actionType}:${event.status}`),
+        onDone: () => observed.push("done"),
+      },
+    );
+    expect(observed).toEqual(["call_contact:executing", "done"]);
+  });
+});
+
+describe("getElaineCommunicationReceipts", () => {
+  it("reads persisted receipts scoped to the requested conversation", async () => {
+    const receipts = [
+      {
+        id: "receipt-1",
+        actionType: "message_contact",
+        channel: "sms",
+        status: "pending",
+        createdAt: "2026-09-25T12:00:00.000Z",
+        updatedAt: "2026-09-25T12:00:01.000Z",
+        conversationId: 12,
+        recipientUserId: 9,
+      },
+    ];
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ receipts }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getElaineCommunicationReceipts(12)).resolves.toEqual(receipts);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/elaine/communication-receipts?conversationId=12",
+      expect.objectContaining({ method: "GET" }),
+    );
   });
 });

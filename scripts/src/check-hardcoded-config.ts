@@ -296,8 +296,12 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   // Fixed client-only display heuristics: collapse unusually long citation
   // lists and load older chat messages near the scroll boundary. Neither
   // changes Elaine's server behavior or belongs in owner-facing settings.
-  "lib/elaine-ui/src/ElaineChatPanel.tsx:354", // INLINE_CITATION_LIMIT
-  "lib/elaine-ui/src/ElaineChatPanel.tsx:547", // SCROLL_TOP_LOAD_THRESHOLD
+  "lib/elaine-ui/src/ElaineChatPanel.tsx:455", // INLINE_CITATION_LIMIT
+  "lib/elaine-ui/src/ElaineChatPanel.tsx:697", // SCROLL_TOP_LOAD_THRESHOLD
+  // Existing fixed bounds: verification-code guesses and reminder dispatch
+  // batch size are safety limits, not owner-facing feature settings.
+  "artifacts/api-server/src/elaine/index.ts:955", // MAX_PHONE_CODE_ATTEMPTS
+  "artifacts/api-server/src/lib/reminders-scheduler.ts:425", // CLAIM_BATCH_SIZE
   // Scanner heuristic that avoids treating short common strings as secrets;
   // it is a fixed detector safeguard, never product configuration.
   "scripts/src/check-public-file-secrets.ts:169", // MIN_SECRET_LENGTH
@@ -336,8 +340,6 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   "artifacts/api-server/src/elaine/app-operation-tools.ts:51",
 
   // ---- elaine/index.ts ----
-  // Auth security: max verification-code attempts before lockout.
-  "artifacts/api-server/src/elaine/index.ts:942",
   // MAX_ROUNDS: fixed 3-attempt ceiling inside the restricted-channel OpenAI
   // Responses attempt loop and the SMS/email/Slack reply loop. Not
   // owner-facing — the outer RuntimeBudgetConfig controls the agentic turn
@@ -477,7 +479,7 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
 
   // ---- lib/crease-removal.ts ----
   // OpenAI image-edit call options: provider timeout and SDK retry config.
-  "artifacts/api-server/src/lib/crease-removal.ts:200",
+  "artifacts/api-server/src/lib/crease-removal.ts:201",
 
   // ---- lib/document-generation.ts ----
   // Max rows in a generated document table — output-size guard.
@@ -587,8 +589,8 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
 
   // ---- routes/admin/integrations-health.ts ----
   // Health-check call timeout and retry delay.
-  "artifacts/api-server/src/routes/admin/integrations-health.ts:53",
-  "artifacts/api-server/src/routes/admin/integrations-health.ts:60",
+  "artifacts/api-server/src/routes/admin/integrations-health.ts:54",
+  "artifacts/api-server/src/routes/admin/integrations-health.ts:61",
 
   // ---- routes/auth.ts ----
   // Auth route: max verification-code attempts — mirrors elaine/index.ts counterpart.
@@ -707,7 +709,7 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
 
   // ---- mockup-sandbox dev plugin ----
   // File-change write-settle timing for the dev preview tool only.
-  "artifacts/mockup-sandbox/mockupPreviewPlugin.ts:157",
+  "artifacts/mockup-sandbox/mockupPreviewPlugin.ts:168",
 
   // ---- modules/ornaments ----
   // Google Calendar query timeout — external API call guard.

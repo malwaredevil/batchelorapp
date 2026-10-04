@@ -4,7 +4,7 @@
  */
 import sharp from "sharp";
 import OpenAI, { toFile } from "openai";
-import { callModel, MODELS } from "./ai-client";
+import { callModel, getModels } from "./ai-client";
 import { env } from "./env";
 import { logger } from "./logger";
 import {
@@ -85,7 +85,8 @@ export async function detectCreasesFromBuffer(
   let creases: DetectedCrease[] = [];
 
   try {
-    const raw = await callModel(MODELS.FAST_VISION, async (client, model) => {
+    const { fastVision } = await getModels();
+    const raw = await callModel(fastVision, async (client, model) => {
       const resp = await client.chat.completions.create({
         model,
         messages: [

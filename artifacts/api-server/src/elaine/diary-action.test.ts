@@ -190,6 +190,7 @@ vi.mock("./communication-actions", () => ({
   LIST_CONTACT_CHANNELS_TOOL_NAME: "list_contact_channels",
   LIST_SCHEDULED_CONTACTS_TOOL_NAME: "list_scheduled_contacts",
   COMMUNICATION_ACTION_TYPES: [],
+  RECEIPT_ACTION_TYPES: [],
 }));
 
 vi.mock("./office-actions", () => ({

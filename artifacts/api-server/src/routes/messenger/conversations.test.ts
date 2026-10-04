@@ -150,7 +150,6 @@ function buildApp(sessionUserId = 1): Express {
   app.use(express.json());
   // Inject session without requiring the full auth middleware stack.
   app.use((req, _res, next) => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (req as any).session = { userId: sessionUserId };
     next();
   });
@@ -228,6 +227,8 @@ describe("POST /messenger/conversations/:id/messages — @elaine mention", () =>
       userId: 1,
       conversationId: 1,
       senderName: "Bob",
+      // The saved message's ID keys communication proposals for this turn.
+      inboundMessageId: "messenger-message:42",
     });
     // inputText must be the message with the @elaine mention stripped.
     expect((callArgs[0] as { inputText: string }).inputText).not.toMatch(

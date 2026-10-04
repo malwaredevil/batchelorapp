@@ -11,6 +11,7 @@ import {
   numeric,
   uniqueIndex,
   uuid,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 
 // ── Elaine — shared AI assistant, used identically across Pottery, Quilting,
@@ -620,6 +621,79 @@ export type ElaineScheduledActionRow =
   typeof elaineScheduledActions.$inferSelect;
 export type InsertElaineScheduledAction =
   typeof elaineScheduledActions.$inferInsert;
+
+// Durable, privacy-minimal outcomes for outbound communication attempts.
+// The attempt key is an opaque server-issued proposal/turn key; payloadHash
+// binds it to the exact validated request without persisting message text or
+// contact details. Rows are retained for 90 days by the receipt service.
+export const elaineCommunicationReceipts = pgTable(
+  "elaine_communication_receipts",
+  {
+    id: uuid("id").primaryKey(),
+    attemptKey: text("attempt_key").notNull().unique(),
+    payloadHash: text("payload_hash").notNull(),
+    ownerUserId: integer("owner_user_id").notNull(),
+    actionType: text("action_type").notNull(),
+    channel: text("channel").notNull(),
+    status: text("status").notNull(),
+    conversationId: integer("conversation_id"),
+    recipientUserId: integer("recipient_user_id"),
+    scheduledActionId: integer("scheduled_action_id"),
+    providerId: text("provider_id"),
+    callStatus: text("call_status"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("elaine_comm_receipts_owner_created_idx").on(
+      table.ownerUserId,
+      table.createdAt,
+    ),
+    index("elaine_comm_receipts_owner_conversation_created_idx").on(
+      table.ownerUserId,
+      table.conversationId,
+      table.createdAt,
+    ),
+    index("elaine_comm_receipts_repeat_check_idx").on(
+      table.ownerUserId,
+      table.recipientUserId,
+      table.channel,
+      table.createdAt,
+    ),
+    index("elaine_comm_receipts_scheduled_action_idx").on(
+      table.scheduledActionId,
+    ),
+    index("elaine_comm_receipts_retention_idx").on(table.createdAt),
+  ],
+).enableRLS();
+
+export type ElaineCommunicationReceiptRow =
+  typeof elaineCommunicationReceipts.$inferSelect;
+export type InsertElaineCommunicationReceipt =
+  typeof elaineCommunicationReceipts.$inferInsert;
+
+export const elaineCommunicationProposalClaims = pgTable(
+  "elaine_communication_proposal_claims",
+  {
+    proposalKey: text("proposal_key").notNull(),
+    ownerUserId: integer("owner_user_id").notNull(),
+    payloadHash: text("payload_hash").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    primaryKey({
+      name: "elaine_communication_proposal_claims_pkey",
+      columns: [table.ownerUserId, table.proposalKey],
+    }),
+    index("elaine_comm_proposal_claims_retention_idx").on(table.createdAt),
+  ],
+).enableRLS();
 
 // Daily morning brief — one personalised summary per user per UTC day.
 // Cached in this table; dismissed flag hides the card until regenerated.

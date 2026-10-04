@@ -244,6 +244,7 @@ describe("listAllObjects", () => {
 describe("runStorageReconcile", () => {
   it(
     "reports orphaned objects (in storage but not in DB)",
+    { timeout: 15_000 },
     async () => {
       // Runs 6 concurrent buckets with Promise.all; allow generous timeout for slow CI
       mockListImpl = (_prefix, _opts) => ({
@@ -276,7 +277,6 @@ describe("runStorageReconcile", () => {
       expect(potteryBucket).toBeDefined();
       expect(potteryBucket!.orphanedObjects.length).toBeGreaterThanOrEqual(0);
     },
-    { timeout: 15_000 },
   );
 
   it("reports missing objects (DB row with no matching storage object)", async () => {

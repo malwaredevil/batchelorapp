@@ -53,6 +53,7 @@ export const MODEL_VISIBLE_HARD_TOOL_NAMES = new Set<string>([
   "analyze_ornament_photo",
   "lookup_book_value",
   "lookup_retail_value",
+  "get_recent_communication_receipts",
 ]);
 
 export const MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS: Readonly<
@@ -107,6 +108,7 @@ export const MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS: Readonly<
   analyze_ornament_photo: "analyzing that ornament photo",
   lookup_book_value: "looking up that book value",
   lookup_retail_value: "looking up that retail value",
+  get_recent_communication_receipts: "checking recent communication receipts",
 };
 
 export const SPECIALIZED_CURRENT_TOOL_NAMES = new Set<string>([

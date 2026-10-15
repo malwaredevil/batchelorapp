@@ -35,6 +35,7 @@
  *   pnpm --filter @workspace/scripts run check-hardcoded-config -- --audit
  */
 import path from "node:path";
+import ts from "typescript";
 import {
   getChangedFiles,
   readFileOrNull,
@@ -259,143 +260,289 @@ function findingContext(content: string, firstLine: number): string {
 
 /**
  * Pre-existing hits an engineer has explicitly reviewed and decided are NOT
- * owner-facing config (e.g. a fixed algorithm parameter). Each entry is
- * "path/relative/to/repo-root.ts:lineNumber". Add new entries only with a
- * `//` comment above explaining why — do not use this to silence a genuine
- * miss, fix the code instead.
+ * owner-facing config (e.g. a fixed algorithm parameter). The default no longer
+ * contains source coordinates. Keep the explicit coordinate-set API for callers
+ * that supply their own policy exceptions.
+ * Every entry needs a reason — do not silence genuine misses; fix them instead.
  */
-export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
+export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set();
+
+type ConfigAnchor = {
+  file: string;
+  kind: "constant" | "cluster";
+  scope: string;
+  symbol: string;
+  expression: string;
+};
+
+function reviewedConstants(
+  file: string,
+  expressions: Record<string, string>,
+  scope = "file-scope",
+): ConfigAnchor[] {
+  return Object.entries(expressions).map(([symbol, expression]) => ({
+    file,
+    kind: "constant",
+    scope,
+    symbol,
+    expression,
+  }));
+}
+
+/**
+ * Match complete reviewed expressions in their named scope, not their former
+ * source lines. Removed/config-store-backed declarations have no exception.
+ */
+export const ANCHORED_CONFIG_ALLOWLIST: readonly ConfigAnchor[] = [
   // Fixed provider-call creation bound. A timeout becomes indeterminate and
   // suppresses automatic retry; this is transport safety, not a user setting.
-  "artifacts/api-server/src/lib/comm-check-scheduler.ts:295",
-  // Per-channel delivery watchdog; not owner-facing product configuration.
-  "artifacts/api-server/src/lib/comm-check-scheduler.ts:357",
-  // Fixed diagnostic safety window intentionally exceeds interactive user-call
-  // polling; comm-check is an internal health probe, not owner-facing config.
-  "artifacts/api-server/src/lib/comm-check-scheduler.ts:360",
+  ...reviewedConstants("artifacts/api-server/src/lib/comm-check-scheduler.ts", {
+    PHONE_CREATE_TIMEOUT_MS: "60_000",
+    // Per-channel delivery watchdog; not owner-facing product configuration.
+    CHANNEL_DELIVERY_TIMEOUT_MS: "60_000",
+    // Fixed diagnostic safety window intentionally exceeds interactive user-call
+    // polling; comm-check is an internal health probe, not owner-facing config.
+    COMM_CHECK_INTERACTIVE_OUTCOME_TIMEOUT_MS: "30_000",
+  }),
   // Client-side concurrency safeguard for an expensive image-processing
   // action, not an owner-facing collection setting.
-  "artifacts/modules/src/quilting/pages/fabrics/index.tsx:567", // CREASE_BATCH_SIZE
+  ...reviewedConstants(
+    "artifacts/modules/src/quilting/pages/fabrics/index.tsx",
+    { CREASE_BATCH_SIZE: "3" },
+    "Fabrics",
+  ),
   // Fixed per-request image cap that prevents oversized AI payloads.
-  "artifacts/api-server/src/routes/magnets/magnets.ts:259", // MAX_REANALYZE_IMAGES
-  "artifacts/api-server/src/elaine/magnets-actions.ts:516",
+  ...reviewedConstants("artifacts/api-server/src/routes/magnets/magnets.ts", {
+    MAX_REANALYZE_IMAGES: "5",
+  }),
+  ...reviewedConstants(
+    "artifacts/api-server/src/elaine/magnets-actions.ts",
+    { MAX_REANALYZE_IMAGES: "5" },
+    "reanalyze_magnet",
+  ),
   // UI-only reconnect poll cadence; it controls a local query refresh, not
   // any owner-facing product behavior or server-side resource budget.
-  "artifacts/web/src/pages/control-panel.tsx:381", // POLL_INTERVAL_MS
+  ...reviewedConstants("artifacts/web/src/pages/control-panel.tsx", {
+    POLL_INTERVAL_MS: "30_000",
+  }),
   // Fixed actor-client execution bounds that prevent an individual Hallmark
   // lookup from consuming unbounded API time, polling, or result payloads.
-  "artifacts/api-server/src/lib/ornaments/hallmark-search.ts:82",
-  "artifacts/api-server/src/lib/ornaments/hallmark-search.ts:83",
-  "artifacts/api-server/src/lib/ornaments/hallmark-search.ts:84",
+  {
+    file: "artifacts/api-server/src/lib/ornaments/hallmark-search.ts",
+    kind: "cluster",
+    scope: "searchHallmark",
+    symbol: "runApifyActor.arguments.3",
+    expression: `{
+      timeoutMs: 120_000,
+      pollIntervalMs: 5_000,
+      maxItems: 1,
+      memoryMbytes: 2048,
+    }`,
+  },
   // Fixed outbound Firecrawl request budget; this is a network safety bound,
   // not owner-facing scanner configuration.
-  "artifacts/api-server/src/lib/ornaments/hallmark-events-source.ts:9",
-  // Input-validation cap for a short internal category label, not a tunable
-  // collection setting.
-  "artifacts/api-server/src/routes/ornaments/ornaments.ts:119", // MAX_LABEL
+  ...reviewedConstants(
+    "artifacts/api-server/src/lib/ornaments/hallmark-events-source.ts",
+    {
+      REQUEST_TIMEOUT_MS: "45_000",
+    },
+  ),
   // Fixed client-only display heuristics: collapse unusually long citation
   // lists and load older chat messages near the scroll boundary. Neither
   // changes Elaine's server behavior or belongs in owner-facing settings.
-  "lib/elaine-ui/src/ElaineChatPanel.tsx:455", // INLINE_CITATION_LIMIT
-  "lib/elaine-ui/src/ElaineChatPanel.tsx:697", // SCROLL_TOP_LOAD_THRESHOLD
-  // Existing fixed bounds: verification-code guesses and reminder dispatch
-  // batch size are safety limits, not owner-facing feature settings.
-  "artifacts/api-server/src/elaine/index.ts:955", // MAX_PHONE_CODE_ATTEMPTS
-  "artifacts/api-server/src/lib/reminders-scheduler.ts:425", // CLAIM_BATCH_SIZE
+  ...reviewedConstants("lib/elaine-ui/src/ElaineChatPanel.tsx", {
+    INLINE_CITATION_LIMIT: "4",
+  }),
+  ...reviewedConstants(
+    "lib/elaine-ui/src/ElaineChatPanel.tsx",
+    {
+      SCROLL_TOP_LOAD_THRESHOLD: "80",
+    },
+    "ElaineChatPanel",
+  ),
+  // Reminder dispatch batch size is a safety limit, not an owner-facing setting.
+  ...reviewedConstants("artifacts/api-server/src/lib/reminders-scheduler.ts", {
+    CLAIM_BATCH_SIZE: "200",
+  }),
   // Scanner heuristic that avoids treating short common strings as secrets;
   // it is a fixed detector safeguard, never product configuration.
-  "scripts/src/check-public-file-secrets.ts:169", // MIN_SECRET_LENGTH
+  ...reviewedConstants("scripts/src/check-public-file-secrets.ts", {
+    MIN_SECRET_LENGTH: "16",
+  }),
   // ---- scripts/scaffold-collection-module.ts ----
   // minLength/maxLength inside the generated OpenAPI YAML templates for
   // category/item name fields — input-validation caps mirroring the existing
   // modules' specs, part of code-generation template strings, never
   // owner-facing runtime config.
-  "scripts/src/scaffold-collection-module.ts:839",
-  "scripts/src/scaffold-collection-module.ts:840",
-  "scripts/src/scaffold-collection-module.ts:1025",
-  "scripts/src/scaffold-collection-module.ts:1036",
+  {
+    file: "scripts/src/scaffold-collection-module.ts",
+    kind: "cluster",
+    scope: "yamlTemplate",
+    symbol: "categorySchemas",
+    expression: `spec.categories
+    ? \`    Category:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        bgColor:
+          type:
+            - string
+            - "null"
+        textColor:
+          type:
+            - string
+            - "null"
+        count:
+          type: integer
+    CategoryInput:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+        bgColor:
+          type:
+            - string
+            - "null"
+        textColor:
+          type:
+            - string
+            - "null"
+    CategoryColorInput:
+      type: object
+      properties:
+        bgColor:
+          type:
+            - string
+            - "null"
+        textColor:
+          type:
+            - string
+            - "null"
+    MergeCategoryInput:
+      type: object
+      required:
+        - intoId
+      properties:
+        intoId:
+          type: integer
+\`
+    : ""`,
+  },
 
   // ---- scripts/check-duplicate-code.ts ----
   // MIN_TOKENS: fixed algorithm parameter of the duplicate-code detector
   // (minimum normalized-token length for a body to be comparable). A
   // guardrail-internal tuning constant, never owner-facing product config.
-  "scripts/src/check-duplicate-code.ts:62",
+  ...reviewedConstants("scripts/src/check-duplicate-code.ts", {
+    MIN_TOKENS: "80",
+  }),
 
   // ---- scripts/check-agent-screenshot-access.ts ----
   // CHECK_TIMEOUT_MS: fixed network budget for the development-only liveness
   // probe. This is a diagnostic implementation safeguard, not product config.
-  "scripts/src/check-agent-screenshot-access.ts:10",
+  ...reviewedConstants("scripts/src/check-agent-screenshot-access.ts", {
+    CHECK_TIMEOUT_MS: "15_000",
+  }),
 
   // ---- observability / request-logging threshold ----
   // Fixed monitoring constant; changing it has no product-visible effect.
-  "artifacts/api-server/src/app.ts:24",
+  ...reviewedConstants("artifacts/api-server/src/app.ts", {
+    SLOW_REQUEST_THRESHOLD_MS: "2_000",
+  }),
 
   // ---- elaine/adaptive-actions.ts ----
   // minItems/maxItems on a tool-schema array: fan-out guard, not owner config.
-  "artifacts/api-server/src/elaine/adaptive-actions.ts:212",
+  {
+    file: "artifacts/api-server/src/elaine/adaptive-actions.ts",
+    kind: "cluster",
+    scope: "file-scope",
+    symbol: "queries",
+    expression: `{
+      type: "array",
+      items: { type: "string" },
+      minItems: 1,
+      maxItems: 5,
+    }`,
+  },
 
   // ---- elaine/app-operation-tools.ts ----
   // Resource/security limits on raw HTTP request and response body sizes.
-  "artifacts/api-server/src/elaine/app-operation-tools.ts:50",
-  "artifacts/api-server/src/elaine/app-operation-tools.ts:51",
-
-  // ---- elaine/index.ts ----
-  // MAX_ROUNDS: fixed 3-attempt ceiling inside the restricted-channel OpenAI
-  // Responses attempt loop and the SMS/email/Slack reply loop. Not
-  // owner-facing — the outer RuntimeBudgetConfig controls the agentic turn
-  // budget; these inner loops are implementation guards for the restricted
-  // channel path that are too tightly coupled to the response-parsing logic
-  // to be safely raised by the owner.
-  "artifacts/api-server/src/elaine/index.ts:10273", // MAX_ROUNDS (restricted-channel OpenAI-Responses attempt loop)
-  "artifacts/api-server/src/elaine/index.ts:10535", // MAX_ROUNDS (restricted-channel reply loop, SMS/email/Slack)
-
-  // ---- routes/magnets/magnets.ts ----
-  // Fixed per-request image cap that prevents oversized AI payloads.
-  "artifacts/api-server/src/routes/magnets/magnets.ts:266",
+  ...reviewedConstants(
+    "artifacts/api-server/src/elaine/app-operation-tools.ts",
+    {
+      MAX_REQUEST_BYTES: "200_000",
+      MAX_RESPONSE_BYTES: "512_000",
+    },
+  ),
 
   // ---- routes/pottery/pottery.ts ----
   // Input-validation and storage caps tied to field sizes and upload safety,
   // not owner-facing product configuration.
-  "artifacts/api-server/src/routes/pottery/pottery.ts:114", // MAX_NAME
-  "artifacts/api-server/src/routes/pottery/pottery.ts:116", // MAX_TEXT
-  "artifacts/api-server/src/routes/pottery/pottery.ts:117", // MAX_LABEL
-  "artifacts/api-server/src/routes/pottery/pottery.ts:120", // MAX_SUPPLEMENTAL_IMAGES
+  ...reviewedConstants("artifacts/api-server/src/routes/pottery/pottery.ts", {
+    MAX_NAME: "200",
+    MAX_NOTES: "4000",
+    MAX_TEXT: "500",
+    MAX_LABEL: "100",
+    MAX_SUPPLEMENTAL_IMAGES: "20",
+  }),
 
   // ---- routes/ornaments/ornaments.ts ----
   // Pre-existing input-validation caps (notes length, supplemental-image
   // counts) — not owner-facing: these are DB column-length guards and
   // a fixed storage cap tied to the upload pipeline.
-  "artifacts/api-server/src/routes/ornaments/ornaments.ts:128", // MAX_NOTES
-  "artifacts/api-server/src/routes/ornaments/ornaments.ts:129", // MAX_TEXT
-  "artifacts/api-server/src/routes/ornaments/ornaments.ts:127", // MAX_NAME
-  "artifacts/api-server/src/routes/ornaments/ornaments.ts:130", // MAX_LABEL
-  "artifacts/api-server/src/routes/ornaments/ornaments.ts:132", // MAX_SUPPLEMENTAL_IMAGES
-  "artifacts/api-server/src/routes/ornaments/ornaments.ts:133", // MAX_AI_SUPPLEMENTAL
+  ...reviewedConstants(
+    "artifacts/api-server/src/routes/ornaments/ornaments.ts",
+    {
+      MAX_NAME: "200",
+      MAX_NOTES: "4000",
+      MAX_TEXT: "500",
+      MAX_LABEL: "100",
+      MAX_SUPPLEMENTAL_IMAGES: "20",
+    },
+  ),
   // ornaments MAX_BULK_REANALYZE is now owner-configurable via
   // thresholds.ornamentsBulkReanalyzeLimit in the Elaine config store.
 
   // ---- routes/quilting/patterns.ts & quilts.ts ----
-  // Pre-existing input-validation caps (field/notes/label lengths, reanalyze
-  // batch sizes) unrelated to Task #1058; flagged only because import
-  // additions for that task placed adjacent diff context around them.
-  // Genuine owner-configurability candidates for the broader hardcoded-config
-  // audit, not this task's scope.
-  // Pre-existing input-validation caps moved verbatim from blocks.ts/layouts.ts
-  // into the shared category helper (Task dedupe of category helpers); same
-  // rationale as the patterns/quilts caps below.
-  "artifacts/api-server/src/routes/quilting/category-helpers.ts:17", // MAX_CATEGORY_NAMES
-  "artifacts/api-server/src/routes/quilting/category-helpers.ts:18", // MAX_CATEGORY_NAME_LEN
-  "artifacts/api-server/src/routes/quilting/fabrics.ts:107", // MAX_FIELD
-  "artifacts/api-server/src/routes/quilting/fabrics.ts:111", // MAX_SUPPLEMENTAL_IMAGES
-  "artifacts/api-server/src/routes/quilting/fabrics.ts:112", // MAX_REANALYZE_IMAGES
-  "artifacts/api-server/src/routes/quilting/patterns.ts:64", // MAX_NAME
-  "artifacts/api-server/src/routes/quilting/patterns.ts:65", // MAX_FIELD
-  "artifacts/api-server/src/routes/quilting/patterns.ts:66", // MAX_NOTES
-  "artifacts/api-server/src/routes/quilting/patterns.ts:67", // MAX_LABEL
-  "artifacts/api-server/src/routes/quilting/patterns.ts:332", // MAX_REANALYZE_IMAGES
-  "artifacts/api-server/src/routes/quilting/quilts.ts:67", // MAX_NAME
-  "artifacts/api-server/src/routes/quilting/quilts.ts:68", // MAX_NOTES
-  "artifacts/api-server/src/routes/quilting/quilts.ts:69", // MAX_LABEL
+  // Field/notes/label and shared category validation caps; fixed storage and
+  // per-request AI payload guards, not owner-facing collection configuration.
+  ...reviewedConstants(
+    "artifacts/api-server/src/routes/quilting/category-helpers.ts",
+    {
+      MAX_CATEGORY_NAMES: "20",
+      MAX_CATEGORY_NAME_LEN: "100",
+    },
+  ),
+  ...reviewedConstants("artifacts/api-server/src/routes/quilting/fabrics.ts", {
+    MAX_NAME: "200",
+    MAX_FIELD: "200",
+    MAX_NOTES: "4000",
+    MAX_LABEL: "100",
+    MAX_SUPPLEMENTAL_IMAGES: "10",
+    MAX_REANALYZE_IMAGES: "5",
+  }),
+  ...reviewedConstants("artifacts/api-server/src/routes/quilting/patterns.ts", {
+    MAX_NAME: "200",
+    MAX_FIELD: "200",
+    MAX_NOTES: "4000",
+    MAX_LABEL: "100",
+    MAX_REANALYZE_IMAGES: "5",
+  }),
+  ...reviewedConstants("artifacts/api-server/src/routes/quilting/quilts.ts", {
+    MAX_NAME: "200",
+    MAX_NOTES: "4000",
+    MAX_LABEL: "100",
+  }),
   // quilting MAX_BULK_REANALYZE (fabrics/patterns/quilts) is now
   // owner-configurable via thresholds.quiltingBulkReanalyzeLimit in the
   // Elaine config store.
@@ -403,7 +550,12 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   // ---- modules/ornaments/pages/hallmark-events.tsx ----
   // UI-only query timeout that prevents a stalled Calendar request from
   // blocking the page indefinitely; it does not alter scanner reconciliation.
-  "artifacts/modules/src/ornaments/pages/hallmark-events.tsx:62",
+  ...reviewedConstants(
+    "artifacts/modules/src/ornaments/pages/hallmark-events.tsx",
+    {
+      GCAL_QUERY_TIMEOUT_MS: "10_000",
+    },
+  ),
 
   // ---- lib/sentry-error-nudges.ts ----
   // MAX_DETAILED_ISSUES: cosmetic cap on how many individual issue lines
@@ -411,405 +563,746 @@ export const HARDCODED_CONFIG_ALLOWLIST: ReadonlySet<string> = new Set([
   // collapse into a "+N more" count. Pure message-formatting choice, not a
   // limit/threshold/budget the owner would ever need to tune. Flagged only
   // because an unrelated retry-wrapper edit in this file entered the diff.
-  "artifacts/api-server/src/lib/sentry-error-nudges.ts:54",
+  ...reviewedConstants("artifacts/api-server/src/lib/sentry-error-nudges.ts", {
+    MAX_DETAILED_ISSUES: "5",
+  }),
 
   // ---- lib/collection-ui/src/async-action-status.ts ----
   // Pure UI-polish timings for how long a "success"/"error" badge lingers on
   // a gallery card before auto-clearing back to idle. Not a limit/budget/cap
   // an owner would ever need to tune — no product behavior depends on the
   // exact value, unlike Elaine's per-turn runtime budget.
-  "lib/collection-ui/src/async-action-status.ts:6", // SUCCESS_DISPLAY_MS
-  "lib/collection-ui/src/async-action-status.ts:7", // ERROR_DISPLAY_MS
+  ...reviewedConstants("lib/collection-ui/src/async-action-status.ts", {
+    SUCCESS_DISPLAY_MS: "2500",
+    ERROR_DISPLAY_MS: "5000",
+  }),
 
   // ---- lib/elaine-ui/src/CommandPalette.tsx ----
-  // Pre-existing client-side UI constant (size of the "Recent" search-history
-  // list kept in localStorage) unrelated to Task #1106 (adding ornaments to
-  // global search); flagged only because that task touched this file for an
-  // unrelated import/icon addition. Not an owner-facing limit/budget — purely
-  // a UI-polish cap on a local list length.
-  "lib/elaine-ui/src/CommandPalette.tsx:81", // MAX_RECENT
-
-  // ---- elaine/runtime/trace-store.ts ----
-  // Zero-initializers for usage counters inside a trace summary object.
-  "artifacts/api-server/src/elaine/runtime/trace-store.ts:115",
-
-  // ---- elaine/runtime/turn-runtime.ts ----
-  // Zero-value usage-counter initializers (modelRounds/replans/elapsedMs
-  // start at 0 every turn), not owner-facing limits — the names happen to
-  // overlap with RuntimeBudgetConfig's ceiling field names because they
-  // track usage against those ceilings, but the values here are always 0.
-  "artifacts/api-server/src/elaine/runtime/turn-runtime.ts:141",
+  // Size of the localStorage "Recent" search-history list: UI presentation.
+  ...reviewedConstants("lib/elaine-ui/src/CommandPalette.tsx", {
+    MAX_RECENT: "5",
+  }),
 
   // ---- elaine/test-helpers/runtime-mock.ts ----
   // Test-only mock default for ElaineTurnRuntime.getBudgetStatus() —
   // mirrors RuntimeBudgetConfig's shape so route tests get a realistic
   // budget snapshot, but these are fixture values for assertions, not a
   // real owner-configurable ceiling (that lives in lib/elaine-config.ts).
-  "artifacts/api-server/src/elaine/test-helpers/runtime-mock.ts:141",
-  "artifacts/api-server/src/elaine/test-helpers/runtime-mock.ts:142",
-  "artifacts/api-server/src/elaine/test-helpers/runtime-mock.ts:143",
-  "artifacts/api-server/src/elaine/test-helpers/runtime-mock.ts:144",
+  {
+    file: "artifacts/api-server/src/elaine/test-helpers/runtime-mock.ts",
+    kind: "cluster",
+    scope: "ElaineTurnRuntime.getBudgetStatus",
+    symbol: "budget",
+    expression: `{
+      maxModelRounds: 4,
+      maxToolCalls: 16,
+      maxReplans: 2,
+      maxElapsedMs: 120_000,
+    }`,
+  },
 
   // ---- elaine/turn-registry.ts ----
   // Memory/leak protection: max buffered SSE events per live turn.
-  "artifacts/api-server/src/elaine/turn-registry.ts:51",
+  ...reviewedConstants("artifacts/api-server/src/elaine/turn-registry.ts", {
+    MAX_BUFFERED_EVENTS: "10_000",
+  }),
 
   // ---- instrument.ts ----
   // Recursive Sentry payload redaction depth — defensive security guard.
-  "artifacts/api-server/src/instrument.ts:74",
+  ...reviewedConstants("artifacts/api-server/src/instrument.ts", {
+    MAX_REDACT_DEPTH: "12",
+  }),
 
   // ---- lib/agentphone-http.ts ----
   // AgentPhone HTTP transport: retry count and exponential-backoff base delay.
-  "artifacts/api-server/src/lib/agentphone-http.ts:24",
-  "artifacts/api-server/src/lib/agentphone-http.ts:25",
-
-  // Fixed one-hour pending outbound-call correlation/privacy bound. This is
-  // deliberately not owner-configurable: extending it increases the window
-  // for stale call context to be disclosed to a later call.
-  "artifacts/api-server/src/lib/agentphone-conversation.ts:14",
+  ...reviewedConstants("artifacts/api-server/src/lib/agentphone-http.ts", {
+    MAX_RETRIES: "2",
+    BASE_DELAY_MS: "500",
+  }),
 
   // ---- lib/circuit-breaker.ts ----
   // Circuit-breaker infrastructure defaults; per-instantiation overridable via options.
-  "artifacts/api-server/src/lib/circuit-breaker.ts:31",
-  "artifacts/api-server/src/lib/circuit-breaker.ts:32",
-  "artifacts/api-server/src/lib/circuit-breaker.ts:33",
-  "artifacts/api-server/src/lib/circuit-breaker.ts:34",
-  // Object-literal cluster at the no-args constructor default-fill site.
-  "artifacts/api-server/src/lib/circuit-breaker.ts:197",
+  ...reviewedConstants("artifacts/api-server/src/lib/circuit-breaker.ts", {
+    DEFAULT_FAILURE_THRESHOLD: "5",
+    DEFAULT_SUCCESS_THRESHOLD: "2",
+    DEFAULT_WINDOW_MS: "60_000",
+    DEFAULT_RESET_TIMEOUT_MS: "30_000",
+  }),
+  // Shared singleton's explicit infrastructure defaults.
+  {
+    file: "artifacts/api-server/src/lib/circuit-breaker.ts",
+    kind: "cluster",
+    scope: "file-scope",
+    symbol: "new CircuitBreaker.arguments.0",
+    expression: `{
+      failureThreshold: 5,
+      successThreshold: 2,
+      windowMs: 60_000,
+      resetTimeoutMs: 30_000,
+    }`,
+  },
 
   // ---- lib/crease-removal.ts ----
   // OpenAI image-edit call options: provider timeout and SDK retry config.
-  "artifacts/api-server/src/lib/crease-removal.ts:201",
+  {
+    file: "artifacts/api-server/src/lib/crease-removal.ts",
+    kind: "cluster",
+    scope: "removeCreasesFromBuffer",
+    symbol: "new OpenAI.arguments.0",
+    expression: `{
+      apiKey: env.openaiApiKey,
+      timeout: 90_000,
+      maxRetries: 0,
+    }`,
+  },
 
   // ---- lib/document-generation.ts ----
   // Max rows in a generated document table — output-size guard.
-  "artifacts/api-server/src/lib/document-generation.ts:43",
+  ...reviewedConstants("artifacts/api-server/src/lib/document-generation.ts", {
+    MAX_TABLE_ROWS: "2000",
+  }),
 
   // ---- lib/document-parsing.ts ----
   // Max extracted chars and XLSX rows — context-window/memory guards.
-  "artifacts/api-server/src/lib/document-parsing.ts:17",
-  "artifacts/api-server/src/lib/document-parsing.ts:18",
+  ...reviewedConstants("artifacts/api-server/src/lib/document-parsing.ts", {
+    MAX_EXTRACTED_CHARS: "8000",
+    MAX_XLSX_ROWS_PER_SHEET: "200",
+  }),
 
   // ---- lib/ebay/sold-listings.ts ----
   // Apify/eBay actor polling: job timeout and poll cadence.
-  "artifacts/api-server/src/lib/ebay/sold-listings.ts:134",
+  {
+    file: "artifacts/api-server/src/lib/ebay/sold-listings.ts",
+    kind: "cluster",
+    scope: "lookupEbaySoldListings",
+    symbol: "runApifyActor.arguments.3",
+    expression: `{
+      timeoutMs: 120_000,
+      pollIntervalMs: 5_000,
+      maxItems: count,
+      memoryMbytes: 1024,
+    }`,
+  },
 
   // ---- lib/elaine-cross-channel.ts ----
   // Bounded cross-channel gist: entry count and topic label length.
   // Both are prompt-engineering / memory-safety constants, not owner config.
-  "artifacts/api-server/src/lib/elaine-cross-channel.ts:41",
-  "artifacts/api-server/src/lib/elaine-cross-channel.ts:58",
+  ...reviewedConstants("artifacts/api-server/src/lib/elaine-cross-channel.ts", {
+    MAX_ENTRIES: "15",
+    MAX_TOPIC_CHARS: "120",
+  }),
 
   // ---- lib/gmail-scan.ts ----
   // Gmail scan caps: messages per run — scan resource/cost guards.
-  "artifacts/api-server/src/lib/gmail-scan.ts:49",
-  "artifacts/api-server/src/lib/gmail-scan.ts:50",
+  ...reviewedConstants("artifacts/api-server/src/lib/gmail-scan.ts", {
+    MAX_MESSAGES_PER_SCAN: "150",
+    MAX_LABELED_MESSAGES_PER_SCAN: "100",
+  }),
 
   // ---- lib/google-oauth.ts ----
   // OAuth token pre-refresh buffer — protocol reliability detail.
-  "artifacts/api-server/src/lib/google-oauth.ts:34",
+  ...reviewedConstants("artifacts/api-server/src/lib/google-oauth.ts", {
+    OAUTH_EXPIRY_BUFFER_MS: "60_000",
+  }),
 
   // ---- lib/image.ts ----
   // Decompression-bomb and storage/AI-payload dimension limits.
-  "artifacts/api-server/src/lib/image.ts:25",
-  "artifacts/api-server/src/lib/image.ts:32",
-  "artifacts/api-server/src/lib/image.ts:40",
+  ...reviewedConstants("artifacts/api-server/src/lib/image.ts", {
+    MAX_INPUT_PIXELS: "50_000_000",
+    MAX_STORAGE_DIMENSION: "2048",
+    MAX_AI_DIMENSION: "1024",
+  }),
   // VTracer vectorization algorithm knobs — fixed tuning presets, not owner config.
-  "artifacts/api-server/src/lib/image.ts:468",
-  "artifacts/api-server/src/lib/image.ts:520",
-  "artifacts/api-server/src/lib/image.ts:538",
+  {
+    file: "artifacts/api-server/src/lib/image.ts",
+    kind: "cluster",
+    scope: "generateFabricTileVectorized",
+    symbol: "vectorize.arguments.1",
+    expression: `{
+      colorMode: ColorMode.Color,
+      colorPrecision: 6,
+      filterSpeckle: 4,
+      spliceThreshold: 45,
+      cornerThreshold: 60,
+      hierarchical: Hierarchical.Stacked,
+      mode: PathSimplifyMode.Spline,
+      layerDifference: 5,
+      lengthThreshold: 5,
+      maxIterations: 2,
+      pathPrecision: 5,
+    }`,
+  },
+  {
+    file: "artifacts/api-server/src/lib/image.ts",
+    kind: "cluster",
+    scope: "file-scope",
+    symbol: "DIRECTION_A_BASELINE_TUNING",
+    expression: `{
+      flatFieldSigmas: [FLAT_FIELD_BLUR_SIGMA, FLAT_FIELD_V3_SECOND_PASS_SIGMA],
+      textureSuppressSigma: TEXTURE_SUPPRESS_SIGMA,
+      posterizeColors: POSTERIZE_COLORS,
+      colorPrecision: 6,
+      filterSpeckle: 4,
+      spliceThreshold: 45,
+      cornerThreshold: 60,
+      layerDifference: 5,
+      lengthThreshold: 5,
+    }`,
+  },
+  {
+    file: "artifacts/api-server/src/lib/image.ts",
+    kind: "cluster",
+    scope: "file-scope",
+    symbol: "DIRECTION_A_SMOOTH_TUNING",
+    expression: `{
+      flatFieldSigmas: [FLAT_FIELD_BLUR_SIGMA, FLAT_FIELD_V3_SECOND_PASS_SIGMA],
+      textureSuppressSigma: 3.2,
+      posterizeColors: 5,
+      colorPrecision: 5,
+      filterSpeckle: 6,
+      spliceThreshold: 45,
+      cornerThreshold: 75,
+      layerDifference: 8,
+      lengthThreshold: 6,
+    }`,
+  },
 
   // ---- lib/integrations-health-nudges.ts ----
   // Background job rate guard and startup delay.
-  "artifacts/api-server/src/lib/integrations-health-nudges.ts:72",
-  "artifacts/api-server/src/lib/integrations-health-nudges.ts:75",
+  ...reviewedConstants(
+    "artifacts/api-server/src/lib/integrations-health-nudges.ts",
+    {
+      MAX_FAILURE_NUDGES_PER_RUN: "3",
+      STARTUP_DELAY_MS: "90_000",
+    },
+  ),
 
   // ---- lib/jobs/worker.ts ----
   // Background job worker heartbeat interval — internal liveness signaling.
-  "artifacts/api-server/src/lib/jobs/worker.ts:21",
+  ...reviewedConstants("artifacts/api-server/src/lib/jobs/worker.ts", {
+    HEARTBEAT_INTERVAL_MS: "60_000",
+  }),
 
   // ---- lib/openrouter-models.ts ----
   // Model-list fetch timeout — HTTP transport detail.
-  "artifacts/api-server/src/lib/openrouter-models.ts:29",
+  ...reviewedConstants("artifacts/api-server/src/lib/openrouter-models.ts", {
+    DEFAULT_FETCH_TIMEOUT_MS: "8_000",
+  }),
 
   // ---- lib/ornaments/book-value.ts ----
   // External Hallmark site fetch timeout.
-  "artifacts/api-server/src/lib/ornaments/book-value.ts:108",
-
-  // ---- lib/ornaments/hallmark-search.ts ----
-  // Apify Hallmark search actor: polling timeout, cadence, and result cap.
-  "artifacts/api-server/src/lib/ornaments/hallmark-search.ts:86",
-
-  // ---- lib/ornaments/hooh-single-lookup.ts ----
-  // External Hallmark site single-item fetch timeout.
-  "artifacts/api-server/src/lib/ornaments/hooh-single-lookup.ts:15",
-
-  // ---- lib/reminders-scheduler.ts ----
-  // Reminder claim batch size — background job implementation detail.
-  "artifacts/api-server/src/lib/reminders-scheduler.ts:419",
-
-  // ---- lib/sentry-error-nudges.ts ----
-  // Max Sentry issues fetched per nudge run — external API call guard.
-  "artifacts/api-server/src/lib/sentry-error-nudges.ts:53",
+  ...reviewedConstants("artifacts/api-server/src/lib/ornaments/book-value.ts", {
+    FETCH_TIMEOUT_MS: "20_000",
+  }),
 
   // ---- lib/sentry-issues.ts ----
   // Sentry API call timeout and max issues per fetch.
-  "artifacts/api-server/src/lib/sentry-issues.ts:89",
-  "artifacts/api-server/src/lib/sentry-issues.ts:90",
+  ...reviewedConstants("artifacts/api-server/src/lib/sentry-issues.ts", {
+    FETCH_TIMEOUT_MS: "15_000",
+    MAX_ISSUES: "50",
+  }),
 
   // ---- lib/ssrf-safe-fetch.ts ----
   // SSRF security limits: DNS timeout, request timeout, body size, text cap, redirect cap.
-  "artifacts/api-server/src/lib/ssrf-safe-fetch.ts:169",
-  "artifacts/api-server/src/lib/ssrf-safe-fetch.ts:209",
-  "artifacts/api-server/src/lib/ssrf-safe-fetch.ts:210",
-  "artifacts/api-server/src/lib/ssrf-safe-fetch.ts:211",
-  "artifacts/api-server/src/lib/ssrf-safe-fetch.ts:527",
+  ...reviewedConstants(
+    "artifacts/api-server/src/lib/ssrf-safe-fetch.ts",
+    {
+      DNS_TIMEOUT_MS: "2000",
+    },
+    "assertSsrfSafeDns",
+  ),
+  ...reviewedConstants("artifacts/api-server/src/lib/ssrf-safe-fetch.ts", {
+    FETCH_ABSOLUTE_TIMEOUT_MS: "12_000",
+    MAX_BODY_BYTES: "200_000",
+    MAX_TEXT_LENGTH: "6_000",
+    MAX_REDIRECTS: "5",
+  }),
 
   // ---- lib/storage-core.ts ----
   // In-memory Supabase Storage bucket policy cache size.
-  "artifacts/api-server/src/lib/storage-core.ts:35",
+  ...reviewedConstants("artifacts/api-server/src/lib/storage-core.ts", {
+    MAX_CACHE_ENTRIES_PER_BUCKET: "250",
+  }),
 
   // ---- lib/travels/google-maps.ts ----
   // Google Maps geocoding API call timeout.
-  "artifacts/api-server/src/lib/travels/google-maps.ts:20",
+  ...reviewedConstants("artifacts/api-server/src/lib/travels/google-maps.ts", {
+    DEFAULT_TIMEOUT_MS: "8000",
+  }),
 
   // ---- lib/travels-nudges.ts ----
   // AQI index reference value — fixed public health standard (100 = unhealthy for sensitive groups).
-  "artifacts/api-server/src/lib/travels-nudges.ts:27",
+  ...reviewedConstants("artifacts/api-server/src/lib/travels-nudges.ts", {
+    AQI_UNHEALTHY_THRESHOLD: "100",
+  }),
 
   // ---- lib/web-search-citations.ts ----
   // Web-search citation count cap — presentation detail.
-  "artifacts/api-server/src/lib/web-search-citations.ts:1",
+  ...reviewedConstants("artifacts/api-server/src/lib/web-search-citations.ts", {
+    MAX_WEB_SEARCH_CITATIONS: "20",
+  }),
 
   // ---- lib/web-search.ts ----
   // Web-search provider timeouts and max image results.
-  "artifacts/api-server/src/lib/web-search.ts:33",
-  "artifacts/api-server/src/lib/web-search.ts:36",
-  "artifacts/api-server/src/lib/web-search.ts:41",
+  ...reviewedConstants("artifacts/api-server/src/lib/web-search.ts", {
+    DEFAULT_SEARCH_TIMEOUT_MS: "15_000",
+    MAX_IMAGES: "4",
+    FETCH_PAGE_TIMEOUT_MS: "20_000",
+  }),
 
   // ---- routes/admin/integrations-health.ts ----
   // Health-check call timeout and retry delay.
-  "artifacts/api-server/src/routes/admin/integrations-health.ts:54",
-  "artifacts/api-server/src/routes/admin/integrations-health.ts:61",
+  ...reviewedConstants(
+    "artifacts/api-server/src/routes/admin/integrations-health.ts",
+    {
+      CHECK_TIMEOUT_MS: "15_000",
+      CHECK_RETRY_DELAY_MS: "2_000",
+    },
+  ),
 
   // ---- routes/auth.ts ----
   // Auth route: max verification-code attempts — mirrors elaine/index.ts counterpart.
-  "artifacts/api-server/src/routes/auth.ts:423",
+  ...reviewedConstants("artifacts/api-server/src/routes/auth.ts", {
+    MAX_PHONE_CODE_ATTEMPTS: "5",
+  }),
 
   // ---- routes/hub.ts ----
   // Link-preview: redirect safety limit and fetch timeout.
-  "artifacts/api-server/src/routes/hub.ts:251",
-  "artifacts/api-server/src/routes/hub.ts:252",
+  ...reviewedConstants("artifacts/api-server/src/routes/hub.ts", {
+    MAX_REDIRECTS: "5",
+    FETCH_TIMEOUT_MS: "10_000",
+  }),
 
   // ---- routes/messenger/gifs.ts ----
   // GIF search result count defaults — API pagination detail.
-  "artifacts/api-server/src/routes/messenger/gifs.ts:10",
-  "artifacts/api-server/src/routes/messenger/gifs.ts:11",
+  ...reviewedConstants("artifacts/api-server/src/routes/messenger/gifs.ts", {
+    DEFAULT_LIMIT: "24",
+    MAX_LIMIT: "50",
+  }),
 
   // ---- routes/messenger/link-preview.ts ----
   // Link-preview fetch timeouts and headroom guard.
-  "artifacts/api-server/src/routes/messenger/link-preview.ts:9",
-  "artifacts/api-server/src/routes/messenger/link-preview.ts:13",
-  "artifacts/api-server/src/routes/messenger/link-preview.ts:14",
+  ...reviewedConstants(
+    "artifacts/api-server/src/routes/messenger/link-preview.ts",
+    {
+      PREVIEW_TIMEOUT_MS: "6000",
+      DIRECT_FETCH_TIMEOUT_MS: "3000",
+      MIN_REMAINING_MS: "500",
+    },
+  ),
 
   // ---- routes/messenger/typing.ts ----
   // Typing indicator ephemeral state TTL — in-memory implementation detail.
-  "artifacts/api-server/src/routes/messenger/typing.ts:18",
-
-  // ---- routes/ornaments/ornaments.ts ----
-  // DB field-length validation limits — tied to schema column sizes, not owner-adjustable.
-  "artifacts/api-server/src/routes/ornaments/ornaments.ts:115",
-  "artifacts/api-server/src/routes/ornaments/ornaments.ts:116",
-  "artifacts/api-server/src/routes/ornaments/ornaments.ts:117",
-  "artifacts/api-server/src/routes/ornaments/ornaments.ts:118",
-  // DB field-length validation limits.
-  "artifacts/api-server/src/routes/ornaments/ornaments.ts:120",
-  "artifacts/api-server/src/routes/ornaments/ornaments.ts:121",
-  "artifacts/api-server/src/routes/ornaments/ornaments.ts:122",
-  "artifacts/api-server/src/routes/ornaments/ornaments.ts:123",
+  ...reviewedConstants("artifacts/api-server/src/routes/messenger/typing.ts", {
+    TYPING_TTL_MS: "2500",
+  }),
 
   // ---- routes/pottery/compare.ts ----
   // Pottery compare: extra-image fan-out cost guard.
-  "artifacts/api-server/src/routes/pottery/compare.ts:53",
-
-  // ---- scripts/check-duplicate-code.ts ----
-  // Duplicate-detection algorithm tuning (minimum body size) — a fixed
-  // detector parameter, not owner-facing configuration.
-  "scripts/src/check-duplicate-code.ts:62",
-
-  // ---- routes/pottery/pottery.ts ----
-  // DB field-length validation limits — tied to schema column sizes, not
-  // owner-adjustable.
-  "artifacts/api-server/src/routes/pottery/pottery.ts:108",
-  "artifacts/api-server/src/routes/pottery/pottery.ts:109",
-  "artifacts/api-server/src/routes/pottery/pottery.ts:110",
-  "artifacts/api-server/src/routes/pottery/pottery.ts:111",
-  "artifacts/api-server/src/routes/pottery/pottery.ts:112",
-  // MAX_SUPPLEMENTAL_IMAGES: hard storage cap per item (tied to the upload
-  // pipeline's slot count), not an AI cost control — not owner-adjustable.
-  "artifacts/api-server/src/routes/pottery/pottery.ts:115",
+  ...reviewedConstants("artifacts/api-server/src/routes/pottery/compare.ts", {
+    MAX_EXTRA_IMAGES: "1",
+  }),
   // potteryMaxAiSupplemental and potteryBulkReanalyzeLimit are now
   // owner-configurable via the Elaine config store — no allowlist needed.
 
-  // ---- routes/quilting/fabrics.ts ----
-  // DB field-length validation limits.
-  "artifacts/api-server/src/routes/quilting/fabrics.ts:103",
-  "artifacts/api-server/src/routes/quilting/fabrics.ts:104",
-  "artifacts/api-server/src/routes/quilting/fabrics.ts:105",
-  "artifacts/api-server/src/routes/quilting/fabrics.ts:106",
-  // Image count guards.
-  "artifacts/api-server/src/routes/quilting/fabrics.ts:108",
-  "artifacts/api-server/src/routes/quilting/fabrics.ts:109",
-
-  // ---- routes/quilting/layouts.ts ----
-  // DB field-length validation limit.
-  "artifacts/api-server/src/routes/quilting/layouts.ts:18",
-
-  // ---- routes/quilting/patterns.ts ----
-  // DB field-length validation limits.
-  "artifacts/api-server/src/routes/quilting/patterns.ts:59",
-  "artifacts/api-server/src/routes/quilting/patterns.ts:60",
-  "artifacts/api-server/src/routes/quilting/patterns.ts:61",
-  "artifacts/api-server/src/routes/quilting/patterns.ts:62",
-  // AI reanalysis image-count guard.
-  "artifacts/api-server/src/routes/quilting/patterns.ts:310",
-
-  // ---- routes/quilting/quilts.ts ----
-  // DB field-length validation limits.
-  "artifacts/api-server/src/routes/quilting/quilts.ts:62",
-  "artifacts/api-server/src/routes/quilting/quilts.ts:63",
-  "artifacts/api-server/src/routes/quilting/quilts.ts:64",
-  // AI reanalysis image-count guard.
-  "artifacts/api-server/src/routes/quilting/quilts.ts:377",
-
   // ---- routes/quilting/stats.ts ----
   // Top-N labels returned by aggregate stats — presentation/query detail.
-  "artifacts/api-server/src/routes/quilting/stats.ts:17",
+  ...reviewedConstants("artifacts/api-server/src/routes/quilting/stats.ts", {
+    TOP_LIMIT: "8",
+  }),
 
   // ---- routes/travels/gmail.ts ----
   // Inbox pagination bounds — API implementation detail, not owner-configurable.
-  "artifacts/api-server/src/routes/travels/gmail.ts:52",
-  "artifacts/api-server/src/routes/travels/gmail.ts:53",
-  "artifacts/api-server/src/routes/travels/gmail.ts:54",
-  // Bulk link-messages cost guard.
-  "artifacts/api-server/src/routes/travels/gmail.ts:483",
+  ...reviewedConstants("artifacts/api-server/src/routes/travels/gmail.ts", {
+    DEFAULT_INBOX_PAGE_SIZE: "20",
+    MIN_INBOX_PAGE_SIZE: "10",
+    MAX_INBOX_PAGE_SIZE: "50",
+    // Bulk link-messages cost guard.
+    MAX_BULK_LINK_MESSAGES: "25",
+  }),
 
   // ---- routes/travels/magnets.ts ----
   // Embedding backfill batch size and similarity result count.
-  "artifacts/api-server/src/routes/travels/magnets.ts:29",
-  "artifacts/api-server/src/routes/travels/magnets.ts:30",
+  ...reviewedConstants("artifacts/api-server/src/routes/travels/magnets.ts", {
+    BACKFILL_LIMIT: "50",
+    RESULT_LIMIT: "5",
+  }),
 
   // ---- Frontend TOAST_LIMIT (all four apps + shared lib) ----
   // Max simultaneous toast notifications — UI presentation constant.
-  "artifacts/elaine/src/hooks/use-toast.ts:5",
-  "artifacts/mockup-sandbox/src/hooks/use-toast.ts:5",
-  "artifacts/modules/src/hooks/use-toast.ts:5",
-  "artifacts/web/src/hooks/use-toast.ts:5",
-  "lib/ui/src/toast.tsx:133",
+  ...[
+    "artifacts/elaine/src/hooks/use-toast.ts",
+    "artifacts/mockup-sandbox/src/hooks/use-toast.ts",
+    "artifacts/modules/src/hooks/use-toast.ts",
+    "artifacts/web/src/hooks/use-toast.ts",
+    "lib/ui/src/toast.tsx",
+  ].flatMap((file) => reviewedConstants(file, { TOAST_LIMIT: "1" })),
 
   // ---- mockup-sandbox dev plugin ----
   // File-change write-settle timing for the dev preview tool only.
-  "artifacts/mockup-sandbox/mockupPreviewPlugin.ts:168",
-
-  // ---- modules/ornaments ----
-  // Google Calendar query timeout — external API call guard.
-  "artifacts/modules/src/ornaments/pages/hallmark-events.tsx:60",
+  {
+    file: "artifacts/mockup-sandbox/mockupPreviewPlugin.ts",
+    kind: "cluster",
+    scope: "mockupPreviewPlugin.configureServer",
+    symbol: "awaitWriteFinish",
+    expression: `{
+      stabilityThreshold: 100,
+      pollInterval: 50,
+    }`,
+  },
 
   // ---- modules/quilting ----
   // Canvas zoom max-scale — UI layout constraint.
-  "artifacts/modules/src/quilting/components/FabricAiLab.tsx:68",
-  "artifacts/modules/src/quilting/components/FabricCreaseRemoverModal.tsx:65",
-  // Client-side crease-removal processing throttle.
-  "artifacts/modules/src/quilting/pages/fabrics/index.tsx:536",
-  // CREASE_BATCH_SIZE — internal concurrency cap for the AI crease-fix
-  // pipeline; controls how many images are sent per batch to stay within
-  // provider rate limits. Not owner-configurable because changing it
-  // requires coordinated server-side limit adjustments.
-  "artifacts/modules/src/quilting/pages/fabrics/index.tsx:546",
-
-  // ---- web/control-panel ----
-  // DB reconnect status polling interval — implementation detail.
-  "artifacts/web/src/pages/control-panel.tsx:382",
-
-  // ---- lib/elaine-ui ----
-  // Max recent commands shown in command palette — UI presentation.
-  "lib/elaine-ui/src/CommandPalette.tsx:80",
-  // Inline citation collapse threshold and scroll-triggered load threshold.
-  "lib/elaine-ui/src/ElaineChatPanel.tsx:354",
-  "lib/elaine-ui/src/ElaineChatPanel.tsx:547",
+  ...reviewedConstants(
+    "artifacts/modules/src/quilting/components/FabricAiLab.tsx",
+    {
+      MAX_SCALE: "10",
+    },
+  ),
+  ...reviewedConstants(
+    "artifacts/modules/src/quilting/components/FabricCreaseRemoverModal.tsx",
+    {
+      MAX_SCALE: "10",
+    },
+  ),
   // Widget minimum dimensions — layout constraints preventing the chat
   // window from becoming too small to use. Not owner-facing config.
-  "lib/elaine-ui/src/ElaineWidget.tsx:38",
-  "lib/elaine-ui/src/ElaineWidget.tsx:39",
+  ...reviewedConstants("lib/elaine-ui/src/ElaineWidget.tsx", {
+    MIN_W: "280",
+    MIN_H: "340",
+  }),
   // Web Speech API rate bounds — browser API constraint.
-  "lib/elaine-ui/src/useTTS.ts:8",
-  "lib/elaine-ui/src/useTTS.ts:9",
+  ...reviewedConstants("lib/elaine-ui/src/useTTS.ts", {
+    MAX_RATE: "2",
+    DEFAULT_RATE: "1",
+  }),
 
   // ---- lib/messenger-ui ----
   // Messenger panel minimum dimensions — layout constraints.
-  "lib/messenger-ui/src/MessengerNavIcon.tsx:38",
-  "lib/messenger-ui/src/MessengerNavIcon.tsx:39",
+  ...reviewedConstants("lib/messenger-ui/src/MessengerNavIcon.tsx", {
+    MIN_W: "320",
+    MIN_H: "280",
+  }),
   // Notification and toast auto-dismiss durations — UI presentation.
-  "lib/messenger-ui/src/MessengerNotification.tsx:56",
-  "lib/messenger-ui/src/MessengerToast.tsx:18",
+  ...reviewedConstants("lib/messenger-ui/src/MessengerNotification.tsx", {
+    AUTO_DISMISS_MS: "8_000",
+  }),
+  ...reviewedConstants("lib/messenger-ui/src/MessengerToast.tsx", {
+    AUTO_DISMISS_MS: "5_000",
+  }),
 
   // ---- lib/upload-validation ----
   // Decompression-bomb pixel limit, storage dimension cap, and Sharp concurrency.
-  "lib/upload-validation/src/index.ts:43",
-  "lib/upload-validation/src/index.ts:49",
-  "lib/upload-validation/src/index.ts:244",
+  ...reviewedConstants("lib/upload-validation/src/index.ts", {
+    MAX_INPUT_PIXELS: "50_000_000",
+    MAX_STORAGE_DIMENSION: "4096",
+    MAX_CONCURRENT_IMAGE_TRANSFORMS: "2",
+  }),
 
   // ---- lib/web-core ----
   // Stale-chunk reload cooldown — prevents reload loops after Vite preload errors.
-  "lib/web-core/src/mount-app.tsx:10",
-
-  // ---- scripts/src/check-public-file-secrets.ts ----
-  // Minimum value length for secret-leak detection — security heuristic constant.
-  "scripts/src/check-public-file-secrets.ts:170",
-
-  // ---- lib/collection-ui/src/async-action-status.ts ----
-  // Auto-clear delays for finished async-action status badges — UI presentation
-  // timing constants, not owner-configurable behaviour limits.
-  "lib/collection-ui/src/async-action-status.ts:6",
-  "lib/collection-ui/src/async-action-status.ts:7",
+  ...reviewedConstants("lib/web-core/src/mount-app.tsx", {
+    STALE_CHUNK_RELOAD_COOLDOWN_MS: "10_000",
+  }),
 
   // ---- artifacts/api-server/src/lib/ornaments/dimensions.ts ----
   // Defensive maximum for a stored display string from an AI/web-research
   // response. This is input sanitization, not a collection behavior or
   // owner-facing budget.
-  "artifacts/api-server/src/lib/ornaments/dimensions.ts:14",
+  ...reviewedConstants("artifacts/api-server/src/lib/ornaments/dimensions.ts", {
+    MAX_DIMENSIONS_LENGTH: "100",
+  }),
 
   // ---- scripts/src/github-sync.ts ----
   // Safety cap on bulk deletions per sync run — prevents runaway exclusion-list bugs.
-  "scripts/src/github-sync.ts:362",
+  ...reviewedConstants(
+    "scripts/src/github-sync.ts",
+    {
+      MAX_DELETIONS: "20",
+    },
+    "main",
+  ),
 
   // ---- lib/image.ts (additional VTracer presets) ----
   // Additional named vectorization presets (smooth, crisp, high-detail, etc.).
-  "artifacts/api-server/src/lib/image.ts:556",
-  "artifacts/api-server/src/lib/image.ts:578",
-  "artifacts/api-server/src/lib/image.ts:600",
-  "artifacts/api-server/src/lib/image.ts:618",
+  {
+    file: "artifacts/api-server/src/lib/image.ts",
+    kind: "cluster",
+    scope: "file-scope",
+    symbol: "DIRECTION_A_CRISP_TUNING",
+    expression: `{
+      flatFieldSigmas: [FLAT_FIELD_BLUR_SIGMA, FLAT_FIELD_V3_SECOND_PASS_SIGMA],
+      textureSuppressSigma: 1.4,
+      posterizeColors: 8,
+      colorPrecision: 7,
+      filterSpeckle: 2,
+      spliceThreshold: 45,
+      cornerThreshold: 50,
+      layerDifference: 4,
+      lengthThreshold: 4,
+    }`,
+  },
+  {
+    file: "artifacts/api-server/src/lib/image.ts",
+    kind: "cluster",
+    scope: "file-scope",
+    symbol: "DIRECTION_A_THREE_PASS_TUNING",
+    expression: `{
+      flatFieldSigmas: [
+        FLAT_FIELD_BLUR_SIGMA,
+        FLAT_FIELD_V3_SECOND_PASS_SIGMA,
+        FLAT_TILE_SIZE * 0.9,
+      ],
+      textureSuppressSigma: TEXTURE_SUPPRESS_SIGMA,
+      posterizeColors: POSTERIZE_COLORS,
+      colorPrecision: 6,
+      filterSpeckle: 4,
+      spliceThreshold: 45,
+      cornerThreshold: 60,
+      layerDifference: 5,
+      lengthThreshold: 5,
+    }`,
+  },
+  {
+    file: "artifacts/api-server/src/lib/image.ts",
+    kind: "cluster",
+    scope: "file-scope",
+    symbol: "DIRECTION_A_ULTRA_SMOOTH_TUNING",
+    expression: `{
+      flatFieldSigmas: [
+        FLAT_FIELD_BLUR_SIGMA,
+        FLAT_FIELD_V3_SECOND_PASS_SIGMA,
+        FLAT_TILE_SIZE * 0.9,
+      ],
+      textureSuppressSigma: 4.5,
+      posterizeColors: 4,
+      colorPrecision: 4,
+      filterSpeckle: 8,
+      spliceThreshold: 60,
+      cornerThreshold: 90,
+      layerDifference: 10,
+      lengthThreshold: 8,
+    }`,
+  },
+  {
+    file: "artifacts/api-server/src/lib/image.ts",
+    kind: "cluster",
+    scope: "file-scope",
+    symbol: "DIRECTION_A_MAX_DETAIL_TUNING",
+    expression: `{
+      flatFieldSigmas: [FLAT_FIELD_BLUR_SIGMA, FLAT_FIELD_V3_SECOND_PASS_SIGMA],
+      textureSuppressSigma: 0.6,
+      posterizeColors: 12,
+      colorPrecision: 8,
+      filterSpeckle: 1,
+      spliceThreshold: 30,
+      cornerThreshold: 35,
+      layerDifference: 2,
+      lengthThreshold: 3,
+    }`,
+  },
 
   // ---- routes/quilting/block-templates.ts ----
   // DB field-length validation limits for block template tags and names.
-  "artifacts/api-server/src/routes/quilting/block-templates.ts:10",
-  "artifacts/api-server/src/routes/quilting/block-templates.ts:11",
-  "artifacts/api-server/src/routes/quilting/block-templates.ts:12",
-
-  // ---- routes/quilting/blocks.ts ----
-  // DB field-length validation limits for block category names.
-  "artifacts/api-server/src/routes/quilting/blocks.ts:26",
-  "artifacts/api-server/src/routes/quilting/blocks.ts:27",
+  ...reviewedConstants(
+    "artifacts/api-server/src/routes/quilting/block-templates.ts",
+    {
+      MAX_TAGS: "20",
+      MAX_TAG_LEN: "100",
+      MAX_NAME_LEN: "120",
+    },
+  ),
 
   // ---- routes/quilting/compare.ts ----
   // Quilting compare extra-image and AI image fan-out cost guards.
-  "artifacts/api-server/src/routes/quilting/compare.ts:47",
-  "artifacts/api-server/src/routes/quilting/compare.ts:50",
+  ...reviewedConstants("artifacts/api-server/src/routes/quilting/compare.ts", {
+    MAX_EXTRA_IMAGES: "2",
+    MAX_AI_IMAGES: "24",
+  }),
+  {
+    file: "artifacts/api-server/src/elaine/index.ts",
+    kind: "constant",
+    scope: "file-scope",
+    symbol: "MAX_PHONE_CODE_ATTEMPTS",
+    // Unchanged OTP security bound, not an owner-facing feature setting.
+    expression: "5",
+  },
+  {
+    file: "artifacts/api-server/src/elaine/runtime/trace-store.ts",
+    kind: "cluster",
+    scope: "loadElaineTurnTracesForMessages",
+    symbol: "usage",
+    // Usage counters start at zero; elapsed time is derived from stored dates.
+    expression: `{
+      modelRounds: 0,
+      toolCalls: 0,
+      replans: 0,
+      elapsedMs: row.completedAt
+        ? Math.max(0, row.completedAt.getTime() - row.startedAt.getTime())
+        : 0,
+    }`,
+  },
+  {
+    file: "artifacts/api-server/src/elaine/runtime/turn-runtime.ts",
+    kind: "cluster",
+    scope: "ElaineTurnRuntime.constructor",
+    symbol: "usage",
+    // Per-turn usage starts at zero, unlike configurable budget ceilings.
+    expression: `{
+      modelRounds: 0,
+      toolCalls: 0,
+      replans: 0,
+      elapsedMs: 0,
+    }`,
+  },
+];
 
-  // ---- routes/quilting/layouts.ts (additional constant) ----
-  // DB field-length validation limit for layout category names.
-  "artifacts/api-server/src/routes/quilting/layouts.ts:17",
-]);
+function expressionTokens(expression: string): string {
+  const scanner = ts.createScanner(
+    ts.ScriptTarget.Latest,
+    /* skipTrivia */ true,
+    ts.LanguageVariant.Standard,
+    expression,
+  );
+  const tokens: string[] = [];
+  while (scanner.scan() !== ts.SyntaxKind.EndOfFileToken) {
+    tokens.push(scanner.getTokenText());
+  }
+  return JSON.stringify(tokens);
+}
+
+function declarationScope(node: ts.Node): string {
+  const scopes: string[] = [];
+  for (let parent = node.parent; parent; parent = parent.parent) {
+    if (ts.isFunctionDeclaration(parent) || ts.isFunctionExpression(parent)) {
+      scopes.push(parent.name?.text ?? "anonymous-function");
+    } else if (ts.isArrowFunction(parent)) {
+      // Action executors wrap their arrow in parentheses / a type assertion.
+      let owner = parent.parent;
+      while (ts.isParenthesizedExpression(owner) || ts.isAsExpression(owner)) {
+        owner = owner.parent;
+      }
+      scopes.push(
+        (ts.isVariableDeclaration(owner) || ts.isPropertyAssignment(owner)) &&
+          ts.isIdentifier(owner.name)
+          ? owner.name.text
+          : "anonymous-function",
+      );
+    } else if (
+      ts.isMethodDeclaration(parent) ||
+      ts.isPropertyDeclaration(parent)
+    ) {
+      scopes.push(
+        ts.isIdentifier(parent.name) ? parent.name.text : "anonymous-member",
+      );
+    } else if (ts.isConstructorDeclaration(parent)) {
+      scopes.push("constructor");
+    } else if (ts.isClassDeclaration(parent) || ts.isClassExpression(parent)) {
+      const owner = parent.parent;
+      scopes.push(
+        parent.name?.text ??
+          ((ts.isPropertyAssignment(owner) ||
+            ts.isVariableDeclaration(owner)) &&
+          ts.isIdentifier(owner.name)
+            ? owner.name.text
+            : "anonymous-class"),
+      );
+    }
+  }
+  return scopes.reverse().join(".") || "file-scope";
+}
+
+/** Return only a complete initializer or a single object argument. */
+function anchorTarget(
+  node: ts.Node,
+): { symbol: string; expression: ts.Expression; constant: boolean } | null {
+  if (
+    (ts.isVariableDeclaration(node) || ts.isPropertyAssignment(node)) &&
+    ts.isIdentifier(node.name) &&
+    node.initializer
+  ) {
+    return {
+      symbol: node.name.text,
+      expression: node.initializer,
+      constant:
+        ts.isVariableDeclaration(node) &&
+        ts.isVariableDeclarationList(node.parent) &&
+        (node.parent.flags & ts.NodeFlags.Const) !== 0,
+    };
+  }
+  const parent = node.parent;
+  if (
+    ts.isObjectLiteralExpression(node) &&
+    (ts.isCallExpression(parent) || ts.isNewExpression(parent))
+  ) {
+    const index = parent.arguments?.indexOf(node) ?? -1;
+    if (index >= 0) {
+      return {
+        symbol: `${ts.isNewExpression(parent) ? "new " : ""}${parent.expression.getText()}.arguments.${index}`,
+        expression: node,
+        constant: false,
+      };
+    }
+  }
+  return null;
+}
+
+function anchoredAllowlistRanges(
+  file: string,
+  content: string,
+): Array<{
+  kind: "constant" | "cluster";
+  symbol: string;
+  start: number;
+  end: number;
+}> {
+  const entries = ANCHORED_CONFIG_ALLOWLIST.filter(
+    (entry) => entry.file === file,
+  );
+  if (entries.length === 0) return [];
+  const source = ts.createSourceFile(
+    file,
+    content,
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const matches = new Map<
+    ConfigAnchor,
+    ReturnType<typeof anchoredAllowlistRanges>
+  >();
+  function visit(node: ts.Node): void {
+    const target = anchorTarget(node);
+    if (target) {
+      for (const entry of entries) {
+        if (
+          (entry.kind !== "constant" || target.constant) &&
+          target.symbol === entry.symbol &&
+          declarationScope(node) === entry.scope &&
+          expressionTokens(target.expression.getText(source)) ===
+            expressionTokens(entry.expression)
+        ) {
+          const ranges = matches.get(entry) ?? [];
+          ranges.push({
+            kind: entry.kind,
+            symbol: entry.symbol,
+            start:
+              source.getLineAndCharacterOfPosition(node.getStart(source)).line +
+              1,
+            end: source.getLineAndCharacterOfPosition(node.getEnd()).line + 1,
+          });
+          matches.set(entry, ranges);
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+  // An identical symbol/expression in another object or call is not an
+  // additional review. Ambiguous anchors fail closed rather than hiding it.
+  return [...matches.values()].flatMap((ranges) =>
+    ranges.length === 1 ? ranges : [],
+  );
+}
 
 export function checkHardcodedConfigFromFiles(
   files: string[],
@@ -823,9 +1316,28 @@ export function checkHardcodedConfigFromFiles(
     const content = readFile(file);
     if (content === null) continue; // deleted in this diff
 
+    // An explicit custom allowlist replaces both default exception mechanisms.
+    const anchoredRanges =
+      allowlist === HARDCODED_CONFIG_ALLOWLIST
+        ? anchoredAllowlistRanges(file, content)
+        : [];
+    const matchesAnchor = (
+      kind: "cluster" | "constant",
+      lines: number[],
+      names: string[],
+    ) =>
+      anchoredRanges.some(
+        (range) =>
+          range.kind === kind &&
+          (kind !== "constant" || names[0] === range.symbol) &&
+          lines.every((line) => line >= range.start && line <= range.end),
+      );
+
     for (const cluster of findTunableClustersInFile(content)) {
       const key = `${file}:${cluster.lines[0]}`;
-      const allowlisted = allowlist.has(key);
+      const allowlisted =
+        allowlist.has(key) ||
+        matchesAnchor("cluster", cluster.lines, cluster.names);
       if (!allowlisted || includeAllowlisted) {
         violations.push({
           ...cluster,
@@ -839,7 +1351,9 @@ export function checkHardcodedConfigFromFiles(
 
     for (const constant of findTunableConstantsInFile(content)) {
       const key = `${file}:${constant.line}`;
-      const allowlisted = allowlist.has(key);
+      const allowlisted =
+        allowlist.has(key) ||
+        matchesAnchor("constant", [constant.line], [constant.name]);
       if (!allowlisted || includeAllowlisted) {
         violations.push({
           file,
@@ -879,8 +1393,8 @@ export const HARDCODED_CONFIG_HELP = [
   "",
   "If a value is a genuine internal implementation constant that should",
   "never be owner-facing (e.g. a fixed algorithm parameter), add",
-  "'path/to/file.ts:lineNumber' to HARDCODED_CONFIG_ALLOWLIST in",
-  "scripts/src/check-hardcoded-config.ts with a comment explaining why.",
+  "a file/scope/symbol/exact-expression entry to ANCHORED_CONFIG_ALLOWLIST",
+  "in scripts/src/check-hardcoded-config.ts with a comment explaining why.",
   "Do not rename or reformat around the check to dodge it.",
 ].join("\n");
 

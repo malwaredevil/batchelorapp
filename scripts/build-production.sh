@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Production build script used by .replit [deployment] when artifact registration
-# is unavailable. Sets PORT and BASE_PATH for each Vite frontend so
-# createWorkspaceViteConfig() doesn't throw, then builds everything.
+# Manual all-app production build. Publishing uses each artifact.toml's own
+# production build; do not also run this as a root deployment.build hook.
+# Sets PORT and BASE_PATH for each Vite frontend, then builds everything once.
 set -euo pipefail
 
 echo "[build-production] Building API server…"

@@ -1392,6 +1392,7 @@ export const ELAINE_IMPORTED_TOOL_FILES: readonly string[] = [
   "artifacts/api-server/src/elaine/universal-actions.ts",
   "artifacts/api-server/src/elaine/adaptive-actions.ts",
   "artifacts/api-server/src/elaine/app-operation-tools.ts",
+  "artifacts/api-server/src/elaine/owner-tool-catalog.ts",
 ];
 
 /**
@@ -2702,6 +2703,7 @@ export const KNOWN_EXECUTOR_PREFIXES: ReadonlySet<string> = new Set([
   "accountAction", // send_test_email, send_test_sms, send_phone_verification_code, verify_phone_code, update_elaine_settings
   "ownerAction", // update_app_config (owner-only)
   // ── Hard-tool (read/utility) inline dispatch in index.ts ─────────────────
+  "ownerSupport", // executeOwnerSupportTool (verified owner/channel reads and Suggestions)
   "travelRead", // search_trip_documents, search_flights, get_weather_forecast, find_nearby_places, …
   "widget", // show_trip_card, show_destination_card, show_data_card
   "collectionRead", // show_pottery_item, analyze_pottery_photo

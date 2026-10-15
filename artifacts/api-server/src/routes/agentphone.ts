@@ -7,6 +7,10 @@ import { env } from "../lib/env";
 import { logger } from "../lib/logger";
 import { sendSms, SmsOptedOutError } from "../lib/sms";
 import {
+  getVerifiedOutboundRecipient,
+  invalidateVerifiedOutboundRecipient,
+} from "../lib/agentphone-voice-identity";
+import {
   claimWebhookSideEffect,
   markWebhookSideEffectCompleted,
   markWebhookSideEffectFailed,
@@ -531,6 +535,8 @@ async function handleVoice(
 ): Promise<void> {
   const data = (req.body?.data ?? {}) as {
     from?: unknown;
+    to?: unknown;
+    toNumber?: unknown;
     transcript?: unknown;
     direction?: unknown;
     callDirection?: unknown;
@@ -538,6 +544,12 @@ async function handleVoice(
     call_id?: unknown;
   };
   const from = typeof data.from === "string" ? data.from : "";
+  const to =
+    typeof data.to === "string"
+      ? data.to
+      : typeof data.toNumber === "string"
+        ? data.toNumber
+        : "";
   const transcript =
     typeof data.transcript === "string" ? data.transcript.trim() : "";
   const direction =
@@ -579,36 +591,95 @@ async function handleVoice(
     return;
   }
 
-  const [user] = from
-    ? await db
-        .select({ id: appUsers.id })
-        .from(appUsers)
-        .where(eq(appUsers.phoneNumber, from))
-        .limit(1)
-    : [];
+  const normalizedDirection = direction.trim().toLowerCase();
+  // Outbound and ambiguous call-ID events must establish identity with the
+  // provider before any household lookup, even if a webhook number matches.
+  const mayConsumeOutboundContext =
+    normalizedDirection === "outbound" ||
+    (normalizedDirection === "" && Boolean(callId?.trim()));
+  let householdNumber = from;
 
-  if (!user) {
-    res.status(200).json({
-      text: "Sorry, I don't recognize this number, so I can't help over the phone. Goodbye.",
-      hangup: true,
-    });
-    return;
-  }
-
-  // Stream an interim acknowledgement before any outbound correlation wait.
+  // A provider verification can take longer than the voice response deadline.
+  // Acknowledge before that lookup, without disclosing household information.
   // Once headers are sent, all later failures must finish this stream rather
   // than attempting a second JSON response.
   const turnStartedAt = Date.now();
-  res.status(200);
-  res.setHeader("Content-Type", "application/x-ndjson");
-  res.write(`${JSON.stringify({ text: "Mm, one sec.", interim: true })}\n`);
-  (res as Response & { flush?: () => void }).flush?.();
+  let streamStarted = false;
+  const startStream = () => {
+    if (streamStarted) return;
+    streamStarted = true;
+    res.status(200);
+    res.setHeader("Content-Type", "application/x-ndjson");
+    res.write(`${JSON.stringify({ text: "Mm, one sec.", interim: true })}\n`);
+    (res as Response & { flush?: () => void }).flush?.();
+  };
+  const finish = (text: string, hangup = false) => {
+    const reply = { text, ...(hangup ? { hangup: true } : {}) };
+    if (streamStarted) {
+      res.write(`${JSON.stringify(reply)}\n`);
+      res.end();
+    } else {
+      res.status(200).json(reply);
+    }
+  };
+
+  const verificationFailure =
+    "Sorry, I couldn't verify this call right now. Please try again or use the app.";
+  if (
+    normalizedDirection !== "" &&
+    normalizedDirection !== "inbound" &&
+    normalizedDirection !== "outbound"
+  ) {
+    finish(verificationFailure, true);
+    return;
+  }
+  let user: { id: number } | undefined;
+  try {
+    if (mayConsumeOutboundContext) {
+      if (!callId?.trim()) {
+        finish(verificationFailure, true);
+        return;
+      }
+      startStream();
+      const recipient = await getVerifiedOutboundRecipient(callId);
+      if (!recipient || (to && to !== recipient)) {
+        finish(verificationFailure, true);
+        return;
+      }
+      householdNumber = recipient;
+    }
+    [user] = householdNumber
+      ? await db
+          .select({ id: appUsers.id })
+          .from(appUsers)
+          .where(eq(appUsers.phoneNumber, householdNumber))
+          .limit(1)
+      : [];
+  } catch (err) {
+    logger.warn(
+      { errorType: err instanceof Error ? err.name : "UnknownError" },
+      "agentphone: voice identity verification unavailable",
+    );
+    finish(verificationFailure, true);
+    return;
+  }
+  if (!user) {
+    finish(
+      "Sorry, I don't recognize this number, so I can't help over the phone. Goodbye.",
+      true,
+    );
+    return;
+  }
+  startStream();
 
   let conversation: Awaited<
     ReturnType<typeof getOrCreateAgentphoneConversation>
   >;
   try {
-    conversation = await getOrCreateAgentphoneConversation(from, user.id);
+    conversation = await getOrCreateAgentphoneConversation(
+      householdNumber,
+      user.id,
+    );
   } catch (err) {
     logger.error(
       { err },
@@ -620,20 +691,15 @@ async function handleVoice(
     res.end();
     return;
   }
-  // Missing direction is not evidence of an outbound call. A call ID can
-  // authorize consumption only when runRestrictedTurnAndPersist confirms it
-  // matches the pending provider call ID.
-  const normalizedDirection = direction.toLowerCase();
-  const mayConsumeOutboundContext =
-    Boolean(callId?.trim()) &&
-    (normalizedDirection === "outbound" || normalizedDirection === "");
+  // Provider verification authorizes recipient identity, not the private
+  // opening. Consumption still requires the exact pending provider call ID.
   // Reload after the initial lookup so an attach that won the race is visible.
   // Never infer correlation from phone number alone: a late old webhook must
   // not consume a newer call's private opening.
   try {
     if (mayConsumeOutboundContext && callId) {
       conversation = await waitForExactOutboundCorrelation(
-        from,
+        householdNumber,
         callId,
         conversation,
       );
@@ -710,6 +776,18 @@ router.post("/webhook", webhookLimiter, async (req: Request, res: Response) => {
 
   const event = typeof req.body?.event === "string" ? req.body.event : "";
   const channel = typeof req.body?.channel === "string" ? req.body.channel : "";
+  const callEndedData = (
+    event === "agent.call_ended" ? (req.body?.data ?? {}) : {}
+  ) as Record<string, unknown>;
+  const endedCallId =
+    typeof callEndedData.callId === "string"
+      ? callEndedData.callId.trim()
+      : typeof callEndedData.call_id === "string"
+        ? callEndedData.call_id.trim()
+        : "";
+  // Signature verification is sufficient to evict an identity. Do this before
+  // dedup/receipt bookkeeping, which may fail or reject a repeated delivery.
+  if (endedCallId) invalidateVerifiedOutboundRecipient(endedCallId);
   if (event === "agent.message" && channel === "voice") {
     const startupData = (req.body?.data ?? {}) as Record<string, unknown>;
     const startupTranscript =
@@ -768,13 +846,7 @@ router.post("/webhook", webhookLimiter, async (req: Request, res: Response) => {
   }
 
   if (event === "agent.call_ended") {
-    const callData = (req.body?.data ?? {}) as Record<string, unknown>;
-    const callId =
-      typeof callData.callId === "string"
-        ? callData.callId.trim()
-        : typeof callData.call_id === "string"
-          ? callData.call_id.trim()
-          : "";
+    const callId = endedCallId;
     if (!callId) {
       logger.warn(
         { event },
@@ -787,7 +859,7 @@ router.post("/webhook", webhookLimiter, async (req: Request, res: Response) => {
     try {
       const updatedReceipts = await updateCallCommunicationReceiptsByProviderId(
         callId,
-        callEndedProviderStatus(callData),
+        callEndedProviderStatus(callEndedData),
       );
       // Defer only while an Elaine outbound call may still be awaiting its
       // provider ID. Calls without a receipt (inbound, comm checks, reminder

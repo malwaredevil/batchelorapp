@@ -42,6 +42,7 @@ import {
   rateLimitMockFactory,
 } from "./test-helpers/standard-mock-scaffold";
 import { buildRuntimeMock } from "./test-helpers/runtime-mock";
+import { toRuntimePlan } from "./runtime/contracts";
 import {
   __listElaineTurnsForTests,
   __resetElaineTurnRegistryForTests,
@@ -67,6 +68,7 @@ const {
   mockDetectClaimedCheckWithoutToolCall,
   mockRecordElaineLesson,
   mockBuildSelfHealLessonInput,
+  mockCallMeExecutor,
 } = vi.hoisted(() => {
   const MOCK_TRACE = {
     version: 1 as const,
@@ -139,6 +141,7 @@ const {
       takeaway: "Test takeaway",
       tags: ["self-heal", "ungrounded-claim"],
     }),
+    mockCallMeExecutor: vi.fn(),
   };
 });
 
@@ -187,6 +190,12 @@ vi.mock("../lib/openai", () => ({
 }));
 
 vi.mock("../lib/elaine-config", () => ({
+  DEFAULT_RUNTIME_BUDGET: {
+    maxToolCalls: 24,
+    maxReplans: 10,
+    maxModelRounds: 8,
+    maxElapsedMs: 240_000,
+  },
   getElaineGlobalConfig: mockGetElaineGlobalConfig,
   invalidateElaineGlobalConfigCache: vi.fn(),
 }));
@@ -352,10 +361,13 @@ vi.mock("./adaptive-actions", () => ({
   buildAdaptiveActionLabel: vi.fn().mockResolvedValue(""),
 }));
 
-vi.mock("./communication-actions", () => ({
+vi.mock("./communication-actions", async (importOriginal) => ({
   RECEIPT_ACTION_TYPES: [],
-  communicationActionSchemas: [],
-  communicationActionExecutors: {},
+  // Keep real validation, but never reach a communication provider or scheduler.
+  communicationActionSchemas: (
+    await importOriginal<typeof import("./communication-actions")>()
+  ).communicationActionSchemas,
+  communicationActionExecutors: { call_me: mockCallMeExecutor },
   buildCommunicationActionLabel: vi.fn().mockResolvedValue(""),
   executeListContactChannels: vi.fn().mockResolvedValue([]),
   executeListScheduledContacts: vi.fn().mockResolvedValue([]),
@@ -437,6 +449,7 @@ vi.mock("./runtime", () =>
     buildSelfHealLessonInput: mockBuildSelfHealLessonInput,
     ElaineTurnRuntime: class {
       registerToolCalls = mockRegisterToolCalls;
+      canAttemptAnotherModelRound = () => true;
       recordModelRound = mockRecordModelRound;
       snapshot = mockSnapshot;
       verify = mockVerify;
@@ -481,7 +494,30 @@ vi.mock("./restricted-channel-config", () => ({
 // "update_trip_status" (Scenario E — auto_run executor failure).
 vi.mock("./planner-tool-catalog", () =>
   buildPlannerToolCatalogMock({
-    ACTION_TOOL_NAMES: new Set<string>(["create_trip", "update_trip_status"]),
+    ACTION_TOOL_NAMES: new Set<string>([
+      "create_trip",
+      "update_trip_status",
+      "call_me",
+    ]),
+    SOFT_TOOLS: [
+      {
+        type: "function",
+        function: {
+          name: "create_trip",
+          parameters: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              destination: { type: "string" },
+            },
+          },
+        },
+      },
+      {
+        type: "function",
+        function: { name: "call_me", parameters: { type: "object" } },
+      },
+    ],
   }),
 );
 
@@ -1218,6 +1254,512 @@ describe("POST /api/elaine/chat — dropped-action corrective text", () => {
       "I wasn't actually able to prepare that as a confirmable action just now",
     );
   }, 15_000);
+});
+
+describe("POST /api/elaine/chat — dependency deferral", () => {
+  it("returns not-attempted output and forces the deferred action after its same-batch lookup completes", async () => {
+    const controls = [
+      mockRegisterToolCalls,
+      mockRecordObservation,
+      mockSnapshot,
+      mockRecordModelRound,
+      mockVerify,
+      mockComplete,
+    ];
+    const originals = controls.map((control) =>
+      control.getMockImplementation(),
+    );
+    try {
+      const { ElaineTurnRuntime } = await vi.importActual<
+        typeof import("./runtime/turn-runtime")
+      >("./runtime/turn-runtime");
+      const runtime = new ElaineTurnRuntime({
+        traceId: "route-dependency-regression",
+        requestClass: {
+          kind: "action",
+          complexity: "multi_step",
+          requiresFreshData: false,
+          hasAttachment: false,
+        },
+        plan: toRuntimePlan({
+          version: 1,
+          goal: "Prepare the requested action after lookup",
+          assumptions: [],
+          completionCriteria: ["Action prepared after lookup"],
+          steps: [
+            {
+              id: "lookup",
+              label: "Look up prerequisites",
+              kind: "lookup",
+              toolName: "discover_app_operations",
+              dependsOn: [],
+              expectedEvidence: "Lookup complete",
+              required: true,
+            },
+            {
+              id: "action",
+              label: "Prepare requested trip",
+              kind: "action",
+              toolName: "create_trip",
+              dependsOn: ["lookup"],
+              expectedEvidence: "Action prepared",
+              required: true,
+            },
+          ],
+        }),
+      });
+      mockRegisterToolCalls.mockImplementation((calls) =>
+        runtime.registerToolCalls(calls),
+      );
+      mockRecordObservation.mockImplementation((input) =>
+        runtime.recordObservation(input),
+      );
+      mockSnapshot.mockImplementation(() => runtime.snapshot());
+      mockRecordModelRound.mockImplementation(() => runtime.recordModelRound());
+      mockVerify.mockImplementation((input) => runtime.verify(input));
+      mockComplete.mockImplementation(() => runtime.complete());
+      mockHardToolNames.add("discover_app_operations");
+      mockIsOpenAIResponsesConfigured.mockReturnValue(true);
+      const baseConfig = await mockGetElaineGlobalConfig();
+      mockGetElaineGlobalConfig.mockResolvedValue({
+        ...baseConfig,
+        features: {
+          ...baseConfig.features,
+          enableOpenAIResponsesFallback: true,
+        },
+      });
+      primeDbForFreshChat();
+      mockStreamOpenAIResponseRound
+        .mockResolvedValueOnce({
+          responseId: "response-lookup-and-action",
+          text: "",
+          reasoningSummary: "",
+          functionCalls: [
+            {
+              callId: "lookup-call",
+              name: "discover_app_operations",
+              arguments: "{}",
+            },
+            {
+              callId: "deferred-action",
+              name: "create_trip",
+              arguments: JSON.stringify({
+                title: "Test Trip",
+                destination: "Paris",
+              }),
+            },
+          ],
+          webSearchCitations: [],
+          usage: null,
+        })
+        .mockResolvedValueOnce({
+          responseId: "response-ready-action",
+          text: "",
+          reasoningSummary: "",
+          functionCalls: [
+            {
+              callId: "ready-action",
+              name: "create_trip",
+              arguments: JSON.stringify({
+                title: "Test Trip",
+                destination: "Paris",
+              }),
+            },
+          ],
+          webSearchCitations: [],
+          usage: null,
+        });
+      const res = await request(buildApp())
+        .post("/api/elaine/chat")
+        .send({ message: "Create a trip to Paris" })
+        .buffer(true);
+      expect(res.status).toBe(200);
+      expect(
+        mockStreamOpenAIResponseRound,
+        JSON.stringify({
+          events: parseSseResponse(res.text),
+          trace: runtime.snapshot(),
+        }),
+      ).toHaveBeenCalledTimes(2);
+      const nextRound = mockStreamOpenAIResponseRound.mock.calls[1]?.[0];
+      expect(nextRound.toolChoice).toEqual({
+        type: "function",
+        name: "create_trip",
+      });
+      expect(nextRound.input).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: "function_call_output",
+            call_id: "deferred-action",
+            output: expect.stringContaining('"status":"not_attempted"'),
+          }),
+        ]),
+      );
+      expect(
+        parseSseResponse(res.text).eventTypes.filter(
+          (type) => type === "action",
+        ),
+      ).toHaveLength(1);
+      expect(runtime.snapshot().plan.steps[1]).toMatchObject({
+        attempts: 1,
+        status: "waiting_confirmation",
+      });
+      assertSelectQueueDrained();
+    } finally {
+      controls.forEach((control, index) => {
+        const original = originals[index];
+        if (original) control.mockImplementation(original);
+        else control.mockReset();
+      });
+    }
+  });
+});
+
+describe("POST /api/elaine/chat — deferred callback across provider fallback", () => {
+  const controls = [
+    mockRegisterToolCalls,
+    mockRecordObservation,
+    mockSnapshot,
+    mockRecordModelRound,
+    mockVerify,
+    mockComplete,
+  ];
+  let originals: ReturnType<
+    (typeof controls)[number]["getMockImplementation"]
+  >[];
+  let runtime: import("./runtime/turn-runtime").ElaineTurnRuntime;
+  const payload = {
+    greeting: "Remind me to check the kiln.",
+    scheduleAt: "2026-11-20T14:30:00-05:00",
+    timezone: "America/New_York",
+  };
+  const message =
+    "Call me on November 20, 2026 at 2:30pm America/New_York and remind me to check the kiln.";
+  const callbackCall = (callId: string) => ({
+    callId,
+    name: "call_me",
+    arguments: JSON.stringify(payload),
+  });
+  const lookupCall = {
+    callId: "prerequisite",
+    name: "discover_app_operations",
+    arguments: "{}",
+  };
+  const responseRound = (
+    responseId: string,
+    functionCalls: Array<{ callId: string; name: string; arguments: string }>,
+  ) => ({
+    responseId,
+    text: "",
+    reasoningSummary: "",
+    functionCalls,
+    webSearchCitations: [],
+    usage: null,
+  });
+
+  beforeEach(async () => {
+    originals = controls.map((control) => control.getMockImplementation());
+    const { ElaineTurnRuntime } = await vi.importActual<
+      typeof import("./runtime/turn-runtime")
+    >("./runtime/turn-runtime");
+    runtime = new ElaineTurnRuntime({
+      traceId: "callback-provider-switch",
+      requestClass: {
+        kind: "action",
+        complexity: "multi_step",
+        requiresFreshData: false,
+        hasAttachment: false,
+      },
+      plan: toRuntimePlan({
+        version: 1,
+        goal: "Prepare the originally requested callback after lookup",
+        assumptions: [],
+        completionCriteria: ["Callback prepared after prerequisite"],
+        steps: [
+          {
+            id: "lookup",
+            label: "Discover scheduling operations",
+            kind: "lookup",
+            toolName: "discover_app_operations",
+            dependsOn: [],
+            expectedEvidence: "Available operations",
+            required: true,
+          },
+          {
+            id: "callback",
+            label: "Schedule the requested callback",
+            kind: "action",
+            toolName: "call_me",
+            dependsOn: ["lookup"],
+            expectedEvidence: "Callback prepared",
+            required: true,
+          },
+        ],
+      }),
+    });
+    mockRegisterToolCalls.mockImplementation((calls) =>
+      runtime.registerToolCalls(calls),
+    );
+    mockRecordObservation.mockImplementation((input) =>
+      runtime.recordObservation(input),
+    );
+    mockSnapshot.mockImplementation(() => runtime.snapshot());
+    mockRecordModelRound.mockImplementation(() => runtime.recordModelRound());
+    mockVerify.mockImplementation((input) => runtime.verify(input));
+    mockComplete.mockImplementation(() => runtime.complete());
+    mockHardToolNames.add("discover_app_operations");
+    mockIsOpenAIResponsesConfigured.mockReturnValue(true);
+    const config = await mockGetElaineGlobalConfig();
+    mockGetElaineGlobalConfig.mockResolvedValue({
+      ...config,
+      features: { ...config.features, enableOpenAIResponsesFallback: true },
+    });
+    mockCallMeExecutor.mockReset();
+    mockCallMeExecutor.mockResolvedValue({
+      status: 200,
+      body: { result: { id: 123, status: "pending" } },
+    });
+    primeDbForFreshChat();
+    mockStreamOpenAIResponseRound.mockResolvedValueOnce(
+      responseRound("lookup-and-deferred-call", [
+        lookupCall,
+        callbackCall("not-attempted-call"),
+      ]),
+    );
+  });
+
+  afterEach(() => {
+    controls.forEach((control, index) => {
+      const original = originals[index];
+      if (original) control.mockImplementation(original);
+      else control.mockReset();
+    });
+  });
+
+  type RouterParams = {
+    messages: Array<{
+      role: string;
+      content?: unknown;
+      tool_call_id?: string;
+      tool_calls?: unknown[];
+    }>;
+    tool_choice?: unknown;
+  };
+
+  function mockRouterRound(create: (params: RouterParams) => unknown) {
+    const spy = vi.fn(create);
+    mockCallModelWithSubagent.mockImplementation(
+      async (
+        _model: string,
+        _instructions: string,
+        callback: (
+          client: unknown,
+          model: string,
+          serverTools: unknown[],
+        ) => Promise<void>,
+      ) => {
+        await callback(
+          { chat: { completions: { create: spy } } },
+          "mock-model",
+          [],
+        );
+      },
+    );
+    return spy;
+  }
+
+  function assertDeferredHistory(params: RouterParams) {
+    expect(params.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ role: "user", content: message }),
+        expect.objectContaining({
+          role: "assistant",
+          tool_calls: expect.arrayContaining([
+            {
+              id: "not-attempted-call",
+              type: "function",
+              function: { name: "call_me", arguments: JSON.stringify(payload) },
+            },
+            {
+              id: lookupCall.callId,
+              type: "function",
+              function: { name: lookupCall.name, arguments: "{}" },
+            },
+          ]),
+        }),
+        expect.objectContaining({
+          role: "tool",
+          tool_call_id: "prerequisite",
+          content: "Available operations: none.",
+        }),
+      ]),
+    );
+    const output = params.messages.find(
+      (entry) => entry.tool_call_id === "not-attempted-call",
+    );
+    expect(output?.role).toBe("tool");
+    expect(JSON.parse(output?.content as string)).toMatchObject({
+      status: "not_attempted",
+    });
+  }
+
+  it.each(["one_by_one", "auto_run"] as const)(
+    "preserves not_attempted output and original details across fallback (%s), allowing only one callback",
+    async (mode) => {
+      if (mode === "auto_run") {
+        selectQueue[4] = [{ actionConfirmationMode: "auto_run" }];
+      }
+      mockStreamOpenAIResponseRound.mockRejectedValueOnce(
+        new Error("Responses provider unavailable"),
+      );
+      const create = mockRouterRound((params) => {
+        // The switch happens after the prerequisite succeeded, but BEFORE an
+        // action was prepared or an executor could have scheduled anything.
+        expect(runtime.snapshot().plan.steps[0]?.status).toBe("completed");
+        expect(runtime.snapshot().plan.steps[1]).toMatchObject({
+          status: "blocked",
+          attempts: 0,
+        });
+        expect(mockCallMeExecutor).not.toHaveBeenCalled();
+        assertDeferredHistory(params);
+        expect(params.tool_choice).toEqual({
+          type: "function",
+          function: { name: "call_me" },
+        });
+        expect(params.messages).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              content: expect.stringContaining("original requested details"),
+            }),
+          ]),
+        );
+        // A misbehaving fallback model repeats the same action under a new ID.
+        return (async function* () {
+          yield {
+            choices: [
+              {
+                delta: {
+                  tool_calls: ["ready-call", "duplicate-call"].map(
+                    (id, index) => ({
+                      index,
+                      id,
+                      function: {
+                        name: "call_me",
+                        arguments: JSON.stringify(payload),
+                      },
+                    }),
+                  ),
+                },
+              },
+            ],
+          };
+        })();
+      });
+
+      const res = await request(buildApp())
+        .post("/api/elaine/chat")
+        .send({ message, appId: "hub" })
+        .buffer(true);
+
+      expect(res.status).toBe(200);
+      expect(mockStreamOpenAIResponseRound).toHaveBeenCalledTimes(2);
+      expect(create).toHaveBeenCalledTimes(1);
+      const nextResponses = mockStreamOpenAIResponseRound.mock.calls[1]?.[0];
+      expect(nextResponses.input).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: "function_call_output",
+            call_id: "not-attempted-call",
+            output: expect.stringContaining('"status":"not_attempted"'),
+          }),
+        ]),
+      );
+      const actions = [
+        ...res.text.matchAll(/event: action\ndata: (.+)\n/g),
+      ].map((match) => JSON.parse(match[1]!));
+      if (mode === "one_by_one") {
+        expect(actions).toHaveLength(1);
+        expect(actions[0]).toMatchObject({ type: "call_me", payload });
+        expect(mockCallMeExecutor).not.toHaveBeenCalled();
+      } else {
+        expect(actions).toHaveLength(0);
+        expect(mockCallMeExecutor).toHaveBeenCalledTimes(1);
+        expect(mockCallMeExecutor.mock.calls[0]?.slice(0, 2)).toEqual([
+          payload,
+          TEST_USER_ID,
+        ]);
+      }
+      expect(runtime.snapshot().plan.steps[1]).toMatchObject({
+        attempts: 1,
+        status: mode === "one_by_one" ? "waiting_confirmation" : "completed",
+      });
+      expect(mockRegisterToolCalls.mock.results[1]?.value).toMatchObject([
+        { id: "ready-call", allowed: true },
+        {
+          id: "duplicate-call",
+          allowed: false,
+          reason:
+            "The same consequential action was already attempted in this turn.",
+        },
+      ]);
+    },
+    15_000,
+  );
+
+  it.each([
+    { outcome: "saved", status: 200 },
+    { outcome: "uncertain", status: 502 },
+  ])(
+    "does not replay a callback with an already $outcome executor outcome after switching providers",
+    async ({ status }) => {
+      selectQueue[4] = [{ actionConfirmationMode: "auto_run" }];
+      mockCallMeExecutor.mockResolvedValue({
+        status,
+        body:
+          status === 200
+            ? { result: { id: 123, status: "pending" } }
+            : { error: "Provider disconnected; scheduling outcome unknown" },
+      });
+      // A second read keeps the route in its model loop after execution.
+      mockStreamOpenAIResponseRound
+        .mockResolvedValueOnce(
+          responseRound("attempted-call", [
+            callbackCall("attempted-call"),
+            { ...lookupCall, callId: "read-after-attempt" },
+          ]),
+        )
+        .mockRejectedValueOnce(new Error("Responses provider unavailable"));
+      const create = mockRouterRound((params) => {
+        assertDeferredHistory(params);
+        expect(mockCallMeExecutor).toHaveBeenCalledTimes(1);
+        expect(runtime.snapshot().plan.steps[1]).toMatchObject({
+          attempts: 1,
+          status: status === 200 ? "completed" : "failed",
+        });
+        expect(params.tool_choice).toBeUndefined();
+        return makeToolCallStream("call_me", JSON.stringify(payload));
+      });
+      const res = await request(buildApp())
+        .post("/api/elaine/chat")
+        .send({ message, appId: "hub" })
+        .buffer(true);
+      expect(res.status).toBe(200);
+      expect(mockStreamOpenAIResponseRound).toHaveBeenCalledTimes(3);
+      expect(create).toHaveBeenCalled();
+      expect(mockCallMeExecutor).toHaveBeenCalledTimes(1);
+      expect(parseSseResponse(res.text).eventTypes).not.toContain("action");
+      expect(runtime.snapshot().plan.steps[1]?.attempts).toBe(1);
+      expect(mockRecordObservation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          callId: "tc-test-1",
+          toolName: "call_me",
+          success: false,
+          errorCategory: "runtime_blocked",
+        }),
+      );
+    },
+    15_000,
+  );
 });
 
 describe("POST /api/elaine/chat — Responses-to-OpenRouter tool fallback", () => {

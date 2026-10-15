@@ -6,6 +6,8 @@ import type { AddressInfo } from "node:net";
 import { createHmac } from "node:crypto";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { makeEagerSelectBuilder } from "../test-helpers/db-mock";
+import { invalidateVerifiedOutboundRecipient } from "../lib/agentphone-voice-identity";
+import { logger } from "../lib/logger";
 
 // Uses PgDialect.sqlToQuery() — drizzle-orm's own public SQL-compilation
 // method — to recover the interpolated parameter values passed to
@@ -26,6 +28,11 @@ vi.mock("../lib/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
+const mockAgentphoneRequest = vi.hoisted(() => vi.fn());
+vi.mock("../lib/agentphone-http", () => ({
+  agentphoneRequest: mockAgentphoneRequest,
+}));
+
 // Rate-limit middleware uses a PostgresRateLimitStore that requires a live DB
 // connection. Replace it with a passthrough in tests so the store never runs.
 vi.mock("../middleware/rateLimit", () => ({
@@ -35,13 +42,15 @@ vi.mock("../middleware/rateLimit", () => ({
   adminLimiter: (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
 
-const TEST_SECRET = "test-agentphone-secret";
+const TEST_SECRET = vi.hoisted(() => "test-agentphone-secret");
 
 vi.mock("../lib/env", () => ({
   env: {
     agentphoneWebhookSecret: TEST_SECRET,
     agentphoneOutboundCorrelationWindowMs: 50,
     agentphoneOutboundCorrelationIntervalMs: 1,
+    agentphoneVoiceIdentityCacheTtlMs: 60_000,
+    agentphoneVoiceIdentityCacheMaxEntries: 10,
     isProduction: false,
     sessionSecret: "test-session",
     supabaseUrl: "https://mock.supabase.co",
@@ -208,12 +217,17 @@ function buildApp(): Express {
 // ---------------------------------------------------------------------------
 
 beforeEach(() => {
+  for (const [path] of mockAgentphoneRequest.mock.calls) {
+    invalidateVerifiedOutboundRecipient(String(path).split("/").at(-1)!);
+  }
   selectQueue.length = 0;
   lastConversationUpdate = undefined;
   insertCalls.length = 0;
   nextInsertThrows = false;
   nextInsertThrowsDbError = false;
   vi.clearAllMocks();
+  mockAgentphoneRequest.mockReset();
+  mockAgentphoneRequest.mockResolvedValue({ ok: false, status: 404 });
   dbMock.insert.mockImplementation(() => makeInsertBuilder());
   dbMock.select.mockImplementation(() => makeEagerSelectBuilder(selectQueue));
   dbMock.update.mockImplementation(() => makeUpdateBuilder());
@@ -1020,6 +1034,7 @@ describe("POST /api/agentphone/webhook — voice channel", () => {
     deliveryId = `voice-delivery-${Date.now()}`,
     direction?: "inbound" | "outbound",
     callId?: string,
+    to?: string,
   ) {
     const raw = JSON.stringify({
       event: "agent.message",
@@ -1027,6 +1042,9 @@ describe("POST /api/agentphone/webhook — voice channel", () => {
       data: {
         from,
         transcript,
+        ...(to !== undefined || direction === "outbound"
+          ? { to: to ?? from }
+          : {}),
         ...(direction ? { direction } : {}),
         ...(callId ? { callId } : {}),
       },
@@ -1041,6 +1059,7 @@ describe("POST /api/agentphone/webhook — voice channel", () => {
     deliveryId?: string,
     direction?: "inbound" | "outbound",
     callId?: string,
+    to?: string,
   ) {
     const { raw, deliveryId: id } = voiceBody(
       transcript,
@@ -1048,6 +1067,7 @@ describe("POST /api/agentphone/webhook — voice channel", () => {
       deliveryId ?? `voice-${transcript.slice(0, 8)}-${Date.now()}`,
       direction,
       callId,
+      to,
     );
     const ts = freshTimestamp();
     return request(app)
@@ -1070,6 +1090,536 @@ describe("POST /api/agentphone/webhook — voice channel", () => {
       },
     });
   }
+
+  function captureWhereCalls() {
+    const calls: unknown[][][] = [];
+    dbMock.select.mockImplementation(() => {
+      const builder = makeEagerSelectBuilder(selectQueue);
+      calls.push(vi.spyOn(builder, "where").mock.calls);
+      return builder;
+    });
+    return calls;
+  }
+
+  it("identifies a signed outbound call by its recipient, never the agent's from number", async () => {
+    const lookups = captureWhereCalls();
+    mockVerifiedCall("call-outbound-recipient");
+    selectQueue.push([{ id: 1 }]);
+    selectQueue.push([
+      { id: 170, phoneNumber: FROM, messages: [], version: 0, userId: 1 },
+    ]);
+    dbMock.update.mockImplementation(makeVoiceUpdateMock(170));
+
+    const res = await sendVoiceWebhook(
+      await buildApp(),
+      "Hello",
+      "+10000000002",
+      "voice-outbound-recipient",
+      "outbound",
+      "call-outbound-recipient",
+      FROM,
+    );
+
+    expect(res.status).toBe(200);
+    expect(getSqlParamValues(lookups.at(0)?.at(0)?.at(0))).toEqual([FROM]);
+    expect(getSqlParamValues(lookups.at(1)?.at(0)?.at(0))).toEqual([FROM]);
+    expect(runAgentphoneTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 1, inputText: "Hello" }),
+    );
+    expect(mockAgentphoneRequest).toHaveBeenCalledTimes(1);
+    expect(mockAgentphoneRequest.mock.invocationCallOrder[0]).toBeLessThan(
+      dbMock.select.mock.invocationCallOrder[0]!,
+    );
+    expect(res.text).not.toContain("don't recognize");
+  });
+
+  it("rejects an outbound turn without a call ID even when its destination matches a user", async () => {
+    const res = await sendVoiceWebhook(
+      await buildApp(),
+      "Hello",
+      "+10000000002",
+      "outbound-missing-call-id",
+      "outbound",
+      undefined,
+      FROM,
+    );
+    expect(res.body.hangup).toBe(true);
+    expect(res.text).toContain("couldn't verify this call");
+    expect(dbMock.select).not.toHaveBeenCalled();
+    expect(mockAgentphoneRequest).not.toHaveBeenCalled();
+    expect(runAgentphoneTurn).not.toHaveBeenCalled();
+  });
+
+  it.each(["outbound", undefined] as const)(
+    "rejects mismatched destination metadata before user lookup (direction %s)",
+    async (direction) => {
+      mockAgentphoneRequest.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          id: "call-mismatched-recipient",
+          direction: "outbound",
+          toNumber: "+19999999999",
+        }),
+      });
+      const res = await sendVoiceWebhook(
+        await buildApp(),
+        "Hello",
+        FROM,
+        `mismatched-recipient-${direction ?? "omitted"}`,
+        direction,
+        "call-mismatched-recipient",
+        FROM,
+      );
+      expect(res.text).toContain("couldn't verify this call");
+      expect(res.text).toContain('"hangup":true');
+      expect(dbMock.select).not.toHaveBeenCalled();
+      expect(runAgentphoneTurn).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["outbound", undefined] as const)(
+    "rejects provider-reported inbound calls despite matching webhook numbers (direction %s)",
+    async (direction) => {
+      mockAgentphoneRequest.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          id: "call-provider-inbound",
+          direction: "inbound",
+          toNumber: FROM,
+        }),
+      });
+      const res = await sendVoiceWebhook(
+        await buildApp(),
+        "Hello",
+        FROM,
+        `provider-inbound-${direction ?? "omitted"}`,
+        direction,
+        "call-provider-inbound",
+        FROM,
+      );
+      expect(res.text).toContain("couldn't verify this call");
+      expect(res.text).toContain('"hangup":true');
+      expect(dbMock.select).not.toHaveBeenCalled();
+      expect(runAgentphoneTurn).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["outbound", undefined] as const)(
+    "fails closed on provider errors despite matching webhook numbers (direction %s)",
+    async (direction) => {
+      mockAgentphoneRequest.mockRejectedValue(
+        new Error("Provider unavailable"),
+      );
+      const res = await sendVoiceWebhook(
+        await buildApp(),
+        "Hello",
+        FROM,
+        `provider-failure-${direction ?? "omitted"}`,
+        direction,
+        "call-provider-failure",
+        FROM,
+      );
+      expect(res.text).toContain("couldn't verify this call");
+      expect(res.text).toContain('"hangup":true');
+      expect(dbMock.select).not.toHaveBeenCalled();
+      expect(runAgentphoneTurn).not.toHaveBeenCalled();
+    },
+  );
+
+  it("never looks up a matching originating number when the verified recipient is not a household member", async () => {
+    const lookups = captureWhereCalls();
+    mockAgentphoneRequest.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: "call-unknown-recipient",
+        direction: "outbound",
+        toNumber: "+19999999999",
+      }),
+    });
+    selectQueue.push([]);
+    const res = await sendVoiceWebhook(
+      await buildApp(),
+      "Hello",
+      FROM,
+      "unknown-verified-recipient",
+      undefined,
+      "call-unknown-recipient",
+    );
+    expect(getSqlParamValues(lookups.at(0)?.at(0)?.at(0))).toEqual([
+      "+19999999999",
+    ]);
+    expect(dbMock.select).toHaveBeenCalledTimes(1);
+    expect(res.text).toContain('"hangup":true');
+    expect(runAgentphoneTurn).not.toHaveBeenCalled();
+  });
+
+  it("verifies the recipient when outbound direction and destination are omitted, and delivers the exact call's purpose", async () => {
+    const lookups = captureWhereCalls();
+    selectQueue.push([{ id: 1 }]);
+    selectQueue.push([
+      {
+        id: 171,
+        phoneNumber: FROM,
+        messages: [],
+        version: 0,
+        userId: 1,
+        pendingOutboundId: "pending-daily-check",
+        pendingOutboundCallId: "call-daily-check",
+        pendingOutboundOpening: "This is your daily communications check.",
+        pendingOutboundExpiresAt: new Date(Date.now() + 60_000),
+      },
+    ]);
+    dbMock.update.mockImplementation(makeVoiceUpdateMock(171));
+    mockAgentphoneRequest.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: "call-daily-check",
+        direction: "outbound",
+        fromNumber: "+10000000002",
+        toNumber: FROM,
+      }),
+    });
+
+    const res = await sendVoiceWebhook(
+      await buildApp(),
+      "Hello",
+      "+10000000002",
+      "voice-outbound-provider-recipient",
+      undefined,
+      "call-daily-check",
+    );
+
+    expect(getSqlParamValues(lookups.at(0)?.at(0)?.at(0))).toEqual([FROM]);
+    expect(getSqlParamValues(lookups.at(1)?.at(0)?.at(0))).toEqual([FROM]);
+    expect(mockAgentphoneRequest).toHaveBeenCalledTimes(1);
+    expect(runAgentphoneTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 1,
+        channel: "voice",
+        history: [
+          expect.objectContaining({
+            content: expect.stringContaining("daily communications check"),
+          }),
+        ],
+      }),
+    );
+    expect(runAgentphoneTurn).toHaveBeenCalledTimes(1);
+    expect(lastConversationUpdate?.pendingOutboundId).toBeNull();
+    expect(res.text).not.toContain("don't recognize");
+    expect(res.text.split("\n").filter(Boolean)).toHaveLength(2);
+  });
+
+  it("never authorizes an unknown inbound caller by the household destination", async () => {
+    const lookups = captureWhereCalls();
+    selectQueue.push([]);
+    const res = await sendVoiceWebhook(
+      await buildApp(),
+      "Hello",
+      "+19999999999",
+      "voice-inbound-unknown-destination",
+      "inbound",
+      "call-inbound",
+      FROM,
+    );
+    expect(getSqlParamValues(lookups.at(0)?.at(0)?.at(0))).toEqual([
+      "+19999999999",
+    ]);
+    expect(res.body.hangup).toBe(true);
+    expect(mockAgentphoneRequest).not.toHaveBeenCalled();
+    expect(runAgentphoneTurn).not.toHaveBeenCalled();
+  });
+
+  function queueVerifiedVoiceTurn(pendingCallId?: string) {
+    selectQueue.push([{ id: 1 }]); // Reauthorize the verified recipient.
+    const conversation = {
+      id: 171,
+      phoneNumber: FROM,
+      messages: [],
+      version: 0,
+      userId: 1,
+      ...(pendingCallId
+        ? {
+            pendingOutboundId: "pending-new-call",
+            pendingOutboundCallId: pendingCallId,
+            pendingOutboundOpening: "Private purpose for a newer call",
+            pendingOutboundExpiresAt: new Date(Date.now() + 60_000),
+          }
+        : {}),
+    };
+    selectQueue.push([conversation]);
+    if (pendingCallId) selectQueue.push([conversation]); // Correlation reload.
+    dbMock.update.mockImplementation(makeVoiceUpdateMock(171));
+  }
+
+  function mockVerifiedCall(callId: string) {
+    mockAgentphoneRequest.mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: callId, direction: "outbound", toNumber: FROM }),
+    });
+  }
+
+  it("reuses a verified call on repeated spoken turns but rechecks household membership", async () => {
+    const app = buildApp();
+    const lookups = captureWhereCalls();
+    mockVerifiedCall("call-repeated");
+    for (let turn = 0; turn < 2; turn++) {
+      queueVerifiedVoiceTurn();
+      const res = await sendVoiceWebhook(
+        app,
+        `Turn ${turn}`,
+        "+10000000002",
+        `repeated-${turn}`,
+        undefined,
+        "call-repeated",
+      );
+      expect(res.status).toBe(200);
+      expect(res.text).toContain("Mock reply");
+    }
+    expect(mockAgentphoneRequest).toHaveBeenCalledTimes(1);
+    expect(runAgentphoneTurn).toHaveBeenCalledTimes(2);
+    expect(getSqlParamValues(lookups.at(0)?.at(0)?.at(0))).toEqual([FROM]);
+    expect(getSqlParamValues(lookups.at(2)?.at(0)?.at(0))).toEqual([FROM]);
+
+    selectQueue.push([]); // Recipient is no longer a household user.
+    const rejected = await sendVoiceWebhook(
+      app,
+      "After removal",
+      "+10000000002",
+      "removed-membership",
+      undefined,
+      "call-repeated",
+    );
+    expect(rejected.text).toContain("don't recognize");
+    expect(rejected.text).toContain('"hangup":true');
+    expect(mockAgentphoneRequest).toHaveBeenCalledTimes(1);
+    expect(runAgentphoneTurn).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not consume a newer call's pending opening using an older cached call ID", async () => {
+    const app = buildApp();
+    mockVerifiedCall("call-old-cached");
+    queueVerifiedVoiceTurn();
+    await sendVoiceWebhook(
+      app,
+      "First turn",
+      "+10000000002",
+      "old-cached-first",
+      undefined,
+      "call-old-cached",
+    );
+    queueVerifiedVoiceTurn("call-new");
+    const res = await sendVoiceWebhook(
+      app,
+      "Delayed old turn",
+      "+10000000002",
+      "old-cached-late",
+      undefined,
+      "call-old-cached",
+    );
+    expect(res.text).toContain("Mock reply");
+    expect(mockAgentphoneRequest).toHaveBeenCalledTimes(1);
+    expect(runAgentphoneTurn.mock.calls.at(-1)?.[0].history).toEqual([]);
+    expect(lastConversationUpdate).not.toHaveProperty("pendingOutboundId");
+  });
+
+  it.each(["callId", "call_id"])(
+    "invalidates on a signed call-ended %s even when receipt persistence fails",
+    async (idKey) => {
+      const app = buildApp();
+      mockVerifiedCall("call-end-cache");
+      queueVerifiedVoiceTurn();
+      await sendVoiceWebhook(
+        app,
+        "Before ending",
+        "+10000000002",
+        "cached-before-end",
+        undefined,
+        "call-end-cache",
+      );
+      mockUpdateCallReceiptByProviderId.mockRejectedValueOnce(
+        new Error("DB unavailable"),
+      );
+      const raw = JSON.stringify({
+        event: "agent.call_ended",
+        channel: "voice",
+        data: { [idKey]: "call-end-cache", status: "completed" },
+      });
+      const ended = await request(app)
+        .post("/api/agentphone/webhook")
+        .set(buildHeaders(freshTimestamp(), raw, "cached-ended"))
+        .set("Content-Type", "application/json")
+        .send(raw);
+      expect(ended.status).toBe(503);
+      mockAgentphoneRequest.mockRejectedValueOnce(
+        new Error("Provider unavailable"),
+      );
+      selectQueue.push([]);
+      const res = await sendVoiceWebhook(
+        app,
+        "Late turn",
+        "+10000000002",
+        "cached-after-end",
+        undefined,
+        "call-end-cache",
+      );
+      expect(res.text).toContain("couldn't verify this call");
+      expect(res.text).toContain('"hangup":true');
+      expect(mockAgentphoneRequest).toHaveBeenCalledTimes(2);
+      expect(runAgentphoneTurn).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("does not let an unsigned call-ended event evict a verified identity", async () => {
+    const app = buildApp();
+    mockVerifiedCall("call-unsigned-end");
+    queueVerifiedVoiceTurn();
+    await sendVoiceWebhook(
+      app,
+      "First turn",
+      "+10000000002",
+      "unsigned-end-first",
+      undefined,
+      "call-unsigned-end",
+    );
+    const ended = await request(app)
+      .post("/api/agentphone/webhook")
+      .send({
+        event: "agent.call_ended",
+        data: { callId: "call-unsigned-end" },
+      });
+    expect(ended.status).toBe(401);
+    queueVerifiedVoiceTurn();
+    const res = await sendVoiceWebhook(
+      app,
+      "Second turn",
+      "+10000000002",
+      "unsigned-end-second",
+      undefined,
+      "call-unsigned-end",
+    );
+    expect(res.text).toContain("Mock reply");
+    expect(mockAgentphoneRequest).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["duplicate", "DB failure"])(
+    "evicts a signed ended call despite webhook-claim %s",
+    async (failure) => {
+      const app = buildApp();
+      mockVerifiedCall("call-claim-end");
+      queueVerifiedVoiceTurn();
+      await sendVoiceWebhook(
+        app,
+        "Before ending",
+        "+10000000002",
+        "claim-end-first",
+        undefined,
+        "call-claim-end",
+      );
+      nextInsertThrows = failure === "duplicate";
+      nextInsertThrowsDbError = failure === "DB failure";
+      const raw = JSON.stringify({
+        event: "agent.call_ended",
+        data: { callId: "call-claim-end" },
+      });
+      const ended = await request(app)
+        .post("/api/agentphone/webhook")
+        .set(buildHeaders(freshTimestamp(), raw, "claim-ended"))
+        .set("Content-Type", "application/json")
+        .send(raw);
+      expect(ended.status).toBe(failure === "duplicate" ? 200 : 503);
+      mockAgentphoneRequest.mockResolvedValueOnce({ ok: false, status: 404 });
+      selectQueue.push([]);
+      const late = await sendVoiceWebhook(
+        app,
+        "After ending",
+        "+10000000002",
+        "claim-end-late",
+        undefined,
+        "call-claim-end",
+      );
+      expect(late.text).toContain("couldn't verify this call");
+      expect(mockAgentphoneRequest).toHaveBeenCalledTimes(2);
+      expect(runAgentphoneTurn).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("does not trust a destination on an omitted-direction event when the provider says inbound", async () => {
+    selectQueue.push([]);
+    mockAgentphoneRequest.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: "call-inbound",
+        direction: "inbound",
+        toNumber: FROM,
+      }),
+    });
+    const res = await sendVoiceWebhook(
+      await buildApp(),
+      "Hello",
+      "+19999999999",
+      "voice-ambiguous-inbound",
+      undefined,
+      "call-inbound",
+      FROM,
+    );
+    expect(res.text).toContain('"hangup":true');
+    expect(runAgentphoneTurn).not.toHaveBeenCalled();
+    expect(dbMock.update).not.toHaveBeenCalled();
+  });
+
+  it("still rejects an outbound recipient who is not a household user", async () => {
+    selectQueue.push([], []);
+    mockAgentphoneRequest.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: "call-external",
+        direction: "outbound",
+        toNumber: "+19999999999",
+      }),
+    });
+    const res = await sendVoiceWebhook(
+      await buildApp(),
+      "Hello",
+      "+10000000002",
+      "voice-external-recipient",
+      undefined,
+      "call-external",
+    );
+    expect(res.text).toContain("don't recognize");
+    expect(res.text).toContain('"hangup":true');
+    expect(runAgentphoneTurn).not.toHaveBeenCalled();
+    expect(dbMock.update).not.toHaveBeenCalled();
+  });
+
+  it("fails closed with a spoken verification error when the provider is unavailable", async () => {
+    selectQueue.push([]);
+    mockAgentphoneRequest.mockRejectedValue(
+      new DOMException(
+        "Timed out verifying +10000000001 from +10000000002",
+        "TimeoutError",
+      ),
+    );
+    const res = await sendVoiceWebhook(
+      await buildApp(),
+      "Hello",
+      "+10000000002",
+      "voice-recipient-verification-timeout",
+      undefined,
+      "call-timeout",
+    );
+    expect(res.status).toBe(200);
+    expect(res.text).toContain("couldn't verify this call");
+    expect(res.text).toContain('"hangup":true');
+    expect(runAgentphoneTurn).not.toHaveBeenCalled();
+    expect(dbMock.update).not.toHaveBeenCalled();
+    const logs = JSON.stringify([
+      vi.mocked(logger.info).mock.calls,
+      vi.mocked(logger.warn).mock.calls,
+      vi.mocked(logger.error).mock.calls,
+    ]);
+    expect(logs).not.toContain("+10000000001");
+    expect(logs).not.toContain("+10000000002");
+  });
 
   it("responds with Content-Type application/x-ndjson for a voice turn", async () => {
     selectQueue.push([{ id: 1 }]); // user lookup
@@ -1357,6 +1907,7 @@ describe("POST /api/agentphone/webhook — voice channel", () => {
   });
 
   it("delivers pending outbound purpose once on the first spoken omitted-direction turn after exact call-id correlation", async () => {
+    mockVerifiedCall("call-exact");
     selectQueue.push([{ id: 1 }]);
     selectQueue.push([
       {
@@ -1473,6 +2024,7 @@ describe("POST /api/agentphone/webhook — voice channel", () => {
   });
 
   it("does not consume an uncorrelated pending context when call-id correlation is required", async () => {
+    mockVerifiedCall("provider-call-id");
     selectQueue.push([{ id: 1 }]);
     selectQueue.push([
       {
@@ -1580,7 +2132,7 @@ describe("POST /api/agentphone/webhook — voice channel", () => {
     ).not.toContain("This old reminder must not be delivered.");
   });
 
-  it("does not consume attached outbound context for an outbound event without its call id", async () => {
+  it("rejects an outbound event without its call id before accessing attached context", async () => {
     selectQueue.push([{ id: 1 }]);
     selectQueue.push([
       {
@@ -1606,12 +2158,9 @@ describe("POST /api/agentphone/webhook — voice channel", () => {
       "outbound",
     );
 
-    expect(runAgentphoneTurn).toHaveBeenCalledWith(
-      expect.objectContaining({ channel: "voice", history: [] }),
-    );
-    expect(
-      JSON.stringify(runAgentphoneTurn.mock.calls[0]?.[0] ?? {}),
-    ).not.toContain("Must not be delivered without correlation.");
+    expect(runAgentphoneTurn).not.toHaveBeenCalled();
+    expect(dbMock.select).not.toHaveBeenCalled();
+    expect(dbMock.update).not.toHaveBeenCalled();
   });
 
   it("does not consume attached outbound context for a mismatched outbound call id", async () => {

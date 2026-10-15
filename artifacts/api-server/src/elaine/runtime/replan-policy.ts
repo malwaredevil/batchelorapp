@@ -23,6 +23,32 @@ function dependenciesReady(
   return step.dependsOn.every((dependency) => completedIds.has(dependency));
 }
 
+/** Continue only an action actually vetoed before execution, never an attempted action. */
+export function selectReadyDeferredElaineAction(
+  trace: ElaineRuntimeTrace,
+  deferredToolNames: ReadonlySet<string>,
+): string | null {
+  const completedIds = new Set(
+    trace.plan.steps
+      .filter((step) => step.status === "completed")
+      .map((step) => step.id),
+  );
+  const step = trace.plan.steps.find(
+    (candidate) =>
+      candidate.required &&
+      candidate.kind === "action" &&
+      candidate.status === "blocked" &&
+      candidate.attempts === 0 &&
+      typeof candidate.toolName === "string" &&
+      deferredToolNames.has(candidate.toolName) &&
+      dependenciesReady(candidate, completedIds) &&
+      !trace.plan.steps.some(
+        (other) => other.toolName === candidate.toolName && other.attempts > 0,
+      ),
+  );
+  return step?.toolName ?? null;
+}
+
 function isSafeRequiredRead(
   step: ElainePlanStep,
   availableToolNames: ReadonlySet<string>,

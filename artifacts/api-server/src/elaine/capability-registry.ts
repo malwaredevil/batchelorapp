@@ -828,17 +828,35 @@ const POLICY_ROWS: ElaineCapabilityPolicy[] = [
     retry: "read_only",
     channels: ["web"],
   }),
-  ...policies(["list_sentry_issues"], {
+  ...policies(["save_elaine_suggestion"], {
     domain: "admin",
-    kind: "read",
-    risk: "none",
+    kind: "utility",
+    risk: "low",
     auth: "session_and_owner",
     confirmation: "never",
-    executorPrefix: "adminRead",
+    executorPrefix: "ownerSupport",
     audit: "runtime_observation",
-    retry: "read_only",
-    channels: ["web"],
+    retry: "safe",
+    channels: ["web", "sms", "voice", "slack"],
   }),
+  ...policies(
+    [
+      "list_sentry_issues",
+      "list_elaine_suggestions",
+      "get_recent_elaine_diagnostics",
+    ],
+    {
+      domain: "admin",
+      kind: "read",
+      risk: "none",
+      auth: "session_and_owner",
+      confirmation: "never",
+      executorPrefix: "adminRead",
+      audit: "runtime_observation",
+      retry: "read_only",
+      channels: ["web", "sms", "voice", "slack"],
+    },
+  ),
 ];
 
 const policyPairs = POLICY_ROWS.map(

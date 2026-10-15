@@ -2559,12 +2559,14 @@ test("real ELAINE_IMPORTED_TOOL_FILES: every enrolled file actually exists", () 
   }
 });
 
-test("real ELAINE_IMPORTED_TOOL_FILES: every enrolled file is a *-actions.ts or *-tools.ts file", () => {
+test("real ELAINE_IMPORTED_TOOL_FILES: enrolled files are tool modules or the owner support catalog", () => {
   // Ensures no accidentally mis-named file sneaks into the list.
   for (const filePath of ELAINE_IMPORTED_TOOL_FILES) {
     assert.ok(
-      filePath.endsWith("-actions.ts") || filePath.endsWith("-tools.ts"),
-      `ELAINE_IMPORTED_TOOL_FILES contains "${filePath}" which does not end in -actions.ts or -tools.ts`,
+      filePath.endsWith("-actions.ts") ||
+        filePath.endsWith("-tools.ts") ||
+        filePath === "artifacts/api-server/src/elaine/owner-tool-catalog.ts",
+      `ELAINE_IMPORTED_TOOL_FILES contains unexpected tool source "${filePath}"`,
     );
   }
 });
@@ -2806,17 +2808,7 @@ test("real capability-registry.ts: all POLICY_ROWS tool names have a definition 
   // Build the same catalog set that Scan J uses at runtime: read each
   // ELAINE_IMPORTED_TOOL_FILES and planner-tool-catalog.ts.
   const ELAINE_TOOL_FILES = [
-    "artifacts/api-server/src/elaine/reminder-actions.ts",
-    "artifacts/api-server/src/elaine/communication-actions.ts",
-    "artifacts/api-server/src/elaine/universal-read-tools.ts",
-    "artifacts/api-server/src/elaine/office-actions.ts",
-    "artifacts/api-server/src/elaine/pottery-actions.ts",
-    "artifacts/api-server/src/elaine/quilting-actions.ts",
-    "artifacts/api-server/src/elaine/ornaments-actions.ts",
-    "artifacts/api-server/src/elaine/magnets-actions.ts",
-    "artifacts/api-server/src/elaine/universal-actions.ts",
-    "artifacts/api-server/src/elaine/adaptive-actions.ts",
-    "artifacts/api-server/src/elaine/app-operation-tools.ts",
+    ...ELAINE_IMPORTED_TOOL_FILES,
     "artifacts/api-server/src/elaine/planner-tool-catalog.ts",
   ];
   const definedNames = new Set<string>();

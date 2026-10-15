@@ -36,6 +36,8 @@ export interface RuntimeScheduledToolCall extends RuntimeToolCall {
   allowed: boolean;
   stepId: string | null;
   reason?: string;
+  /** Prerequisite veto only: no execution or consequential dedupe claim occurred. */
+  deferred?: boolean;
 }
 
 export interface RuntimeVerificationDecision {
@@ -278,11 +280,13 @@ export class ElaineTurnRuntime {
         if (missingDependencies.length > 0) {
           const reason = `Waiting for prerequisite step${missingDependencies.length > 1 ? "s" : ""}: ${missingDependencies.join(", ")}`;
           this.updateStep(step, "blocked", reason);
+          this.callSteps.set(call.id, step.id);
           return {
             ...call,
             allowed: false,
             stepId: step.id,
             reason,
+            deferred: true,
           };
         }
 
@@ -323,6 +327,7 @@ export class ElaineTurnRuntime {
     resultReference?: string;
     provenance?: ElaineObservationProvenance;
   }): void {
+    const deferred = input.errorCategory === "dependency_not_ready";
     const stepId = this.callSteps.get(input.callId);
     const step = stepId
       ? this.trace.plan.steps.find((candidate) => candidate.id === stepId)
@@ -357,20 +362,24 @@ export class ElaineTurnRuntime {
       errorCategory: input.errorCategory
         ? sanitizeRuntimeText(input.errorCategory, 80)
         : undefined,
-      status: input.waitingConfirmation
-        ? "waiting_confirmation"
-        : input.success
-          ? "completed"
-          : "failed",
-    });
-    if (step) {
-      this.updateStep(
-        step,
-        input.waitingConfirmation
+      status: deferred
+        ? "blocked"
+        : input.waitingConfirmation
           ? "waiting_confirmation"
           : input.success
             ? "completed"
             : "failed",
+    });
+    if (step) {
+      this.updateStep(
+        step,
+        deferred
+          ? "blocked"
+          : input.waitingConfirmation
+            ? "waiting_confirmation"
+            : input.success
+              ? "completed"
+              : "failed",
         summary ||
           (input.success
             ? "Evidence received"

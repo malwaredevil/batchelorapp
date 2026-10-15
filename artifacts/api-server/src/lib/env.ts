@@ -78,6 +78,14 @@ export const env = {
     "AGENTPHONE_OUTBOUND_CORRELATION_WINDOW_MS",
     5_000,
   ),
+  agentphoneVoiceIdentityCacheTtlMs: optionalPositiveInteger(
+    "AGENTPHONE_VOICE_IDENTITY_CACHE_TTL_MS",
+    15 * 60 * 1_000,
+  ),
+  agentphoneVoiceIdentityCacheMaxEntries: optionalPositiveInteger(
+    "AGENTPHONE_VOICE_IDENTITY_CACHE_MAX_ENTRIES",
+    256,
+  ),
   agentphoneOutboundLifecycleIntervalMs: optionalPositiveInteger(
     "AGENTPHONE_OUTBOUND_LIFECYCLE_INTERVAL_MS",
     60_000,

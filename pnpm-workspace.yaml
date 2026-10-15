@@ -127,6 +127,7 @@ overrides:
   "@xmldom/xmldom": ">=0.8.15 <0.9" # GHSA-6gmq-8vp8-gcm6: namespace-confusion issue; patched 0.8.15; mammoth expects ^0.8
   browserslist: ">=4.28.7 <5" # GHSA-c83g-rgw3-j3cx / GHSA-73wf-gq98-2v4g: arbitrary file read + poisoned-stats DoS; patched 4.28.7
   dompurify: "3.4.16" # GHSA-p98j-92pf-mc4p; retain the parent's major.
+  fast-copy: "4.1.2" # GHSA-jggr-w7fw-pc2j: stack exhaustion; compatible pino-pretty transitive patch.
   fast-uri: "3.1.8" # Authority/host confusion plus GHSA-hrr3-gc8f-f4qj.
   "undici@^7": "7.29.1" # Patched request smuggling and response parsing; retain jsdom's expected major.
   "undici@^8": "8.10.2" # Patched request smuggling and response parsing; retain API server's expected major.
@@ -135,6 +136,8 @@ overrides:
   markdown-it: "14.3.1" # GHSA-253c-mchw-3w2r: quadratic linkify; retain typedoc's major.
   postcss: ">=8.5.23 <9" # GHSA-fxqj-rqcc-2cmp (CVE-2026-69153): incomplete fix of prior sourceMappingURL path-traversal GHSA; patched 8.5.23; parent expects ^8
   qs: ">=6.16.0 <7" # GHSA-x5fp-wj9c-mxmx / GHSA-4mjr-xmp4-gh2g: prototype-pollution and isBuffer DoS; patched 6.16.0
+  proxy-addr: "2.0.8" # GHSA-jqcg-44mw-7w3h: IPv4-mapped IPv6 trust-subnet bypass.
+  source-map-js: "1.2.2" # GHSA-68fv-2mgg-jv7q: indexed source-map offset DoS.
   "rollup>@rollup/rollup-android-arm-eabi": "-"
   "rollup>@rollup/rollup-android-arm64": "-"
   "rollup>@rollup/rollup-darwin-arm64": "-"

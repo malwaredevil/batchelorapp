@@ -36,6 +36,8 @@ export interface AgentphoneRequestInit {
   body?: unknown;
   /** Disable retries for non-idempotent provider operations such as call creation. */
   retry?: boolean;
+  /** Optional deadline/cancellation for latency-sensitive webhook lookups. */
+  signal?: AbortSignal;
 }
 
 /**
@@ -71,6 +73,7 @@ export async function agentphoneRequest(
       method: init.method,
       headers,
       body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+      signal: init.signal,
     });
     if (response.ok || !RETRYABLE_STATUS.has(response.status)) {
       return response;

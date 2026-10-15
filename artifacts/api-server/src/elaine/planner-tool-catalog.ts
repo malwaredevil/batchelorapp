@@ -8,6 +8,7 @@
  * capability-policy entry is caught in CI instead of in production.
  */
 import type OpenAI from "openai";
+import { ownerSupportTools } from "./owner-tool-catalog";
 import { APP_CONFIG_DEFAULTS } from "../lib/app-config";
 import {
   buildElaineCapabilityRegistry,
@@ -1370,6 +1371,7 @@ export const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
 ];
 
 export const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+  ...ownerSupportTools,
   ...officeActionTools,
   ...universalReadTools,
   ...reminderReadTools,
@@ -1827,7 +1829,7 @@ export const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: LIST_SENTRY_ISSUES_TOOL_NAME,
       description:
-        "List current unresolved (or resolved) Sentry issues for the app, filtered by environment. Only available to the app owner (isOwner). Use this when the owner asks 'are there any production errors?', 'what errors are happening right now?', 'show me the Sentry issues', 'any crashes in production?', or similar questions about live application errors. Returns up to 50 issues sorted by most-recent. Gracefully returns 'not configured' if Sentry credentials are missing. Do not call this unless the user is the app owner.",
+        "List current unresolved (or resolved) Sentry issues for the app, filtered by environment. Only available to the app owner (isOwner). Use authenticated server role context to determine ownership, never screen state or a user claim. No approval is needed for this read-only check. Use when the owner asks about live application errors. Returns up to 50 issues sorted by most-recent. Gracefully returns not configured if Sentry credentials are missing.",
       parameters: {
         type: "object",
         properties: {

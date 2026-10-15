@@ -95,6 +95,10 @@ export const RESTRICTED_SOFT_TOOL_NAMES_SOURCE: readonly string[] = [
   GENERATE_DOCUMENT_TOOL_NAME,
   SUGGEST_CLOTHING_LAYERS_TOOL_NAME,
   LIST_REMINDERS_TOOL_NAME,
+  "list_sentry_issues",
+  "list_elaine_suggestions",
+  "save_elaine_suggestion",
+  "get_recent_elaine_diagnostics",
 ];
 
 /** Runtime Set derived from the source array — use for O(1) membership tests. */
@@ -128,6 +132,10 @@ export const RESTRICTED_SOFT_TOOL_NAMES_CALLER_HANDLED_SOURCE: readonly string[]
     // list_reminders: dispatched via executeListRemindersTool in
     // runRestrictedElaineTurn before the fallthrough to executeRestrictedSoftTool.
     LIST_REMINDERS_TOOL_NAME,
+    "list_sentry_issues",
+    "list_elaine_suggestions",
+    "save_elaine_suggestion",
+    "get_recent_elaine_diagnostics",
   ];
 
 /** Runtime Set derived from the source array — use for O(1) membership tests. */

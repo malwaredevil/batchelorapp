@@ -563,7 +563,7 @@ for (const entry of ANCHORED_CONFIG_ALLOWLIST) {
 
   if (entry.kind === "cluster") {
     const expandedExpression = entry.expression.startsWith("{")
-      ? entry.expression.replace("{", "{\nmaxQueuedJobs: 8,")
+      ? `{\nmaxQueuedJobs: 8,${entry.expression.slice(1)}`
       : entry.expression.replace(
           "minLength: 1",
           "minLength: 1\n          maxQueuedJobs: 8",

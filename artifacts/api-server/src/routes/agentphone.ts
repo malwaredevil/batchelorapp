@@ -592,18 +592,12 @@ async function handleVoice(
   }
 
   const normalizedDirection = direction.trim().toLowerCase();
-  // A call ID alone does not establish direction or authorize private context.
+  // Outbound and ambiguous call-ID events must establish identity with the
+  // provider before any household lookup, even if a webhook number matches.
   const mayConsumeOutboundContext =
-    Boolean(callId?.trim()) &&
-    (normalizedDirection === "outbound" || normalizedDirection === "");
-  let householdNumber = normalizedDirection === "outbound" ? to : from;
-  let [user] = householdNumber
-    ? await db
-        .select({ id: appUsers.id })
-        .from(appUsers)
-        .where(eq(appUsers.phoneNumber, householdNumber))
-        .limit(1)
-    : [];
+    normalizedDirection === "outbound" ||
+    (normalizedDirection === "" && Boolean(callId?.trim()));
+  let householdNumber = from;
 
   // A provider verification can take longer than the voice response deadline.
   // Acknowledge before that lookup, without disclosing household information.
@@ -629,29 +623,45 @@ async function handleVoice(
     }
   };
 
-  if (!user && mayConsumeOutboundContext && callId) {
-    startStream();
-    try {
+  const verificationFailure =
+    "Sorry, I couldn't verify this call right now. Please try again or use the app.";
+  if (
+    normalizedDirection !== "" &&
+    normalizedDirection !== "inbound" &&
+    normalizedDirection !== "outbound"
+  ) {
+    finish(verificationFailure, true);
+    return;
+  }
+  let user: { id: number } | undefined;
+  try {
+    if (mayConsumeOutboundContext) {
+      if (!callId?.trim()) {
+        finish(verificationFailure, true);
+        return;
+      }
+      startStream();
       const recipient = await getVerifiedOutboundRecipient(callId);
-      if (recipient) {
-        householdNumber = recipient;
-        [user] = await db
+      if (!recipient || (to && to !== recipient)) {
+        finish(verificationFailure, true);
+        return;
+      }
+      householdNumber = recipient;
+    }
+    [user] = householdNumber
+      ? await db
           .select({ id: appUsers.id })
           .from(appUsers)
           .where(eq(appUsers.phoneNumber, householdNumber))
-          .limit(1);
-      }
-    } catch (err) {
-      logger.warn(
-        { errorType: err instanceof Error ? err.name : "UnknownError" },
-        "agentphone: outbound recipient verification unavailable",
-      );
-      finish(
-        "Sorry, I couldn't verify this call right now. Please try again or use the app.",
-        true,
-      );
-      return;
-    }
+          .limit(1)
+      : [];
+  } catch (err) {
+    logger.warn(
+      { errorType: err instanceof Error ? err.name : "UnknownError" },
+      "agentphone: voice identity verification unavailable",
+    );
+    finish(verificationFailure, true);
+    return;
   }
   if (!user) {
     finish(
@@ -681,9 +691,8 @@ async function handleVoice(
     res.end();
     return;
   }
-  // Missing direction is not evidence of an outbound call. A call ID can
-  // authorize consumption only when runRestrictedTurnAndPersist confirms it
-  // matches the pending provider call ID.
+  // Provider verification authorizes recipient identity, not the private
+  // opening. Consumption still requires the exact pending provider call ID.
   // Reload after the initial lookup so an attach that won the race is visible.
   // Never infer correlation from phone number alone: a late old webhook must
   // not consume a newer call's private opening.

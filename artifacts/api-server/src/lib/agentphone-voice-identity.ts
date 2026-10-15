@@ -2,9 +2,9 @@ import { agentphoneRequest } from "./agentphone-http";
 import { env } from "./env";
 
 /**
- * An outbound webhook's `from` can be the agent's own number. When the signed
- * webhook cannot identify the household recipient, verify the exact call with
- * the provider rather than trusting a destination on an ambiguous event.
+ * An outbound webhook's `from` can be the agent's own number. Every outbound
+ * or ambiguous call-ID turn must verify the exact call with the provider
+ * before looking up a household user, regardless of matching webhook numbers.
  */
 async function verifyOutboundRecipient(callId: string): Promise<string | null> {
   if (!/^[a-zA-Z0-9_-]{1,128}$/.test(callId)) return null;

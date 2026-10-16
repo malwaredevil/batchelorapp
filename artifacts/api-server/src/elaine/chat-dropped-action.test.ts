@@ -1732,6 +1732,19 @@ describe("POST /api/elaine/chat — deferred callback across provider fallback",
         ],
       }),
     });
+    const [completedPrerequisite] = runtime.registerToolCalls([
+      { id: "completed-prerequisite", name: "discover_app_operations" },
+    ]);
+    expect(completedPrerequisite).toMatchObject({
+      allowed: true,
+      stepId: "lookup",
+    });
+    runtime.recordObservation({
+      callId: "completed-prerequisite",
+      toolName: "discover_app_operations",
+      success: true,
+      summary: "Scheduling operations discovered",
+    });
     selectQueue[4] = [{ actionConfirmationMode: "auto_run" }];
     mockHardToolNames.add("list_scheduled_contacts");
     mockCallMeExecutor.mockResolvedValue({
@@ -1742,11 +1755,16 @@ describe("POST /api/elaine/chat — deferred callback across provider fallback",
     vi.mocked(executeListScheduledContacts).mockResolvedValueOnce(
       "No pending scheduled calls or messages.",
     );
+    mockStreamOpenAIResponseRound.mockReset();
     mockStreamOpenAIResponseRound
       .mockResolvedValueOnce(
         responseRound("attempt", [
           callbackCall("attempted-call"),
-          { ...lookupCall, callId: "read-after-attempt" },
+          {
+            callId: "initial-inspection",
+            name: "list_scheduled_contacts",
+            arguments: "{}",
+          },
         ]),
       )
       .mockResolvedValueOnce(

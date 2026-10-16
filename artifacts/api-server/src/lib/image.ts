@@ -25,13 +25,6 @@ export { sniffImageType };
 const MAX_INPUT_PIXELS = 50_000_000;
 
 /**
- * Longest-edge cap for images we persist. Keeps stored originals at a sane size
- * for display without letting a single upload balloon storage or later AI
- * payloads. A 2048px JPEG is well under ~1 MB.
- */
-const MAX_STORAGE_DIMENSION = 2048;
-
-/**
  * Longest-edge cap for images handed to the vision model. Vision models tile
  * images at ~512px, so 1024px is plenty of detail while keeping each base64
  * payload small. This is the key bound that stops the compare fan-out from

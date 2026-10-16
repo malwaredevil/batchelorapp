@@ -14,7 +14,7 @@
  * PUT    /patterns/:id/variants/:variantId/requirements  — replace full requirement list
  */
 import { Router, type IRouter } from "express";
-import { eq, desc, asc, and, sql } from "drizzle-orm";
+import { eq, desc, asc, and } from "drizzle-orm";
 import {
   db,
   quiltPatterns,

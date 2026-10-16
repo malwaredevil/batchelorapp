@@ -30,7 +30,6 @@ export interface WebSearchResult {
   images: WebSearchImage[];
 }
 
-const DEFAULT_SEARCH_TIMEOUT_MS = 15_000;
 // Perplexity caps return_images results well above this; we only ever want
 // a small, chat-bubble-sized preview, not a gallery.
 const MAX_IMAGES = 4;

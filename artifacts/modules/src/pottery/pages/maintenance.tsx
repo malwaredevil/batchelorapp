@@ -25,7 +25,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
 import { usePageAssistantContext } from "@/pottery/lib/assistant-context";
 import { useAppConfigSummary } from "@workspace/elaine-ui";
 import { generateInsurancePdf } from "@/pottery/lib/pdf-export";

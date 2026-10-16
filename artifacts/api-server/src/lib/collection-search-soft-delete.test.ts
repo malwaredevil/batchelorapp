@@ -87,7 +87,7 @@ vi.mock("@workspace/db", async (importOriginal) => {
 // ---------------------------------------------------------------------------
 
 import { semanticCollectionSearch } from "./collection-search";
-import { isNull, sql } from "drizzle-orm";
+import { isNull } from "drizzle-orm";
 import { potteryItems, fabrics } from "@workspace/db";
 
 beforeEach(() => {

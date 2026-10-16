@@ -537,7 +537,7 @@ export function CalendarSyncCard({
       queryKey: getListConnectedCalendarsQueryKey(),
     },
   });
-  const { data: travelStatus } = useGetTravelCalendarStatus();
+  useGetTravelCalendarStatus();
   const disconnectCalendar = useDisconnectCalendar();
   const addCalendar = useAddConnectedCalendar();
   const updateCalendar = useUpdateConnectedCalendar();

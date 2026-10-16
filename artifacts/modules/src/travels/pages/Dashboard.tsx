@@ -13,7 +13,6 @@ import {
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Plane,
@@ -180,10 +179,7 @@ export default function Dashboard() {
               entity: "trip",
               id: trip.id,
               label: trip.title,
-              details: [
-                trip.destination && trip.destination,
-                `status: ${trip.status}`,
-              ],
+              details: [trip.destination, `status: ${trip.status}`],
             }),
         })}.${
           pendingReminders.length > 0

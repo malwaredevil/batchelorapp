@@ -12,15 +12,10 @@ import {
 } from "../../lib/storage";
 import { env } from "../../lib/env";
 import { logger } from "../../lib/logger";
-import {
-  validateSourceDataUrl,
-  preprocessForInpaint,
-  type CropInfo,
-} from "@workspace/ai-actions";
+import { validateSourceDataUrl, type CropInfo } from "@workspace/ai-actions";
 import {
   detectCreasesFromBuffer,
   removeCreasesFromBuffer,
-  DEFAULT_INPAINT_PROMPT,
 } from "../../lib/crease-removal";
 
 const router: IRouter = Router();

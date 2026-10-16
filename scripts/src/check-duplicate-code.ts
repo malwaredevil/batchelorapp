@@ -13,6 +13,10 @@
  *
  * Same diff-scoping convention as check-hardcoded-config.ts: only files
  * present in `git diff --name-only <base>...HEAD` are treated as candidates.
+ * Within those files, unchanged function bodies are excluded using the base
+ * snapshot, so import-only cleanup does not turn legacy duplication into a
+ * newly introduced finding. Names and literal values are retained for this
+ * comparison; renamed or edited copies remain candidates.
  * Unlike that check, the "reference" side of the comparison is the rest of
  * the repository (artifacts/** /src, lib/** /src), read fresh from the
  * working tree — so a duplicate is caught even if the original predates any
@@ -27,7 +31,7 @@
  *   2. Normalize each body's token stream: identifiers → "ID", literals →
  *      "LIT", everything else (keywords, punctuation, operators) kept as-is.
  *      This is what lets a renamed copy still match structurally.
- *   3. Compare each candidate block (from a diff-changed file) against a
+ *   3. Compare each new/changed block (not present in the base snapshot) against a
  *      corpus of blocks from every OTHER file in artifacts/lib:
  *        - identical normalized token stream → "exact" match.
  *        - otherwise, k-token shingle sets compared via Jaccard similarity;
@@ -47,6 +51,7 @@
 import fs from "node:fs";
 import ts from "typescript";
 import {
+  git,
   getChangedFiles,
   readFileOrNull,
   repoRoot,
@@ -76,6 +81,7 @@ export interface CodeBlock {
   endLine: number;
   tokenCount: number;
   normalizedText: string;
+  sourceText: string;
   shingles: Set<string>;
 }
 
@@ -315,6 +321,7 @@ export function extractBlocks(file: string, content: string): CodeBlock[] {
       endLine: end.line + 1,
       tokenCount: tokens.length,
       normalizedText: tokens.join(" "),
+      sourceText: bodyText,
       shingles: buildShingles(tokens),
     });
   }
@@ -418,6 +425,7 @@ export function checkDuplicateCode(
   changedFiles: string[],
   allRepoFiles: string[],
   readFile: (file: string) => string | null,
+  readBaseFile?: (file: string) => string | null,
 ): DuplicateViolation[] {
   const changedSet = new Set(changedFiles.filter(isScannableFile));
   const corpusFiles = allRepoFiles.filter(
@@ -446,7 +454,21 @@ export function checkDuplicateCode(
     } catch {
       continue;
     }
+    const unchangedBodies = new Map<string, number>();
+    const baseContent = readBaseFile?.(file);
+    if (baseContent != null) {
+      for (const previous of extractBlocks(file, baseContent)) {
+        const key = JSON.stringify([previous.name, previous.sourceText]);
+        unchangedBodies.set(key, (unchangedBodies.get(key) ?? 0) + 1);
+      }
+    }
     for (const block of blocks) {
+      const key = JSON.stringify([block.name, block.sourceText]);
+      const remaining = unchangedBodies.get(key) ?? 0;
+      if (remaining > 0) {
+        unchangedBodies.set(key, remaining - 1);
+        continue;
+      }
       const match = findBestMatch(block, corpus);
       if (!match) continue;
       const violation: DuplicateViolation = {
@@ -506,8 +528,19 @@ export function runDuplicateCodeCheck(base: string): DuplicateViolation[] {
   const resolvedBase = resolveBase(root, base);
   const changedFiles = getChangedFiles(root, resolvedBase);
   const allRepoFiles = listRepoFiles(root);
-  return checkDuplicateCode(changedFiles, allRepoFiles, (f) =>
-    readFileOrNull(root, f),
+  const baseFiles = new Set(
+    git(root, ["ls-tree", "-r", "--name-only", resolvedBase])
+      .split("\n")
+      .filter(Boolean),
+  );
+  return checkDuplicateCode(
+    changedFiles,
+    allRepoFiles,
+    (file) => readFileOrNull(root, file),
+    (file) =>
+      baseFiles.has(file)
+        ? git(root, ["show", `${resolvedBase}:${file}`])
+        : null,
   );
 }
 

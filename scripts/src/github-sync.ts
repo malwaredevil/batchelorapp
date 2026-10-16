@@ -23,7 +23,7 @@
  * - If nothing changed vs GitHub HEAD, exits 0 cleanly.
  */
 
-import { execSync, spawnSync } from "child_process";
+import { spawnSync } from "child_process";
 import fs from "fs";
 import https from "https";
 import path from "path";

@@ -45,10 +45,7 @@ import { PreviewZoomModal } from "@/quilting/components/PreviewZoomModal";
 import { TagSelector } from "@/quilting/components/tag-selector";
 import type { QuiltingCategory } from "@workspace/api-client-react";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
-import {
-  formatElaineContextList,
-  formatElaineContextEntity,
-} from "@workspace/elaine-ui";
+import { formatElaineContextEntity } from "@workspace/elaine-ui";
 
 /** URL for the server-rasterised PNG preview of a block. */
 function blockPreviewUrl(blockId: number, sizePx: number): string {

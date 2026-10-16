@@ -298,7 +298,6 @@ async function reconcileBucket(config: BucketConfig): Promise<BucketReport> {
   }
 
   const storagePathSet = new Set(storageObjects.map((o) => o.path));
-  const storageByPath = new Map(storageObjects.map((o) => [o.path, o]));
 
   const orphanedObjects: StorageObjectEntry[] = [];
   const staleTempObjects: StorageObjectEntry[] = [];

@@ -118,7 +118,6 @@ export function MessengerNavIcon({
 
   const vvWidth = () => window.visualViewport?.width ?? window.innerWidth;
   const vvHeight = () => window.visualViewport?.height ?? window.innerHeight;
-  const isMobile = () => vvWidth() < MOBILE_BREAK;
 
   // Position the panel when first opened.
   // Mobile: full-width, 50 % height, centered on screen.
@@ -186,7 +185,6 @@ export function MessengerNavIcon({
       const dy = cy - op.startY;
       setPanelPos((prev) => {
         const w = panelRef.current?.offsetWidth ?? DEFAULT_W;
-        const h = panelRef.current?.offsetHeight ?? DEFAULT_H;
         return {
           left: Math.max(0, Math.min(window.innerWidth - w, op.startLeft + dx)),
           top: Math.max(0, Math.min(window.innerHeight - 48, op.startTop + dy)),
@@ -198,8 +196,8 @@ export function MessengerNavIcon({
         op;
       const dx = cx - startX;
       const dy = cy - startY;
-      let newW = startW,
-        newH = startH,
+      let newW: number,
+        newH: number,
         newLeft = startLeft,
         newTop = startTop;
 
@@ -749,7 +747,7 @@ export function MessengerNavIcon({
                 <div style={{ flex: 1, overflow: "hidden" }}>
                   <MessengerChatPanel
                     currentUserId={currentUserId}
-                    isOpen={isOpen && view === "chat"}
+                    isOpen
                     conversationId={effectiveConvId ?? undefined}
                     showParticipants={false}
                   />

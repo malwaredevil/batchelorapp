@@ -186,7 +186,7 @@ export default function CameraAddOrnament() {
 
   /** User said the data is wrong. */
   function handleConfirmNo(confirmation: PendingConfirmation) {
-    const { clientId, code } = confirmation;
+    const { clientId } = confirmation;
     setItems((prev) =>
       prev.map((i) =>
         i.clientId === clientId

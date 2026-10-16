@@ -14,8 +14,6 @@ import {
 } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import { fetchJsonSafe } from "../../lib/ssrf-safe-fetch";
-import { deleteTripPhoto } from "../../lib/travels/storage";
-import { deleteDocument } from "../../lib/travels-storage";
 import {
   syncTripCalendarEvents,
   deleteTripCalendarEvents,

@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import multer from "multer";
 import { DEFAULT_MULTER_FILE_BYTES } from "../../middleware/uploadSizeGuard";
 import { and, eq, isNull, sql } from "drizzle-orm";
-import { db, travelsTripPhotos, travelsTrips } from "@workspace/db";
+import { db, travelsTripPhotos } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import { supplementalUploadLimiter } from "../../middleware/rateLimit";
 import { generateVisualEmbedding } from "../../lib/visual-embed";

@@ -20,12 +20,9 @@ import {
   FlaskConical,
   Shirt,
   Rss,
-  Sparkles,
   MessageCircle,
-  SlidersHorizontal,
   Gift,
   Tag,
-  Sparkle,
   GripVertical,
   Magnet,
   AlertCircle,
@@ -35,7 +32,6 @@ import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  Command,
   CommandDialog,
   CommandEmpty,
   CommandGroup,
@@ -71,10 +67,7 @@ import {
   useListMagnetCategories,
 } from "@workspace/api-client-react";
 import { usePageAssistantContext } from "@/lib/assistant-context";
-import {
-  formatElaineContextList,
-  formatElaineContextEntity,
-} from "@workspace/elaine-ui";
+import { formatElaineContextEntity } from "@workspace/elaine-ui";
 
 const base = crossAppBase();
 
@@ -903,10 +896,6 @@ export function AppLauncher() {
       accentIconColor: "text-cyan-600 dark:text-cyan-400",
     },
   };
-
-  function navigate(href: string) {
-    window.location.href = href;
-  }
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans flex flex-col overflow-x-hidden">

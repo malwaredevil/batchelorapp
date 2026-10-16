@@ -2,7 +2,6 @@
 // see google-calendar-oauth.ts / google-calendar-tokens.ts). Each function
 // takes that user's live access token and talks to the Calendar REST API
 // directly — no shared connector, no shared calendar.
-import { logger } from "./logger";
 
 const CALENDAR_API_BASE = "https://www.googleapis.com/calendar/v3";
 

@@ -30,7 +30,6 @@ import {
   untrashMessage,
 } from "../lib/gmail-api-extended";
 import { getAttachment } from "../lib/gmail-api";
-import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 router.use(requireAuth);

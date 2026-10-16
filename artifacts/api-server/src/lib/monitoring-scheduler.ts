@@ -12,15 +12,13 @@
  * per-type once a normalised adapter and test fixtures exist.
  */
 
-import { and, eq, gte, lte, isNotNull } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   db,
   travelsTrips,
   travelsReservations,
-  travelMonitoringBaselines,
   travelMonitoringObservations,
   travelChangeEvents,
-  travelsMonitoringPreferences,
 } from "@workspace/db";
 import { createNotification, NOTIFICATION_TYPES } from "./notifications";
 import {

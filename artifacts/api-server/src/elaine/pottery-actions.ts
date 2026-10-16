@@ -16,7 +16,6 @@ import {
   potteryImages,
 } from "@workspace/db";
 import {
-  runItemAnalysis,
   bulkReanalyzePotteryItems,
   promotePotteryImageToPrimary,
   createPotteryItemFromBuffer,

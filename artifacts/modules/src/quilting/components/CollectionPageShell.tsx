@@ -5,7 +5,6 @@ import {
   X,
   SortAsc,
   SortDesc,
-  RefreshCw,
   Sparkles,
 } from "lucide-react";
 import { GalleryPaginationPair } from "@/components/GalleryPaginationPair";

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, asc, desc, isNull } from "drizzle-orm";
+import { and, eq, asc, isNull } from "drizzle-orm";
 import { logActivity } from "../../lib/soft-delete";
 import multer from "multer";
 import { multerLimitForPrefix } from "../../lib/upload-limits";
@@ -19,11 +19,7 @@ import {
 } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import { tripExists } from "../../lib/travels/db-helpers";
-import {
-  uploadDocument,
-  downloadDocument,
-  deleteDocument,
-} from "../../lib/travels-storage";
+import { uploadDocument, downloadDocument } from "../../lib/travels-storage";
 import {
   extractFromImage,
   extractFromPdf,

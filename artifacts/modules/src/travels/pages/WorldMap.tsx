@@ -46,7 +46,7 @@ type MapStatus = "booked" | "completed" | "planning" | "wishlist";
 // - planning status OR no end date → planning (yellow pin)
 // - end date in the past → completed (green pin)
 // - end date in the future → booked (orange pin)
-function getMapStatus(trip: Trip): MapStatus | null {
+function getMapStatus(trip: Trip): MapStatus {
   if (trip.status === "wishlist") return "wishlist";
   if (trip.status === "planning" || !trip.endDate) return "planning";
   const today = new Date();
@@ -312,7 +312,6 @@ function MapPanel({
         .filter((t) => t.lat != null && t.lng != null)
         .forEach((trip) => {
           const mapStatus = getMapStatus(trip);
-          if (!mapStatus) return; // planning/active with no end date → skip
 
           const posKey = `${Math.round(trip.lat! * 1000)},${Math.round(trip.lng! * 1000)}`;
           const visits = visitCount.get(posKey) ?? 1;
@@ -733,7 +732,7 @@ export default function WorldMap() {
                 <span
                   className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
                   style={{
-                    background: MAP_COLORS[getMapStatus(t) ?? "booked"],
+                    background: MAP_COLORS[getMapStatus(t)],
                   }}
                 />
                 {t.title}

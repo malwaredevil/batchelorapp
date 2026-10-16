@@ -150,6 +150,82 @@ assert.equal(violations[0]?.matchFile, "artifacts/api-server/src/quilting.ts");
 assert.equal(violations[0]?.matchName, "summarizeQuiltingBatch");
 assert.equal(violations[0]?.kind, "exact");
 
+const importCleanupFiles = {
+  ...files,
+  "artifacts/api-server/src/pottery.ts": `import { used } from "./used";\n${potterySource}`,
+};
+assert.equal(
+  checkDuplicateCode(
+    ["artifacts/api-server/src/pottery.ts"],
+    Object.keys(importCleanupFiles),
+    (file) =>
+      importCleanupFiles[file as keyof typeof importCleanupFiles] ?? null,
+    (file) =>
+      file === "artifacts/api-server/src/pottery.ts"
+        ? `import { used, unused } from "./used";\n\n${potterySource}`
+        : null,
+  ).length,
+  0,
+  "import-only edits and line shifts must not flag unchanged legacy bodies",
+);
+for (const previousBody of [
+  potterySource.replace("value > threshold", "value < threshold"),
+  potterySource.replace("100", "99"),
+  potterySource.replaceAll("potteryTotal", "previousTotal"),
+]) {
+  assert.equal(
+    checkDuplicateCode(
+      ["artifacts/api-server/src/pottery.ts"],
+      Object.keys(files),
+      readFile,
+      (file) =>
+        file === "artifacts/api-server/src/pottery.ts" ? previousBody : null,
+    ).length,
+    1,
+    "changed operators, literals, and bindings must remain duplicate candidates",
+  );
+}
+assert.equal(
+  checkDuplicateCode(
+    ["artifacts/api-server/src/pottery.ts"],
+    Object.keys(files),
+    readFile,
+    (file) =>
+      file === "artifacts/api-server/src/pottery.ts"
+        ? potterySource.replaceAll("summarizePotteryBatch", "olderName")
+        : null,
+  ).length,
+  1,
+  "renaming a body without changing its contents must not bypass detection",
+);
+assert.equal(
+  checkDuplicateCode(
+    ["artifacts/api-server/src/pottery.ts"],
+    Object.keys(files),
+    readFile,
+    () => null,
+  ).length,
+  1,
+  "new files with no base snapshot remain fully checked",
+);
+
+const originalMethod = `class Original { ${potterySource.replace("export function ", "")} }`;
+const addedMethod = `class Added { ${potterySource.replace("export function ", "")} }`;
+assert.equal(
+  checkDuplicateCode(
+    ["artifacts/api-server/src/pottery.ts"],
+    Object.keys(files),
+    (file) =>
+      file === "artifacts/api-server/src/pottery.ts"
+        ? `${originalMethod}\n${addedMethod}`
+        : readFile(file),
+    (file) =>
+      file === "artifacts/api-server/src/pottery.ts" ? originalMethod : null,
+  ).length,
+  1,
+  "an additional body with the same name must not consume an existing body's exemption twice",
+);
+
 const noViolations = checkDuplicateCode(
   ["artifacts/api-server/src/formatting.ts"],
   Object.keys(files),

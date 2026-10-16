@@ -99,9 +99,6 @@ export function GmailSidebar({
     (l) => l.type === "user" && l.name !== "CHAT",
   );
 
-  const inboxLabel = labels.find((l) => l.id === "INBOX");
-  const draftsLabel = labels.find((l) => l.id === "DRAFT");
-
   function unreadFor(id: string): number | undefined {
     const l = labels.find((lbl) => lbl.id === id);
     return l?.threadsUnread ?? l?.messagesUnread;

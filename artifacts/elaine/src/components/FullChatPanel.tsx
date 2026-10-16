@@ -1,4 +1,3 @@
-import { Link } from "wouter";
 import { Camera, X, CheckCircle2, HelpCircle, XCircle } from "lucide-react";
 import type { ReactNode } from "react";
 import type { MagnetCheckResult } from "@workspace/api-client-react";

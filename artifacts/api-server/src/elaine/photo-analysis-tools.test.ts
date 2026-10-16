@@ -678,7 +678,6 @@ beforeAll(async () => {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 const TEST_USER_ID = 42;
-const TEST_PHOTO_URL = "https://signed.example.com/attached-photo.jpg";
 
 const silentLog = {
   warn: () => {},

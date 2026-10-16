@@ -1,11 +1,8 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { Link, useLocation, useParams } from "wouter";
+import { useLocation, useParams } from "wouter";
 import { useRegisterNavGuard } from "@/quilting/lib/nav-guard";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
-import {
-  formatElaineContextList,
-  formatElaineContextEntity,
-} from "@workspace/elaine-ui";
+import { formatElaineContextEntity } from "@workspace/elaine-ui";
 import {
   ArrowLeft,
   Save,

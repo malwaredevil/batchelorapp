@@ -885,11 +885,6 @@ describe("claimAndSendDueDeliveries — messenger branch", () => {
     await claimAndSendDueDeliveries();
 
     expect(mockDbInsertReturning).not.toHaveBeenCalled(); // no conv auto-create
-    // The values() mock on the message insert must carry the assembled content
-    const valuesCall =
-      // assert via the insert chain instead: pull the last values() call
-      // argument from the insert mock results
-      vi.mocked(mockDbSelectWhere).getMockImplementation; // unused — we check the insert mock below
     const { db } = await import("@workspace/db");
     const lastInsertResult = vi.mocked(db.insert).mock.results.at(-1)!
       .value as { values: ReturnType<typeof vi.fn> };

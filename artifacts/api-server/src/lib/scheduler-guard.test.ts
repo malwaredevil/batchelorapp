@@ -587,6 +587,130 @@ describe("startSchedulerHeartbeat", () => {
 
   // ── Core staleness math ────────────────────────────────────────────────────
 
+  it("logs searchable scalar diagnostics for each overdue job, correlated to one check-in", async () => {
+    const checkInId = "heartbeat-diagnostics-check-in";
+    vi.mocked(Sentry.captureCheckIn).mockReturnValueOnce(checkInId);
+    const staleRow = makeRow({
+      name: "gmail-scan",
+      expectedIntervalMs: ONE_HOUR_MS,
+      successAgeMs: 2 * ONE_HOUR_MS,
+    });
+    const candidateRow = makeRow({
+      name: "travels-nudges",
+      expectedIntervalMs: ONE_HOUR_MS,
+      successAgeMs: STALE_THRESHOLD_ONE_HOUR_MS,
+    });
+    setupHeartbeatMock([
+      staleRow,
+      candidateRow,
+      makeRow({
+        name: "healthy-job",
+        expectedIntervalMs: ONE_HOUR_MS,
+        successAgeMs: 0,
+      }),
+    ]);
+
+    stopHeartbeat = startSchedulerHeartbeat();
+    await vi.advanceTimersByTimeAsync(FIRST_CHECK_DELAY_MS + 1);
+
+    const errorCalls = (logger.error as ReturnType<typeof vi.fn>).mock.calls;
+    const warnCalls = (logger.warn as ReturnType<typeof vi.fn>).mock.calls;
+    const confirmed = errorCalls.find(
+      ([fields]) => fields.taskName === staleRow.name,
+    );
+    const candidate = warnCalls.find(
+      ([fields]) => fields.taskName === candidateRow.name,
+    );
+    expect(confirmed).toEqual([
+      {
+        checkInId,
+        taskName: staleRow.name,
+        diagnosticStage: "confirmed_stale",
+        lastRunAt: staleRow.last_run_at,
+        lastSuccessAt: staleRow.last_success_at,
+        anchorSource: "last_success_at",
+        expectedIntervalMs: ONE_HOUR_MS,
+        toleranceMs: TOLERANCE_ONE_HOUR_MS,
+        ageMs: 2 * ONE_HOUR_MS + FIRST_CHECK_DELAY_MS,
+        overdueMs: ONE_HOUR_MS + FIRST_CHECK_DELAY_MS,
+        remainingConfirmationMs: 0,
+      },
+      expect.stringContaining('task "gmail-scan" confirmed overdue'),
+    ]);
+    expect(candidate).toEqual([
+      expect.objectContaining({
+        checkInId,
+        taskName: candidateRow.name,
+        diagnosticStage: "awaiting_confirmation",
+        lastRunAt: candidateRow.last_run_at,
+        lastSuccessAt: candidateRow.last_success_at,
+        remainingConfirmationMs: HEARTBEAT_INTERVAL_MS - FIRST_CHECK_DELAY_MS,
+      }),
+      expect.stringContaining('task "travels-nudges" awaiting confirmation'),
+    ]);
+    for (const [fields] of [confirmed!, candidate!]) {
+      expect(
+        Object.values(fields).every((value) =>
+          ["string", "number", "boolean"].includes(typeof value),
+        ),
+      ).toBe(true);
+    }
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        checkInId,
+        staleTaskCount: 1,
+        staleTaskNames: staleRow.name,
+      }),
+      expect.stringContaining("gone silent"),
+    );
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        checkInId,
+        candidateTaskCount: 1,
+        candidateTaskNames: candidateRow.name,
+      }),
+      expect.stringContaining("awaiting one more heartbeat"),
+    );
+    const jobLogs = [...errorCalls, ...warnCalls].filter(
+      ([fields]) => fields.taskName,
+    );
+    expect(jobLogs).toHaveLength(2);
+    expect(Sentry.captureCheckIn).toHaveBeenCalledTimes(2);
+    expect(Sentry.captureCheckIn).toHaveBeenLastCalledWith({
+      checkInId,
+      monitorSlug: "scheduled-tasks-heartbeat",
+      status: "error",
+    });
+  });
+
+  it("identifies a never-successful overdue job without an object or null attribute", async () => {
+    vi.mocked(Sentry.captureCheckIn).mockReturnValueOnce(
+      "never-succeeded-check-in",
+    );
+    const row = makeRow({
+      name: "never-succeeded-job",
+      expectedIntervalMs: ONE_HOUR_MS,
+      successAgeMs: null,
+      runAgeMs: 2 * ONE_HOUR_MS,
+    });
+    setupHeartbeatMock([row]);
+
+    stopHeartbeat = startSchedulerHeartbeat();
+    await vi.advanceTimersByTimeAsync(FIRST_CHECK_DELAY_MS);
+
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskName: row.name,
+        diagnosticStage: "confirmed_stale",
+        lastRunAt: row.last_run_at,
+        lastSuccessAt: "never",
+        anchorSource: "last_run_at",
+        ageMs: 2 * ONE_HOUR_MS + FIRST_CHECK_DELAY_MS,
+      }),
+      expect.stringContaining(`task "${row.name}" confirmed overdue`),
+    );
+  });
+
   it("task within tolerance — ok check-in sent", async () => {
     // A 1-hour task whose last success was 61 min ago is past its interval
     // but still inside the 30-min tolerance window (stale threshold = 90 min).
@@ -735,7 +859,9 @@ describe("startSchedulerHeartbeat", () => {
       expect.stringContaining("gone silent"),
     );
     // "healthy-task" must NOT appear in the stale array
-    const errorCall = (logger.error as ReturnType<typeof vi.fn>).mock.calls[0];
+    const errorCall = (
+      logger.error as ReturnType<typeof vi.fn>
+    ).mock.calls.find(([fields]) => Array.isArray(fields.stale))!;
     const staleNames = (errorCall[0].stale as Array<{ name: string }>).map(
       (s) => s.name,
     );

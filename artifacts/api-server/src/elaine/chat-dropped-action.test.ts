@@ -1706,6 +1706,104 @@ describe("POST /api/elaine/chat — deferred callback across provider fallback",
     15_000,
   );
 
+  it("checks saved calls after an uncertain executor result without repeating the callback", async () => {
+    const { ElaineTurnRuntime } = await vi.importActual<
+      typeof import("./runtime/turn-runtime")
+    >("./runtime/turn-runtime");
+    const { executeListScheduledContacts } =
+      await import("./communication-actions");
+    const snapshot = runtime.snapshot();
+    runtime = new ElaineTurnRuntime({
+      traceId: snapshot.traceId,
+      requestClass: snapshot.requestClass,
+      plan: toRuntimePlan({
+        ...snapshot.plan,
+        steps: [
+          ...snapshot.plan.steps,
+          {
+            id: "verify-callback",
+            label: "Inspect scheduled callbacks",
+            kind: "lookup",
+            toolName: "list_scheduled_contacts",
+            dependsOn: ["callback"],
+            expectedEvidence: "Saved scheduled-call records",
+            required: true,
+          },
+        ],
+      }),
+    });
+    const [completedPrerequisite] = runtime.registerToolCalls([
+      { id: "completed-prerequisite", name: "discover_app_operations" },
+    ]);
+    expect(completedPrerequisite).toMatchObject({
+      allowed: true,
+      stepId: "lookup",
+    });
+    runtime.recordObservation({
+      callId: "completed-prerequisite",
+      toolName: "discover_app_operations",
+      success: true,
+      summary: "Scheduling operations discovered",
+    });
+    selectQueue[4] = [{ actionConfirmationMode: "auto_run" }];
+    mockHardToolNames.add("list_scheduled_contacts");
+    mockCallMeExecutor.mockResolvedValue({
+      status: 502,
+      body: { error: "Scheduling outcome uncertain" },
+    });
+    vi.mocked(executeListScheduledContacts).mockClear();
+    vi.mocked(executeListScheduledContacts).mockResolvedValueOnce(
+      "No pending scheduled calls or messages.",
+    );
+    mockStreamOpenAIResponseRound.mockReset();
+    mockStreamOpenAIResponseRound
+      .mockResolvedValueOnce(
+        responseRound("attempt", [
+          callbackCall("attempted-call"),
+          {
+            callId: "initial-inspection",
+            name: "list_scheduled_contacts",
+            arguments: "{}",
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(
+        responseRound("inspect", [
+          {
+            callId: "inspect-saved-calls",
+            name: "list_scheduled_contacts",
+            arguments: "{}",
+          },
+        ]),
+      );
+    mockStreamOpenAIResponseRound.mockRejectedValueOnce(
+      new Error("Responses provider unavailable"),
+    );
+    mockRouterRound(() =>
+      makeContentStream("The call is not confirmed scheduled."),
+    );
+
+    const res = await request(buildApp())
+      .post("/api/elaine/chat")
+      .send({ message, appId: "hub" })
+      .buffer(true);
+
+    expect(res.status).toBe(200);
+    expect(res.text).not.toContain("event: error\n");
+    expect(mockCallMeExecutor).toHaveBeenCalledTimes(1);
+    expect(executeListScheduledContacts).toHaveBeenCalledTimes(1);
+    expect(executeListScheduledContacts).toHaveBeenCalledWith(TEST_USER_ID);
+    expect(runtime.snapshot().plan.steps[1]?.status).toBe("failed");
+    expect(runtime.snapshot().plan.steps[2]?.status).toBe("completed");
+    expect(mockRecordObservation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        callId: "attempted-call",
+        success: false,
+        errorCategory: "http_502",
+      }),
+    );
+  });
+
   it.each([
     { outcome: "saved", status: 200 },
     { outcome: "uncertain", status: 502 },

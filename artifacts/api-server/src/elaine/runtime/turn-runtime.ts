@@ -275,7 +275,9 @@ export class ElaineTurnRuntime {
         }
 
         const missingDependencies = step.dependsOn.filter(
-          (dependency) => !completedIds.has(dependency),
+          (dependency) =>
+            !completedIds.has(dependency) &&
+            !this.canInspectFailedScheduledCall(call, step, dependency),
         );
         if (missingDependencies.length > 0) {
           const reason = `Waiting for prerequisite step${missingDependencies.length > 1 ? "s" : ""}: ${missingDependencies.join(", ")}`;
@@ -594,6 +596,44 @@ export class ElaineTurnRuntime {
       { status: resolvedStatus },
     );
     return this.snapshot();
+  }
+
+  private canInspectFailedScheduledCall(
+    call: RuntimeToolCall,
+    step: ElainePlanStep,
+    dependencyId: string,
+  ): boolean {
+    // Only relax execution ordering for this account-scoped, read-only lookup.
+    // Never mark the failed action successful or authorize another attempt.
+    if (
+      call.name !== "list_scheduled_contacts" ||
+      call.consequential ||
+      step.kind !== "lookup" ||
+      step.riskClass !== "read_only"
+    ) {
+      return false;
+    }
+    const dependency = this.trace.plan.steps.find(
+      (candidate) => candidate.id === dependencyId,
+    );
+    if (
+      dependency?.kind !== "action" ||
+      !["call_me", "call_contact"].includes(dependency.toolName ?? "") ||
+      dependency.status !== "failed" ||
+      dependency.attempts === 0
+    ) {
+      return false;
+    }
+    const outcome = this.trace.observations
+      ?.filter((observation) => observation.stepId === dependencyId)
+      .at(-1);
+    // http_* observations are recorded only after an executor returns. A
+    // payload-validation failure, dependency veto or proposal is not execution.
+    return (
+      outcome?.success === false &&
+      !outcome.waitingConfirmation &&
+      /^http_[45]\d{2}$/.test(outcome.errorCategory ?? "")
+    );
   }
 
   private findRunnableStep(toolName: string): ElainePlanStep | null {

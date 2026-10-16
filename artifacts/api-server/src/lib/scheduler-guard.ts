@@ -586,6 +586,37 @@ export function startSchedulerHeartbeat(): () => void {
         const candidateThresholdMs = expectedMs + toleranceMs;
         const confirmedThresholdMs =
           candidateThresholdMs + HEARTBEAT_INTERVAL_MS;
+        if (ageMs > candidateThresholdMs) {
+          const confirmed = ageMs > confirmedThresholdMs;
+          // Arrays of objects in the aggregate log are not reliably retained
+          // as searchable Sentry attributes. Emit one scalar-only record per
+          // job, with its name in the message as well as the attributes.
+          const diagnostic = {
+            checkInId,
+            taskName: row.name,
+            diagnosticStage: confirmed
+              ? "confirmed_stale"
+              : "awaiting_confirmation",
+            lastRunAt: new Date(runMs).toISOString(),
+            lastSuccessAt:
+              successMs === null ? "never" : new Date(successMs).toISOString(),
+            anchorSource:
+              claimIsFreshAndUnconfirmed || successMs === null
+                ? "last_run_at"
+                : "last_success_at",
+            expectedIntervalMs: expectedMs,
+            toleranceMs,
+            ageMs,
+            overdueMs: ageMs - expectedMs,
+            remainingConfirmationMs: Math.max(0, confirmedThresholdMs - ageMs),
+          };
+          const message = `scheduler-heartbeat: task "${row.name}" ${confirmed ? "confirmed overdue" : "awaiting confirmation"} (${Math.round(diagnostic.overdueMs / 60_000)} minutes past its expected interval)`;
+          if (confirmed) {
+            logger.error(diagnostic, message);
+          } else {
+            logger.warn(diagnostic, message);
+          }
+        }
         if (ageMs > confirmedThresholdMs) {
           stale.push({ name: row.name, overdueMs: ageMs - expectedMs });
         } else if (ageMs > candidateThresholdMs) {
@@ -599,14 +630,26 @@ export function startSchedulerHeartbeat(): () => void {
 
       if (staleCandidates.length > 0) {
         logger.warn(
-          { staleCandidates },
+          {
+            checkInId,
+            staleCandidates,
+            candidateTaskCount: staleCandidates.length,
+            candidateTaskNames: staleCandidates
+              .map((task) => task.name)
+              .join(", "),
+          },
           "scheduler-heartbeat: scheduled tasks are beyond tolerance but awaiting one more heartbeat before alerting",
         );
       }
 
       if (stale.length > 0) {
         logger.error(
-          { stale },
+          {
+            checkInId,
+            stale,
+            staleTaskCount: stale.length,
+            staleTaskNames: stale.map((task) => task.name).join(", "),
+          },
           "scheduler-heartbeat: one or more scheduled tasks have gone silent",
         );
         Sentry.captureCheckIn({

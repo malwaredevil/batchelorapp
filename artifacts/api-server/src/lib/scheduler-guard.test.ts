@@ -610,6 +610,7 @@ describe("startSchedulerHeartbeat", () => {
       }),
     ]);
 
+    vi.setSystemTime(NOW_MS + 1);
     stopHeartbeat = startSchedulerHeartbeat();
     await vi.advanceTimersByTimeAsync(FIRST_CHECK_DELAY_MS + 1);
 
@@ -631,8 +632,8 @@ describe("startSchedulerHeartbeat", () => {
         anchorSource: "last_success_at",
         expectedIntervalMs: ONE_HOUR_MS,
         toleranceMs: TOLERANCE_ONE_HOUR_MS,
-        ageMs: 2 * ONE_HOUR_MS + FIRST_CHECK_DELAY_MS,
-        overdueMs: ONE_HOUR_MS + FIRST_CHECK_DELAY_MS,
+        ageMs: 2 * ONE_HOUR_MS + FIRST_CHECK_DELAY_MS + 1,
+        overdueMs: ONE_HOUR_MS + FIRST_CHECK_DELAY_MS + 1,
         remainingConfirmationMs: 0,
       },
       expect.stringContaining('task "gmail-scan" confirmed overdue'),
@@ -644,7 +645,8 @@ describe("startSchedulerHeartbeat", () => {
         diagnosticStage: "awaiting_confirmation",
         lastRunAt: candidateRow.last_run_at,
         lastSuccessAt: candidateRow.last_success_at,
-        remainingConfirmationMs: HEARTBEAT_INTERVAL_MS - FIRST_CHECK_DELAY_MS,
+        remainingConfirmationMs:
+          HEARTBEAT_INTERVAL_MS - FIRST_CHECK_DELAY_MS - 1,
       }),
       expect.stringContaining('task "travels-nudges" awaiting confirmation'),
     ]);

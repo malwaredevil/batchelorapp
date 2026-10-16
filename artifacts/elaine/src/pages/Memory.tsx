@@ -43,7 +43,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -560,7 +559,7 @@ function FullHistory({ channelFilter, onChannelChange }: FullHistoryProps) {
     );
   }
 
-  if (!isLoading && total === 0) {
+  if (total === 0) {
     return (
       <div className="flex flex-col items-center gap-3 py-16 text-center">
         <Clock className="h-8 w-8 text-muted-foreground/40" />

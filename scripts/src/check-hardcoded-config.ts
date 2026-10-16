@@ -529,14 +529,12 @@ export const ANCHORED_CONFIG_ALLOWLIST: readonly ConfigAnchor[] = [
     MAX_NOTES: "4000",
     MAX_LABEL: "100",
     MAX_SUPPLEMENTAL_IMAGES: "10",
-    MAX_REANALYZE_IMAGES: "5",
   }),
   ...reviewedConstants("artifacts/api-server/src/routes/quilting/patterns.ts", {
     MAX_NAME: "200",
     MAX_FIELD: "200",
     MAX_NOTES: "4000",
     MAX_LABEL: "100",
-    MAX_REANALYZE_IMAGES: "5",
   }),
   ...reviewedConstants("artifacts/api-server/src/routes/quilting/quilts.ts", {
     MAX_NAME: "200",
@@ -709,7 +707,6 @@ export const ANCHORED_CONFIG_ALLOWLIST: readonly ConfigAnchor[] = [
   // Decompression-bomb and storage/AI-payload dimension limits.
   ...reviewedConstants("artifacts/api-server/src/lib/image.ts", {
     MAX_INPUT_PIXELS: "50_000_000",
-    MAX_STORAGE_DIMENSION: "2048",
     MAX_AI_DIMENSION: "1024",
   }),
   // VTracer vectorization algorithm knobs — fixed tuning presets, not owner config.
@@ -783,12 +780,6 @@ export const ANCHORED_CONFIG_ALLOWLIST: readonly ConfigAnchor[] = [
     HEARTBEAT_INTERVAL_MS: "60_000",
   }),
 
-  // ---- lib/openrouter-models.ts ----
-  // Model-list fetch timeout — HTTP transport detail.
-  ...reviewedConstants("artifacts/api-server/src/lib/openrouter-models.ts", {
-    DEFAULT_FETCH_TIMEOUT_MS: "8_000",
-  }),
-
   // ---- lib/ornaments/book-value.ts ----
   // External Hallmark site fetch timeout.
   ...reviewedConstants("artifacts/api-server/src/lib/ornaments/book-value.ts", {
@@ -845,7 +836,6 @@ export const ANCHORED_CONFIG_ALLOWLIST: readonly ConfigAnchor[] = [
   // ---- lib/web-search.ts ----
   // Web-search provider timeouts and max image results.
   ...reviewedConstants("artifacts/api-server/src/lib/web-search.ts", {
-    DEFAULT_SEARCH_TIMEOUT_MS: "15_000",
     MAX_IMAGES: "4",
     FETCH_PAGE_TIMEOUT_MS: "20_000",
   }),

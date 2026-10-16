@@ -300,7 +300,6 @@ export default function Collection() {
   }, [data?.items, selectedYear, debouncedSearch]);
 
   // The server returns a globally sorted and filtered page.
-  const sortedItems = items;
   const filteredItems = items;
 
   const uniqueColors = data?.facets.colors ?? [];

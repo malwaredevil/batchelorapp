@@ -13,7 +13,6 @@ import {
   primaryKey,
   jsonb,
   boolean,
-  numeric,
 } from "drizzle-orm/pg-core";
 
 // ---------------------------------------------------------------------------

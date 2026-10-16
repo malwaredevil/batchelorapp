@@ -9,7 +9,6 @@ import {
   RefreshCw,
   Check,
   X as XIcon,
-  Tag,
   Download,
   Sparkles,
   Grid3x3,
@@ -55,10 +54,7 @@ import {
 } from "@workspace/image-capture";
 import { downloadCollectionImage } from "@/quilting/lib/svg-export";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
-import {
-  formatElaineContextList,
-  formatElaineContextEntity,
-} from "@workspace/elaine-ui";
+import { formatElaineContextEntity } from "@workspace/elaine-ui";
 import { PatternAnalysisPanel } from "@/quilting/components/PatternAnalysisPanel";
 import {
   CollectionDetailHero,
@@ -105,8 +101,6 @@ type PatternData = {
   }>;
   recognitionRefreshStatus?: "pending" | "complete" | null;
 };
-
-const AI_FIELDS = ["name", "designer", "blockSize", "difficulty", "notes"];
 
 export default function PatternDetail() {
   const { id } = useParams<{ id: string }>();

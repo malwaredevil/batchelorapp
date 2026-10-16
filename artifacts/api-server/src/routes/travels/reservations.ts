@@ -2,7 +2,6 @@ import { Router, type IRouter } from "express";
 import { and, eq, desc } from "drizzle-orm";
 import {
   db,
-  travelsTrips,
   travelsReservations,
   travelMonitoringBaselines,
   travelMonitoringObservations,
@@ -10,10 +9,6 @@ import {
 } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
 import { tripExists } from "../../lib/travels/db-helpers";
-import {
-  createNotification,
-  NOTIFICATION_TYPES,
-} from "../../lib/notifications";
 import { enqueueJob } from "../../lib/jobs/queue";
 import { logger } from "../../lib/logger";
 import { createHash } from "crypto";

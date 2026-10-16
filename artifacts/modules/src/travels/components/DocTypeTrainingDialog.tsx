@@ -125,36 +125,6 @@ const COLOR_OPTIONS = [
 
 type ColorKey = (typeof COLOR_OPTIONS)[number]["key"];
 
-function IconPreview({
-  iconName,
-  colorKey,
-}: {
-  iconName: IconName | null;
-  colorKey: ColorKey;
-}) {
-  const color =
-    COLOR_OPTIONS.find((c) => c.key === colorKey) ??
-    COLOR_OPTIONS[COLOR_OPTIONS.length - 1];
-  if (!iconName) {
-    return (
-      <div
-        className={`w-10 h-10 rounded-xl flex items-center justify-center ${color.bg} text-xs ${color.fg} font-medium`}
-      >
-        ?
-      </div>
-    );
-  }
-  return (
-    <div
-      className={`w-10 h-10 rounded-xl flex items-center justify-center ${color.bg}`}
-    >
-      <span className={`text-[11px] font-medium ${color.fg}`}>
-        {iconName.slice(0, 2)}
-      </span>
-    </div>
-  );
-}
-
 interface Props {
   onClose: () => void;
   onSaved: () => void;

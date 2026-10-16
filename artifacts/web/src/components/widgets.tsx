@@ -11,7 +11,6 @@ import {
   Layers,
   Plus,
   Camera,
-  Zap,
   Star,
   Rss,
   Settings,
@@ -20,7 +19,6 @@ import {
   Loader2,
   RefreshCw,
   Plane,
-  Globe,
   Bell,
   MapPin,
   List,
@@ -28,7 +26,6 @@ import {
   NotebookPen,
   Send,
   CalendarDays,
-  Magnet,
 } from "lucide-react";
 import {
   useGetCollectionStats,

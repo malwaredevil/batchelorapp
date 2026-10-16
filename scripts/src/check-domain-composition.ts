@@ -755,7 +755,11 @@ for (const [name, artifacts] of exportArtifacts) {
   // Named-file requirement markers appear as quoted strings in includes[].
   // KNOWN_SHARED_EXPORTS_NO_BOUNDARY_NEEDED entries appear as quoted strings above.
   // Either way the name IS present → consciously handled → no violation.
-  if (checkScriptSource.includes(`"${name}"`)) continue;
+  if (
+    KNOWN_SHARED_EXPORTS_NO_BOUNDARY_NEEDED.has(name) ||
+    checkScriptSource.includes(`"${name}"`)
+  )
+    continue;
 
   const artifactList = [...artifacts].sort().join(", ");
   violations.push(

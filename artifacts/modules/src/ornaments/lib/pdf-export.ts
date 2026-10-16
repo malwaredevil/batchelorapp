@@ -1,7 +1,6 @@
 import type { OrnamentsOrnamentItem as OrnamentItem } from "@workspace/api-client-react";
 import {
   generateCollectionPdf,
-  formatDate,
   escHtml,
   PAGE_WIDTH_PX,
 } from "../../lib/pdf-export";

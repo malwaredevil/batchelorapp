@@ -16,7 +16,6 @@ import {
   db,
   fabrics,
   entityCategories,
-  quiltingCategories as categories,
   quiltingImages,
   quiltFabricLinks,
   type FabricRow,
@@ -50,7 +49,6 @@ import {
   generateFabricTilePosterized,
   generateFabricTileVectorized,
   generateFabricTileVectorizedTuned,
-  generateProductionFabricTile,
   getCachedProductionFabricTile,
   DIRECTION_A_SMOOTH_TUNING,
   DIRECTION_A_CRISP_TUNING,
@@ -69,7 +67,6 @@ import {
   uploadImage,
   deleteImage,
   downloadImageBuffer,
-  downloadImageAsDataUrl,
 } from "../../lib/storage";
 import {
   analyzeImage,
@@ -86,7 +83,6 @@ import {
 import { getModels } from "../../lib/ai-client";
 import {
   assignGenerationRunTarget,
-  runAnalysisWithEvidence,
   runAnalysisWithEvidenceTrace,
 } from "../../lib/ai-provenance";
 import { parseStringArray } from "../../lib/collection-parsing";
@@ -109,7 +105,6 @@ const MAX_NOTES = 4000;
 const MAX_LABEL = 100;
 
 const MAX_SUPPLEMENTAL_IMAGES = 10;
-const MAX_REANALYZE_IMAGES = 5;
 
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 

@@ -28,10 +28,6 @@ let mockSelectRows: unknown[] = [];
 let mockUpdateRows: unknown[] = [];
 let mockDeleteRows: unknown[] = [];
 
-const mockDbSelect = {
-  select: vi.fn(),
-};
-
 // Shared mock client for pool.connect()
 const mockClient = {
   query: vi.fn(async () => ({ rows: [] })),

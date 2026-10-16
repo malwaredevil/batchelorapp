@@ -25,9 +25,6 @@ interface OpenRouterModelsApiResponse {
   }>;
 }
 
-const DEFAULT_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
-const DEFAULT_FETCH_TIMEOUT_MS = 8_000;
-
 let cached: { value: OpenRouterModelSummary[]; expiresAt: number } | null =
   null;
 

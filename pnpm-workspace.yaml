@@ -135,6 +135,8 @@ overrides:
   linkify-it: ">=5.0.2 <6" # GHSA: ReDoS; patched 5.0.2; parent expects ^5
   markdown-it: "14.3.1" # GHSA-253c-mchw-3w2r: quadratic linkify; retain typedoc's major.
   postcss: ">=8.5.23 <9" # GHSA-fxqj-rqcc-2cmp (CVE-2026-69153): incomplete fix of prior sourceMappingURL path-traversal GHSA; patched 8.5.23; parent expects ^8
+  "@tailwindcss/typography>postcss-selector-parser": "7.1.6" # GHSA-rj75-hqrm-r3gf; verified typography selector compatibility in regression tests.
+  "mammoth>argparse": "-" # Library-only usage: prune the CLI-only dependency and its unpatched sprintf-js (GHSA-hp3w-g68c-fv3c).
   qs: ">=6.16.0 <7" # GHSA-x5fp-wj9c-mxmx / GHSA-4mjr-xmp4-gh2g: prototype-pollution and isBuffer DoS; patched 6.16.0
   proxy-addr: "2.0.8" # GHSA-jqcg-44mw-7w3h: IPv4-mapped IPv6 trust-subnet bypass.
   source-map-js: "1.2.2" # GHSA-68fv-2mgg-jv7q: indexed source-map offset DoS.

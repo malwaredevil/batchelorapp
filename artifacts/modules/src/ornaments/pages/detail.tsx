@@ -530,7 +530,6 @@ export default function OrnamentDetail() {
     ornament.ebayPriceCachedAt != null || ornament.ebayLastSoldPriceUsd != null;
   const hasEbayForSale =
     ornament.ebayPriceMinUsd != null && ornament.ebayPriceMaxUsd != null;
-  const hasEbayLastSold = ornament.ebayLastSoldPriceUsd != null;
 
   // Computed valuation values (all read-only, derived from stored data)
   const ebayMid = hasEbayForSale

@@ -10,7 +10,6 @@ import {
   getTableColumns,
   inArray,
   isNull,
-  notInArray,
   or,
   sql,
   type SQL,
@@ -80,7 +79,6 @@ import {
   scheduleCompletePhotoScan,
 } from "../../lib/ai-scan-pipeline";
 import { serializeItem, serializeItems } from "../../lib/pottery/serialize";
-import { env } from "../../lib/env";
 import { logger } from "../../lib/logger";
 import pLimit from "p-limit";
 import {
@@ -433,7 +431,6 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
 
 router.patch("/items/:id", async (req, res) => {
   const { id } = UpdatePotteryParams.parse(req.params);
-  const userId = req.session.userId!;
   const body = UpdatePotteryBody.parse(req.body);
 
   const fieldUpdates: Partial<typeof potteryItems.$inferInsert> = {};

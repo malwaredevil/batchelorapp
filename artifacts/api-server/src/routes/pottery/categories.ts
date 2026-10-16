@@ -96,7 +96,7 @@ const ops: CategoryOps = {
 // Build router + exported helpers for Elaine actions
 // ---------------------------------------------------------------------------
 
-const { router, merge, rename } = buildCategoryRouter({
+const { router, merge } = buildCategoryRouter({
   ops,
   normalize: normalizeCategoryNameSimple,
   schemas: {

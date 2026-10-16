@@ -9,7 +9,6 @@ import {
   ImagePlus,
   Loader2,
   Pencil,
-  Plus,
   Ruler,
   Sparkles,
   X,

@@ -9,10 +9,7 @@ import {
 import { useLocation, useParams } from "wouter";
 import { useRegisterNavGuard } from "@/quilting/lib/nav-guard";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
-import {
-  formatElaineContextList,
-  formatElaineContextEntity,
-} from "@workspace/elaine-ui";
+import { formatElaineContextEntity } from "@workspace/elaine-ui";
 import {
   ArrowLeft,
   Save,
@@ -24,7 +21,6 @@ import {
   FlipVertical2,
   Pipette,
   ChevronDown,
-  ChevronUp,
   Maximize2,
   Minimize2,
   Upload,
@@ -36,7 +32,6 @@ import {
   Eye,
   EyeOff,
   FileDown,
-  FilePlus2,
   GripVertical,
   Minus,
   Wand2,
@@ -133,7 +128,6 @@ import {
   parseCell,
   encodeXline,
   applyDiagClip,
-  floodFillSolid,
   fmtInch,
   toggleQuarterLine,
   quarterDirForClick,
@@ -500,21 +494,6 @@ function applyFlipV(
       : { ...s, cellIdx: gridH - 1 - s.cellIdx },
   );
   return { cells: newCells, seams: newSeams };
-}
-
-/** Return the colour of one of the four sub-quadrants of a cell (for seam fill mapping). */
-function getSubCellColor(
-  parsed: ParsedCell,
-  pos: "tl" | "tr" | "bl" | "br",
-): string {
-  const W = "#FFFFFF";
-  if (parsed.kind === "solid") return parsed.color || W;
-  if (parsed.kind === "hsplit")
-    return pos === "tl" || pos === "tr" ? parsed.top : parsed.bottom;
-  if (parsed.kind === "vsplit")
-    return pos === "tl" || pos === "bl" ? parsed.left : parsed.right;
-  if (parsed.kind === "xsplit") return parsed[pos];
-  return W; // triangle / quad / line — treat as white for partial-fill merging
 }
 
 /**
@@ -2690,26 +2669,6 @@ export default function BlockDesigner() {
     );
   }
 
-  function movePanelUp(id: PanelId) {
-    setPanels((prev) => {
-      const idx = prev.findIndex((p) => p.id === id);
-      if (idx <= 0) return prev;
-      const next = [...prev];
-      [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
-      return next;
-    });
-  }
-
-  function movePanelDown(id: PanelId) {
-    setPanels((prev) => {
-      const idx = prev.findIndex((p) => p.id === id);
-      if (idx < 0 || idx >= prev.length - 1) return prev;
-      const next = [...prev];
-      [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
-      return next;
-    });
-  }
-
   const enterBgAdjust = useCallback(() => {
     prevToolRef.current = null;
     setTool((cur) => {
@@ -3329,14 +3288,6 @@ export default function BlockDesigner() {
     setGridW(newSize);
     setGridH(newSize);
     setCells(makeEmptyCells(newSize, newSize));
-    setHistory([]);
-    setSeams([]);
-  }
-
-  function handleCustomGridChange(w: number, h: number) {
-    setGridW(w);
-    setGridH(h);
-    setCells(makeEmptyCells(w, h));
     setHistory([]);
     setSeams([]);
   }
@@ -5126,9 +5077,6 @@ export default function BlockDesigner() {
                     className={`relative flex h-9 w-9 items-center justify-center rounded transition-colors ${bgImage && bgVisible ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"}`}
                   >
                     <ImageIcon className="h-4 w-4" />
-                    {bgAdjusting && (
-                      <span className="pointer-events-none absolute bottom-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-primary" />
-                    )}
                     <svg
                       className="pointer-events-none absolute bottom-0 right-0 h-2 w-2 opacity-70"
                       viewBox="0 0 6 6"

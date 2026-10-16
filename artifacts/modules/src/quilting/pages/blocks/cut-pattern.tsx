@@ -2,10 +2,7 @@ import { useParams, useLocation } from "wouter";
 import { useMemo } from "react";
 import { useGetBlock, useListFabrics } from "@workspace/api-client-react";
 import { usePageAssistantContext } from "@/quilting/lib/assistant-context";
-import {
-  formatElaineContextList,
-  formatElaineContextEntity,
-} from "@workspace/elaine-ui";
+import { formatElaineContextEntity } from "@workspace/elaine-ui";
 import { ArrowLeft, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -434,82 +431,6 @@ function TechnicalBlockDiagram({
 // ---------------------------------------------------------------------------
 // Repeat / quilt-top layout preview
 // ---------------------------------------------------------------------------
-
-function RepeatPreview({
-  cells,
-  gridW,
-  gridH,
-  repeat = 3,
-  fabricColorMap = {},
-}: {
-  cells: string[];
-  gridW: number;
-  gridH: number;
-  repeat?: number;
-  fabricColorMap?: Record<string, string>;
-}) {
-  const CELL = 9;
-  const bw = CELL * gridW;
-  const bh = CELL * gridH;
-  const W = bw * repeat;
-  const H = bh * repeat;
-  return (
-    <svg
-      width={W}
-      height={H}
-      viewBox={`0 0 ${W} ${H}`}
-      style={{ maxWidth: "100%", height: "auto" }}
-    >
-      {Array.from({ length: repeat }).map((_, br) =>
-        Array.from({ length: repeat }).map((_, bc) => (
-          <g
-            key={`${br}-${bc}`}
-            transform={`translate(${bc * bw}, ${br * bh})`}
-          >
-            {cells.map((cell, idx) => {
-              const col = idx % gridW;
-              const row = Math.floor(idx / gridW);
-              return (
-                <CellShape
-                  key={idx}
-                  cell={cell}
-                  x={col * CELL}
-                  y={row * CELL}
-                  size={CELL}
-                  fabricColorMap={fabricColorMap}
-                />
-              );
-            })}
-          </g>
-        )),
-      )}
-      {Array.from({ length: repeat + 1 }, (_, i) => (
-        <line
-          key={`bv${i}`}
-          x1={i * bw}
-          y1={0}
-          x2={i * bw}
-          y2={H}
-          stroke={INK}
-          strokeWidth={0.6}
-          opacity={0.55}
-        />
-      ))}
-      {Array.from({ length: repeat + 1 }, (_, i) => (
-        <line
-          key={`bh${i}`}
-          x1={0}
-          y1={i * bh}
-          x2={W}
-          y2={i * bh}
-          stroke={INK}
-          strokeWidth={0.6}
-          opacity={0.55}
-        />
-      ))}
-    </svg>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Cutting-technique diagrams

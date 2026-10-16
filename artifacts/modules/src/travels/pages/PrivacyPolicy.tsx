@@ -1,4 +1,3 @@
-import { Link } from "wouter";
 import { ArrowLeft } from "lucide-react";
 
 export default function PrivacyPolicy() {

@@ -5,11 +5,7 @@ import multer from "multer";
 import { multerLimitForPrefix } from "../../lib/upload-limits";
 import { db, travelsTrips, travelsTripPhotos } from "@workspace/db";
 import { requireAuth } from "../../middleware/auth";
-import {
-  uploadTripPhoto,
-  downloadTripPhoto,
-  deleteTripPhoto,
-} from "../../lib/travels/storage";
+import { uploadTripPhoto, downloadTripPhoto } from "../../lib/travels/storage";
 import { generateVisualEmbedding } from "../../lib/visual-embed";
 import { tripExists } from "../../lib/travels/db-helpers";
 import { clearActivityPhotoReferences } from "../../lib/travels/activity-photo-refs";

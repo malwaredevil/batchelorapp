@@ -25,9 +25,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
@@ -37,7 +34,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { getCategoryPalette, colorToHex } from "@workspace/web-core";
 import { toast } from "sonner";
-import { parseCell, fmtInch } from "@/quilting/lib/cell-parser";
+import { fmtInch } from "@/quilting/lib/cell-parser";
 import {
   buildEmbeddedLayoutSvgString,
   downloadSvgAsPng,

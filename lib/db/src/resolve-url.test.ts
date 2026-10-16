@@ -24,7 +24,7 @@
  * SUPABASE_POOLER_PORT to 5432 in production.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { resolveDatabaseUrl } from "./resolve-url";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

@@ -7,7 +7,6 @@ import {
   db,
   quiltPatterns,
   entityCategories,
-  quiltingCategories as categories,
   quiltingImages,
   type QuiltPatternRow,
 } from "@workspace/db";
@@ -43,15 +42,10 @@ import { parseStringArray } from "../../lib/collection-parsing";
 import { resolveOrCreateQuiltingCategories as resolveOrCreateCategories } from "../../lib/quilting/resolve-categories";
 import {
   uploadImage,
-  deleteImage,
   downloadImageBuffer,
   downloadImageAsDataUrl,
 } from "../../lib/storage";
-import {
-  analyzePatternImage,
-  enrichPatternMetadata,
-  extractBlockFromImage,
-} from "../../lib/openai";
+import { enrichPatternMetadata, extractBlockFromImage } from "../../lib/openai";
 import { serializePattern, serializePatterns } from "../../lib/serialize";
 import { pathCacheBuster } from "../../lib/path-cache-buster";
 import {
@@ -328,8 +322,6 @@ router.delete("/patterns/:id", async (req, res) => {
 // ---------------------------------------------------------------------------
 // Re-analyze with AI
 // ---------------------------------------------------------------------------
-
-const MAX_REANALYZE_IMAGES = 5;
 
 router.post("/patterns/:id/reanalyze", aiLimiter, async (req, res) => {
   const { id } = ReanalyzePatternParams.parse(req.params);

@@ -7,7 +7,6 @@ import {
   useUpdatePottery,
   useDeletePottery,
   getListPotteryQueryKey,
-  getGetPotteryQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { PotteryPotteryItem as PotteryItem } from "@workspace/api-client-react";

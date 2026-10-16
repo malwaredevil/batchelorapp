@@ -1,7 +1,6 @@
 import { useState, useCallback } from "react";
 import { Link, useLocation } from "wouter";
 import {
-  PlusCircle,
   BookOpen,
   MoreVertical,
   RefreshCw,

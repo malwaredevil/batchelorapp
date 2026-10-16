@@ -7,7 +7,6 @@ import {
   db,
   finishedQuilts,
   entityCategories,
-  quiltingCategories as categories,
   quiltingImages,
   quiltFabricLinks,
   quiltPatternLinks,
@@ -48,13 +47,7 @@ import {
   parseStringArray,
 } from "../../lib/collection-parsing";
 import { resolveOrCreateQuiltingCategories as resolveOrCreateCategories } from "../../lib/quilting/resolve-categories";
-import {
-  uploadImage,
-  deleteImage,
-  downloadImageBuffer,
-  downloadImageAsDataUrl,
-} from "../../lib/storage";
-import { analyzeQuiltImage } from "../../lib/openai";
+import { uploadImage, downloadImageBuffer } from "../../lib/storage";
 import { serializeQuilt, serializeQuilts } from "../../lib/serialize";
 import { pathCacheBuster } from "../../lib/path-cache-buster";
 import {

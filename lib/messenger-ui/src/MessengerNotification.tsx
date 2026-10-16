@@ -476,11 +476,7 @@ export function MessengerNotification() {
 
           <div style={{ marginTop: 8, textAlign: "center" }}>
             <a
-              href={
-                notification
-                  ? `/modules/office/messenger?convId=${notification.convId}`
-                  : "/modules/office/messenger"
-              }
+              href={`/modules/office/messenger?convId=${notification.convId}`}
               style={{
                 fontSize: 11,
                 color: "#3b82f6",

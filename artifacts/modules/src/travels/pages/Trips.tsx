@@ -42,7 +42,6 @@ import {
   Plus,
   Plane,
   ArrowRight,
-  Filter,
   X,
   Sparkles,
   Loader2,
@@ -1071,7 +1070,7 @@ export default function Trips() {
               label: trip.title,
               details: [
                 trip.destination && `to ${trip.destination}`,
-                trip.startDate && trip.startDate,
+                trip.startDate,
                 `status: ${trip.status}`,
               ],
             }),

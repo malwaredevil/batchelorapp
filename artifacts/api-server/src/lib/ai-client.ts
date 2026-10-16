@@ -89,7 +89,6 @@ export type OpenRouterServerTool =
 // The live value is read from app_config (openrouter / request_timeout_ms) on
 // every call so an admin override survives a server restart without a deploy.
 // The singleton client is rebuilt only when the timeout value changes.
-const REQUEST_TIMEOUT_MS_DEFAULT = 12_000;
 
 function makeOpenRouterClient(timeoutMs: number): OpenAI {
   // openai-direct-ok — reviewed shared OpenRouter provider facade.

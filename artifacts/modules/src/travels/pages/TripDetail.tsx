@@ -30,8 +30,6 @@ import {
   useLinkGmailMessage,
   useGetPackingList,
   useListCustomDocumentTypes,
-  useCreateCustomDocumentType,
-  useSuggestDocumentType,
   getTripDocumentDownloadUrl,
   getTripPhotoImageUrl,
   getListTripsQueryKey,
@@ -70,7 +68,6 @@ import { MagnetCheckDialog } from "@/travels/components/MagnetCheckDialog";
 import { ReminderEditDialog } from "@/travels/components/ReminderEditDialog";
 import { AttachmentPickerDialog } from "@/travels/components/AttachmentPickerDialog";
 import {
-  ActivityPhotoThumb,
   ActivityPhotoStrip,
   AttachActivityPhotoButton,
 } from "@/travels/components/trip-detail/activity-photo-attach";
@@ -135,7 +132,6 @@ import {
   ArrowLeft,
   MapPin,
   Calendar,
-  Users,
   Car,
   Plane,
   Train,

@@ -13,20 +13,13 @@ import {
 } from "@workspace/api-client-react";
 import { toast } from "sonner";
 import {
-  Plus,
   Pencil,
   GitCompare,
   RefreshCw as RefreshCwIcon,
   X,
   Camera,
 } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,

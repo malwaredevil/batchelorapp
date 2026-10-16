@@ -1,7 +1,7 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Link } from "wouter";
 import { toast } from "sonner";
-import { Loader2, ScanSearch, RotateCcw, Camera } from "lucide-react";
+import { Loader2, ScanSearch, RotateCcw } from "lucide-react";
 import { useCompareFabric } from "@workspace/api-client-react";
 import { ImagePicker } from "@/quilting/components/image-picker";
 import { ImageEditor } from "@/quilting/components/image-editor";

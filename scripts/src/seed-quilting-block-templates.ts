@@ -54,8 +54,6 @@ const quad = (t: string, r: string, b: string, l: string) =>
   `quad:${t}:${r}:${b}:${l}`;
 const hsplit = (t: string, b: string) => `hsplit:${t}:${b}`;
 const vsplit = (l: string, r: string) => `vsplit:${l}:${r}`;
-const xsplit = (tl: string, tr: string, bl: string, br: string) =>
-  `xsplit:${tl}:${tr}:${bl}:${br}`;
 
 interface TemplateDef {
   name: string;

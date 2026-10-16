@@ -10,7 +10,7 @@
  */
 import { Router, type IRouter } from "express";
 import { requireAuth } from "../middleware/auth";
-import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, eq, isNotNull, sql } from "drizzle-orm";
 import {
   db,
   potteryItems,

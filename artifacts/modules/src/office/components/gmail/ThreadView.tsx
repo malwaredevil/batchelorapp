@@ -11,20 +11,10 @@ import {
   Forward,
   Paperclip,
   Download,
-  ChevronDown,
   ChevronUp,
-  MoreHorizontal,
-  ExternalLink,
-  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import type {
   FullThread,
   ThreadMessage,

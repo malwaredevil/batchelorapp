@@ -12,7 +12,6 @@ import {
   quiltingImages,
   fabrics,
   quiltPatterns,
-  finishedQuilts,
   quiltFabricLinks,
   quiltPatternLinks,
 } from "@workspace/db";

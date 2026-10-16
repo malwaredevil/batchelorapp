@@ -5,7 +5,6 @@ import {
   Mail,
   LogOut,
   X,
-  Menu,
   AlertTriangle,
   RefreshCw,
 } from "lucide-react";

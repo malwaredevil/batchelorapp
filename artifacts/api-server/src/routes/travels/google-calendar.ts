@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { Router, type IRouter } from "express";
+import { sanitizeReturnPath as sanitizeReturnTo } from "@workspace/web-core/return-path";
 import { eq } from "drizzle-orm";
 import {
   db,
@@ -64,13 +65,6 @@ router.get("/google-calendar/status", requireAuth, async (req, res) => {
 
 // Only allow redirecting back into our own app's relative paths — never an
 // absolute/external URL — to prevent this becoming an open-redirect vector.
-function sanitizeReturnTo(raw: unknown): string | null {
-  if (typeof raw !== "string" || !raw.startsWith("/") || raw.startsWith("//")) {
-    return null;
-  }
-  return raw;
-}
-
 // GET /google-calendar/connect — begin the per-user OAuth flow
 router.get("/google-calendar/connect", requireAuth, (req, res) => {
   if (!googleCalendarOAuthEnabled()) {

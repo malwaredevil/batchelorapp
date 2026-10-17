@@ -1,5 +1,6 @@
 import { Router, type IRouter, type Request } from "express";
 import crypto from "node:crypto";
+import { sanitizeReturnPath as sanitizeReturnTo } from "@workspace/web-core/return-path";
 import bcrypt from "bcryptjs";
 import { eq, and, gt, lt, isNull, desc, sql } from "drizzle-orm";
 import {
@@ -89,13 +90,6 @@ function googleCallbackUrl(req: Request): string | null {
 // visitors to "/login?returnTo=<original path>" so this must only ever accept
 // a same-origin relative path — never an absolute URL or protocol-relative
 // "//host" path — to prevent it being used as an open redirect.
-function sanitizeReturnTo(value: unknown): string | null {
-  if (typeof value !== "string" || !value) return null;
-  if (!value.startsWith("/") || value.startsWith("//")) return null;
-  if (value.includes("\\")) return null;
-  return value;
-}
-
 const router: IRouter = Router();
 
 router.post("/auth/login", loginLimiter, async (req, res) => {

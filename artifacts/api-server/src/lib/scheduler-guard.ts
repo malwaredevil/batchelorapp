@@ -41,6 +41,15 @@ const HEARTBEAT_MONITOR_SLUG = "scheduled-tasks-heartbeat";
 const HEARTBEAT_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
 
 /**
+ * Poll for persisted due work independently of the task's execution interval.
+ * A denied startup claim must not delay the next check by a full task period.
+ * The atomic claim still controls when work may actually run.
+ */
+export function getSchedulerPollIntervalMs(taskIntervalMs: number): number {
+  return Math.min(taskIntervalMs, HEARTBEAT_INTERVAL_MS);
+}
+
+/**
  * Grace period before the heartbeat's very FIRST staleness check. Every
  * in-process scheduler (travels-nudges, gmail-scan, calendar-scan, etc.)
  * fires an unconditional `void run()` on module load, same as the heartbeat
@@ -164,6 +173,7 @@ export function recordScheduledTaskFailure(_taskName: string): void {
 export async function shouldRunScheduledTask(
   taskName: string,
   minIntervalMs: number,
+  options: { recoverStuckClaims?: boolean } = {},
 ): Promise<boolean> {
   // One retry after a short delay before giving up. Supabase's pooler
   // occasionally drops an idle connection mid-claim ("Connection terminated
@@ -175,7 +185,11 @@ export async function shouldRunScheduledTask(
   // absorbs the blip instead of turning it into a missed run.
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      return await claimScheduledTaskRun(taskName, minIntervalMs);
+      return await claimScheduledTaskRun(
+        taskName,
+        minIntervalMs,
+        options.recoverStuckClaims ?? true,
+      );
     } catch (err) {
       if (attempt === 2) {
         // Fail closed on the side of NOT running an expensive AI job if the
@@ -201,6 +215,7 @@ export async function shouldRunScheduledTask(
 async function claimScheduledTaskRun(
   taskName: string,
   minIntervalMs: number,
+  recoverStuckClaims: boolean,
 ): Promise<boolean> {
   // See CLAIM_GRACE_MS doc comment: compare against a slightly shorter
   // window than the nominal interval so a same-duration setInterval tick
@@ -269,8 +284,10 @@ async function claimScheduledTaskRun(
             ) OR (
               -- Arm 2: crash recovery — the previous claim never completed
               -- (last_run_at > last_success_at) and enough time has passed to
-              -- rule out an active concurrent claim (10 min >> any race window).
-              scheduler_runs.last_success_at IS NOT NULL
+              -- rule out a short active claim. Long-running jobs can disable
+              -- early recovery and retain their normal cadence after a crash.
+              ${recoverStuckClaims}::boolean
+              AND scheduler_runs.last_success_at IS NOT NULL
               AND scheduler_runs.last_run_at > scheduler_runs.last_success_at
               AND scheduler_runs.last_success_at
                 < now() - (${claimWindowMs}::text || ' milliseconds')::interval
@@ -286,7 +303,8 @@ async function claimScheduledTaskRun(
               scheduler_runs.last_run_at
                 < now() - (${claimWindowMs}::text || ' milliseconds')::interval
             ) OR (
-              scheduler_runs.last_success_at IS NOT NULL
+              ${recoverStuckClaims}::boolean
+              AND scheduler_runs.last_success_at IS NOT NULL
               AND scheduler_runs.last_run_at > scheduler_runs.last_success_at
               AND scheduler_runs.last_success_at
                 < now() - (${claimWindowMs}::text || ' milliseconds')::interval

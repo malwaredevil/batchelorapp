@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import crypto from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db, appUsers } from "@workspace/db";
+import { sanitizeReturnPath } from "@workspace/web-core/return-path";
 import { env } from "../lib/env";
 import { deriveAgentScreenshotToken } from "../lib/agent-screenshot-auth";
 
@@ -20,13 +21,6 @@ import { deriveAgentScreenshotToken } from "../lib/agent-screenshot-auth";
 // agent only ever handles the derived value (see agent-screenshot-auth.ts),
 // so a leaked derived token is useless without the real secret, and rotating
 // the real secret instantly invalidates every previously-derived token.
-function sanitizeNext(value: unknown): string {
-  if (typeof value !== "string" || !value) return "/";
-  if (!value.startsWith("/") || value.startsWith("//")) return "/";
-  if (value.includes("\\")) return "/";
-  return value;
-}
-
 function timingSafeTokenMatch(provided: string, expected: string): boolean {
   const a = Buffer.from(provided);
   const b = Buffer.from(expected);
@@ -68,7 +62,7 @@ router.get("/dev/screenshot-login", async (req, res) => {
     return;
   }
 
-  const next = sanitizeNext(req.query.next);
+  const next = sanitizeReturnPath(req.query.next) ?? "/";
 
   // Append screenshotToken as a URL param so the frontend's custom-fetch.ts
   // can pick it up and forward it as X-Screenshot-Token on every API call.

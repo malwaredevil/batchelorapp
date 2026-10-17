@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
 import { AppLogo } from "@/components/app-logo";
+import { sanitizeReturnPath as sanitizeReturnTo } from "@workspace/web-core/return-path";
 
 function GoogleIcon({ className }: { className?: string }) {
   return (
@@ -39,15 +40,6 @@ function GoogleIcon({ className }: { className?: string }) {
 // Only ever accept a same-origin relative path for post-login redirect —
 // never an absolute URL or protocol-relative "//host" path — to prevent this
 // being used as an open redirect.
-function sanitizeReturnTo(value: string | null): string | null {
-  if (!value) return null;
-  // Reject anything that isn't a single-leading-slash relative path.
-  // Browsers treat a leading "//" OR a leading "/\" (mixed slash/backslash)
-  // as a protocol-relative URL, so both must be blocked, not just "//".
-  if (!/^\/[^/\\]/.test(value)) return null;
-  return value;
-}
-
 export default function Login() {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();

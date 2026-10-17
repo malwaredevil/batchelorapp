@@ -63,6 +63,43 @@ import {
   KNOWN_SCHEDULER_NAMES,
 } from "./scheduler-guard";
 import { logger } from "./logger";
+
+describe("long-running task claim policy", () => {
+  beforeEach(() => {
+    mockExecute.mockReset();
+  });
+  it.each([undefined, true, false])(
+    "gates both SQL crash-recovery arms with recoverStuckClaims=%s",
+    async (recoverStuckClaims) => {
+      mockExecute.mockResolvedValue(
+        skippedResult({
+          lastRunAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
+          lastSuccessAt: new Date(
+            Date.now() - 7 * 60 * 60 * 1000,
+          ).toISOString(),
+        }),
+      );
+      const intervalMs = 6 * 60 * 60 * 1000;
+      expect(
+        await shouldRunScheduledTask("gmail-scan", intervalMs, {
+          recoverStuckClaims,
+        }),
+      ).toBe(false);
+      const dialect = new PgDialect();
+      const compiled = dialect.sqlToQuery(mockExecute.mock.calls[0]![0]);
+      expect(
+        compiled.params.filter((param) => typeof param === "boolean"),
+      ).toEqual([recoverStuckClaims ?? true, recoverStuckClaims ?? true]);
+      expect(
+        compiled.sql
+          .replace(/--[^\n]*/g, "")
+          .match(/OR\s*\(\s*\$\d+::boolean\s+AND/g),
+      ).toHaveLength(2);
+      expect(compiled.params).toContain(intervalMs);
+      expect(compiled.params).toContain(intervalMs - CLAIM_GRACE_MS);
+    },
+  );
+});
 import * as Sentry from "@sentry/node";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

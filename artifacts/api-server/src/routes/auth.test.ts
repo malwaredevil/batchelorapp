@@ -33,6 +33,7 @@ import { googleEnabled } from "../lib/google-oauth";
 import { runReminderDeliveries } from "../lib/reminders-scheduler";
 import { env } from "../lib/env";
 import { csrfGuard } from "../middleware/csrf";
+import { apiLimiter } from "../middleware/rateLimit";
 
 // ---------------------------------------------------------------------------
 // Mocks (declared before any imports that exercise the modules under test)
@@ -300,6 +301,7 @@ describe("Google sign-in return-path policy", () => {
     const app = express();
     app.use(cookieParser("unit-test-cookie-key"));
     app.use("/api", csrfGuard);
+    app.use("/api", apiLimiter);
     app.use(injectSession(4));
     app.get("/fixture-cookie", (_req, res) => {
       const options = {

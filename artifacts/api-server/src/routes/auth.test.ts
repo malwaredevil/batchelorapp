@@ -11,7 +11,15 @@
  * email, rate-limiters, etc.) are all mocked so no live database is required.
  */
 
-import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  beforeAll,
+  afterEach,
+} from "vitest";
 import express, {
   type Express,
   type Request,
@@ -19,7 +27,13 @@ import express, {
   type NextFunction,
 } from "express";
 import request from "supertest";
+import cookieParser from "cookie-parser";
 import { makeEagerSelectBuilder } from "../test-helpers/db-mock";
+import { googleEnabled } from "../lib/google-oauth";
+import { runReminderDeliveries } from "../lib/reminders-scheduler";
+import { env } from "../lib/env";
+import { csrfGuard } from "../middleware/csrf";
+import { apiLimiter } from "../middleware/rateLimit";
 
 // ---------------------------------------------------------------------------
 // Mocks (declared before any imports that exercise the modules under test)
@@ -44,6 +58,7 @@ vi.mock("../middleware/rateLimit", () => ({
 vi.mock("../lib/env", () => ({
   env: {
     isProduction: false,
+    replitDomains: ["app.example"],
     sessionSecret: "test-secret",
     supabaseUrl: "https://mock.supabase.co",
     supabaseServiceRoleKey: "mock-key",
@@ -69,8 +84,19 @@ vi.mock("../lib/sms", () => ({
 }));
 
 vi.mock("../lib/google-oauth", () => ({
-  googleEnabled: false,
-  createGoogleClient: vi.fn(),
+  googleEnabled: vi.fn(() => false),
+  createGoogleClient: vi.fn(() => ({
+    generateAuthUrl: () => "https://accounts.google.com/mock",
+    getToken: vi
+      .fn()
+      .mockResolvedValue({ tokens: { id_token: "test-id-token" } }),
+    verifyIdToken: vi.fn().mockResolvedValue({
+      getPayload: () => ({
+        email: "user@example.com",
+        email_verified: true,
+      }),
+    }),
+  })),
   GOOGLE_SCOPES: [],
 }));
 
@@ -243,10 +269,12 @@ function injectSession(
 // ESM registry by the time individual tests call buildApp().
 import type { IRouter } from "express";
 let authRouter: IRouter;
+let googleCallbackHandler: typeof import("./auth").handleGoogleOAuthCallback;
 
 beforeAll(async () => {
   const mod = await import("./auth");
   authRouter = mod.default;
+  googleCallbackHandler = mod.handleGoogleOAuthCallback;
 }, 30_000);
 
 async function buildApp(
@@ -258,6 +286,101 @@ async function buildApp(
   app.use("/api", authRouter);
   return app;
 }
+
+describe("Google sign-in return-path policy", () => {
+  beforeEach(() => {
+    selectQueue.length = 0;
+    vi.mocked(googleEnabled).mockReturnValue(true);
+    vi.mocked(runReminderDeliveries).mockResolvedValue(undefined);
+  });
+  afterEach(() => {
+    vi.mocked(googleEnabled).mockReturnValue(false);
+  });
+
+  async function appWithSignedReturnPath(path: string) {
+    const app = express();
+    app.use(cookieParser("unit-test-cookie-key"));
+    app.use("/api", csrfGuard);
+    app.use("/api", apiLimiter);
+    app.use(injectSession(4));
+    app.get("/fixture-cookie", (_req, res) => {
+      const options = {
+        signed: true,
+        httpOnly: true,
+        secure: true,
+        // This fixture makes same-site requests; unlike the production iframe
+        // OAuth flow, it does not need cross-site cookies.
+        sameSite: "lax" as const,
+      };
+      res.cookie("pottery.oauth_state", "test-state", options);
+      res.cookie("pottery.oauth_returnto", path, options);
+      res.sendStatus(204);
+    });
+    app.get("/api/auth/google/callback", googleCallbackHandler);
+    const cookies = await request(app).get("/fixture-cookie");
+    return {
+      app,
+      cookies: (cookies.headers["set-cookie"] as unknown as string[])
+        .map((cookie) => cookie.split(";")[0])
+        .join("; "),
+    };
+  }
+
+  it.each([
+    "/\\untrusted.invalid",
+    "//untrusted.invalid",
+    "/\n/untrusted.invalid",
+    "/\t/untrusted.invalid",
+    "/modules/\rtravels",
+  ])(
+    "rejects unsafe return path %j in a real signed callback cookie",
+    async (path) => {
+      const { app, cookies } = await appWithSignedReturnPath(path);
+      selectQueue.push([{ id: 4, email: "user@example.com" }]);
+      const response = await request(app)
+        .get("/api/auth/google/callback?code=test-code&state=test-state")
+        .set("Host", env.replitDomains[0] ?? "app.example")
+        .set("Cookie", cookies);
+      expect(response.status).toBe(302);
+      expect(response.headers.location).toBe("/");
+    },
+  );
+
+  it("preserves a valid cross-app destination from a signed callback cookie", async () => {
+    const { app, cookies } = await appWithSignedReturnPath(
+      "/modules/travels?tab=calendar",
+    );
+    selectQueue.push([{ id: 4, email: "user@example.com" }]);
+    const response = await request(app)
+      .get("/api/auth/google/callback?code=test-code&state=test-state")
+      .set("Host", env.replitDomains[0] ?? "app.example")
+      .set("Cookie", cookies);
+    expect(response.status).toBe(302);
+    expect(response.headers.location).toBe("/modules/travels?tab=calendar");
+  });
+
+  it("does not persist an unsafe return path when starting Google sign-in", async () => {
+    const app = await buildApp();
+    // This route only writes signed cookies; no incoming-cookie parsing is needed.
+    Object.assign(app.request, { secret: "unit-test-cookie-key" });
+    const response = await request(app)
+      .get("/api/auth/google")
+      .query({ returnTo: "/\n/untrusted.invalid" })
+      .set("Host", env.replitDomains[0] ?? "app.example");
+    expect(response.status).toBe(302);
+    const cookies = response.headers["set-cookie"] as unknown as string[];
+    expect(
+      cookies.find((cookie) => cookie.startsWith("pottery.oauth_returnto=")),
+    ).toContain("Expires=Thu, 01 Jan 1970");
+  });
+
+  it("keeps the actual callback registered on the production router", async () => {
+    const app = await buildApp();
+    const response = await request(app).get("/api/auth/google/callback");
+    expect(response.status).toBe(302);
+    expect(response.headers.location).toBe("/login?error=google_failed");
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Tests: #307 — atomic password-change transaction

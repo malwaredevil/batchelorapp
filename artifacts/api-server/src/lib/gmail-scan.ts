@@ -20,6 +20,7 @@ import {
   shouldRunScheduledTask,
   recordScheduledTaskSuccess,
   recordScheduledTaskFailure,
+  getSchedulerPollIntervalMs,
 } from "./scheduler-guard";
 import {
   getAllGmailConnections,
@@ -379,8 +380,16 @@ const SCAN_INTERVAL_MS = 6 * 60 * 60 * 1000; // every 6 hours
  * this safely idempotent alongside the manual "Scan now" button.
  */
 export function startGmailScanScheduler(): () => void {
-  const run = async (): Promise<void> => {
-    if (!(await shouldRunScheduledTask("gmail-scan", SCAN_INTERVAL_MS))) {
+  const runOnce = async (): Promise<void> => {
+    // A scan can legitimately exceed the guard's short stuck-claim timeout.
+    // Polling instances must honor the normal cooldown rather than reclaiming
+    // another instance's active scan after ten minutes. Crash recovery waits
+    // until that same normal execution window instead.
+    if (
+      !(await shouldRunScheduledTask("gmail-scan", SCAN_INTERVAL_MS, {
+        recoverStuckClaims: false,
+      }))
+    ) {
       logger.info("gmail-scan: skipped (ran within the last 6 hours)");
       return;
     }
@@ -399,11 +408,26 @@ export function startGmailScanScheduler(): () => void {
     }
   };
 
+  let running = false;
+  const run = async (): Promise<void> => {
+    if (running) return;
+    running = true;
+    try {
+      await runOnce();
+    } finally {
+      running = false;
+    }
+  };
+
   void run();
 
-  const interval = setInterval(() => void run(), SCAN_INTERVAL_MS);
+  const pollIntervalMs = getSchedulerPollIntervalMs(SCAN_INTERVAL_MS);
+  const interval = setInterval(() => void run(), pollIntervalMs);
   interval.unref();
 
-  logger.info("gmail-scan: started (in-process fallback, runs every 6h)");
+  logger.info(
+    { pollIntervalMs, scanIntervalMs: SCAN_INTERVAL_MS },
+    "gmail-scan: started (in-process fallback, checks for a due 6h scan each heartbeat interval)",
+  );
   return () => clearInterval(interval);
 }

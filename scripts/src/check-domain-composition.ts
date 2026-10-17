@@ -93,6 +93,19 @@ const requirements: Array<{
   excludes?: string[];
   fix?: string;
 }> = [
+  // Redirect security policy must stay shared across browser and OAuth routes.
+  ...[
+    "artifacts/web/src/pages/login.tsx",
+    "artifacts/api-server/src/routes/auth.ts",
+    "artifacts/api-server/src/routes/dev-screenshot-login.ts",
+    "artifacts/api-server/src/routes/gmail.ts",
+    "artifacts/api-server/src/routes/travels/google-calendar.ts",
+  ].map((path) => ({
+    path,
+    includes: ["@workspace/web-core/return-path", "sanitizeReturnPath"],
+    excludes: ["function sanitizeReturnTo(", "function sanitizeNext("],
+    fix: "Use sanitizeReturnPath from @workspace/web-core/return-path for redirect destinations, including paths decoded from OAuth state cookies.",
+  })),
   // ── Feature registry: all SPAs must use the shared createFeatureRegistry ──
   {
     path: "artifacts/modules/src/features/registry.ts",

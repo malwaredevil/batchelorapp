@@ -3,6 +3,7 @@ import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { z } from "zod/v4";
 import { db, appGmailConnections } from "@workspace/db";
+import { sanitizeReturnPath } from "@workspace/web-core/return-path";
 import { requireAuth } from "../middleware/auth";
 import {
   createAppGmailOAuthClient,
@@ -109,12 +110,7 @@ router.get("/connect", (req, res) => {
   // Optional same-origin relative path to redirect back to after the OAuth
   // round trip (e.g. "/modules/office/gmail"). Defaults to Hub's "/gmail".
   // Only same-origin relative paths are accepted to avoid an open redirect.
-  const rawReturnTo =
-    typeof req.query.returnTo === "string" ? req.query.returnTo : "";
-  const returnTo =
-    rawReturnTo.startsWith("/") && !rawReturnTo.startsWith("//")
-      ? rawReturnTo
-      : "/gmail";
+  const returnTo = sanitizeReturnPath(req.query.returnTo) ?? "/gmail";
   const cookieValue = `${state}:${Buffer.from(returnTo).toString("base64url")}`;
   res.cookie(OAUTH_STATE_COOKIE, cookieValue, {
     signed: true,
@@ -161,9 +157,7 @@ router.get("/callback", async (req, res) => {
           expectedCookie.slice(sepIndex + 1),
           "base64url",
         ).toString("utf8");
-        if (decoded.startsWith("/") && !decoded.startsWith("//")) {
-          returnTo = decoded;
-        }
+        returnTo = sanitizeReturnPath(decoded) ?? "/gmail";
       } catch {
         // keep default returnTo
       }

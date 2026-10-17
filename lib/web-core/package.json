@@ -14,7 +14,8 @@
     "./not-found": "./src/not-found.tsx",
     "./download": "./src/download.ts",
     "./sentry": "./src/sentry.ts",
-    "./cross-app": "./src/cross-app.ts"
+    "./cross-app": "./src/cross-app.ts",
+    "./return-path": "./src/return-path.ts"
   },
   "dependencies": {
     "@workspace/api-client-react": "workspace:*",

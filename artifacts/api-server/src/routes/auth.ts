@@ -1,5 +1,6 @@
-import { Router, type IRouter, type Request } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import crypto from "node:crypto";
+import { sanitizeReturnPath as sanitizeReturnTo } from "@workspace/web-core/return-path";
 import bcrypt from "bcryptjs";
 import { eq, and, gt, lt, isNull, desc, sql } from "drizzle-orm";
 import {
@@ -89,13 +90,6 @@ function googleCallbackUrl(req: Request): string | null {
 // visitors to "/login?returnTo=<original path>" so this must only ever accept
 // a same-origin relative path — never an absolute URL or protocol-relative
 // "//host" path — to prevent it being used as an open redirect.
-function sanitizeReturnTo(value: unknown): string | null {
-  if (typeof value !== "string" || !value) return null;
-  if (!value.startsWith("/") || value.startsWith("//")) return null;
-  if (value.includes("\\")) return null;
-  return value;
-}
-
 const router: IRouter = Router();
 
 router.post("/auth/login", loginLimiter, async (req, res) => {
@@ -887,7 +881,12 @@ router.get("/auth/google", loginLimiter, (req, res) => {
 });
 
 // Step 2: Google redirects back here with a one-time code
-router.get("/auth/google/callback", async (req, res) => {
+// Export the actual handler so signed-cookie callback regressions can mount
+// only this endpoint, without exposing unrelated password/phone POST routes.
+export async function handleGoogleOAuthCallback(
+  req: Request,
+  res: Response,
+): Promise<void> {
   if (!googleEnabled()) {
     res.redirect(`${LOGIN_PATH}?error=google_unavailable`);
     return;
@@ -993,6 +992,8 @@ router.get("/auth/google/callback", async (req, res) => {
     );
     res.redirect(`${LOGIN_PATH}?error=google_failed`);
   }
-});
+}
+
+router.get("/auth/google/callback", handleGoogleOAuthCallback);
 
 export default router;

@@ -61,6 +61,11 @@ import pg from "pg";
 import { pathToFileURL } from "node:url";
 import { resolveProductionDatabaseUrl, sslConfig } from "@workspace/db";
 import { copyTable } from "./copy-table-helpers.js";
+import {
+  BACKUP_CONNECTION_TIMEOUT_MS,
+  connectBackupClients,
+  withBackupSnapshot,
+} from "./backup-connections.js";
 
 const { Client } = pg;
 
@@ -1857,6 +1862,7 @@ async function main() {
   const source = new Client({
     connectionString: resolveProductionDatabaseUrl(),
     ssl: sslConfig,
+    connectionTimeoutMillis: BACKUP_CONNECTION_TIMEOUT_MS,
   });
   const dest = new Client({
     host: process.env.PGHOST,
@@ -1865,12 +1871,22 @@ async function main() {
     password: process.env.PGPASSWORD,
     database: process.env.PGDATABASE,
     ssl: false,
+    connectionTimeoutMillis: BACKUP_CONNECTION_TIMEOUT_MS,
   });
 
-  console.log("Connecting to Supabase (source) and Replit DB (destination)...");
-  await source.connect();
-  await dest.connect();
+  try {
+    await connectBackupClients(source, dest);
+    const summary = await withBackupSnapshot(dest, () =>
+      copySnapshot(source, dest),
+    );
+    console.log("✓ Backup complete.");
+    console.log("  Row counts:", summary);
+  } finally {
+    await Promise.allSettled([source.end(), dest.end()]);
+  }
+}
 
+async function copySnapshot(source: pg.Client, dest: pg.Client) {
   // Ensure destination schema exists
   for (const stmt of DEST_SCHEMA.split(";")
     .map((s) => s.trim())
@@ -4108,11 +4124,7 @@ async function main() {
     .join(", ");
   await dest.query(`INSERT INTO backup_history (note) VALUES ($1)`, [note]);
 
-  console.log("✓ Backup complete.");
-  console.log("  Row counts:", summary);
-
-  await source.end();
-  await dest.end();
+  return summary;
 }
 
 if (

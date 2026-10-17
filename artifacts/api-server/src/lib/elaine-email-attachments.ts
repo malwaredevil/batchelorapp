@@ -2,6 +2,13 @@ import { Resend } from "resend";
 import { db, travelsTripDocuments } from "@workspace/db";
 import { env } from "./env";
 import { logger } from "./logger";
+import {
+  downloadEmailAttachment,
+  EmailAttachmentLimitError,
+  EMAIL_ATTACHMENT_MAX_COUNT,
+  EMAIL_ATTACHMENT_MAX_FILE_BYTES,
+  EMAIL_ATTACHMENT_MAX_TOTAL_BYTES,
+} from "./email-attachment-download";
 import { uploadDocument } from "./travels-storage";
 import {
   extractFromImage,
@@ -20,14 +27,15 @@ import {
 // as a manual document upload, and either linked straight to a confidently
 // matched trip or dropped into the unmatched-documents triage queue
 // (status: "unmatched", tripId: null) for a household member to assign later
-// from the Documents tab. See threat_model.md's Resend webhook boundary —
-// this reuses the same identity-matched userId, no new trust boundary.
+// from the Documents tab. A matching From address is only attribution, not
+// sender authentication; enforce resource ceilings before storage or AI work.
 
 const SUPPORTED_MIME_PREFIXES = ["image/", "application/pdf"];
 
 export interface EmailAttachmentOutcome {
   filename: string;
   outcome: "linked" | "unmatched" | "skipped" | "failed";
+  reason?: "resource_limit";
   tripTitle?: string;
 }
 
@@ -47,12 +55,14 @@ export async function processEmailAttachments(params: {
   let attachments: Array<{
     id: string;
     filename?: string;
+    size?: number;
     content_type: string;
     download_url: string;
   }> = [];
   try {
     const { data, error } = await resend.emails.receiving.attachments.list({
       emailId: params.emailId,
+      limit: EMAIL_ATTACHMENT_MAX_COUNT + 1,
     });
     if (error) {
       logger.warn(
@@ -62,6 +72,20 @@ export async function processEmailAttachments(params: {
       return [];
     }
     attachments = data?.data ?? [];
+    // Do not paginate or create an unbounded outcome/prompt for excess files.
+    if (data?.has_more || attachments.length > EMAIL_ATTACHMENT_MAX_COUNT) {
+      logger.warn(
+        { emailId: params.emailId },
+        "elaine-email-attachments: attachment count limit exceeded",
+      );
+      return [
+        {
+          filename: "Email attachments",
+          outcome: "skipped",
+          reason: "resource_limit",
+        },
+      ];
+    }
   } catch (err) {
     logger.warn(
       { err, emailId: params.emailId },
@@ -73,6 +97,7 @@ export async function processEmailAttachments(params: {
   if (attachments.length === 0) return [];
 
   const outcomes: EmailAttachmentOutcome[] = [];
+  let downloadedBytes = 0;
 
   for (const attachment of attachments) {
     const filename = attachment.filename || "attachment";
@@ -82,12 +107,20 @@ export async function processEmailAttachments(params: {
     }
 
     try {
-      const fileResp = await fetch(attachment.download_url);
-      if (!fileResp.ok) {
-        outcomes.push({ filename, outcome: "failed" });
-        continue;
+      const maxBytes = Math.min(
+        EMAIL_ATTACHMENT_MAX_FILE_BYTES,
+        EMAIL_ATTACHMENT_MAX_TOTAL_BYTES - downloadedBytes,
+      );
+      if (maxBytes <= 0 || (attachment.size ?? 0) > maxBytes) {
+        throw new EmailAttachmentLimitError("Attachment exceeds email budget");
       }
-      const buffer = Buffer.from(await fileResp.arrayBuffer());
+      const buffer = await downloadEmailAttachment(
+        attachment.download_url,
+        maxBytes,
+        (bytes) => {
+          downloadedBytes += bytes;
+        },
+      );
       const isPdf = attachment.content_type === "application/pdf";
 
       const storagePath = await uploadDocument(
@@ -183,6 +216,18 @@ export async function processEmailAttachments(params: {
         tripTitle,
       });
     } catch (err) {
+      if (err instanceof EmailAttachmentLimitError) {
+        logger.warn(
+          { emailId: params.emailId },
+          "elaine-email-attachments: attachment byte limit exceeded",
+        );
+        outcomes.push({
+          filename,
+          outcome: "skipped",
+          reason: "resource_limit",
+        });
+        continue;
+      }
       logger.error(
         { err, filename },
         "elaine-email-attachments: failed to process attachment",

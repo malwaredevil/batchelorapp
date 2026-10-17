@@ -988,6 +988,14 @@
       "metric": 1
     },
     {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/email-attachment-download.ts:constant:constant:EMAIL_ATTACHMENT_DOWNLOAD_TIMEOUT_MS:export const EMAIL_ATTACHMENT_DOWNLOAD_TIMEOUT_MS = 15_000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/email-attachment-download.ts",
+      "evidence": "constant:EMAIL_ATTACHMENT_DOWNLOAD_TIMEOUT_MS:export const EMAIL_ATTACHMENT_DOWNLOAD_TIMEOUT_MS = 15_000;",
+      "reason": "Fixed inbound attachment download deadline is a security ceiling against spoofed-From email resource amplification, not an owner-tunable product setting.",
+      "metric": 1
+    },
+    {
       "id": "exception:hardcoded-config:artifacts/api-server/src/lib/sentry-issues.ts:constant:constant:FETCH_TIMEOUT_MS:const FETCH_TIMEOUT_MS = 15_000;",
       "category": "hardcoded-config",
       "file": "artifacts/api-server/src/lib/sentry-issues.ts",

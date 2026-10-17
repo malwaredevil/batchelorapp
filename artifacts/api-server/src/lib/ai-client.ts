@@ -8,6 +8,7 @@ import {
 import { getConfig } from "./app-config";
 import { logger } from "./logger";
 import { circuitBreaker } from "./circuit-breaker";
+import { runCatalogAI } from "./catalog-ai";
 
 /**
  * Shared OpenRouter facade for broad model access and resilient fallback.
@@ -155,9 +156,17 @@ export async function getOpenRouterClient(): Promise<OpenAI> {
 export async function callModel<T>(
   model: string,
   fn: (client: OpenAI, model: string) => Promise<T>,
+  workload: "interactive" | "catalog" = "interactive",
 ): Promise<T> {
-  const client = await getOpenRouterClient();
-  return circuitBreaker.execute("openrouter", () => fn(client, model));
+  const run = async () => {
+    const client = await getOpenRouterClient();
+    // A slow catalog model must not trip the circuit for search, embeddings,
+    // or Elaine's interactive calls. Keep the existing failure thresholds.
+    return circuitBreaker.execute(`openrouter:${workload}:${model}`, () =>
+      fn(client, model),
+    );
+  };
+  return workload === "catalog" ? runCatalogAI(run) : run();
 }
 
 /**

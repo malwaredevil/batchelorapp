@@ -17,6 +17,7 @@
  */
 
 import { callModel, getModels } from "../ai-client";
+import { CATALOG_AI_REQUEST_OPTIONS } from "../catalog-ai";
 import {
   researchOrnament,
   sourceDomainFromUrl,
@@ -52,20 +53,24 @@ async function extractResult(
     return { valueUsd: null, productUrl: null };
 
   const models = await getModels();
-  const completion = await callModel(models.fastVision, (client, model) =>
-    client.chat.completions.create({
-      model,
-      response_format: { type: "json_object" },
-      temperature: 0,
-      max_tokens: 200,
-      messages: [
-        { role: "system", content: EXTRACTION_PROMPT },
-        {
-          role: "user",
-          content: `Ornament: ${input.name}${input.seriesOrCollection ? ` (${input.seriesOrCollection})` : ""}${input.year ? ` — ${input.year}` : ""}\n\nSearch answer:\n${answer}\n\nCitations:\n${citations.join("\n")}`,
-        },
-      ],
-    }),
+  const completion = await callModel(
+    models.fastVision,
+    (client, model) =>
+      client.chat.completions.create({
+        model,
+        ...CATALOG_AI_REQUEST_OPTIONS,
+        response_format: { type: "json_object" },
+        temperature: 0,
+        max_tokens: 200,
+        messages: [
+          { role: "system", content: EXTRACTION_PROMPT },
+          {
+            role: "user",
+            content: `Ornament: ${input.name}${input.seriesOrCollection ? ` (${input.seriesOrCollection})` : ""}${input.year ? ` — ${input.year}` : ""}\n\nSearch answer:\n${answer}\n\nCitations:\n${citations.join("\n")}`,
+          },
+        ],
+      }),
+    "catalog",
   );
 
   const raw = completion.choices[0]?.message?.content ?? "{}";

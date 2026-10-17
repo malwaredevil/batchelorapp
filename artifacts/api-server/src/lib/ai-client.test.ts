@@ -4,7 +4,9 @@ vi.mock("./elaine-config", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./elaine-config")>();
   return { ...actual, getElaineGlobalConfig: vi.fn() };
 });
-vi.mock("./app-config", () => ({ getConfig: vi.fn(async () => 12_000) }));
+vi.mock("./app-config", () => ({
+  getConfig: vi.fn(async (_module, _key, fallback) => fallback),
+}));
 vi.mock("./logger", () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() },
 }));
@@ -14,7 +16,13 @@ import {
   ELAINE_CONFIG_DEFAULTS,
   getElaineGlobalConfig,
 } from "./elaine-config";
-import { callModelWithAdvisor, getModels, MODELS } from "./ai-client";
+import {
+  callModel,
+  callModelWithAdvisor,
+  getModels,
+  MODELS,
+} from "./ai-client";
+import { circuitBreaker, CircuitOpenError } from "./circuit-breaker";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -24,6 +32,31 @@ beforeEach(() => {
 });
 
 describe("supporting model routing", () => {
+  it("isolates a failed catalog model from interactive work and other models", async () => {
+    const model = "test/failed-catalog-model";
+    const key = `openrouter:catalog:${model}`;
+    circuitBreaker.reset(key);
+    const failed = vi.fn(async () => {
+      throw new Error("Request timed out.");
+    });
+    for (let attempt = 0; attempt < 5; attempt++) {
+      await expect(callModel(model, failed, "catalog")).rejects.toThrow(
+        "Request timed out.",
+      );
+    }
+    await expect(callModel(model, failed, "catalog")).rejects.toBeInstanceOf(
+      CircuitOpenError,
+    );
+    expect(failed).toHaveBeenCalledTimes(5);
+    await expect(callModel(model, async () => "interactive ok")).resolves.toBe(
+      "interactive ok",
+    );
+    await expect(
+      callModel("test/embedding-model", async () => "embedding ok", "catalog"),
+    ).resolves.toBe("embedding ok");
+    circuitBreaker.reset(key);
+  });
+
   it("keeps static recognition defaults aligned with owner-config defaults", () => {
     expect(MODELS.FAST_VISION).toBe(DEFAULT_MODELS.fastVision);
     expect(MODELS.SMART_VISION).toBe(DEFAULT_MODELS.smartVision);

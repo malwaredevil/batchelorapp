@@ -2,6 +2,8 @@ import { logger } from "../logger";
 import { env } from "../env";
 import { getEbayAppToken } from "../ebay/oauth";
 import { callModel, getModels } from "../ai-client";
+import { CATALOG_AI_REQUEST_OPTIONS } from "../catalog-ai";
+import { getCatalogAISignal } from "../catalog-ai-context";
 
 /**
  * Live barcode identification for ornament intake. Exact eBay GTIN results are
@@ -61,6 +63,8 @@ async function fetchFromEbay(barcode: string): Promise<UpcFetchResult> {
   }
 
   const token = await getEbayAppToken();
+  const requestSignal = getCatalogAISignal();
+  requestSignal?.throwIfAborted();
 
   const params = new URLSearchParams({
     gtin: barcode,
@@ -75,7 +79,9 @@ async function fetchFromEbay(barcode: string): Promise<UpcFetchResult> {
         Authorization: `Bearer ${token}`,
         "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
       },
-      signal: AbortSignal.timeout(12_000),
+      signal: requestSignal
+        ? AbortSignal.any([requestSignal, AbortSignal.timeout(12_000)])
+        : AbortSignal.timeout(12_000),
     },
   );
 
@@ -174,15 +180,20 @@ async function fetchFromAI(barcode: string): Promise<UpcFetchResult> {
   ].join(" ");
 
   const models = await getModels();
-  const raw = await callModel(models.fastVision, async (client, model) => {
-    const completion = await client.chat.completions.create({
-      model,
-      messages: [{ role: "user", content: prompt }],
-      response_format: { type: "json_object" },
-      temperature: 0,
-    });
-    return completion.choices[0]?.message?.content?.trim() ?? "";
-  });
+  const raw = await callModel(
+    models.fastVision,
+    async (client, model) => {
+      const completion = await client.chat.completions.create({
+        model,
+        ...CATALOG_AI_REQUEST_OPTIONS,
+        messages: [{ role: "user", content: prompt }],
+        response_format: { type: "json_object" },
+        temperature: 0,
+      });
+      return completion.choices[0]?.message?.content?.trim() ?? "";
+    },
+    "catalog",
+  );
 
   let parsed: {
     found?: boolean;
@@ -238,6 +249,7 @@ async function fetchFromAI(barcode: string): Promise<UpcFetchResult> {
 export async function lookupBarcode(
   rawBarcode: string,
 ): Promise<BarcodeLookupResult> {
+  getCatalogAISignal()?.throwIfAborted();
   const barcode = rawBarcode.trim();
   // eBay GTIN search is an exact barcode match against live market listings.
   // This is an authoritative, verifiable match (the barcode is searched

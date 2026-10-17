@@ -89,6 +89,13 @@ vi.mock("../../lib/ornaments/openai", () => ({
 
 vi.mock("../../lib/ornaments/barcode", () => ({ lookupBarcode: vi.fn() }));
 vi.mock("../../lib/ornaments/book-value", () => ({ lookupBookValue: vi.fn() }));
+vi.mock("../../lib/ornaments/retail-value", () => ({
+  lookupRetailValue: vi.fn(),
+}));
+vi.mock("../../lib/ornaments/recognition", () => ({
+  runOrnamentRecognition: vi.fn(),
+  recognizeOrnamentPhotos: vi.fn(),
+}));
 vi.mock("../../lib/collection-search", () => ({
   semanticCollectionSearch: vi.fn(),
   buildOrnamentSearchDocument: vi.fn(),
@@ -135,7 +142,12 @@ vi.mock("../../lib/env", () => ({
 //   3. db.update(ornamentsItems).set({deletedAt}).where()            — item soft-delete
 
 let selectCallCount = 0;
-let itemRow: { imagePath: string } | null = null;
+let itemRow: {
+  imagePath?: string;
+  name?: string;
+  year?: number;
+  seriesOrCollection?: string;
+} | null = null;
 
 // Track update calls so we can assert soft-delete happened
 const updateCalls: { table: string; payload: Record<string, unknown> }[] = [];
@@ -227,6 +239,77 @@ function buildApp(router: IRouter): Express {
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
+
+describe("required recognition before optional refresh work", () => {
+  it("loads corrected identity after recognition for book and retail lookups", async () => {
+    vi.clearAllMocks();
+    selectCallCount = 0;
+    updateCalls.length = 0;
+    itemRow = { name: "Old name", year: 2000 };
+    const { GetOrnamentResponse } = await import("@workspace/api-zod");
+    const parser = vi
+      .spyOn(GetOrnamentResponse, "parse")
+      .mockImplementation((value) => value as never);
+    const { serializeItem } = await import("../../lib/ornaments/serialize");
+    vi.mocked(serializeItem).mockResolvedValueOnce({ id: 42 } as never);
+    const { runOrnamentRecognition } =
+      await import("../../lib/ornaments/recognition");
+    vi.mocked(runOrnamentRecognition).mockImplementationOnce(async () => {
+      expect(selectCallCount).toBe(0);
+      itemRow = {
+        name: "Corrected name",
+        seriesOrCollection: "Corrected series",
+        year: 2026,
+      };
+      return {
+        item: {},
+        maintenance: { unresolvedFields: [], recommendation: null },
+      } as never;
+    });
+    const { lookupBookValue } = await import("../../lib/ornaments/book-value");
+    const { lookupRetailValue } =
+      await import("../../lib/ornaments/retail-value");
+    vi.mocked(lookupBookValue).mockResolvedValueOnce(null);
+    vi.mocked(lookupRetailValue).mockResolvedValueOnce(null);
+    try {
+      const { refreshOrnamentItemAllData } = await import("./ornaments");
+      await refreshOrnamentItemAllData(42, { warn: vi.fn() });
+      for (const lookup of [lookupBookValue, lookupRetailValue]) {
+        expect(lookup).toHaveBeenCalledWith({
+          name: "Corrected name",
+          seriesOrCollection: "Corrected series",
+          year: 2026,
+        });
+      }
+    } finally {
+      parser.mockRestore();
+    }
+  });
+
+  it("does not start more paid work or overwrite values after a core timeout", async () => {
+    vi.clearAllMocks();
+    selectCallCount = 0;
+    updateCalls.length = 0;
+    itemRow = { imagePath: "ornaments/test/primary.jpg" };
+    const { runOrnamentRecognition } =
+      await import("../../lib/ornaments/recognition");
+    const { lookupBookValue } = await import("../../lib/ornaments/book-value");
+    const { lookupRetailValue } =
+      await import("../../lib/ornaments/retail-value");
+    const { appraiseOrnamentImage } =
+      await import("../../lib/ornaments/openai");
+    const error = new Error("Request timed out.");
+    vi.mocked(runOrnamentRecognition).mockRejectedValueOnce(error);
+    const { refreshOrnamentItemAllData } = await import("./ornaments");
+    await expect(
+      refreshOrnamentItemAllData(42, { warn: vi.fn() }),
+    ).rejects.toBe(error);
+    expect(lookupBookValue).not.toHaveBeenCalled();
+    expect(lookupRetailValue).not.toHaveBeenCalled();
+    expect(appraiseOrnamentImage).not.toHaveBeenCalled();
+    expect(updateCalls).toHaveLength(0);
+  });
+});
 
 describe("DELETE /ornaments/items/:id — soft-delete semantics", () => {
   beforeEach(() => {

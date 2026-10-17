@@ -1,12 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("../app-config", () => ({
+  getConfig: vi.fn(async (_module, _key, fallback) => fallback),
+}));
+
 vi.mock("../ai-client", () => ({
   callModel: vi.fn(),
   getModels: vi.fn(),
 }));
 
 import { callModel, getModels } from "../ai-client";
-import { enrichOrnamentIdentity } from "./openai";
+import {
+  embedText,
+  enrichOrnamentIdentity,
+  extractBarcodeFromPhoto,
+} from "./openai";
 
 function mockVisionIdentityResponse(response: unknown) {
   vi.mocked(getModels).mockResolvedValue({
@@ -28,8 +36,70 @@ function mockVisionIdentityResponse(response: unknown) {
   );
 }
 
+it("puts photo barcode extraction in the bounded catalog workload", async () => {
+  mockVisionIdentityResponse({ barcode: "661127022308" });
+  await expect(
+    extractBarcodeFromPhoto("data:image/jpeg;base64,test"),
+  ).resolves.toBe("661127022308");
+  expect(callModel).toHaveBeenLastCalledWith(
+    "test-model",
+    expect.any(Function),
+    "catalog",
+  );
+});
+
 describe("targeted ornament identity enrichment", () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it("includes ornament embeddings in catalog capacity without vision parameters", async () => {
+    vi.mocked(getModels).mockResolvedValue({
+      embedding: "test-embedding-model",
+    } as Awaited<ReturnType<typeof getModels>>);
+    const create = vi.fn().mockResolvedValue({
+      data: [{ embedding: [0.1, 0.2] }],
+    });
+    vi.mocked(callModel).mockImplementation(async (_model, run) =>
+      run({ embeddings: { create } } as never, "test-embedding-model"),
+    );
+    expect(await embedText("ornament description")).toEqual([0.1, 0.2]);
+    expect(callModel).toHaveBeenCalledWith(
+      "test-embedding-model",
+      expect.any(Function),
+      "catalog",
+    );
+    expect(create).toHaveBeenCalledWith({
+      model: "test-embedding-model",
+      input: "ornament description",
+    });
+  });
+
+  it("uses the shared catalog workload and bounded reasoning policy", async () => {
+    mockVisionIdentityResponse({ seriesOrCollection: null, year: null });
+    const create = vi.fn().mockResolvedValue({
+      choices: [{ message: { content: "{}" } }],
+    });
+    vi.mocked(callModel).mockImplementation(async (_model, run) =>
+      run({ chat: { completions: { create } } } as never, "test-model"),
+    );
+    await enrichOrnamentIdentity(["data:image/jpeg;base64,test"], {
+      name: "Snow Day",
+      barcodeValue: null,
+      seriesOrCollection: null,
+      year: null,
+    });
+    expect(callModel).toHaveBeenCalledWith(
+      "test-model",
+      expect.any(Function),
+      "catalog",
+    );
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "test-model",
+        reasoning: { effort: "low", exclude: true },
+        provider: { sort: "latency" },
+      }),
+    );
+  });
 
   it("returns only a supported series and year from the focused pass", async () => {
     mockVisionIdentityResponse({

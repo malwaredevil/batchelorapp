@@ -1,4 +1,6 @@
 import { callModel, getModels } from "../ai-client";
+import { getConfig } from "../app-config";
+import { CATALOG_AI_REQUEST_OPTIONS } from "../catalog-ai";
 import { asString, asStringArray, parseJson } from "../ai-parse";
 import { resolveOrnamentDimensions } from "./dimensions";
 
@@ -65,44 +67,58 @@ export async function analyzeOrnamentImage(
   }));
 
   const models = await getModels();
-  const completion = await callModel(models.fastVision, (c, model) =>
-    c.chat.completions.create({
-      model,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: ANALYSIS_PROMPT },
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: [
-                dataUrls.length > 1
-                  ? `Catalogue this Hallmark ornament. All ${dataUrls.length} photos show the same ornament.`
-                  : "Catalogue this Hallmark ornament.",
-                options.existingContext
-                  ? [
-                      "Existing saved facts are context, not permission to overwrite them:",
-                      `Name: ${options.existingContext.name ?? "(unknown)"}`,
-                      `Brand: ${options.existingContext.brand ?? "(unknown)"}`,
-                      `Series/collection: ${options.existingContext.seriesOrCollection ?? "(unknown)"}`,
-                      `Year: ${options.existingContext.year ?? "(unknown)"}`,
-                      `Barcode: ${options.existingContext.barcodeValue ?? "(unknown)"}`,
-                      `Locked fields: ${options.existingContext.lockedFields.join(", ") || "(none)"}`,
-                    ].join("\n")
-                  : null,
-                "Respond with JSON only.",
-              ]
-                .filter(Boolean)
-                .join("\n"),
-            },
-            ...imageContent,
-          ],
-        },
-      ],
-    }),
+  const completion = await callModel(
+    models.fastVision,
+    async (c, model) =>
+      c.chat.completions.create({
+        model,
+        ...CATALOG_AI_REQUEST_OPTIONS,
+        max_tokens: await getConfig(
+          "openrouter",
+          "catalog_max_response_tokens",
+          1500,
+        ),
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: ANALYSIS_PROMPT },
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: [
+                  dataUrls.length > 1
+                    ? `Catalogue this Hallmark ornament. All ${dataUrls.length} photos show the same ornament.`
+                    : "Catalogue this Hallmark ornament.",
+                  options.existingContext
+                    ? [
+                        "Existing saved facts are context, not permission to overwrite them:",
+                        `Name: ${options.existingContext.name ?? "(unknown)"}`,
+                        `Brand: ${options.existingContext.brand ?? "(unknown)"}`,
+                        `Series/collection: ${options.existingContext.seriesOrCollection ?? "(unknown)"}`,
+                        `Year: ${options.existingContext.year ?? "(unknown)"}`,
+                        `Barcode: ${options.existingContext.barcodeValue ?? "(unknown)"}`,
+                        `Locked fields: ${options.existingContext.lockedFields.join(", ") || "(none)"}`,
+                      ].join("\n")
+                    : null,
+                  "Respond with JSON only.",
+                ]
+                  .filter(Boolean)
+                  .join("\n"),
+              },
+              ...imageContent,
+            ],
+          },
+        ],
+      }),
+    "catalog",
   );
 
+  if (completion.choices[0]?.finish_reason === "length") {
+    throw new Error(
+      "Ornament recognition exceeded its response limit. Please raise the catalog response token limit before trying again.",
+    );
+  }
   const raw = completion.choices[0]?.message?.content ?? "{}";
   const parsed = parseJson(raw);
 
@@ -174,35 +190,39 @@ export async function enrichOrnamentIdentity(
   },
 ): Promise<OrnamentIdentityEnrichment> {
   const models = await getModels();
-  const completion = await callModel(models.fastVision, (c, model) =>
-    c.chat.completions.create({
-      model,
-      response_format: { type: "json_object" },
-      temperature: 0,
-      messages: [
-        { role: "system", content: IDENTITY_ENRICHMENT_PROMPT },
-        {
-          role: "user",
-          content: [
-            {
-              type: "text" as const,
-              text: [
-                "Existing saved identifiers:",
-                `Name: ${existing.name ?? "(unknown)"}`,
-                `Barcode: ${existing.barcodeValue ?? "(unknown)"}`,
-                `Series/collection: ${existing.seriesOrCollection ?? "(unknown)"}`,
-                `Year: ${existing.year ?? "(unknown)"}`,
-                "Identify only currently unknown series/year fields. Respond with JSON only.",
-              ].join("\n"),
-            },
-            ...dataUrls.map((url) => ({
-              type: "image_url" as const,
-              image_url: { url },
-            })),
-          ],
-        },
-      ],
-    }),
+  const completion = await callModel(
+    models.fastVision,
+    (c, model) =>
+      c.chat.completions.create({
+        model,
+        ...CATALOG_AI_REQUEST_OPTIONS,
+        response_format: { type: "json_object" },
+        temperature: 0,
+        messages: [
+          { role: "system", content: IDENTITY_ENRICHMENT_PROMPT },
+          {
+            role: "user",
+            content: [
+              {
+                type: "text" as const,
+                text: [
+                  "Existing saved identifiers:",
+                  `Name: ${existing.name ?? "(unknown)"}`,
+                  `Barcode: ${existing.barcodeValue ?? "(unknown)"}`,
+                  `Series/collection: ${existing.seriesOrCollection ?? "(unknown)"}`,
+                  `Year: ${existing.year ?? "(unknown)"}`,
+                  "Identify only currently unknown series/year fields. Respond with JSON only.",
+                ].join("\n"),
+              },
+              ...dataUrls.map((url) => ({
+                type: "image_url" as const,
+                image_url: { url },
+              })),
+            ],
+          },
+        ],
+      }),
+    "catalog",
   );
 
   const parsed = parseJson(completion.choices[0]?.message?.content ?? "{}");
@@ -232,14 +252,17 @@ export async function extractBarcodeFromPhoto(
   imageDataUrl: string,
 ): Promise<string | null> {
   const models = await getModels();
-  const completion = await callModel(models.fastVision, (c, model) =>
-    c.chat.completions.create({
-      model,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content: `You are a barcode reader. Find and read the UPC or EAN barcode in the image.
+  const completion = await callModel(
+    models.fastVision,
+    (c, model) =>
+      c.chat.completions.create({
+        model,
+        ...CATALOG_AI_REQUEST_OPTIONS,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content: `You are a barcode reader. Find and read the UPC or EAN barcode in the image.
 
 Rules:
 - Look for a 1D barcode (parallel vertical bars) and read the human-readable digits printed directly below or beside it.
@@ -248,22 +271,23 @@ Rules:
 - Before returning, count the digits in your answer. If you get 11, you likely dropped a leading digit — look again.
 - Return JSON with exactly one key: "barcode" — a string of the digit characters only (no spaces, no dashes), or null if no barcode is visible or legible.
 - Never guess or fabricate any digit you cannot clearly see.`,
-        },
-        {
-          role: "user",
-          content: [
-            {
-              type: "text" as const,
-              text: "Read the barcode in this image. Return JSON only.",
-            },
-            {
-              type: "image_url" as const,
-              image_url: { url: imageDataUrl },
-            },
-          ],
-        },
-      ],
-    }),
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "text" as const,
+                text: "Read the barcode in this image. Return JSON only.",
+              },
+              {
+                type: "image_url" as const,
+                image_url: { url: imageDataUrl },
+              },
+            ],
+          },
+        ],
+      }),
+    "catalog",
   );
 
   const raw = completion.choices[0]?.message?.content ?? "{}";
@@ -311,27 +335,31 @@ export async function appraiseOrnamentImage(
     .join("\n");
 
   const models = await getModels();
-  const completion = await callModel(models.fastVision, (c, model) =>
-    c.chat.completions.create({
-      model,
-      messages: [
-        { role: "system", content: APPRAISAL_PROMPT },
-        {
-          role: "user",
-          content: [
-            {
-              type: "text" as const,
-              text: `Appraise this ornament:\n\n${metaText}`,
-            },
-            ...dataUrls.map((url) => ({
-              type: "image_url" as const,
-              image_url: { url },
-            })),
-          ],
-        },
-      ],
-      max_tokens: 300,
-    }),
+  const completion = await callModel(
+    models.fastVision,
+    (c, model) =>
+      c.chat.completions.create({
+        model,
+        ...CATALOG_AI_REQUEST_OPTIONS,
+        messages: [
+          { role: "system", content: APPRAISAL_PROMPT },
+          {
+            role: "user",
+            content: [
+              {
+                type: "text" as const,
+                text: `Appraise this ornament:\n\n${metaText}`,
+              },
+              ...dataUrls.map((url) => ({
+                type: "image_url" as const,
+                image_url: { url },
+              })),
+            ],
+          },
+        ],
+        max_tokens: 300,
+      }),
+    "catalog",
   );
 
   return (
@@ -398,16 +426,20 @@ export async function suggestOrnamentCategoryNames(
   ].join("\n");
 
   const models = await getModels();
-  const completion = await callModel(models.fastVision, (c, model) =>
-    c.chat.completions.create({
-      model,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: CATEGORY_SUGGESTION_PROMPT },
-        { role: "user", content: userContent },
-      ],
-      max_tokens: 1000,
-    }),
+  const completion = await callModel(
+    models.fastVision,
+    (c, model) =>
+      c.chat.completions.create({
+        model,
+        ...CATALOG_AI_REQUEST_OPTIONS,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: CATEGORY_SUGGESTION_PROMPT },
+          { role: "user", content: userContent },
+        ],
+        max_tokens: 1000,
+      }),
+    "catalog",
   );
 
   const raw = completion.choices[0]?.message?.content ?? "{}";
@@ -446,8 +478,10 @@ export function buildEmbeddingText(analysis: OrnamentAnalysis): string {
 
 export async function embedText(text: string): Promise<number[]> {
   const models = await getModels();
-  const response = await callModel(models.embedding, (c, model) =>
-    c.embeddings.create({ model, input: text || " " }),
+  const response = await callModel(
+    models.embedding,
+    (c, model) => c.embeddings.create({ model, input: text || " " }),
+    "catalog",
   );
   return response.data[0]?.embedding ?? [];
 }

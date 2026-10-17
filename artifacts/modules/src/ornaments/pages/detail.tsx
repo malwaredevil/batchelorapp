@@ -71,6 +71,7 @@ import {
   CollectionDetailLayout,
   CollectionDetailSkeleton,
   CollectionDetailField,
+  CollectionFieldLock,
   CollectionDetailSection,
   InfoTooltip,
   trackAsyncAction,
@@ -212,7 +213,7 @@ export default function OrnamentDetail() {
 
   const updateOrnament = useUpdateOrnament({
     mutation: {
-      onSuccess: (data) => {
+      onSuccess: (data, variables) => {
         queryClient.setQueryData(getGetOrnamentQueryKey(id), data);
         queryClient.invalidateQueries({ queryKey: getListOrnamentsQueryKey() });
         queryClient.invalidateQueries({
@@ -221,6 +222,12 @@ export default function OrnamentDetail() {
         queryClient.invalidateQueries({
           queryKey: getGetOrnamentStragglersQueryKey(),
         });
+        if (
+          Object.keys(variables.data).length === 1 &&
+          "lockedFields" in variables.data
+        ) {
+          return;
+        }
         setIsEditing(false);
         if (editRequested || focusField) {
           setLocation(`/ornaments/ornament/${id}`, { replace: true });
@@ -574,6 +581,7 @@ export default function OrnamentDetail() {
   return (
     <>
       <CollectionDetailLayout
+        headerLayout="stacked"
         backLabel="Collection"
         onBack={() => setLocation("/ornaments/")}
         gallery={
@@ -705,33 +713,44 @@ export default function OrnamentDetail() {
               }
         }
         titleSlot={
-          isEditing ? (
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Name</Label>
-              <Input
-                value={draft.name}
-                onChange={(e) =>
-                  setDraft((d) => ({ ...d, name: e.target.value }))
-                }
-                className="text-lg font-bold"
-                autoFocus
-                data-testid="input-edit-name"
-              />
+          <div className="flex items-start gap-2">
+            <div className="min-w-0 flex-1">
+              {isEditing ? (
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Name</Label>
+                  <Input
+                    value={draft.name}
+                    onChange={(e) =>
+                      setDraft((d) => ({ ...d, name: e.target.value }))
+                    }
+                    className="text-lg font-bold"
+                    autoFocus
+                    data-testid="input-edit-name"
+                  />
+                </div>
+              ) : (
+                <div>
+                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-0.5">
+                    {ornament.brand || "Hallmark"}
+                    {ornament.year ? ` · ${ornament.year}` : ""}
+                  </p>
+                  <h1
+                    className="text-2xl font-bold tracking-tight leading-tight break-words"
+                    data-testid="text-detail-name"
+                  >
+                    {ornament.name}
+                  </h1>
+                </div>
+              )}
             </div>
-          ) : (
-            <div>
-              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-0.5">
-                {ornament.brand || "Hallmark"}
-                {ornament.year ? ` · ${ornament.year}` : ""}
-              </p>
-              <h1
-                className="text-2xl font-bold tracking-tight leading-tight"
-                data-testid="text-detail-name"
-              >
-                {ornament.name}
-              </h1>
-            </div>
-          )
+            <CollectionFieldLock
+              label="Name"
+              locked={lockedFields.includes("name")}
+              onToggleLock={() => toggleFieldLock("name")}
+              disabled={updateOrnament.isPending}
+              touchTarget
+            />
+          </div>
         }
         actions={
           isEditing ? (

@@ -1,4 +1,5 @@
 import { logger } from "../logger";
+import { withOptionalAILookup } from "../optional-ai-lookup";
 import { extractCitationDomains, webSearch } from "../web-search";
 
 /**
@@ -68,7 +69,9 @@ export async function researchOrnament(
 
   const query = `${question.trim()} Hallmark Keepsake ornament: ${identity}.`;
   try {
-    const result = await webSearch(query);
+    const result = await withOptionalAILookup(() =>
+      webSearch(query, { includeImages: false, workload: "catalog" }),
+    );
     if (!result.answer.trim() || result.citations.length === 0) return null;
     const citations = result.citations.filter((citation) =>
       Boolean(sourceDomainFromUrl(citation)),
@@ -81,7 +84,7 @@ export async function researchOrnament(
       citationDomains: extractCitationDomains(citations),
     };
   } catch (err) {
-    logger.warn({ err, query }, "ornament research failed");
+    logger.warn({ err }, "ornament research failed; existing values retained");
     return null;
   }
 }

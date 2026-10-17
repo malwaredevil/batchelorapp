@@ -32,6 +32,53 @@ export interface CollectionDetailFieldProps {
   highlighted?: boolean;
 }
 
+export function CollectionFieldLock({
+  label,
+  locked = false,
+  onToggleLock,
+  lockTitle,
+  disabled = false,
+  touchTarget = false,
+}: {
+  label: string;
+  locked?: boolean;
+  onToggleLock: () => void;
+  lockTitle?: string;
+  disabled?: boolean;
+  touchTarget?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggleLock}
+      disabled={disabled}
+      aria-label={`${locked ? "Unlock" : "Lock"} ${label.toLowerCase()}`}
+      aria-pressed={locked}
+      title={
+        lockTitle ??
+        (locked
+          ? "Field is locked — AI won't overwrite it. Click to unlock."
+          : "Field is unlocked — AI may update it. Click to lock.")
+      }
+      className={cn(
+        "mt-1 flex shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50",
+        touchTarget ? "h-11 w-11" : "h-6 w-6",
+        locked
+          ? "text-primary"
+          : touchTarget
+            ? "text-muted-foreground"
+            : "text-muted-foreground/40 hover:text-muted-foreground",
+      )}
+    >
+      {locked ? (
+        <Lock className={touchTarget ? "h-4 w-4" : "h-3.5 w-3.5"} />
+      ) : (
+        <Unlock className={touchTarget ? "h-4 w-4" : "h-3.5 w-3.5"} />
+      )}
+    </button>
+  );
+}
+
 export function CollectionDetailField({
   label,
   value,
@@ -75,28 +122,12 @@ export function CollectionDetailField({
         )}
       </div>
       {onToggleLock && (
-        <button
-          type="button"
-          onClick={onToggleLock}
-          title={
-            lockTitle ??
-            (locked
-              ? "Field is locked — AI won't overwrite it. Click to unlock."
-              : "Field is unlocked — AI may update it. Click to lock.")
-          }
-          className={cn(
-            "mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-muted",
-            locked
-              ? "text-primary"
-              : "text-muted-foreground/40 hover:text-muted-foreground",
-          )}
-        >
-          {locked ? (
-            <Lock className="h-3.5 w-3.5" />
-          ) : (
-            <Unlock className="h-3.5 w-3.5" />
-          )}
-        </button>
+        <CollectionFieldLock
+          label={label}
+          locked={locked}
+          onToggleLock={onToggleLock}
+          lockTitle={lockTitle}
+        />
       )}
     </div>
   );

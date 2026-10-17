@@ -1,4 +1,5 @@
 import { callModel, getModels } from "../ai-client";
+import { CATALOG_AI_REQUEST_OPTIONS } from "../catalog-ai";
 import { asString, parseJson } from "../ai-parse";
 import { logger } from "../logger";
 import {
@@ -56,20 +57,24 @@ async function extractPublishedDimensions(
   citations: string[],
 ): Promise<string | null> {
   const models = await getModels();
-  const completion = await callModel(models.fastVision, (client, model) =>
-    client.chat.completions.create({
-      model,
-      response_format: { type: "json_object" },
-      temperature: 0,
-      max_tokens: 220,
-      messages: [
-        { role: "system", content: DIMENSIONS_EXTRACTION_PROMPT },
-        {
-          role: "user",
-          content: `Ornament: ${identity.name}${identity.seriesOrCollection ? ` (${identity.seriesOrCollection})` : ""}${identity.year ? ` — ${identity.year}` : ""}\n\nSearch answer:\n${answer}\n\nCitations:\n${citations.join("\n")}`,
-        },
-      ],
-    }),
+  const completion = await callModel(
+    models.fastVision,
+    (client, model) =>
+      client.chat.completions.create({
+        model,
+        ...CATALOG_AI_REQUEST_OPTIONS,
+        response_format: { type: "json_object" },
+        temperature: 0,
+        max_tokens: 220,
+        messages: [
+          { role: "system", content: DIMENSIONS_EXTRACTION_PROMPT },
+          {
+            role: "user",
+            content: `Ornament: ${identity.name}${identity.seriesOrCollection ? ` (${identity.seriesOrCollection})` : ""}${identity.year ? ` — ${identity.year}` : ""}\n\nSearch answer:\n${answer}\n\nCitations:\n${citations.join("\n")}`,
+          },
+        ],
+      }),
+    "catalog",
   );
 
   const parsed = parseJson(completion.choices[0]?.message?.content ?? "{}");

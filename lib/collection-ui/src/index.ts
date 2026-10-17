@@ -33,6 +33,7 @@ export type { CollectionDetailLayoutProps } from "./collection-detail-layout";
 
 export {
   CollectionDetailField,
+  CollectionFieldLock,
   CollectionDetailSection,
 } from "./collection-detail-field";
 export type {

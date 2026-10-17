@@ -11,6 +11,8 @@ export interface CollectionDetailLayoutProps {
   gallery: ReactNode;
   /** Right column: title + action buttons row */
   titleSlot: ReactNode;
+  /** Stack titles above dense action rows without squeezing the title. */
+  headerLayout?: "inline" | "stacked";
   /** Right column: action icon buttons (small, outlined) */
   actions?: ReactNode;
   /**
@@ -65,6 +67,7 @@ export function CollectionDetailLayout({
   onBack,
   gallery,
   titleSlot,
+  headerLayout = "inline",
   actions,
   reminder,
   heroContent,
@@ -96,10 +99,22 @@ export function CollectionDetailLayout({
         {/* Right: identity, actions, and a deliberately concise summary */}
         <div className="flex flex-col gap-4">
           {/* Title row + icon action buttons */}
-          <div className="flex items-start justify-between gap-3">
+          <div
+            className={
+              headerLayout === "stacked"
+                ? "flex flex-col gap-3"
+                : "flex items-start justify-between gap-3"
+            }
+          >
             <div className="flex-1 min-w-0">{titleSlot}</div>
             {(reminder || actions) && (
-              <div className="flex shrink-0 gap-1">
+              <div
+                className={
+                  headerLayout === "stacked"
+                    ? "flex flex-wrap gap-1"
+                    : "flex shrink-0 gap-1"
+                }
+              >
                 {reminder && (
                   <ReminderBellButton
                     entityType={reminder.entityType}

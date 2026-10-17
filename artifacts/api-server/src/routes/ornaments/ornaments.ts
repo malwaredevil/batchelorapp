@@ -1606,13 +1606,11 @@ export async function refreshOrnamentItemAllData(
     throw Object.assign(new Error("Ornament not found."), { status: 404 });
   }
 
-  // Run all 5 in parallel — each independently stores its result.
-  // Non-fatal: a failure in book-value/retail-value/eBay/appraisal doesn't
-  // abort the whole refresh — but a failed core reanalysis does mark the
-  // whole item refresh as failed (matching the bulk endpoint's semantics).
-  const [analysisResult] = await Promise.allSettled([
-    // 1. AI vision reanalysis (description, colors, motifs, name, barcode)
-    runItemAnalysisWithMaintenance(id),
+  // Finish required recognition before launching optional enrichments. A failed
+  // core analysis must not fan out more paid work, and optional price/appraisal
+  // calls must not compete with this item's required analysis for queue slots.
+  const analysisResult = await runItemAnalysisWithMaintenance(id);
+  await Promise.allSettled([
     // 2. Book value — live lookup
     (async () => {
       const result = await lookupBookValue({
@@ -1706,10 +1704,7 @@ export async function refreshOrnamentItemAllData(
     }),
   ]);
 
-  if (analysisResult.status === "rejected") {
-    throw analysisResult.reason;
-  }
-  return analysisResult.value.maintenance;
+  return analysisResult.maintenance;
 }
 
 router.post("/items/:id/refresh-all", aiLimiter, async (req, res) => {

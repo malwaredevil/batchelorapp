@@ -40,6 +40,38 @@ export const DAY_LIST_CODES = [
 export type DayListCode = (typeof DAY_LIST_CODES)[number];
 
 export const APP_CONFIG_DEFAULTS: AppConfigDefault[] = [
+  {
+    module: "openrouter",
+    key: "catalog_concurrency",
+    value: "4",
+    type: "integer",
+    label: "Catalog AI concurrent requests",
+    description: "Per-server limit shared by ornament catalog AI requests.",
+  },
+  {
+    module: "openrouter",
+    key: "catalog_max_queued",
+    value: "32",
+    type: "integer",
+    label: "Catalog AI queued requests",
+    description: "Reject excess catalog work before starting paid requests.",
+  },
+  {
+    module: "openrouter",
+    key: "catalog_queue_wait_ms",
+    value: "12000",
+    type: "integer",
+    label: "Catalog AI maximum queue wait (ms)",
+    description: "Expired queued requests never start model work later.",
+  },
+  {
+    module: "openrouter",
+    key: "catalog_max_response_tokens",
+    value: "1500",
+    type: "integer",
+    label: "Ornament recognition output token limit",
+    description: "Bounds the main structured ornament recognition response.",
+  },
   // ── web_search ────────────────────────────────────────────────────────────
   {
     module: "web_search",

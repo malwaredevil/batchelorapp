@@ -304,32 +304,44 @@ export async function webSearchWithCorroboration(
   };
 }
 
-export async function webSearch(query: string): Promise<WebSearchResult> {
+export async function webSearch(
+  query: string,
+  options: {
+    includeImages?: boolean;
+    workload?: "interactive" | "catalog";
+  } = {},
+): Promise<WebSearchResult> {
   const trimmed = query.trim().slice(0, 500);
   if (!trimmed) return { answer: "", citations: [], images: [] };
 
   const models = await getModels();
-  const raw = await callModel(models.research, async (client, model) => {
-    return client.chat.completions.create(
-      {
-        model,
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a live web search tool for a household AI assistant. Answer the user's query using current, up-to-date web results. Be concise and factual (a few sentences to a short paragraph). Prioritize recency for anything time-sensitive (prices, hours, weather, events, news). If you can't find a reliable answer, say so plainly instead of guessing.",
-          },
-          { role: "user", content: trimmed },
-        ],
-        max_tokens: 600,
-        // `return_images` is a Perplexity-specific request extension (not
-        // part of the OpenAI chat-completions schema), passed through
-        // OpenRouter to the underlying Sonar model.
-        ...({ return_images: true } as Record<string, unknown>),
-      },
-      { timeout: await getConfig("web_search", "search_timeout_ms", 15_000) },
-    );
-  });
+  const raw = await callModel(
+    models.research,
+    async (client, model) => {
+      return client.chat.completions.create(
+        {
+          model,
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are a live web search tool for a household AI assistant. Answer the user's query using current, up-to-date web results. Be concise and factual (a few sentences to a short paragraph). Prioritize recency for anything time-sensitive (prices, hours, weather, events, news). If you can't find a reliable answer, say so plainly instead of guessing.",
+            },
+            { role: "user", content: trimmed },
+          ],
+          max_tokens: 600,
+          // `return_images` is a Perplexity-specific request extension (not
+          // part of the OpenAI chat-completions schema), passed through
+          // OpenRouter to the underlying Sonar model.
+          ...({
+            return_images: options.includeImages ?? true,
+          } as Record<string, unknown>),
+        },
+        { timeout: await getConfig("web_search", "search_timeout_ms", 15_000) },
+      );
+    },
+    options.workload,
+  );
 
   const answer = raw.choices[0]?.message?.content?.trim() ?? "";
   const citations = extractWebSearchCitations(raw);

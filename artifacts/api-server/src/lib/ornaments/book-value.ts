@@ -26,6 +26,7 @@
  */
 
 import { callModel, getModels } from "../ai-client";
+import { CATALOG_AI_REQUEST_OPTIONS } from "../catalog-ai";
 import { env } from "../env";
 import { logger } from "../logger";
 import { withRetry } from "../retry";
@@ -78,20 +79,24 @@ async function extractValueFromText(
   if (!pageText || pageText.length < 20) return null;
 
   const models = await getModels();
-  const completion = await callModel(models.fastVision, (client, model) =>
-    client.chat.completions.create({
-      model,
-      response_format: { type: "json_object" },
-      temperature: 0,
-      max_tokens: 100,
-      messages: [
-        { role: "system", content: EXTRACTION_PROMPT },
-        {
-          role: "user",
-          content: `Ornament: ${buildQuery(input)}\n\nPage text:\n${pageText.slice(0, 4000)}`,
-        },
-      ],
-    }),
+  const completion = await callModel(
+    models.fastVision,
+    (client, model) =>
+      client.chat.completions.create({
+        model,
+        ...CATALOG_AI_REQUEST_OPTIONS,
+        response_format: { type: "json_object" },
+        temperature: 0,
+        max_tokens: 100,
+        messages: [
+          { role: "system", content: EXTRACTION_PROMPT },
+          {
+            role: "user",
+            content: `Ornament: ${buildQuery(input)}\n\nPage text:\n${pageText.slice(0, 4000)}`,
+          },
+        ],
+      }),
+    "catalog",
   );
 
   const raw = completion.choices[0]?.message?.content ?? "{}";

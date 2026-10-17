@@ -89,6 +89,13 @@ vi.mock("../../lib/ornaments/openai", () => ({
 
 vi.mock("../../lib/ornaments/barcode", () => ({ lookupBarcode: vi.fn() }));
 vi.mock("../../lib/ornaments/book-value", () => ({ lookupBookValue: vi.fn() }));
+vi.mock("../../lib/ornaments/retail-value", () => ({
+  lookupRetailValue: vi.fn(),
+}));
+vi.mock("../../lib/ornaments/recognition", () => ({
+  runOrnamentRecognition: vi.fn(),
+  recognizeOrnamentPhotos: vi.fn(),
+}));
 vi.mock("../../lib/collection-search", () => ({
   semanticCollectionSearch: vi.fn(),
   buildOrnamentSearchDocument: vi.fn(),
@@ -227,6 +234,32 @@ function buildApp(router: IRouter): Express {
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
+
+describe("required recognition before optional refresh work", () => {
+  it("does not start more paid work or overwrite values after a core timeout", async () => {
+    vi.clearAllMocks();
+    selectCallCount = 0;
+    updateCalls.length = 0;
+    itemRow = { imagePath: "ornaments/test/primary.jpg" };
+    const { runOrnamentRecognition } =
+      await import("../../lib/ornaments/recognition");
+    const { lookupBookValue } = await import("../../lib/ornaments/book-value");
+    const { lookupRetailValue } =
+      await import("../../lib/ornaments/retail-value");
+    const { appraiseOrnamentImage } =
+      await import("../../lib/ornaments/openai");
+    const error = new Error("Request timed out.");
+    vi.mocked(runOrnamentRecognition).mockRejectedValueOnce(error);
+    const { refreshOrnamentItemAllData } = await import("./ornaments");
+    await expect(
+      refreshOrnamentItemAllData(42, { warn: vi.fn() }),
+    ).rejects.toBe(error);
+    expect(lookupBookValue).not.toHaveBeenCalled();
+    expect(lookupRetailValue).not.toHaveBeenCalled();
+    expect(appraiseOrnamentImage).not.toHaveBeenCalled();
+    expect(updateCalls).toHaveLength(0);
+  });
+});
 
 describe("DELETE /ornaments/items/:id — soft-delete semantics", () => {
   beforeEach(() => {

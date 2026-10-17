@@ -32,6 +32,7 @@ import { makeEagerSelectBuilder } from "../test-helpers/db-mock";
 import { googleEnabled } from "../lib/google-oauth";
 import { runReminderDeliveries } from "../lib/reminders-scheduler";
 import { env } from "../lib/env";
+import { csrfGuard } from "../middleware/csrf";
 
 // ---------------------------------------------------------------------------
 // Mocks (declared before any imports that exercise the modules under test)
@@ -296,10 +297,17 @@ describe("Google sign-in return-path policy", () => {
   async function appWithSignedReturnPath(path: string) {
     const app = express();
     app.use(cookieParser("unit-test-cookie-key"));
+    app.use("/api", csrfGuard);
     app.use(injectSession(4));
     app.get("/fixture-cookie", (_req, res) => {
-      res.cookie("pottery.oauth_state", "test-state", { signed: true });
-      res.cookie("pottery.oauth_returnto", path, { signed: true });
+      const options = {
+        signed: true,
+        httpOnly: true,
+        secure: true,
+        sameSite: "none" as const,
+      };
+      res.cookie("pottery.oauth_state", "test-state", options);
+      res.cookie("pottery.oauth_returnto", path, options);
       res.sendStatus(204);
     });
     app.use("/api", authRouter);

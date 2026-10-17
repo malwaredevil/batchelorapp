@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
+import { requireAuth } from "../middleware/auth";
 import { multerLimitForPrefix } from "../lib/upload-limits";
 import { uploadRichTextImage } from "../lib/rich-text-storage";
 import { logger } from "../lib/logger";
@@ -16,6 +17,9 @@ import {
  * lives at the top level rather than under either module's route prefix.
  */
 const router: IRouter = Router();
+
+// Reject anonymous requests before buffering files or writing to storage.
+router.use(requireAuth);
 
 const RICH_TEXT_IMAGE_PREFIX = "/api/rich-text/upload-image";
 

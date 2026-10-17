@@ -12,7 +12,8 @@ pnpm --filter @workspace/db run bootstrap
 # Snapshot Supabase (all pottery + quilting tables) → Replit built-in PostgreSQL.
 # Non-fatal: a backup failure does not block the merge, but the warning is
 # visible in the post-merge log so it can be investigated and run manually.
+# Bound the entire optional step, including slow queries, below setup's deadline.
 echo "Running Supabase → Replit DB snapshot backup..."
-pnpm --filter @workspace/scripts run backup-to-replit \
+timeout --kill-after=5s 120s pnpm --filter @workspace/scripts run backup-to-replit \
   && echo "✓ Backup complete" \
-  || echo "⚠️  Backup skipped or failed — check PG* secrets and run manually if needed"
+  || echo "WARNING: Backup failed or timed out — snapshot is not confirmed; investigate and rerun before publishing"

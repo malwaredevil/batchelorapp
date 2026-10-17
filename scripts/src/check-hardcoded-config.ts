@@ -294,6 +294,11 @@ function reviewedConstants(
  * source lines. Removed/config-store-backed declarations have no exception.
  */
 export const ANCHORED_CONFIG_ALLOWLIST: readonly ConfigAnchor[] = [
+  // Deployment-tool connection deadline, not an application setting. It must
+  // work before either database is reachable and fit within merge setup's limit.
+  ...reviewedConstants("scripts/src/backup-connections.ts", {
+    BACKUP_CONNECTION_TIMEOUT_MS: "10_000",
+  }),
   // Fixed provider-call creation bound. A timeout becomes indeterminate and
   // suppresses automatic retry; this is transport safety, not a user setting.
   ...reviewedConstants("artifacts/api-server/src/lib/comm-check-scheduler.ts", {
@@ -792,6 +797,15 @@ export const ANCHORED_CONFIG_ALLOWLIST: readonly ConfigAnchor[] = [
     FETCH_TIMEOUT_MS: "15_000",
     MAX_ISSUES: "50",
   }),
+
+  // ---- lib/email-attachment-download.ts ----
+  // Inbound email attachment resource ceilings are fixed security boundaries.
+  ...reviewedConstants(
+    "artifacts/api-server/src/lib/email-attachment-download.ts",
+    {
+      EMAIL_ATTACHMENT_DOWNLOAD_TIMEOUT_MS: "15_000",
+    },
+  ),
 
   // ---- lib/ssrf-safe-fetch.ts ----
   // SSRF security limits: DNS timeout, request timeout, body size, text cap, redirect cap.

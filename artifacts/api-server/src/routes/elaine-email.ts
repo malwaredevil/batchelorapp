@@ -412,6 +412,9 @@ router.post(
         return `- Attachment "${a.filename}": saved, but I couldn't confidently match it to a trip — it's waiting in the Documents triage inbox for someone to assign it.`;
       }
       if (a.outcome === "skipped") {
+        if (a.reason === "resource_limit") {
+          return `- Attachment "${a.filename}": skipped because the email attachment count or size safety limit was exceeded. Nothing was saved or analyzed for this skipped attachment.`;
+        }
         return `- Attachment "${a.filename}": skipped (unsupported file type — only PDF and image files are supported).`;
       }
       return `- Attachment "${a.filename}": failed to process.`;

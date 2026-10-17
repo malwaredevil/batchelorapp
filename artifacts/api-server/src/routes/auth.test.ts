@@ -268,10 +268,12 @@ function injectSession(
 // ESM registry by the time individual tests call buildApp().
 import type { IRouter } from "express";
 let authRouter: IRouter;
+let googleCallbackHandler: typeof import("./auth").handleGoogleOAuthCallback;
 
 beforeAll(async () => {
   const mod = await import("./auth");
   authRouter = mod.default;
+  googleCallbackHandler = mod.handleGoogleOAuthCallback;
 }, 30_000);
 
 async function buildApp(
@@ -304,13 +306,15 @@ describe("Google sign-in return-path policy", () => {
         signed: true,
         httpOnly: true,
         secure: true,
-        sameSite: "none" as const,
+        // This fixture makes same-site requests; unlike the production iframe
+        // OAuth flow, it does not need cross-site cookies.
+        sameSite: "lax" as const,
       };
       res.cookie("pottery.oauth_state", "test-state", options);
       res.cookie("pottery.oauth_returnto", path, options);
       res.sendStatus(204);
     });
-    app.use("/api", authRouter);
+    app.get("/api/auth/google/callback", googleCallbackHandler);
     const cookies = await request(app).get("/fixture-cookie");
     return {
       app,
@@ -354,7 +358,9 @@ describe("Google sign-in return-path policy", () => {
   });
 
   it("does not persist an unsafe return path when starting Google sign-in", async () => {
-    const { app } = await appWithSignedReturnPath("/");
+    const app = await buildApp();
+    // This route only writes signed cookies; no incoming-cookie parsing is needed.
+    Object.assign(app.request, { secret: "unit-test-cookie-key" });
     const response = await request(app)
       .get("/api/auth/google")
       .query({ returnTo: "/\n/untrusted.invalid" })
@@ -364,6 +370,13 @@ describe("Google sign-in return-path policy", () => {
     expect(
       cookies.find((cookie) => cookie.startsWith("pottery.oauth_returnto=")),
     ).toContain("Expires=Thu, 01 Jan 1970");
+  });
+
+  it("keeps the actual callback registered on the production router", async () => {
+    const app = await buildApp();
+    const response = await request(app).get("/api/auth/google/callback");
+    expect(response.status).toBe(302);
+    expect(response.headers.location).toBe("/login?error=google_failed");
   });
 });
 

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("./app-config", () => ({ getConfig: vi.fn() }));
 import { getConfig } from "./app-config";
 import { CatalogAIBusyError, runCatalogAI } from "./catalog-ai";
+import { getCatalogAISignal, withCatalogAISignal } from "./catalog-ai-context";
 
 let concurrency = 2;
 let maxQueued = 10;
@@ -25,6 +26,88 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe("catalog AI capacity", () => {
+  it("preserves the originating request context across the shared queue", async () => {
+    concurrency = 1;
+    let finish!: () => void;
+    const active = runCatalogAI(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    const controller = new AbortController();
+    const queued = withCatalogAISignal(controller.signal, () =>
+      runCatalogAI(async () => getCatalogAISignal()),
+    );
+    finish();
+    await active;
+    expect(await queued).toBe(controller.signal);
+  });
+
+  it("rejects an already-abandoned request before starting paid work", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const paid = vi.fn();
+    await expect(
+      withCatalogAISignal(controller.signal, () => runCatalogAI(paid)),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(paid).not.toHaveBeenCalled();
+  });
+
+  it("cancels queued work and refuses subsequent stages after disconnect", async () => {
+    concurrency = 1;
+    let finish!: () => void;
+    const active = runCatalogAI(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    const controller = new AbortController();
+    const paid = vi.fn(async () => "should not start");
+    const queued = expect(
+      withCatalogAISignal(controller.signal, () => runCatalogAI(paid)),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    await vi.advanceTimersByTimeAsync(0);
+    controller.abort();
+    await queued;
+    finish();
+    await active;
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(
+      withCatalogAISignal(controller.signal, () => runCatalogAI(paid)),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(paid).not.toHaveBeenCalled();
+    await expect(runCatalogAI(async () => "background")).resolves.toBe(
+      "background",
+    );
+  });
+
+  it("keeps an active provider call counted until it really settles", async () => {
+    concurrency = 1;
+    const controller = new AbortController();
+    let finish!: () => void;
+    const active = withCatalogAISignal(controller.signal, () =>
+      runCatalogAI(
+        () =>
+          new Promise<void>((resolve) => {
+            finish = resolve;
+          }),
+      ),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    controller.abort();
+    const other = vi.fn(async () => "next");
+    const queued = runCatalogAI(other);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(other).not.toHaveBeenCalled();
+    finish();
+    await active;
+    expect(await queued).toBe("next");
+  });
+
   it("bounds active calls across independent batches", async () => {
     let active = 0;
     let peak = 0;

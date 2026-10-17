@@ -24,6 +24,8 @@ import { toDataUrl } from "./image";
 import { sniffImageType } from "@workspace/upload-validation";
 import { generateVisualEmbedding } from "../visual-embed";
 import { getModels } from "../ai-client";
+import { runCatalogAI } from "../catalog-ai";
+import { getCatalogAISignal } from "../catalog-ai-context";
 import {
   runAnalysisWithEvidenceTrace,
   type FieldCandidateInput,
@@ -144,7 +146,14 @@ async function generateMultiPhotoVisualEmbedding(
   photos: readonly OrnamentRecognitionPhoto[],
 ): Promise<{ value: number[] | null; failed: boolean }> {
   const results = await Promise.allSettled(
-    photos.map((photo) => generateVisualEmbedding(photo.dataUrl)),
+    photos.map((photo) =>
+      runCatalogAI(() => {
+        const signal = getCatalogAISignal();
+        return signal
+          ? generateVisualEmbedding(photo.dataUrl, signal)
+          : generateVisualEmbedding(photo.dataUrl);
+      }),
+    ),
   );
   const vectors = results.flatMap((result) =>
     result.status === "fulfilled" && result.value ? [result.value] : [],

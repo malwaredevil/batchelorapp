@@ -23,7 +23,11 @@ describe("barcode recognition model selection", () => {
       vi.mocked(callModel).mockResolvedValue('{"found":false}');
       const result = await lookupBarcode("661127022308");
       expect(result.found).toBe(false);
-      expect(callModel).toHaveBeenLastCalledWith(model, expect.any(Function));
+      expect(callModel).toHaveBeenLastCalledWith(
+        model,
+        expect.any(Function),
+        "catalog",
+      );
     },
   );
 });

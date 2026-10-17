@@ -252,14 +252,17 @@ export async function extractBarcodeFromPhoto(
   imageDataUrl: string,
 ): Promise<string | null> {
   const models = await getModels();
-  const completion = await callModel(models.fastVision, (c, model) =>
-    c.chat.completions.create({
-      model,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content: `You are a barcode reader. Find and read the UPC or EAN barcode in the image.
+  const completion = await callModel(
+    models.fastVision,
+    (c, model) =>
+      c.chat.completions.create({
+        model,
+        ...CATALOG_AI_REQUEST_OPTIONS,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content: `You are a barcode reader. Find and read the UPC or EAN barcode in the image.
 
 Rules:
 - Look for a 1D barcode (parallel vertical bars) and read the human-readable digits printed directly below or beside it.
@@ -268,22 +271,23 @@ Rules:
 - Before returning, count the digits in your answer. If you get 11, you likely dropped a leading digit — look again.
 - Return JSON with exactly one key: "barcode" — a string of the digit characters only (no spaces, no dashes), or null if no barcode is visible or legible.
 - Never guess or fabricate any digit you cannot clearly see.`,
-        },
-        {
-          role: "user",
-          content: [
-            {
-              type: "text" as const,
-              text: "Read the barcode in this image. Return JSON only.",
-            },
-            {
-              type: "image_url" as const,
-              image_url: { url: imageDataUrl },
-            },
-          ],
-        },
-      ],
-    }),
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "text" as const,
+                text: "Read the barcode in this image. Return JSON only.",
+              },
+              {
+                type: "image_url" as const,
+                image_url: { url: imageDataUrl },
+              },
+            ],
+          },
+        ],
+      }),
+    "catalog",
   );
 
   const raw = completion.choices[0]?.message?.content ?? "{}";

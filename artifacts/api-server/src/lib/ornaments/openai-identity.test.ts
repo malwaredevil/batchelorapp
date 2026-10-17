@@ -10,7 +10,11 @@ vi.mock("../ai-client", () => ({
 }));
 
 import { callModel, getModels } from "../ai-client";
-import { embedText, enrichOrnamentIdentity } from "./openai";
+import {
+  embedText,
+  enrichOrnamentIdentity,
+  extractBarcodeFromPhoto,
+} from "./openai";
 
 function mockVisionIdentityResponse(response: unknown) {
   vi.mocked(getModels).mockResolvedValue({
@@ -31,6 +35,18 @@ function mockVisionIdentityResponse(response: unknown) {
     ),
   );
 }
+
+it("puts photo barcode extraction in the bounded catalog workload", async () => {
+  mockVisionIdentityResponse({ barcode: "661127022308" });
+  await expect(
+    extractBarcodeFromPhoto("data:image/jpeg;base64,test"),
+  ).resolves.toBe("661127022308");
+  expect(callModel).toHaveBeenLastCalledWith(
+    "test-model",
+    expect.any(Function),
+    "catalog",
+  );
+});
 
 describe("targeted ornament identity enrichment", () => {
   beforeEach(() => vi.clearAllMocks());

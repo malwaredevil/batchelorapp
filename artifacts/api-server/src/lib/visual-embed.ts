@@ -151,6 +151,7 @@ type JinaEmbeddingResponse = {
  */
 export async function generateVisualEmbedding(
   imageInput: string | Buffer,
+  signal?: AbortSignal,
 ): Promise<number[] | null> {
   if (!env.jinaApiKey) return null;
 
@@ -172,8 +173,11 @@ export async function generateVisualEmbedding(
   }
 
   const response = await withRetry(
-    () =>
-      fetch("https://api.jina.ai/v1/embeddings", {
+    () => {
+      // Check every retry too: an abandoned request must not start another
+      // billable attempt during the retry backoff.
+      signal?.throwIfAborted();
+      return fetch("https://api.jina.ai/v1/embeddings", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -183,8 +187,11 @@ export async function generateVisualEmbedding(
           model: "jina-clip-v2",
           input: [input],
         }),
-        signal: AbortSignal.timeout(15_000),
-      }),
+        signal: signal
+          ? AbortSignal.any([signal, AbortSignal.timeout(15_000)])
+          : AbortSignal.timeout(15_000),
+      });
+    },
     { label: "jina-embeddings" },
   );
 

@@ -83,6 +83,10 @@ import { env } from "../../lib/env";
 import { serializeItem, serializeItems } from "../../lib/ornaments/serialize";
 import { logger } from "../../lib/logger";
 import pLimit from "p-limit";
+import {
+  catalogAIRequestContext,
+  getCatalogAISignal,
+} from "../../lib/catalog-ai-context";
 import { createCollectionTextSearch } from "../../lib/collection-text-search";
 import {
   assignGenerationRunTarget,
@@ -142,6 +146,7 @@ function clampField(value: unknown, max: number): string | null {
 
 const router: IRouter = Router();
 router.use(requireAuth);
+router.use(catalogAIRequestContext);
 
 // ---------------------------------------------------------------------------
 // Collection
@@ -1597,6 +1602,11 @@ export async function refreshOrnamentItemAllData(
   id: number,
   log: { warn: (obj: unknown, msg: string) => void },
 ): Promise<OrnamentReanalysisMaintenance> {
+  getCatalogAISignal()?.throwIfAborted();
+  // Recognition can correct identity. Load the lookup inputs only after it has
+  // saved those corrections, never from the pre-recognition snapshot.
+  const analysisResult = await runItemAnalysisWithMaintenance(id);
+  getCatalogAISignal()?.throwIfAborted();
   const [item] = await db
     .select(itemColumns)
     .from(ornamentsItems)
@@ -1609,7 +1619,6 @@ export async function refreshOrnamentItemAllData(
   // Finish required recognition before launching optional enrichments. A failed
   // core analysis must not fan out more paid work, and optional price/appraisal
   // calls must not compete with this item's required analysis for queue slots.
-  const analysisResult = await runItemAnalysisWithMaintenance(id);
   await Promise.allSettled([
     // 2. Book value — live lookup
     (async () => {

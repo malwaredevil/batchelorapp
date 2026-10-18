@@ -33,7 +33,7 @@ jobs:
   # a separate job avoids the need for a third-party paths-filter action.
   changes:
     name: Detect changed file categories
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       actions: ${{ steps.detect.outputs.actions }}
@@ -86,7 +86,7 @@ jobs:
     name: Analyze (actions)
     needs: changes
     if: needs.changes.outputs.actions == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       security-events: write
@@ -116,7 +116,7 @@ jobs:
     name: Analyze (javascript-typescript)
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       security-events: write

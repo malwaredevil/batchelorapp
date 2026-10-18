@@ -103,6 +103,8 @@ function gh<T>(method: string, apiPath: string, body?: unknown): Promise<T> {
 }
 
 const EXCLUDED_PREFIXES = [
+  // Private generated output can contain source snippets or detected PII.
+  "generated-artifacts/",
   // Replit-internal directories — never push to public repo
   ".local/",
   ".agents/",

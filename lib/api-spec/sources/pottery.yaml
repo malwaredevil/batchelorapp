@@ -19,6 +19,102 @@ tags:
   - name: stats
     description: Collection statistics
 paths:
+  /items/{id}/photos/{photoKey}/original-info:
+    get:
+      operationId: inspectPotteryOriginalPhoto
+      tags: [pottery]
+      summary: Check the protected original or earliest saved copy of a pottery photo
+      parameters:
+        - {
+            name: id,
+            in: path,
+            required: true,
+            schema: { type: integer, minimum: 1 },
+          }
+        - {
+            name: photoKey,
+            in: path,
+            required: true,
+            schema: { type: string, pattern: "^(primary|[1-9][0-9]*)$" },
+          }
+      responses:
+        "200":
+          description: Original availability, provenance and authenticated view URL
+          content:
+            application/json:
+              schema: &originalPhotoInfo
+                type: object
+                required:
+                  [version, available, source, isCurrentOriginal, imageUrl]
+                properties:
+                  version: { type: string, pattern: "^[a-f0-9]{64}$" }
+                  available: { type: boolean }
+                  source:
+                    { type: string, enum: [upload, existing], nullable: true }
+                  isCurrentOriginal: { type: boolean }
+                  imageUrl: { type: string, nullable: true }
+  /items/{id}/photos/{photoKey}/original:
+    get:
+      operationId: viewPotteryOriginalPhoto
+      tags: [pottery]
+      summary: View a protected original pottery photo
+      parameters:
+        - {
+            name: id,
+            in: path,
+            required: true,
+            schema: { type: integer, minimum: 1 },
+          }
+        - {
+            name: photoKey,
+            in: path,
+            required: true,
+            schema: { type: string, pattern: "^(primary|[1-9][0-9]*)$" },
+          }
+      responses:
+        "200":
+          description: Private original image bytes
+          content:
+            image/jpeg:
+              schema: { type: string, format: binary }
+  /items/{id}/photos/{photoKey}/restore-original:
+    post:
+      operationId: restorePotteryOriginalPhoto
+      tags: [pottery]
+      summary: Replace current pottery photo edits with its protected original or earliest saved copy
+      description: Replaces the current photo, discarding its current edits. The protected copy remains available. Requires user confirmation. Does not recover edits made before protection existed.
+      parameters:
+        - {
+            name: id,
+            in: path,
+            required: true,
+            schema: { type: integer, minimum: 1 },
+          }
+        - {
+            name: photoKey,
+            in: path,
+            required: true,
+            schema: { type: string, pattern: "^(primary|[1-9][0-9]*)$" },
+          }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expectedVersion]
+              properties:
+                expectedVersion:
+                  type: string
+                  pattern: "^[a-f0-9]{64}$"
+                  description: Use the exact version returned by inspectPotteryOriginalPhoto. Never guess; a changed photo returns 409.
+      responses:
+        "200":
+          description: Protected copy restored
+          content:
+            application/json:
+              schema: *originalPhotoInfo
   /healthz:
     get:
       operationId: healthCheck

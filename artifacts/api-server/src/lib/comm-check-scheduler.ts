@@ -5,6 +5,7 @@ import { db, pool, appUsers } from "@workspace/db";
 import { sendSms } from "./sms";
 import { openDmChannel, postSlackMessage, slackConfigured } from "./slack";
 import { logger } from "./logger";
+import { communicationLogOutcome } from "./communication-log-outcome";
 import { getConfig, type DayListCode } from "./app-config";
 import { isValidIanaTimeZone } from "./timezone";
 import {
@@ -817,9 +818,11 @@ export async function runCommCheckSchedulerTick(
     logger.info(
       {
         date: result.date,
-        email: result.email,
-        sms: result.sms,
-        slack: result.slack,
+        channels: [
+          { channel: "email", outcome: communicationLogOutcome(result.email) },
+          { channel: "sms", outcome: communicationLogOutcome(result.sms) },
+          { channel: "slack", outcome: communicationLogOutcome(result.slack) },
+        ],
         alreadyComplete: result.alreadyRan,
       },
       "comm-check: daily scheduled check evaluated",
@@ -831,7 +834,8 @@ export async function runCommCheckSchedulerTick(
     logger.info(
       {
         date: phoneResult.date,
-        phone: phoneResult.phone,
+        channel: "voice",
+        outcome: communicationLogOutcome(phoneResult.phone),
         alreadyComplete: phoneResult.alreadySent,
       },
       "comm-check: phone scheduled check evaluated",

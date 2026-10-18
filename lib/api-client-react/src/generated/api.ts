@@ -49,6 +49,7 @@ import type {
   HubWeatherConfigBody,
   HubWeatherConfigResponse,
   ImportPatternFromUrlBody,
+  InspectPotteryOriginalPhoto200,
   JobsJobHealth,
   JobsJobListResponse,
   JobsJobMutationResponse,
@@ -222,6 +223,8 @@ import type {
   QuiltingUpdateShoppingItemInput,
   ReorderPackingItems200,
   ResetPasswordInput,
+  RestorePotteryOriginalPhoto200,
+  RestorePotteryOriginalPhotoBody,
   RunPatternAnalysisBody,
   SavePatternRequirementsBody,
   SendPhoneCodeInput,
@@ -1239,6 +1242,245 @@ export const useChangePassword = <TError = ErrorType<Error>,
         TContext
       > => {
       return useMutation(getChangePasswordMutationOptions(options));
+    }
+
+export const getInspectPotteryOriginalPhotoUrl = (id: number,
+    photoKey: string,) => {
+
+
+
+
+  return `/api/pottery/items/${id}/photos/${photoKey}/original-info`
+}
+
+/**
+ * @summary Check the protected original or earliest saved copy of a pottery photo
+ */
+export const inspectPotteryOriginalPhoto = async (id: number,
+    photoKey: string, options?: RequestInit): Promise<InspectPotteryOriginalPhoto200> => {
+
+  return customFetch<InspectPotteryOriginalPhoto200>(getInspectPotteryOriginalPhotoUrl(id,photoKey),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getInspectPotteryOriginalPhotoQueryKey = (id: number,
+    photoKey: string,) => {
+    return [
+    `/api/pottery/items/${id}/photos/${photoKey}/original-info`
+    ] as const;
+    }
+
+
+export const getInspectPotteryOriginalPhotoQueryOptions = <TData = Awaited<ReturnType<typeof inspectPotteryOriginalPhoto>>, TError = ErrorType<unknown>>(id: number,
+    photoKey: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof inspectPotteryOriginalPhoto>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getInspectPotteryOriginalPhotoQueryKey(id,photoKey);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof inspectPotteryOriginalPhoto>>> = ({ signal }) => inspectPotteryOriginalPhoto(id,photoKey, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined && photoKey !== null && photoKey !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof inspectPotteryOriginalPhoto>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type InspectPotteryOriginalPhotoQueryResult = NonNullable<Awaited<ReturnType<typeof inspectPotteryOriginalPhoto>>>
+export type InspectPotteryOriginalPhotoQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Check the protected original or earliest saved copy of a pottery photo
+ */
+
+export function useInspectPotteryOriginalPhoto<TData = Awaited<ReturnType<typeof inspectPotteryOriginalPhoto>>, TError = ErrorType<unknown>>(
+ id: number,
+    photoKey: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof inspectPotteryOriginalPhoto>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getInspectPotteryOriginalPhotoQueryOptions(id,photoKey,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getViewPotteryOriginalPhotoUrl = (id: number,
+    photoKey: string,) => {
+
+
+
+
+  return `/api/pottery/items/${id}/photos/${photoKey}/original`
+}
+
+/**
+ * @summary View a protected original pottery photo
+ */
+export const viewPotteryOriginalPhoto = async (id: number,
+    photoKey: string, options?: RequestInit): Promise<Blob> => {
+
+  return customFetch<Blob>(getViewPotteryOriginalPhotoUrl(id,photoKey),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getViewPotteryOriginalPhotoQueryKey = (id: number,
+    photoKey: string,) => {
+    return [
+    `/api/pottery/items/${id}/photos/${photoKey}/original`
+    ] as const;
+    }
+
+
+export const getViewPotteryOriginalPhotoQueryOptions = <TData = Awaited<ReturnType<typeof viewPotteryOriginalPhoto>>, TError = ErrorType<unknown>>(id: number,
+    photoKey: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof viewPotteryOriginalPhoto>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getViewPotteryOriginalPhotoQueryKey(id,photoKey);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof viewPotteryOriginalPhoto>>> = ({ signal }) => viewPotteryOriginalPhoto(id,photoKey, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined && photoKey !== null && photoKey !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof viewPotteryOriginalPhoto>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ViewPotteryOriginalPhotoQueryResult = NonNullable<Awaited<ReturnType<typeof viewPotteryOriginalPhoto>>>
+export type ViewPotteryOriginalPhotoQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary View a protected original pottery photo
+ */
+
+export function useViewPotteryOriginalPhoto<TData = Awaited<ReturnType<typeof viewPotteryOriginalPhoto>>, TError = ErrorType<unknown>>(
+ id: number,
+    photoKey: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof viewPotteryOriginalPhoto>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getViewPotteryOriginalPhotoQueryOptions(id,photoKey,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRestorePotteryOriginalPhotoUrl = (id: number,
+    photoKey: string,) => {
+
+
+
+
+  return `/api/pottery/items/${id}/photos/${photoKey}/restore-original`
+}
+
+/**
+ * Replaces the current photo, discarding its current edits. The protected copy remains available. Requires user confirmation. Does not recover edits made before protection existed.
+ * @summary Replace current pottery photo edits with its protected original or earliest saved copy
+ */
+export const restorePotteryOriginalPhoto = async (id: number,
+    photoKey: string,
+    restorePotteryOriginalPhotoBody: RestorePotteryOriginalPhotoBody, options?: RequestInit): Promise<RestorePotteryOriginalPhoto200> => {
+
+  return customFetch<RestorePotteryOriginalPhoto200>(getRestorePotteryOriginalPhotoUrl(id,photoKey),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(restorePotteryOriginalPhotoBody)
+  }
+);}
+
+
+
+
+
+export const getRestorePotteryOriginalPhotoMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restorePotteryOriginalPhoto>>, TError,{id: number;photoKey: string;data: BodyType<RestorePotteryOriginalPhotoBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof restorePotteryOriginalPhoto>>, TError,{id: number;photoKey: string;data: BodyType<RestorePotteryOriginalPhotoBody>}, TContext> => {
+
+const mutationKey = ['restorePotteryOriginalPhoto'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof restorePotteryOriginalPhoto>>, {id: number;photoKey: string;data: BodyType<RestorePotteryOriginalPhotoBody>}> = (props) => {
+          const {id,photoKey,data} = props ?? {};
+
+          return  restorePotteryOriginalPhoto(id,photoKey,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RestorePotteryOriginalPhotoMutationResult = NonNullable<Awaited<ReturnType<typeof restorePotteryOriginalPhoto>>>
+    export type RestorePotteryOriginalPhotoMutationBody = BodyType<RestorePotteryOriginalPhotoBody>
+    export type RestorePotteryOriginalPhotoMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Replace current pottery photo edits with its protected original or earliest saved copy
+ */
+export const useRestorePotteryOriginalPhoto = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof restorePotteryOriginalPhoto>>, TError,{id: number;photoKey: string;data: BodyType<RestorePotteryOriginalPhotoBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof restorePotteryOriginalPhoto>>,
+        TError,
+        {id: number;photoKey: string;data: BodyType<RestorePotteryOriginalPhotoBody>},
+        TContext
+      > => {
+      return useMutation(getRestorePotteryOriginalPhotoMutationOptions(options));
     }
 
 export const getListPotteryUrl = (params?: ListPotteryParams,) => {

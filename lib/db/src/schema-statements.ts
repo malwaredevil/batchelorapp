@@ -222,6 +222,10 @@ export const STATEMENTS: string[] = [
      ON pottery_item_categories (category_id)`,
   `CREATE INDEX IF NOT EXISTS pottery_images_item_idx
      ON pottery_images (item_id)`,
+  `ALTER TABLE pottery_items ADD COLUMN IF NOT EXISTS original_image_path TEXT`,
+  `ALTER TABLE pottery_items ADD COLUMN IF NOT EXISTS original_image_source TEXT`,
+  `ALTER TABLE pottery_images ADD COLUMN IF NOT EXISTS original_image_path TEXT`,
+  `ALTER TABLE pottery_images ADD COLUMN IF NOT EXISTS original_image_source TEXT`,
   `ALTER TABLE pottery_items ENABLE ROW LEVEL SECURITY`,
   `ALTER TABLE pottery_categories ENABLE ROW LEVEL SECURITY`,
   `ALTER TABLE pottery_item_categories ENABLE ROW LEVEL SECURITY`,

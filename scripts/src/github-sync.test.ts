@@ -10,6 +10,12 @@
 import assert from "node:assert/strict";
 import { isExcluded } from "./github-sync.js";
 
+assert.equal(
+  isExcluded("generated-artifacts/security/hounddog/latest.json"),
+  true,
+  "private scanner reports must never be pushed to the public repository",
+);
+
 // ---------------------------------------------------------------------------
 // .replit-artifact/ carve-out
 // ---------------------------------------------------------------------------

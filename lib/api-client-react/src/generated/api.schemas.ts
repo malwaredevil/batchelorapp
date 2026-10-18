@@ -3195,6 +3195,48 @@ export interface MagnetsMergeCategoryInput {
   intoId: number;
 }
 
+export type InspectPotteryOriginalPhoto200Source = typeof InspectPotteryOriginalPhoto200Source[keyof typeof InspectPotteryOriginalPhoto200Source] | null;
+
+
+export const InspectPotteryOriginalPhoto200Source = {
+  upload: 'upload',
+  existing: 'existing',
+} as const;
+
+export type InspectPotteryOriginalPhoto200 = {
+  /** @pattern ^[a-f0-9]{64}$ */
+  version: string;
+  available: boolean;
+  source: InspectPotteryOriginalPhoto200Source;
+  isCurrentOriginal: boolean;
+  imageUrl: string | null;
+};
+
+export type RestorePotteryOriginalPhotoBody = {
+  /**
+     * Use the exact version returned by inspectPotteryOriginalPhoto. Never guess; a changed photo returns 409.
+     * @pattern ^[a-f0-9]{64}$
+     */
+  expectedVersion: string;
+};
+
+export type RestorePotteryOriginalPhoto200Source = typeof RestorePotteryOriginalPhoto200Source[keyof typeof RestorePotteryOriginalPhoto200Source] | null;
+
+
+export const RestorePotteryOriginalPhoto200Source = {
+  upload: 'upload',
+  existing: 'existing',
+} as const;
+
+export type RestorePotteryOriginalPhoto200 = {
+  /** @pattern ^[a-f0-9]{64}$ */
+  version: string;
+  available: boolean;
+  source: RestorePotteryOriginalPhoto200Source;
+  isCurrentOriginal: boolean;
+  imageUrl: string | null;
+};
+
 export type ListPotteryParams = {
 /**
  * Text search across name, pattern description, style, shape, maker, and motifs

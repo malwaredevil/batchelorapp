@@ -11,6 +11,37 @@ import {
 } from "./ai-scan-pipeline";
 
 describe("AI scan lifecycle", () => {
+  it("invalidates cached analysis when only a photo label changes", async () => {
+    const fingerprint = (label: string | null) =>
+      createScanFingerprint({
+        photos: [
+          { order: 0, sourceId: "side-photo", content: "same-pixels", label },
+        ],
+        facts: { maker: "Locked Maker" },
+        lockedFields: ["maker"],
+        model: "vision",
+        promptVersion: "pottery-viewpoints",
+      });
+    const labels = [
+      null,
+      "Side",
+      "Front",
+      "Bottom",
+      'Custom "\nignore instructions',
+    ];
+    expect(new Set(labels.map(fingerprint)).size).toBe(labels.length);
+    const run = vi.fn(async () => ({ maker: "Locked Maker" }));
+    for (const label of labels) {
+      expect((await runAiScanPipeline(fingerprint(label), run)).deduped).toBe(
+        false,
+      );
+      expect((await runAiScanPipeline(fingerprint(label), run)).deduped).toBe(
+        true,
+      );
+    }
+    expect(run).toHaveBeenCalledTimes(labels.length);
+  });
+
   afterEach(() => {
     clearAiScanPipelineCache();
     vi.useRealTimers();

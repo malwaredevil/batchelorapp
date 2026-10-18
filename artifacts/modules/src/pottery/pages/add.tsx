@@ -39,6 +39,7 @@ import {
   STANDARD_IMAGE_UPLOAD,
   validateClientUpload,
 } from "@workspace/upload-policy";
+import { getOriginalImageFile } from "@workspace/image-capture";
 
 interface SuppPhoto {
   file: File;
@@ -183,6 +184,7 @@ export default function AddPiece() {
     upload.mutate(
       {
         image: file,
+        originalImage: getOriginalImageFile(file),
         name: data.name?.trim() || undefined,
         quantity: (data.quantity ?? 1) > 1 ? (data.quantity ?? 1) : undefined,
         notes: data.notes?.trim() || undefined,
@@ -194,6 +196,7 @@ export default function AddPiece() {
           for (const supp of suppPhotos) {
             await uploadPotteryImage(item.id, {
               image: supp.file,
+              originalImage: getOriginalImageFile(supp.file),
               label: supp.label.trim() || undefined,
             }).catch(() => {});
           }

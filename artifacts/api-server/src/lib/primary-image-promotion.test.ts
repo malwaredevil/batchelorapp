@@ -15,6 +15,15 @@ function makeAdapter() {
 }
 
 describe("createPrimaryImagePromoter", () => {
+  it("uses an atomic photo-and-original swap when the collection supplies one", async () => {
+    const adapter = makeAdapter();
+    const swapImages = vi.fn().mockResolvedValue(undefined);
+    await createPrimaryImagePromoter({ ...adapter, swapImages })(4, 9);
+    expect(swapImages).toHaveBeenCalledWith(4, 9);
+    expect(adapter.updateImagePath).not.toHaveBeenCalled();
+    expect(adapter.updateItemPath).not.toHaveBeenCalled();
+    expect(adapter.rerunAnalysis).toHaveBeenCalledWith(4);
+  });
   it("swaps the paths and runs analysis when the image belongs to the item", async () => {
     const adapter = makeAdapter();
     const promote = createPrimaryImagePromoter(adapter);

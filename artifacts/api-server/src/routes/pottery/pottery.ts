@@ -97,6 +97,15 @@ import {
   parsePositiveIntegerArray,
 } from "../../lib/collection-parsing";
 import { getElaineGlobalConfig } from "../../lib/elaine-config";
+import {
+  storeUploadedOriginal,
+  savePotteryPhotoPath,
+  deleteUnreferencedPotteryPhoto,
+  swapPotteryPhotos,
+  getPotteryPhotoVersion,
+  assertPotteryPhotoVersion,
+} from "../../lib/pottery/photo-originals";
+import createPhotoOriginalRoutes from "./photo-originals";
 
 // All columns except the three embedding vectors — the 1536-dim text embedding,
 // the 1024-dim whole-piece visual embedding, and the 1024-dim zone embedding are
@@ -123,12 +132,33 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
     fileSize: DEFAULT_MULTER_FILE_BYTES,
-    files: 1,
+    files: 2,
     fields: 8,
     fieldSize: 8192,
   },
   fileFilter: createImageFileFilter(ALLOWED_IMAGE_TYPES),
 });
+const protectedPhotoUpload: import("express").RequestHandler = (
+  req,
+  res,
+  next,
+) => {
+  upload.fields([
+    { name: "image", maxCount: 1 },
+    { name: "originalImage", maxCount: 1 },
+  ])(req, res, (error) => {
+    if (error) return next(error);
+    const files = req.files as
+      | Record<string, Express.Multer.File[]>
+      | undefined;
+    req.file = files?.image?.[0];
+    next();
+  });
+};
+function originalUpload(req: import("express").Request) {
+  return (req.files as Record<string, Express.Multer.File[]> | undefined)
+    ?.originalImage?.[0];
+}
 
 function clampField(value: unknown, max: number): string | null {
   if (typeof value !== "string") return null;
@@ -144,6 +174,7 @@ function sentenceCase(value: string | null): string | null {
 
 const router: IRouter = Router();
 router.use(requireAuth);
+router.use(createPhotoOriginalRoutes(schedulePotteryRecognition));
 
 // ---------------------------------------------------------------------------
 // Collection
@@ -277,7 +308,7 @@ router.get("/items/:id", async (req, res) => {
   res.json(GetPotteryResponse.parse(await serializeItem(row)));
 });
 
-router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
+router.post("/items", aiLimiter, protectedPhotoUpload, async (req, res) => {
   const userId = req.session.userId!;
   const file = req.file;
   if (!file) {
@@ -357,11 +388,17 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
   );
 
   const imagePath = await uploadImage(cleanBuffer, contentType);
+  let retainedOriginalPath: string | undefined;
 
   // Default acquiredAt to today's date
   const today = new Date().toISOString().slice(0, 10);
 
   try {
+    const original = await storeUploadedOriginal(
+      originalUpload(req),
+      imagePath,
+    );
+    retainedOriginalPath = original.originalImagePath;
     const [row] = await db
       .insert(potteryItems)
       .values({
@@ -380,6 +417,7 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
         aiDescription: analysis.aiDescription,
         acquiredAt: today,
         imagePath,
+        ...original,
         embedding,
         visualEmbedding,
         glazeType: analysis.glazeType,
@@ -424,7 +462,10 @@ router.post("/items", aiLimiter, upload.single("image"), async (req, res) => {
 
     res.status(201).json(GetPotteryResponse.parse(await serializeItem(row)));
   } catch (err) {
-    await deleteImage(imagePath).catch(() => {});
+    await deleteUnreferencedPotteryPhoto(imagePath);
+    if (retainedOriginalPath && retainedOriginalPath !== imagePath) {
+      await deleteUnreferencedPotteryPhoto(retainedOriginalPath);
+    }
     throw err;
   }
 });
@@ -571,6 +612,7 @@ router.get("/items/:id/image", async (req, res) => {
     return;
   }
   const { buffer, contentType } = await downloadImageBuffer(row.imagePath);
+  res.set("X-Photo-Version", getPotteryPhotoVersion(row.imagePath));
   res.set("Content-Type", contentType);
   res.set(
     "Cache-Control",
@@ -612,6 +654,7 @@ router.get("/items/:id/images/:imageId", async (req, res) => {
     return;
   }
   const { buffer, contentType } = await downloadImageBuffer(row.storagePath);
+  res.set("X-Photo-Version", getPotteryPhotoVersion(row.storagePath));
   res.set("Content-Type", contentType);
   res.set(
     "Cache-Control",
@@ -629,7 +672,7 @@ router.get("/items/:id/images/:imageId", async (req, res) => {
 router.post(
   "/items/:id/images",
   supplementalUploadLimiter,
-  upload.single("image"),
+  protectedPhotoUpload,
   async (req, res) => {
     const { id } = AddPotteryImageParams.parse(req.params);
 
@@ -680,10 +723,22 @@ router.post(
       existing.length > 0 ? Math.max(...existing.map((r) => r.position)) : -1;
 
     const storagePath = await uploadImage(cleanBuffer, contentType);
+    let retainedOriginalPath: string | undefined;
     try {
+      const original = await storeUploadedOriginal(
+        originalUpload(req),
+        storagePath,
+      );
+      retainedOriginalPath = original.originalImagePath;
       const [newImg] = await db
         .insert(potteryImages)
-        .values({ itemId: id, storagePath, label, position: maxPos + 1 })
+        .values({
+          itemId: id,
+          storagePath,
+          label,
+          position: maxPos + 1,
+          ...original,
+        })
         .returning();
 
       schedulePotteryRecognition(id);
@@ -694,7 +749,10 @@ router.post(
         position: newImg.position,
       });
     } catch (err) {
-      await deleteImage(storagePath).catch(() => {});
+      await deleteUnreferencedPotteryPhoto(storagePath);
+      if (retainedOriginalPath && retainedOriginalPath !== storagePath) {
+        await deleteUnreferencedPotteryPhoto(retainedOriginalPath);
+      }
       throw err;
     }
   },
@@ -833,15 +891,19 @@ router.put(
       return;
     }
     const contentType = sniffedType;
+    const oldPath = item.imagePath;
+    assertPotteryPhotoVersion(oldPath, req.body?.expectedVersion);
     const cleanBuffer = await stripMetadata(file.buffer, contentType);
     const newPath = await uploadImage(cleanBuffer, contentType);
-    const oldPath = item.imagePath;
     try {
-      await db
-        .update(potteryItems)
-        .set({ imagePath: newPath })
-        .where(eq(potteryItems.id, id));
-      if (oldPath) await deleteImage(oldPath).catch(() => {});
+      await savePotteryPhotoPath(
+        id,
+        null,
+        oldPath,
+        newPath,
+        req.body.expectedVersion,
+      );
+      await deleteUnreferencedPotteryPhoto(oldPath);
       schedulePotteryRecognition(id);
       const [updated] = await db
         .select()
@@ -850,7 +912,7 @@ router.put(
         .limit(1);
       res.json(GetPotteryResponse.parse(await serializeItem(updated)));
     } catch (err) {
-      await deleteImage(newPath).catch(() => {});
+      await deleteUnreferencedPotteryPhoto(newPath);
       throw err;
     }
   },
@@ -908,15 +970,19 @@ router.put(
       return;
     }
     const contentType = sniffedType;
+    const oldPath = imageRow.storagePath;
+    assertPotteryPhotoVersion(oldPath, req.body?.expectedVersion);
     const cleanBuffer = await stripMetadata(file.buffer, contentType);
     const newPath = await uploadImage(cleanBuffer, contentType);
-    const oldPath = imageRow.storagePath;
     try {
-      await db
-        .update(potteryImages)
-        .set({ storagePath: newPath })
-        .where(eq(potteryImages.id, imageId));
-      await deleteImage(oldPath).catch(() => {});
+      await savePotteryPhotoPath(
+        id,
+        imageId,
+        oldPath,
+        newPath,
+        req.body.expectedVersion,
+      );
+      await deleteUnreferencedPotteryPhoto(oldPath);
       schedulePotteryRecognition(id);
       const [updated] = await db
         .select()
@@ -925,7 +991,7 @@ router.put(
         .limit(1);
       res.json(GetPotteryResponse.parse(await serializeItem(updated)));
     } catch (err) {
-      await deleteImage(newPath).catch(() => {});
+      await deleteUnreferencedPotteryPhoto(newPath);
       throw err;
     }
   },
@@ -980,6 +1046,7 @@ async function syncDuplicateCategory(
 type PotteryScanSnapshot = {
   item: Omit<PotteryItemRow, "embedding" | "visualEmbedding" | "zoneEmbedding">;
   dataUrls: string[];
+  labels: (string | null)[];
   primaryBuffer: Buffer;
   context: AnalysisContext;
   model: string;
@@ -1001,17 +1068,24 @@ async function loadPotteryScanSnapshot(
       id: potteryImages.id,
       storagePath: potteryImages.storagePath,
       position: potteryImages.position,
+      label: potteryImages.label,
     })
     .from(potteryImages)
     .where(and(eq(potteryImages.itemId, id), isNull(potteryImages.deletedAt)))
     .orderBy(asc(potteryImages.position), asc(potteryImages.id));
 
   const ordered = [
-    { order: 0, sourceId: `primary:${id}`, storagePath: item.imagePath },
+    {
+      order: 0,
+      sourceId: `primary:${id}`,
+      storagePath: item.imagePath,
+      label: null,
+    },
     ...supplemental.map((photo, index) => ({
       order: index + 1,
       sourceId: photo.id,
       storagePath: photo.storagePath,
+      label: photo.label,
     })),
   ];
   const downloaded = await Promise.all(
@@ -1041,6 +1115,7 @@ async function loadPotteryScanSnapshot(
     dimensions: item.dimensions,
     dominantColors: item.dominantColors,
     motifs: item.motifs,
+    glazeType: item.glazeType,
   };
   const model = (await getModels()).fastVision;
 
@@ -1050,15 +1125,17 @@ async function loadPotteryScanSnapshot(
         order: photo.order,
         sourceId: photo.sourceId,
         content: photo.dataUrl,
+        label: photo.label,
       })),
       facts: context,
       lockedFields: context.lockedFields,
       model,
-      promptVersion: "pottery-recognition-v2",
+      promptVersion: "pottery-recognition-v3-viewpoints",
     }),
     value: {
       item,
       dataUrls: downloaded.map((photo) => photo.dataUrl),
+      labels: downloaded.map((photo) => photo.label),
       primaryBuffer: downloaded[0]!.buffer,
       context,
       model,
@@ -1082,13 +1159,13 @@ async function executePotteryScan(
         userId: snapshot.item.userId ?? undefined,
         model: snapshot.model,
       },
-      () => analyzeImage(snapshot.dataUrls, snapshot.context),
+      () => analyzeImage(snapshot.dataUrls, snapshot.context, snapshot.labels),
     ),
     generateMultiPhotoVisualEmbedding(
       snapshot.dataUrls,
       generateVisualEmbedding,
     ),
-    analyzePotteryZones(snapshot.dataUrls).catch(() => null),
+    analyzePotteryZones(snapshot.dataUrls, snapshot.labels).catch(() => null),
   ]);
 
   // Zone embedding is intentionally primary-only: it represents the main
@@ -1103,6 +1180,7 @@ async function executePotteryScan(
   if (!analysis.maker) {
     const backstampResult = await locateBackstampAndEnhanceMaker(
       snapshot.dataUrls,
+      snapshot.labels,
     ).catch(() => null);
     if (backstampResult?.maker) {
       analysis.maker = backstampResult.maker;
@@ -1303,6 +1381,7 @@ router.post("/items/bulk-reanalyze", bulkAiLimiter, async (req, res) => {
  * set-primary-image route and Elaine's promote_pottery_photo action.
  */
 export const promotePotteryImageToPrimary = createPrimaryImagePromoter({
+  swapImages: swapPotteryPhotos,
   itemNotFoundMessage: "Pottery piece not found.",
   async getItem(itemId) {
     const [item] = await db
@@ -1417,6 +1496,8 @@ export async function createPotteryItemFromBuffer(
       .values({
         userId,
         name: analysis.name,
+        originalImagePath: imagePath,
+        originalImageSource: "upload",
         quantity: 1,
         dimensions: analysis.dimensions,
         patternDescription: analysis.patternDescription,

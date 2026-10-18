@@ -77,3 +77,6 @@ artifacts/e2e/test-results/
 .env.local
 .env.*.local
 tmp-env-output/
+
+# Private scanner reports may contain source snippets; never commit.
+/generated-artifacts/

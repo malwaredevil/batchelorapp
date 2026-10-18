@@ -47,7 +47,7 @@ export async function runBirthdayEmails(): Promise<void> {
     try {
       await sendBirthdayEmail(user.email, user.displayName ?? null);
       logger.info(
-        { userId: user.id, email: user.email },
+        { userId: user.id },
         "birthday-scheduler: sent birthday email",
       );
     } catch (err) {

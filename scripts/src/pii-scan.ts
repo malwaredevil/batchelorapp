@@ -130,6 +130,8 @@ const EMAIL_ENV_VARS = [
 // These directories may contain agent working files, private ops notes, or
 // dev tooling that is intentionally NOT synced to the public repo.
 export const EXCLUDED_PATH_PREFIXES = [
+  // Private generated reports are excluded from GitHub sync, not public inputs.
+  "generated-artifacts/",
   ".local/",
   ".agents/",
   ".git/",
@@ -411,12 +413,13 @@ function main(): void {
       notes.push(
         `${householdEmails.length} household email literal(s) from env`,
       );
-    const phoneNote =
+    // This describes coverage counts, not a phone number or email value.
+    const coverageNote =
       notes.length > 0
         ? ` (including ${notes.join(", ")})`
         : " (no PHONE_NUMBER/EMAIL env vars set — only regex pass ran)";
     console.log(
-      `pii-scan: OK — scanned ${files.length} files, no findings${phoneNote}.`,
+      `pii-scan: OK — scanned ${files.length} files, no findings${coverageNote}.`,
     );
     process.exit(0);
   }
@@ -428,7 +431,7 @@ function main(): void {
   if (emailFindings.length > 0) {
     console.error(`  EMAIL findings (${emailFindings.length}):`);
     for (const f of emailFindings) {
-      console.error(`    ${f.file}:${f.line}  ${f.value}`);
+      console.error(`    ${f.file}:${f.line}  [email redacted]`);
     }
     console.error(
       "\n  If an email is a system address (e.g. elaine@app.batchelor.app), add its",
@@ -440,7 +443,7 @@ function main(): void {
   if (phoneFindings.length > 0) {
     console.error(`  PHONE findings (${phoneFindings.length}):`);
     for (const f of phoneFindings) {
-      console.error(`    ${f.file}:${f.line}  ${f.value}  [${f.detail}]`);
+      console.error(`    ${f.file}:${f.line}  [phone redacted]  [${f.detail}]`);
     }
     console.error(
       "\n  If a phone number is a fictional placeholder (e.g. a 555 number), add it",

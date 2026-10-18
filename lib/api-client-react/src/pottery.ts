@@ -23,6 +23,7 @@ import type {
 
 export interface UploadPotteryInput {
   image: File;
+  originalImage?: File;
   name?: string;
   quantity?: number;
   notes?: string;
@@ -33,6 +34,7 @@ export interface UploadPotteryInput {
 function buildUploadPotteryFormData(data: UploadPotteryInput): FormData {
   const formData = new FormData();
   formData.append("image", data.image);
+  if (data.originalImage) formData.append("originalImage", data.originalImage);
   if (data.name) formData.append("name", data.name);
   if (data.quantity && data.quantity > 1) {
     formData.append("quantity", String(data.quantity));
@@ -106,10 +108,11 @@ export function useUploadCompare<TError = Error, TContext = unknown>(
 
 export const uploadPotteryImage = (
   itemId: number,
-  data: { image: File; label?: string },
+  data: { image: File; originalImage?: File; label?: string },
 ): Promise<PotteryPotteryImage> => {
   const formData = new FormData();
   formData.append("image", data.image);
+  if (data.originalImage) formData.append("originalImage", data.originalImage);
   if (data.label) formData.append("label", data.label);
   return customFetch<PotteryPotteryImage>(
     `/api/pottery/items/${itemId}/images`,
@@ -123,14 +126,14 @@ export function useUploadPotteryImage<TError = Error, TContext = unknown>(
     mutation?: UseMutationOptions<
       PotteryPotteryImage,
       TError,
-      { image: File; label?: string },
+      { image: File; originalImage?: File; label?: string },
       TContext
     >;
   },
 ): UseMutationResult<
   PotteryPotteryImage,
   TError,
-  { image: File; label?: string },
+  { image: File; originalImage?: File; label?: string },
   TContext
 > {
   const queryClient = useQueryClient();

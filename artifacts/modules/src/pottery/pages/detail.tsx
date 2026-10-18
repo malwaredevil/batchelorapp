@@ -58,6 +58,8 @@ import { AutocompleteInput } from "@/pottery/components/autocomplete-input";
 import { TagSelector } from "@/pottery/components/tag-selector";
 import { CameraModal } from "@/pottery/components/image-picker";
 import { ImageEditor } from "@/pottery/components/image-editor";
+import { PhotoOriginalControls } from "@/pottery/components/photo-original-controls";
+import { getOriginalImageFile } from "@workspace/image-capture";
 import { useUploadPotteryImage } from "@/pottery/hooks/use-pottery";
 import {
   useUpdatePotteryImage,
@@ -88,6 +90,7 @@ import {
 const LABEL_SUGGESTIONS = [
   "Front",
   "Back",
+  "Side",
   "Left side",
   "Right side",
   "Top",
@@ -188,6 +191,7 @@ interface GalleryProps {
   primaryAlt: string;
   supplemental: PotteryImage[];
   itemId: number;
+  onSelectedImageChange: (imageId: number | null) => void;
 }
 
 function ImageGallery({
@@ -195,6 +199,7 @@ function ImageGallery({
   primaryAlt,
   supplemental,
   itemId,
+  onSelectedImageChange,
 }: GalleryProps) {
   const [activeIdx, setActiveIdx] = useState(0);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -216,6 +221,7 @@ function ImageGallery({
   const [editingExistingTarget, setEditingExistingTarget] = useState<{
     id: number;
     isPrimary: boolean;
+    version: string;
   } | null>(null);
   const [isFetchingExisting, setIsFetchingExisting] = useState(false);
   const [isSavingExisting, setIsSavingExisting] = useState(false);
@@ -223,6 +229,9 @@ function ImageGallery({
   // All images: index 0 = primary
   const allImages = [{ url: primaryUrl, label: null, id: -1 }, ...supplemental];
   const selected = allImages[activeIdx] ?? allImages[0];
+  useEffect(() => {
+    onSelectedImageChange(selected.id === -1 ? null : selected.id);
+  }, [selected.id, onSelectedImageChange]);
   const isSupplemental = activeIdx > 0;
   const selectedSupplemental = isSupplemental
     ? supplemental[activeIdx - 1]
@@ -270,7 +279,7 @@ function ImageGallery({
     setEditingFile(null);
     openLabelAfterUpload.current = true;
     uploadImage.mutate(
-      { image: edited },
+      { image: edited, originalImage: getOriginalImageFile(edited) },
       {
         onError: (err) => {
           openLabelAfterUpload.current = false;
@@ -347,11 +356,17 @@ function ImageGallery({
   ) {
     if (isFetchingExisting || isSavingExisting) return;
     setIsFetchingExisting(true);
-    setEditingExistingTarget({ id: imgId, isPrimary });
     try {
-      const resp = await fetch(url, { credentials: "include" });
+      const resp = await fetch(url, {
+        credentials: "include",
+        cache: "no-store",
+      });
       if (!resp.ok) throw new Error("fetch failed");
+      const version = resp.headers.get("X-Photo-Version");
+      if (!version)
+        throw new Error("Photo version is unavailable. Reload the app.");
       const blob = await resp.blob();
+      setEditingExistingTarget({ id: imgId, isPrimary, version });
       setEditingExistingFile(
         new File([blob], "photo.jpg", {
           type: blob.type || "image/jpeg",
@@ -376,19 +391,30 @@ function ImageGallery({
         : `/api/pottery/items/${itemId}/images/${imgId}`;
       const form = new FormData();
       form.append("image", edited, "photo.jpg");
+      form.append("expectedVersion", editingExistingTarget.version);
       const resp = await fetch(endpoint, {
         method: "PUT",
         body: form,
         credentials: "include",
       });
-      if (!resp.ok) throw new Error("Failed to save");
+      if (resp.status === 409) {
+        void queryClient.invalidateQueries({
+          queryKey: getGetPotteryQueryKey(itemId),
+        });
+        throw new Error(
+          "This photo changed. Reload the piece and start the edit again.",
+        );
+      }
+      if (!resp.ok) throw new Error("Couldn't save the photo.");
       queryClient.invalidateQueries({
         queryKey: getGetPotteryQueryKey(itemId),
       });
       queryClient.invalidateQueries({ queryKey: getListPotteryQueryKey() });
       toast.success("Photo updated.");
-    } catch {
-      toast.error("Failed to save edited photo.");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to save edited photo.",
+      );
     } finally {
       setIsSavingExisting(false);
       setEditingExistingTarget(null);
@@ -505,6 +531,17 @@ function ImageGallery({
           </svg>
         </span>
       </div>
+
+      <PhotoOriginalControls
+        key={`${selected.id}:${selected.url}`}
+        itemId={itemId}
+        imageId={selected.id === -1 ? null : selected.id}
+        onRestored={() => {
+          void queryClient.invalidateQueries({
+            queryKey: getGetPotteryQueryKey(itemId),
+          });
+        }}
+      />
 
       {/* Thumbnail row */}
       <div className="flex flex-wrap gap-2 pb-1">
@@ -700,6 +737,7 @@ export default function PieceDetail() {
   const [, params] = useRoute("/pottery/piece/:id");
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
+  const [selectedPhotoId, setSelectedPhotoId] = useState<number | null>(null);
   const id = Number(params?.id);
 
   const {
@@ -854,7 +892,7 @@ export default function PieceDetail() {
     "pottery-detail",
     isLoading || !item
       ? undefined
-      : `Pottery Piece Detail page: ${formatElaineContextEntity({ entity: "item", id: item.id, label: item.name })}${editing ? " — currently in edit mode with unsaved field changes" : ""}. ${item.maker ? `Maker: ${item.maker}. ` : ""}${item.style ? `Style: ${item.style}. ` : ""}${item.shape ? `Shape: ${item.shape}. ` : ""}${item.dimensions ? `Dimensions: ${item.dimensions}. ` : ""}Quantity: ${item.quantity ?? 1}. ${item.categories.length ? `${formatElaineContextList(item.categories, { label: "Categories", formatItem: (c) => formatElaineContextEntity({ entity: "category", id: c.id, label: c.name }) })}. ` : "Uncategorized. "}${item.dominantColors.length ? `Colors: ${item.dominantColors.join(", ")}. ` : ""}${item.motifs.length ? `Motifs: ${item.motifs.join(", ")}. ` : ""}${item.patternDescription ? `Pattern: ${item.patternDescription}. ` : ""}Photos: ${1 + item.images.length} (1 primary + ${item.images.length} supplemental, imageIds: ${item.images.map((im) => im.id).join(", ") || "none"}). ${item.lockedFields?.length ? `Locked fields (AI won't overwrite): ${item.lockedFields.join(", ")}. ` : "No fields are locked. "}${formatElaineContextList(allCategories ?? [], { label: "Available categories to assign", formatItem: (c) => formatElaineContextEntity({ entity: "category", id: c.id, label: c.name }) })}.`,
+      : `Pottery Piece Detail page: ${formatElaineContextEntity({ entity: "item", id: item.id, label: item.name })}${editing ? " — currently in edit mode with unsaved field changes" : ""}. ${item.maker ? `Maker: ${item.maker}. ` : ""}${item.style ? `Style: ${item.style}. ` : ""}${item.shape ? `Shape: ${item.shape}. ` : ""}${item.dimensions ? `Dimensions: ${item.dimensions}. ` : ""}Quantity: ${item.quantity ?? 1}. ${item.categories.length ? `${formatElaineContextList(item.categories, { label: "Categories", formatItem: (c) => formatElaineContextEntity({ entity: "category", id: c.id, label: c.name }) })}. ` : "Uncategorized. "}${item.dominantColors.length ? `Colors: ${item.dominantColors.join(", ")}. ` : ""}${item.motifs.length ? `Motifs: ${item.motifs.join(", ")}. ` : ""}${item.patternDescription ? `Pattern: ${item.patternDescription}. ` : ""}Photos: ${1 + item.images.length} (1 primary + ${item.images.length} supplemental, imageIds: ${item.images.map((im) => im.id).join(", ") || "none"}). Selected photoKey for original-copy actions: ${selectedPhotoId ?? "primary"}. Inspect its original-info first and use the returned version when restoring. A source of existing means only the earliest surviving saved copy, not a recovered camera original. ${item.lockedFields?.length ? `Locked fields (AI won't overwrite): ${item.lockedFields.join(", ")}. ` : "No fields are locked. "}${formatElaineContextList(allCategories ?? [], { label: "Available categories to assign", formatItem: (c) => formatElaineContextEntity({ entity: "category", id: c.id, label: c.name }) })}.`,
   );
 
   // ---------------------------------------------------------------------------
@@ -912,6 +950,7 @@ export default function PieceDetail() {
         {/* Image gallery */}
         <div className="space-y-4">
           <ImageGallery
+            onSelectedImageChange={setSelectedPhotoId}
             primaryUrl={item.imageUrl}
             primaryAlt={item.name}
             supplemental={item.images}

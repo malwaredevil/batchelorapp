@@ -79,6 +79,13 @@ test("excludes .local/ prefix", () => {
   assert.equal(shouldScanFile(".local/state/something.ts"), false);
 });
 
+test("excludes private generated reports that cannot be synced to GitHub", () => {
+  assert.equal(
+    shouldScanFile("generated-artifacts/security/hounddog/latest.json"),
+    false,
+  );
+});
+
 test("excludes .agents/ prefix", () => {
   assert.equal(shouldScanFile(".agents/memory/MEMORY.md"), false);
 });
@@ -239,7 +246,7 @@ test("excludes pnpm-lock.yaml (exact filename match)", () => {
 console.log("\npii-scan.test: EXCLUDED_PATH_PREFIXES size snapshot");
 
 test("EXCLUDED_PATH_PREFIXES size is exactly as expected (update if you add/remove an entry)", () => {
-  const EXPECTED_EXCLUDED_PATH_PREFIXES_SIZE = 23;
+  const EXPECTED_EXCLUDED_PATH_PREFIXES_SIZE = 24;
   assert.equal(
     EXCLUDED_PATH_PREFIXES.length,
     EXPECTED_EXCLUDED_PATH_PREFIXES_SIZE,
@@ -880,6 +887,9 @@ test("script exits non-zero when a real PII email is injected into a scanned fil
       0,
       `Expected non-zero exit when PII email is present, but got ${result.status}`,
     );
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    assert.ok(output.includes("[email redacted]"));
+    assert.ok(!output.includes("john.doe@realperson-household.com"));
   } finally {
     try {
       fs.unlinkSync(PII_FIXTURE_PATH);
@@ -892,6 +902,25 @@ test("script exits non-zero when a real PII email is injected into a scanned fil
 // ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
+
+test("phone findings retain their location without printing the detected number", () => {
+  // NANP 555-01xx is reserved for fictional use, and is not in our safe set.
+  const fictionalContact = "+12025550199";
+  fs.writeFileSync(
+    PII_FIXTURE_PATH,
+    `export const contact = "${fictionalContact}";\n`,
+  );
+  try {
+    const result = runPiiScan();
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    assert.notEqual(result.status, 0);
+    assert.ok(output.includes("[phone redacted]"));
+    assert.ok(output.includes("_temp_pii_scan_test_fixture_delete_me.ts"));
+    assert.ok(!output.includes(fictionalContact));
+  } finally {
+    fs.unlinkSync(PII_FIXTURE_PATH);
+  }
+});
 
 console.log(`\npii-scan.test: ${passed} passed, ${failed} failed\n`);
 

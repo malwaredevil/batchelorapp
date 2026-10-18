@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { inheritOriginalImage } from "./original-image";
 import {
   X,
   Camera,
@@ -388,7 +389,8 @@ export function ImageEditor({
   const [flipH, setFlipH] = useState(false);
   const [brightness, setBrightness] = useState(100);
   const [contrast, setContrast] = useState(100);
-  const [sharpness, setSharpness] = useState(25); // 0-100; applied at export only
+  // Crop-only saves must not silently enhance the photo.
+  const [sharpness, setSharpness] = useState(0); // 0-100; applied at export only
   const [zoom, setZoom] = useState(1);
   const [panX, setPanX] = useState(0.5);
   const [panY, setPanY] = useState(0.5);
@@ -1071,7 +1073,12 @@ export function ImageEditor({
       (blob) => {
         if (!blob) return;
         const base = file.name.replace(/\.[^.]+$/, "");
-        onSave(new File([blob], `${base}-edited.jpg`, { type: "image/jpeg" }));
+        onSave(
+          inheritOriginalImage(
+            new File([blob], `${base}-edited.jpg`, { type: "image/jpeg" }),
+            file,
+          ),
+        );
       },
       "image/jpeg",
       0.95,
@@ -1287,7 +1294,7 @@ export function ImageEditor({
               setFlipH(false);
               setBrightness(100);
               setContrast(100);
-              setSharpness(25);
+              setSharpness(0);
               setCrop(FULL);
               setCropMode(false);
             }}

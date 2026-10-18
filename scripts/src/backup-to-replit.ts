@@ -167,6 +167,8 @@ CREATE TABLE IF NOT EXISTS pottery_items (
   dominant_colors     TEXT[] NOT NULL DEFAULT '{}',
   motifs              TEXT[] NOT NULL DEFAULT '{}',
   image_path          TEXT NOT NULL,
+  original_image_path TEXT,
+  original_image_source TEXT,
   pattern_crop_path   TEXT,
   acquired_at         DATE,
   condition           TEXT,
@@ -181,6 +183,8 @@ CREATE TABLE IF NOT EXISTS pottery_images (
   id           SERIAL PRIMARY KEY,
   item_id      INTEGER NOT NULL REFERENCES pottery_items(id) ON DELETE CASCADE,
   storage_path TEXT NOT NULL,
+  original_image_path TEXT,
+  original_image_source TEXT,
   label        TEXT,
   position     INTEGER NOT NULL DEFAULT 0,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -191,6 +195,11 @@ CREATE TABLE IF NOT EXISTS pottery_item_categories (
   category_id INTEGER NOT NULL REFERENCES pottery_categories(id) ON DELETE CASCADE,
   PRIMARY KEY (item_id, category_id)
 );
+
+ALTER TABLE pottery_items ADD COLUMN IF NOT EXISTS original_image_path TEXT;
+ALTER TABLE pottery_items ADD COLUMN IF NOT EXISTS original_image_source TEXT;
+ALTER TABLE pottery_images ADD COLUMN IF NOT EXISTS original_image_path TEXT;
+ALTER TABLE pottery_images ADD COLUMN IF NOT EXISTS original_image_source TEXT;
 
 CREATE TABLE IF NOT EXISTS pottery_watchlist_items (
   id                  SERIAL PRIMARY KEY,
@@ -1993,6 +2002,8 @@ async function copySnapshot(source: pg.Client, dest: pg.Client) {
       "dominant_colors",
       "motifs",
       "image_path",
+      "original_image_path",
+      "original_image_source",
       "pattern_crop_path",
       "acquired_at",
       "condition",
@@ -2013,6 +2024,8 @@ async function copySnapshot(source: pg.Client, dest: pg.Client) {
       "id",
       "item_id",
       "storage_path",
+      "original_image_path",
+      "original_image_source",
       "label",
       "position",
       "created_at",

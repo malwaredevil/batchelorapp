@@ -184,6 +184,10 @@ async function main() {
 
   await copyTable(source, dest, {
     table: "pottery_items",
+    missingColumnDefaults: {
+      original_image_path: "NULL",
+      original_image_source: "NULL",
+    },
     columns: [
       "id",
       "name",
@@ -198,6 +202,8 @@ async function main() {
       "dominant_colors",
       "motifs",
       "image_path",
+      "original_image_path",
+      "original_image_source",
       "pattern_crop_path",
       "acquired_at",
       "condition",
@@ -213,10 +219,16 @@ async function main() {
 
   await copyTable(source, dest, {
     table: "pottery_images",
+    missingColumnDefaults: {
+      original_image_path: "NULL",
+      original_image_source: "NULL",
+    },
     columns: [
       "id",
       "item_id",
       "storage_path",
+      "original_image_path",
+      "original_image_source",
       "label",
       "position",
       "created_at",

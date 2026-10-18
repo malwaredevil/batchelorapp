@@ -1457,6 +1457,36 @@ export const ELAINE_APP_OPERATION_CATALOG = [
     },
   },
   {
+    operationId: "inspectPotteryOriginalPhoto",
+    method: "GET",
+    path: "/pottery/items/{id}/photos/{photoKey}/original-info",
+    domain: "pottery",
+    summary:
+      "Check the protected original or earliest saved copy of a pottery photo",
+    access: "read",
+    parameters: [
+      {
+        name: "id",
+        in: "path",
+        required: true,
+        schema: {
+          type: "integer",
+          minimum: 1,
+        },
+      },
+      {
+        name: "photoKey",
+        in: "path",
+        required: true,
+        schema: {
+          type: "string",
+          pattern: "^(primary|[1-9][0-9]*)$",
+        },
+      },
+    ],
+    requestBody: null,
+  },
+  {
     operationId: "labBulkCreaseFix",
     method: "POST",
     path: "/quilting/lab/bulk-crease-fix",
@@ -2266,6 +2296,51 @@ export const ELAINE_APP_OPERATION_CATALOG = [
             items: {
               type: "integer",
             },
+          },
+        },
+      },
+    },
+  },
+  {
+    operationId: "restorePotteryOriginalPhoto",
+    method: "POST",
+    path: "/pottery/items/{id}/photos/{photoKey}/restore-original",
+    domain: "pottery",
+    summary:
+      "Replace current pottery photo edits with its protected original or earliest saved copy",
+    access: "action",
+    parameters: [
+      {
+        name: "id",
+        in: "path",
+        required: true,
+        schema: {
+          type: "integer",
+          minimum: 1,
+        },
+      },
+      {
+        name: "photoKey",
+        in: "path",
+        required: true,
+        schema: {
+          type: "string",
+          pattern: "^(primary|[1-9][0-9]*)$",
+        },
+      },
+    ],
+    requestBody: {
+      required: true,
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["expectedVersion"],
+        properties: {
+          expectedVersion: {
+            type: "string",
+            pattern: "^[a-f0-9]{64}$",
+            description:
+              "Use the exact version returned by inspectPotteryOriginalPhoto. Never guess; a changed photo returns 409.",
           },
         },
       },

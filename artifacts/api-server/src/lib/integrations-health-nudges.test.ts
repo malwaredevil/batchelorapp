@@ -57,6 +57,7 @@ vi.mock("./logger", () => ({
 }));
 
 vi.mock("./scheduler-guard", () => ({
+  getSchedulerPollIntervalMs: (ms: number) => Math.min(ms, 15 * 60 * 1000),
   shouldRunScheduledTask: vi.fn().mockResolvedValue(true),
   recordScheduledTaskSuccess: vi.fn().mockResolvedValue(undefined),
   recordScheduledTaskFailure: vi.fn().mockResolvedValue(undefined),
@@ -140,6 +141,33 @@ function mockPrimeState(
 }
 
 // ── A. In-process path ────────────────────────────────────────────────────────
+
+describe.each([
+  ["in-process", computeAndStoreIntegrationsHealthNudges],
+  ["scheduled", runScheduledIntegrationsHealthNudges],
+] as const)("%s connection ownership", (_name, run) => {
+  it("completes owner lookup and health probes before leasing a DB connection", async () => {
+    const { db, pool } = await import("@workspace/db");
+    mockRunAllChecks.mockResolvedValueOnce({ checks: [] });
+    mockQuery.mockResolvedValue({ rows: [], rowCount: 0 });
+    await run();
+    const leasedAt = vi.mocked(pool.connect).mock.invocationCallOrder[0]!;
+    expect(vi.mocked(db.select).mock.invocationCallOrder[0]!).toBeLessThan(
+      leasedAt,
+    );
+    expect(mockRunAllChecks.mock.invocationCallOrder[0]!).toBeLessThan(
+      leasedAt,
+    );
+  });
+
+  it("propagates connection failure rather than pretending the task succeeded", async () => {
+    const { pool } = await import("@workspace/db");
+    const failure = new Error("permission denied");
+    mockRunAllChecks.mockResolvedValueOnce({ checks: [] });
+    vi.mocked(pool.connect).mockRejectedValueOnce(failure);
+    await expect(run()).rejects.toBe(failure);
+  });
+});
 //
 // computeAndStoreIntegrationsHealthNudges uses _consecutiveErrorCount (in-memory)
 // and ALSO persists updated counts to DB via integrations_health_state upserts.

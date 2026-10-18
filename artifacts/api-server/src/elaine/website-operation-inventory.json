@@ -1,5 +1,35 @@
 [
   {
+    "operationId": "inspectPotteryOriginalPhoto",
+    "method": "GET",
+    "path": "/pottery/items/{id}/photos/{photoKey}/original-info",
+    "domain": "pottery",
+    "summary": "Check the protected original or earliest saved copy of a pottery photo",
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "read_app_operation"],
+    "reason": "Elaine can inspect retained photo provenance and provide the authenticated view URL through the reviewed JSON operation bridge."
+  },
+  {
+    "operationId": "restorePotteryOriginalPhoto",
+    "method": "POST",
+    "path": "/pottery/items/{id}/photos/{photoKey}/restore-original",
+    "domain": "pottery",
+    "summary": "Replace current pottery photo edits with its protected original or earliest saved copy",
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "execute_app_operation"],
+    "reason": "Elaine proposes this authenticated JSON mutation through the reviewed operation bridge and its confirmation flow; current photo edits are replaced."
+  },
+  {
+    "operationId": "viewPotteryOriginalPhoto",
+    "method": "GET",
+    "path": "/pottery/items/{id}/photos/{photoKey}/original",
+    "domain": "pottery",
+    "summary": "View a protected original pottery photo",
+    "disposition": "attachment_or_camera",
+    "mappedTools": [],
+    "reason": "Binary image response. Elaine can obtain the authenticated view URL from inspectPotteryOriginalPhoto rather than download image bytes through the JSON operation bridge."
+  },
+  {
     "operationId": "applyExistingOrnamentCategories",
     "method": "POST",
     "path": "/ornaments/categories/apply-existing",

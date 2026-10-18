@@ -53,6 +53,7 @@ vi.mock("./logger", () => ({
 }));
 
 vi.mock("./scheduler-guard", () => ({
+  getSchedulerPollIntervalMs: (ms: number) => Math.min(ms, 15 * 60 * 1000),
   shouldRunScheduledTask: mockShouldRunScheduledTask,
   recordScheduledTaskSuccess: mockRecordScheduledTaskSuccess,
   recordScheduledTaskFailure: mockRecordScheduledTaskFailure,
@@ -78,6 +79,7 @@ import {
   startSentryErrorNudgeScheduler,
 } from "./sentry-error-nudges";
 import type { SentryIssue } from "./sentry-issues";
+import { logger } from "./logger";
 
 // ── Fixtures / helpers ────────────────────────────────────────────────────────
 
@@ -205,6 +207,14 @@ function ledgerUpsertCalls(): unknown[][] {
       (c[0] as string).includes("sentry_seen_issues") &&
       (c[0] as string).includes("INSERT"),
   );
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
 }
 
 beforeEach(() => {
@@ -363,6 +373,7 @@ describe("computeAndStoreSentryErrorNudges", () => {
   });
 
   it("propagates a failed DB connection so the scheduler can retry it", async () => {
+    setSentryLists([]);
     mockConnect.mockRejectedValueOnce(
       new Error("Connection terminated unexpectedly"),
     );
@@ -370,6 +381,20 @@ describe("computeAndStoreSentryErrorNudges", () => {
     await expect(computeAndStoreSentryErrorNudges()).rejects.toThrow(
       "Connection terminated unexpectedly",
     );
+  });
+
+  it("finishes owner lookup and Sentry fetches before leasing a DB connection", async () => {
+    const { db } = await import("@workspace/db");
+    setSentryLists([]);
+    setSeenLedger([]);
+    await computeAndStoreSentryErrorNudges();
+    const leasedAt = mockConnect.mock.invocationCallOrder[0]!;
+    expect(vi.mocked(db.select).mock.invocationCallOrder[0]!).toBeLessThan(
+      leasedAt,
+    );
+    for (const fetchedAt of mockListSentryIssues.mock.invocationCallOrder) {
+      expect(fetchedAt).toBeLessThan(leasedAt);
+    }
   });
 
   it("includes the suggestion, labelled as unverified, when generation succeeds", async () => {
@@ -383,6 +408,181 @@ describe("computeAndStoreSentryErrorNudges", () => {
     expect(message).toContain("Possible fix");
     expect(message).toContain("unverified");
     expect(message).toContain("Add a null check in mod55.");
+  });
+
+  it("keeps a one-slot pool available while suggestions wait and reacquires for persistence", async () => {
+    setSentryLists([issue("100")]);
+    setSeenLedger([]);
+    let leased = false;
+    const releases: ReturnType<typeof vi.fn>[] = [];
+    mockConnect.mockImplementation(async () => {
+      if (leased) throw new Error("pool exhausted");
+      leased = true;
+      const release = vi.fn(() => {
+        leased = false;
+      });
+      releases.push(release);
+      return { query: mockQuery, release };
+    });
+    const started = deferred<void>();
+    const suggestion = deferred<{
+      choices: { message: { content: string } }[];
+    }>();
+    mockCallModel.mockImplementation(() => {
+      started.resolve();
+      return suggestion.promise;
+    });
+
+    const run = computeAndStoreSentryErrorNudges();
+    try {
+      await started.promise;
+      expect(leased).toBe(false);
+      expect(releases[0]).toHaveBeenCalledOnce();
+      expect(nudgeInsertCalls()).toHaveLength(0);
+      const unrelatedClient = await mockConnect();
+      await unrelatedClient.query("SELECT 1");
+      unrelatedClient.release();
+    } finally {
+      suggestion.resolve({
+        choices: [{ message: { content: "Check the null value." } }],
+      });
+      await run;
+    }
+    expect(mockConnect).toHaveBeenCalledTimes(3);
+    expect(releases).toHaveLength(3);
+    for (const release of releases) expect(release).toHaveBeenCalledOnce();
+    expect(leased).toBe(false);
+    expect(nudgeInsertCalls()).toHaveLength(1);
+    expect(ledgerUpsertCalls()).toHaveLength(1);
+  });
+
+  it("bounds suggestion concurrency across overlapping runs and skips undisplayed suggestions", async () => {
+    setSentryLists(Array.from({ length: 8 }, (_, i) => issue(String(i))));
+    setSeenLedger([]);
+    const started = deferred<void>();
+    const suggestions = deferred<{
+      choices: { message: { content: string } }[];
+    }>();
+    let active = 0;
+    let peak = 0;
+    mockCallModel.mockImplementation(async () => {
+      active++;
+      peak = Math.max(peak, active);
+      if (active === 2) started.resolve();
+      try {
+        return await suggestions.promise;
+      } finally {
+        active--;
+      }
+    });
+    const runs = [
+      computeAndStoreSentryErrorNudges(),
+      computeAndStoreSentryErrorNudges(),
+    ];
+    try {
+      await started.promise;
+      expect(mockCallModel).toHaveBeenCalledTimes(2);
+      expect(mockRelease).toHaveBeenCalledTimes(2);
+    } finally {
+      suggestions.resolve({ choices: [{ message: { content: "NONE" } }] });
+      await Promise.all(runs);
+    }
+    expect(peak).toBe(2);
+    expect(mockCallModel).toHaveBeenCalledTimes(10); // Five per run, not eight.
+    expect(ledgerUpsertCalls()).toHaveLength(16); // All issues still recorded.
+    expect(String(nudgeInsertCalls()[0]![1])).toContain(
+      "…and 3 more new issues.",
+    );
+  });
+
+  it("uses separate clients and releases each exactly once", async () => {
+    setSentryLists([issue("100")]);
+    setSeenLedger([]);
+    const ledgerRelease = vi.fn();
+    const persistenceRelease = vi.fn();
+    const persistenceQuery = vi.fn((...args: unknown[]) => mockQuery(...args));
+    mockConnect
+      .mockResolvedValueOnce({ query: mockQuery, release: ledgerRelease })
+      .mockResolvedValueOnce({
+        query: persistenceQuery,
+        release: persistenceRelease,
+      });
+    await computeAndStoreSentryErrorNudges();
+    expect(ledgerRelease).toHaveBeenCalledOnce();
+    expect(persistenceRelease).toHaveBeenCalledOnce();
+    expect(persistenceQuery).toHaveBeenCalledTimes(2);
+    expect(ledgerRelease.mock.invocationCallOrder[0]!).toBeLessThan(
+      mockCallModel.mock.invocationCallOrder[0]!,
+    );
+    expect(mockCallModel.mock.invocationCallOrder[0]!).toBeLessThan(
+      mockConnect.mock.invocationCallOrder[1]!,
+    );
+  });
+
+  it.each(["DELETE FROM", "SELECT issue_id", "UPDATE sentry_seen_issues"])(
+    "releases the ledger client and propagates a %s failure without AI work",
+    async (failingSql) => {
+      setSentryLists([], [issue("100", { status: "resolved" })]);
+      setSeenLedger([{ issue_id: "100", last_status: "unresolved" }]);
+      const query = mockQuery.getMockImplementation()!;
+      mockQuery.mockImplementation((sql: string, params?: unknown[]) => {
+        if (sql.includes(failingSql)) throw new Error("ledger failure");
+        return query(sql, params);
+      });
+      await expect(computeAndStoreSentryErrorNudges()).rejects.toThrow(
+        "ledger failure",
+      );
+      expect(mockRelease).toHaveBeenCalledOnce();
+      expect(mockConnect).toHaveBeenCalledOnce();
+      expect(mockCallModel).not.toHaveBeenCalled();
+    },
+  );
+
+  it("propagates a persistence checkout failure without releasing the ledger client twice", async () => {
+    setSentryLists([issue("100")]);
+    setSeenLedger([]);
+    mockConnect
+      .mockResolvedValueOnce({ query: mockQuery, release: mockRelease })
+      .mockRejectedValueOnce(new Error("persistence checkout failed"));
+    await expect(computeAndStoreSentryErrorNudges()).rejects.toThrow(
+      "persistence checkout failed",
+    );
+    expect(mockRelease).toHaveBeenCalledOnce();
+    expect(nudgeInsertCalls()).toHaveLength(0);
+  });
+
+  it.each(["elaine_nudges", "INSERT INTO sentry_seen_issues"])(
+    "releases both clients and preserves retry idempotency after a %s failure",
+    async (failingSql) => {
+      setSentryLists([issue("100")]);
+      const state = installStatefulDb();
+      const query = mockQuery.getMockImplementation()!;
+      let failed = false;
+      mockQuery.mockImplementation((sql: string, params?: unknown[]) => {
+        if (!failed && sql.includes(failingSql)) {
+          failed = true;
+          throw new Error("persistence failure");
+        }
+        return query(sql, params);
+      });
+      await expect(computeAndStoreSentryErrorNudges()).rejects.toThrow(
+        "persistence failure",
+      );
+      expect(mockRelease).toHaveBeenCalledTimes(2);
+      await computeAndStoreSentryErrorNudges();
+      expect(mockRelease).toHaveBeenCalledTimes(4);
+      expect(state.nudges).toHaveLength(1);
+      expect(state.ledger.get("100")?.alert_generation).toBe(1);
+    },
+  );
+
+  it("releases the only ledger lease on a no-new-issues pass", async () => {
+    setSentryLists([issue("100")]);
+    setSeenLedger([{ issue_id: "100", last_status: "unresolved" }]);
+    await computeAndStoreSentryErrorNudges();
+    expect(mockConnect).toHaveBeenCalledOnce();
+    expect(mockRelease).toHaveBeenCalledOnce();
+    expect(mockCallModel).not.toHaveBeenCalled();
   });
 });
 
@@ -456,5 +656,26 @@ describe("startSentryErrorNudgeScheduler DB recovery", () => {
     expect(mockConnect).toHaveBeenCalledTimes(2);
     expect(mockRecordScheduledTaskSuccess).not.toHaveBeenCalled();
     expect(mockRecordScheduledTaskFailure).toHaveBeenCalledOnce();
+  });
+
+  it("records failure, not success, when persistence checkout fails on both attempts", async () => {
+    setSentryLists([issue("100")]);
+    setSeenLedger([]);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      mockConnect
+        .mockResolvedValueOnce({ query: mockQuery, release: mockRelease })
+        .mockRejectedValueOnce(new Error("Connection terminated unexpectedly"));
+    }
+    const stop = startSentryErrorNudgeScheduler();
+    await vi.advanceTimersByTimeAsync(STARTUP_DELAY_MS + 501);
+    stop();
+    expect(mockConnect).toHaveBeenCalledTimes(4);
+    expect(mockRelease).toHaveBeenCalledTimes(2);
+    expect(mockRecordScheduledTaskSuccess).not.toHaveBeenCalled();
+    expect(mockRecordScheduledTaskFailure).toHaveBeenCalledOnce();
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ err: expect.any(Error) }),
+      "sentry-error-nudges: run failed",
+    );
   });
 });

@@ -218,9 +218,14 @@ async function canvasFile(
   return new File([blob], `${base}${suffix}.jpg`, { type: "image/jpeg" });
 }
 
+import { inheritOriginalImage } from "./original-image";
+
 /** Bake EXIF orientation into pixels while preserving the photo's aspect ratio. */
 export async function normalizeCapturedImage(file: File): Promise<File> {
-  return canvasFile(await uprightCanvas(file), file.name);
+  return inheritOriginalImage(
+    await canvasFile(await uprightCanvas(file), file.name),
+    file,
+  );
 }
 
 async function rotateImage(
@@ -241,7 +246,10 @@ async function rotateImage(
     ctx.rotate(-Math.PI / 2);
   }
   ctx.drawImage(upright, 0, 0);
-  return canvasFile(rotated, file.name, "-rotated");
+  return inheritOriginalImage(
+    await canvasFile(rotated, file.name, "-rotated"),
+    file,
+  );
 }
 
 /** Rotate an already-normalized image clockwise and return the new upload file. */

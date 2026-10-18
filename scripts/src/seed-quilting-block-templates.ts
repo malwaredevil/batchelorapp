@@ -1043,7 +1043,7 @@ const TEMPLATES: TemplateDef[] = [
 // ---------------------------------------------------------------------------
 
 async function main() {
-  console.log(`Logging in as ${EMAIL}...`);
+  console.log("Logging in with the configured account...");
   const jar: string[] = [];
 
   const loginRes = await fetch(`${BASE_URL}/api/auth/login`, {

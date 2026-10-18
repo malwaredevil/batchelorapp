@@ -250,14 +250,23 @@ router.post(
       .select({
         itemId: potteryImages.itemId,
         storagePath: potteryImages.storagePath,
+        label: potteryImages.label,
       })
       .from(potteryImages)
-      .where(inArray(potteryImages.itemId, ids))
-      .orderBy(asc(potteryImages.position));
-    const suppByItemId = new Map<number, string[]>();
+      .where(
+        and(
+          inArray(potteryImages.itemId, ids),
+          isNull(potteryImages.deletedAt),
+        ),
+      )
+      .orderBy(asc(potteryImages.position), asc(potteryImages.id));
+    const suppByItemId = new Map<
+      number,
+      { storagePath: string; label: string | null }[]
+    >();
     for (const s of suppRows) {
       const arr = suppByItemId.get(s.itemId) ?? [];
-      arr.push(s.storagePath);
+      arr.push({ storagePath: s.storagePath, label: s.label });
       suppByItemId.set(s.itemId, arr);
     }
 
@@ -276,7 +285,7 @@ router.post(
         Promise.all(
           (suppByItemId.get(row.id) ?? [])
             .slice(0, MAX_EXTRA_IMAGES)
-            .map((p) => downloadAndShrinkImageForAi(p)),
+            .map((p) => downloadAndShrinkImageForAi(p.storagePath)),
         ),
       ),
     );
@@ -286,6 +295,9 @@ router.post(
         index,
         imageUrl: matchDataUrls[index] ?? "",
         extraImageUrls: extraDataUrlsByIndex[index] ?? [],
+        extraImageLabels: (suppByItemId.get(item.id) ?? [])
+          .slice(0, MAX_EXTRA_IMAGES)
+          .map((photo) => photo.label),
         name: item.name,
         patternDescription: item.patternDescription,
         style: item.style,

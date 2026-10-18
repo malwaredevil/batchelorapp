@@ -1,6 +1,9 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+vi.mock("./purge-expired-pottery-photos", () => ({
+  purgeExpiredPotteryPhotos: vi.fn(async () => 0),
+}));
 
 const source = readFileSync(
   fileURLToPath(new URL("./purge-deleted.ts", import.meta.url)),

@@ -39,5 +39,5 @@ if (!res.ok) {
 }
 
 const rows = (await res.json()) as { id: number; email: string }[];
-console.log(`EMAIL=${email}`);
+console.log("Test account created.");
 console.log(`USER_ID=${rows[0]?.id ?? "unknown"}`);

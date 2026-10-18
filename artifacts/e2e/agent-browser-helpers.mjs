@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { chromium } from "@playwright/test";
 
-function deriveAgentScreenshotToken() {
+export function deriveAgentScreenshotToken() {
   let output;
   try {
     output = execFileSync(

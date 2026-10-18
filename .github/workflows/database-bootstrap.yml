@@ -24,7 +24,7 @@ permissions:
 jobs:
   bootstrap:
     name: Fresh schema and idempotency
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       # This job intentionally defines its own disposable connection. It never

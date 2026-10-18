@@ -25,7 +25,7 @@ permissions:
 jobs:
   typecheck:
     name: Typecheck
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -37,7 +37,7 @@ jobs:
   build-api:
     name: Build API server
     needs: [typecheck]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       NODE_ENV: production
@@ -51,7 +51,7 @@ jobs:
   build-modules:
     name: Build modules frontend
     needs: [typecheck]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       NODE_ENV: production
@@ -67,7 +67,7 @@ jobs:
   build-web:
     name: Build web frontend
     needs: [typecheck]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       NODE_ENV: production
@@ -83,7 +83,7 @@ jobs:
   build-elaine:
     name: Build elaine frontend
     needs: [typecheck]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       NODE_ENV: production
@@ -98,7 +98,7 @@ jobs:
 
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       # `pnpm run lint` shells out to check-duplicate-code with
@@ -119,7 +119,7 @@ jobs:
 
   app-config-drift:
     name: App-config drift guard
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -135,7 +135,7 @@ jobs:
     # (or explicitly listed in INTENTIONAL_SKIPS).  Catches the recurring bug
     # where a new feature table is added to the Drizzle schema but the
     # hand-maintained backup/restore scripts are not updated.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -146,7 +146,7 @@ jobs:
 
   workflow-security:
     name: Workflow security policy
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -161,7 +161,7 @@ jobs:
     # job (which also runs the check via pnpm run lint) so that a composition
     # violation surfaces as a clearly labelled failed job in the GitHub UI
     # rather than being buried inside lint output.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -173,7 +173,7 @@ jobs:
 
   elaine-capability-parity:
     name: Elaine capability parity
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     # Heavier check — only worth running once a PR is out of Draft. GitHub
     # treats a skipped job as satisfying a required status check, so a Draft
@@ -191,7 +191,7 @@ jobs:
     name: DB library tests (drizzle-contracts upgrade guard)
     # Runs the drizzle-contracts test suite so that Dependabot PRs that bump
     # drizzle-orm are automatically validated against the upgrade guard.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -202,7 +202,7 @@ jobs:
 
   test-api-server:
     name: API server tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -213,7 +213,7 @@ jobs:
 
   test-api-client:
     name: API client tests (getUploadErrorMessage)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -224,7 +224,7 @@ jobs:
 
   test-app-shell:
     name: Shared application shell tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -236,7 +236,7 @@ jobs:
 
   secrets-scan:
     name: Secrets / credential scan
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -248,7 +248,7 @@ jobs:
 
   security-audit:
     name: Security audit (high+)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -270,7 +270,7 @@ jobs:
 
   pii-scan:
     name: PII email scan
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -306,7 +306,7 @@ jobs:
 
   codegen-drift:
     name: Codegen drift
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     # Heavier check — deferred to the ready-for-review stage, see
     # elaine-capability-parity above for why this is safe.
@@ -328,7 +328,7 @@ jobs:
   e2e-critical:
     name: E2E critical-path (Chromium)
     needs: [typecheck]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     if: github.event.pull_request.draft == false
     env:
@@ -355,7 +355,7 @@ jobs:
 
   guard-elaine-widget:
     name: Guard — Elaine widget globally mounted in modules
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -383,7 +383,7 @@ jobs:
   e2e-modules:
     name: E2E smoke (modules)
     needs: [typecheck]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     if: github.event.pull_request.draft == false
     env:
@@ -411,7 +411,7 @@ jobs:
   e2e-elaine:
     name: E2E smoke (Elaine)
     needs: [typecheck]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     if: github.event.pull_request.draft == false
     env:

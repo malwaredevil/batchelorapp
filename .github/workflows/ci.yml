@@ -246,6 +246,21 @@ jobs:
       - name: Scan all public files for credentials and secret patterns
         run: pnpm --filter @workspace/scripts run check-public-file-secrets
 
+  privacy-scan:
+    name: Privacy dataflow scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-workspace
+      - name: Test report validation and privacy gate
+        run: pnpm --filter @workspace/scripts run privacy:test
+      - name: Run pinned local scanner without cloud uploads or AI review
+        run: pnpm --filter @workspace/scripts run privacy:scan
+      # Do not upload raw reports: public CI artifacts can expose source/PII.
+
   security-audit:
     name: Security audit (high+)
     runs-on: ubuntu-latest

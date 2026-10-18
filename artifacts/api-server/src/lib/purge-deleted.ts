@@ -27,6 +27,7 @@ import {
 import { createClient } from "@supabase/supabase-js";
 import { logger } from "./logger";
 import { env } from "./env";
+import { purgeExpiredPotteryPhotos } from "./purge-expired-pottery-photos";
 import {
   clearActivityPhotoReferences,
   clearActivityDocumentReferences,
@@ -119,6 +120,7 @@ export async function purgeDeletedItems(): Promise<PurgeSummary> {
       .select({
         id: potteryItems.id,
         imagePath: potteryItems.imagePath,
+        originalImagePath: potteryItems.originalImagePath,
         patternCropPath: potteryItems.patternCropPath,
       })
       .from(potteryItems)
@@ -131,12 +133,19 @@ export async function purgeDeletedItems(): Promise<PurgeSummary> {
     if (rows.length > 0) {
       const ids = rows.map((r) => r.id);
       const suppImages = await db
-        .select({ storagePath: potteryImages.storagePath })
+        .select({
+          storagePath: potteryImages.storagePath,
+          originalImagePath: potteryImages.originalImagePath,
+        })
         .from(potteryImages)
         .where(inArray(potteryImages.itemId, ids));
       const paths = [
-        ...rows.flatMap((r) => [r.imagePath, r.patternCropPath]),
-        ...suppImages.map((i) => i.storagePath),
+        ...rows.flatMap((r) => [
+          r.imagePath,
+          r.patternCropPath,
+          r.originalImagePath,
+        ]),
+        ...suppImages.flatMap((i) => [i.storagePath, i.originalImagePath]),
       ];
       await removeStoragePaths("pottery", paths);
       await db.delete(potteryImages).where(inArray(potteryImages.itemId, ids));
@@ -525,5 +534,16 @@ export async function purgeDeletedItems(): Promise<PurgeSummary> {
   }
 
   logger.info({ summary }, "purge-deleted: completed");
+  try {
+    await purgeExpiredPotteryPhotos(cutoff);
+  } catch {
+    summary.errors.push(
+      "pottery_images: photo cleanup failed; retained rows for retry",
+    );
+    logger.warn(
+      { operation: "purge-pottery-photos" },
+      "Deleted photo cleanup failed",
+    );
+  }
   return summary;
 }

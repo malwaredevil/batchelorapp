@@ -22,8 +22,12 @@ export interface RetryOptions {
 }
 
 function isTransientError(err: unknown): boolean {
-  if (err instanceof TypeError) return true;
-  if (err instanceof Error) {
+  const seen = new Set<Error>();
+  // Drizzle wraps the useful pg/network error in cause and omits it from
+  // the outer message. Inspect the chain without looping on cyclic causes.
+  while (err instanceof Error && !seen.has(err)) {
+    seen.add(err);
+    if (err instanceof TypeError) return true;
     const msg = err.message.toLowerCase();
     if (
       msg.includes("timeout") ||
@@ -41,6 +45,7 @@ function isTransientError(err: unknown): boolean {
       const status = parseInt(match[1], 10);
       return status >= 500 && status < 600;
     }
+    err = err.cause;
   }
   return false;
 }

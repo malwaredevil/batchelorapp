@@ -7,6 +7,7 @@ export interface PrimaryImagePromotionAdapter<TResult> {
   updateImagePath: (imageId: number, path: string) => Promise<void>;
   updateItemPath: (itemId: number, path: string) => Promise<void>;
   rerunAnalysis: (itemId: number) => Promise<TResult>;
+  swapImages?: (itemId: number, imageId: number) => Promise<void>;
 }
 
 /**
@@ -30,8 +31,12 @@ export function createPrimaryImagePromoter<TResult>(
       throw Object.assign(new Error("Image not found."), { status: 404 });
     }
 
-    await adapter.updateImagePath(imageId, item.imagePath);
-    await adapter.updateItemPath(itemId, supplementalImage.storagePath);
+    if (adapter.swapImages) {
+      await adapter.swapImages(itemId, imageId);
+    } else {
+      await adapter.updateImagePath(imageId, item.imagePath);
+      await adapter.updateItemPath(itemId, supplementalImage.storagePath);
+    }
     return adapter.rerunAnalysis(itemId);
   };
 }

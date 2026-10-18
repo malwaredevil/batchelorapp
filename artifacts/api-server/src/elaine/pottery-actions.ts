@@ -21,7 +21,7 @@ import {
   createPotteryItemFromBuffer,
 } from "../routes/pottery/pottery";
 import { mergePotteryCategories } from "../routes/pottery/categories";
-import { deleteImage } from "../lib/pottery/storage";
+import { deleteUnreferencedPotteryPhoto } from "../lib/pottery/photo-originals";
 import { logActivity } from "../lib/soft-delete";
 import { env } from "../lib/env";
 import { consumeAiRateLimit } from "../middleware/rateLimit";
@@ -386,9 +386,17 @@ export const potteryActionExecutors: Record<PotteryActionType, ActionExecutor> =
         return r ?? null;
       },
       deleteDbImage: async (imageId) => {
-        await db.delete(potteryImages).where(eq(potteryImages.id, imageId));
+        const deleted = await db
+          .delete(potteryImages)
+          .where(eq(potteryImages.id, imageId))
+          .returning({ originalImagePath: potteryImages.originalImagePath });
+        for (const image of deleted) {
+          if (image.originalImagePath) {
+            await deleteUnreferencedPotteryPhoto(image.originalImagePath);
+          }
+        }
       },
-      deleteStorageImage: deleteImage,
+      deleteStorageImage: deleteUnreferencedPotteryPhoto,
       actionType: "delete_pottery_photo",
     }),
 

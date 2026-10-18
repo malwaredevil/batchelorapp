@@ -1,5 +1,9 @@
 import OpenAI from "openai";
 import {
+  buildPotteryPhotoContent,
+  PHOTO_VIEWPOINT_POLICY,
+} from "./photo-evidence";
+import {
   callModel,
   callModelWithAdvisor,
   callFusion,
@@ -62,7 +66,9 @@ export interface VisionAnalysis {
   glazeType: string | null;
 }
 
-const ANALYSIS_PROMPT = `You are an expert ceramics and pottery cataloguer. You will be given one or more photos of the same pottery piece — different angles, front and back, or close-ups. Use every photo to build the most accurate assessment you can.
+const ANALYSIS_PROMPT = `${PHOTO_VIEWPOINT_POLICY}
+
+You are an expert ceramics and pottery cataloguer. You will be given one or more photos of the same pottery piece — different angles, front and back, or close-ups. Use every photo to build the most accurate assessment you can.
 
 Respond with STRICT JSON only, using exactly these keys:
 - "name": a concise, descriptive name that combines size (if measurable), the dominant decorative attribute, and the item type — in that order. The size you use in the name MUST be copied exactly from your "dimensions" answer — use the same snapped or rounded values, never different ones. Each inch value MUST use the ″ symbol followed immediately by its metric equivalent in parentheses, rounded to the nearest whole centimetre (1 inch = 2.54 cm). Use ONLY the ″ symbol for inches — never the word "in" or "inch". Choose the format that matches the piece type: (A) Single circular dimension (plates, bowls, round platters): '11″ (28 cm) Blue Willow Dinner Plate'. (B) Non-circular flat piece, top view only (trays, baking dishes, rectangular platters): '12″ (30 cm) × 8″ (20 cm) Blue Willow Serving Tray'. (C) Non-circular flat piece with depth measured from a side shot: '14″ (36 cm) × 6″ (15 cm) × 3″ (8 cm) Floral Oval Baking Dish'. (D) Upright vessel (mug, cup, vase, jug, pitcher) — diameter from top shot × height from side shot: '3″ (8 cm) × 5″ (13 cm) Blue Willow Mug'. If only one dimension is measurable, use that alone. (E) 3D sculptural piece with a circular footprint (round-base figurine, animal, bust) — diameter from top × height from front/side: '5″ (13 cm) × 10″ (25 cm) Snowman Figurine'. (F) 3D sculptural piece with a non-circular footprint — L × W from top × height from front/side: '6″ (15 cm) × 4″ (10 cm) × 9″ (23 cm) Cat Figurine'. Omit size entirely when no measurement is available (e.g. 'Spongeware Mixing Bowl'). Keep it concise — under 12 words including the size.
@@ -200,11 +206,9 @@ function buildContextBlock(ctx: AnalysisContext): string {
 export async function analyzeImage(
   dataUrls: string[],
   context?: AnalysisContext,
+  labels?: readonly (string | null)[],
 ): Promise<VisionAnalysis> {
-  const imageContent = dataUrls.map((url) => ({
-    type: "image_url" as const,
-    image_url: { url },
-  }));
+  const imageContent = buildPotteryPhotoContent(dataUrls, labels);
 
   const contextBlock = context ? buildContextBlock(context) : "";
   const baseInstruction =
@@ -306,7 +310,9 @@ export async function embedText(text: string): Promise<number[]> {
 // Surface zone analysis
 // ---------------------------------------------------------------------------
 
-const ZONE_ANALYSIS_PROMPT = `You are an expert ceramics analyst. Examine this pottery piece and analyse its decorative surface zones.
+const ZONE_ANALYSIS_PROMPT = `${PHOTO_VIEWPOINT_POLICY}
+
+You are an expert ceramics analyst. Examine this pottery piece and analyse its decorative surface zones.
 
 Identify each distinct zone of the piece that is visible. Only include zones with meaningful decoration or noteworthy characteristics.
 
@@ -338,11 +344,9 @@ Do not include any commentary outside the JSON.`;
 
 export async function analyzePotteryZones(
   dataUrls: string[],
+  labels?: readonly (string | null)[],
 ): Promise<SurfaceZoneAnalysis | null> {
-  const imageContent = dataUrls.slice(0, 3).map((url) => ({
-    type: "image_url" as const,
-    image_url: { url },
-  }));
+  const imageContent = buildPotteryPhotoContent(dataUrls.slice(0, 3), labels);
 
   try {
     const models = await getModels();
@@ -432,7 +436,9 @@ export async function analyzePotteryZones(
 // Backstamp-focused maker identification
 // ---------------------------------------------------------------------------
 
-const BACKSTAMP_PROMPT = `You are an expert ceramics appraiser specialising in pottery maker's marks and backstamps.
+const BACKSTAMP_PROMPT = `${PHOTO_VIEWPOINT_POLICY}
+
+You are an expert ceramics appraiser specialising in pottery maker's marks and backstamps.
 
 Examine all photos carefully — especially any shot showing the underside or bottom of the piece. Focus specifically on:
 - Printed or transfer-printed backstamps
@@ -460,11 +466,9 @@ Do not include any commentary outside the JSON.`;
  */
 export async function locateBackstampAndEnhanceMaker(
   dataUrls: string[],
+  labels?: readonly (string | null)[],
 ): Promise<{ maker: string | null; makerInfo: string | null } | null> {
-  const imageContent = dataUrls.map((url) => ({
-    type: "image_url" as const,
-    image_url: { url },
-  }));
+  const imageContent = buildPotteryPhotoContent(dataUrls, labels);
 
   const backstampUserContent = [
     {
@@ -572,6 +576,7 @@ export interface CompareMatchInput {
   index: number;
   imageUrl: string;
   extraImageUrls: string[];
+  extraImageLabels?: (string | null)[];
   name: string;
   patternDescription: string | null;
   style: string | null;
@@ -592,7 +597,9 @@ export interface CompareVerdictResult {
   perMatch: Record<number, CompareMatchVerdict>;
 }
 
-const COMPARE_PROMPT = `You are a specialist pottery appraiser comparing a CANDIDATE photo against pieces in a private collection. Your job is to give the owner a confident, useful answer — not a vague hedge.
+const COMPARE_PROMPT = `${PHOTO_VIEWPOINT_POLICY}
+
+You are a specialist pottery appraiser comparing a CANDIDATE photo against pieces in a private collection. Your job is to give the owner a confident, useful answer — not a vague hedge.
 
 Each existing piece is labelled with a PATTERN SIMILARITY SCORE (0–1) computed from AI-extracted textual descriptions of both pieces. Use these scores as your primary guide:
 - Score ≥ 0.80: very strong evidence the patterns are the same. You should say "yes" for samePattern unless the photos show clearly different decoration.
@@ -658,10 +665,12 @@ export async function compareWithMatches(params: {
         motifs: match.motifs,
       })}. ${photoCount > 1 ? `${photoCount} photos follow (different angles of the same piece):` : "Photo:"}`,
     });
-    content.push({ type: "image_url", image_url: { url: match.imageUrl } });
-    for (const extra of match.extraImageUrls) {
-      content.push({ type: "image_url", image_url: { url: extra } });
-    }
+    content.push(
+      ...buildPotteryPhotoContent(
+        [match.imageUrl, ...match.extraImageUrls],
+        [null, ...(match.extraImageLabels ?? [])],
+      ),
+    );
   }
 
   const models = await getModels();

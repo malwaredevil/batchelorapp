@@ -27,11 +27,13 @@
 
 import { pool, db, appUsers } from "@workspace/db";
 import { eq } from "drizzle-orm";
+import pLimit from "p-limit";
 import { logger } from "./logger";
 import {
   shouldRunScheduledTask,
   recordScheduledTaskSuccess,
   recordScheduledTaskFailure,
+  getSchedulerPollIntervalMs,
 } from "./scheduler-guard";
 import {
   listSentryIssues,
@@ -52,6 +54,8 @@ export const RESOLVED_RETENTION_DAYS = 90;
 // At most this many issues get individual detail lines in a consolidated
 // message; beyond that the remainder is summarised as a count.
 const MAX_DETAILED_ISSUES = 5;
+// Shared across overlapping passes in this process, not one limiter per run.
+const suggestionLimit = pLimit(2);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -168,7 +172,17 @@ export async function computeAndStoreSentryErrorNudges(): Promise<void> {
     return;
   }
 
-  const client = await pool.connect().catch((err: unknown) => {
+  // Never hold a pool client while the owner lookup asks the same pool for
+  // another connection, or while waiting for the external Sentry API.
+  const ownerId = await resolveOwnerId();
+  if (ownerId === null) return;
+  const [unresolvedResult, resolvedResult] = await Promise.all([
+    listSentryIssues({ environment: "production", query: "is:unresolved" }),
+    listSentryIssues({ environment: "production", query: "is:resolved" }),
+  ]);
+  if (!unresolvedResult.configured || !resolvedResult.configured) return;
+
+  const ledgerClient = await pool.connect().catch((err: unknown) => {
     logger.warn({ err }, "sentry-error-nudges: could not connect to DB");
     // The scheduler wraps the full pass in withRetry(). Do not turn a failed
     // connection into a successful no-op, or the caller will persist a false
@@ -176,13 +190,11 @@ export async function computeAndStoreSentryErrorNudges(): Promise<void> {
     throw err;
   });
 
+  let newIssues: { issue: SentryIssue; generation: number }[];
   try {
-    const ownerId = await resolveOwnerId();
-    if (ownerId === null) return;
-
     // Prune stale resolved rows so the ledger doesn't accumulate forever.
     // Re-announcing an ancient reopened issue after pruning is acceptable.
-    const pruneResult = await client.query(
+    const pruneResult = await ledgerClient.query(
       `DELETE FROM sentry_seen_issues
        WHERE last_status = 'resolved'
          AND last_updated_at < NOW() - INTERVAL '${RESOLVED_RETENTION_DAYS} days'`,
@@ -194,14 +206,7 @@ export async function computeAndStoreSentryErrorNudges(): Promise<void> {
       );
     }
 
-    // Fetch both lists so resolved issues can be marked in the seen ledger.
-    const [unresolvedResult, resolvedResult] = await Promise.all([
-      listSentryIssues({ environment: "production", query: "is:unresolved" }),
-      listSentryIssues({ environment: "production", query: "is:resolved" }),
-    ]);
-    if (!unresolvedResult.configured || !resolvedResult.configured) return;
-
-    const seenResult = await client.query<{
+    const seenResult = await ledgerClient.query<{
       issue_id: string;
       last_status: string;
       alert_generation: number;
@@ -219,7 +224,7 @@ export async function computeAndStoreSentryErrorNudges(): Promise<void> {
     for (const issue of resolvedResult.issues) {
       const prev = seen.get(issue.id);
       if (prev && prev.status !== "resolved") {
-        await client.query(
+        await ledgerClient.query(
           `UPDATE sentry_seen_issues
            SET last_status = 'resolved', last_updated_at = NOW()
            WHERE issue_id = $1`,
@@ -235,7 +240,7 @@ export async function computeAndStoreSentryErrorNudges(): Promise<void> {
     // same UTC day still produces a DISTINCT nudge key, while an identical
     // retry of the same run (crash before the ledger write) recomputes the
     // same generation and stays idempotent.
-    const newIssues = unresolvedResult.issues
+    newIssues = unresolvedResult.issues
       .map((issue) => {
         const prev = seen.get(issue.id);
         if (prev === undefined) return { issue, generation: 1 };
@@ -246,36 +251,47 @@ export async function computeAndStoreSentryErrorNudges(): Promise<void> {
       .filter((entry): entry is { issue: SentryIssue; generation: number } =>
         Boolean(entry),
       );
+  } finally {
+    ledgerClient.release();
+  }
 
-    if (newIssues.length === 0) {
-      logger.info(
-        { unresolved: unresolvedResult.issues.length },
-        "sentry-error-nudges: no new issues this run",
-      );
-      return;
-    }
-
-    // Optional fix suggestions — strictly best-effort, never blocking.
-    const withSuggestions = await Promise.all(
-      newIssues.map(async ({ issue }) => ({
-        issue,
-        suggestion: await generateFixSuggestion(issue),
-      })),
+  if (newIssues.length === 0) {
+    logger.info(
+      { unresolved: unresolvedResult.issues.length },
+      "sentry-error-nudges: no new issues this run",
     );
+    return;
+  }
 
-    const message = buildNudgeMessage(withSuggestions);
-    // Key includes the sorted new `id:g<generation>` pairs so distinct
-    // batches — including a same-day reopen of an already-announced issue —
-    // never collide, while an identical retry of the same batch (e.g. a
-    // crash after fetch but before the ledger write) recomputes the same key
-    // and stays idempotent.
-    const idsKey = newIssues
-      .map(({ issue, generation }) => `${issue.id}:g${generation}`)
-      .sort()
-      .join(",")
-      .slice(0, 120);
-    const nudgeKey = `sentry_errors:${todayUtc()}:${idsKey}`;
+  // No leased client while optional AI work (including getModels' DB reads)
+  // runs. Only generate suggestions that the detailed message can display.
+  const withSuggestions = await Promise.all(
+    newIssues.map(async ({ issue }, index) => ({
+      issue,
+      suggestion:
+        index < MAX_DETAILED_ISSUES
+          ? await suggestionLimit(() => generateFixSuggestion(issue))
+          : null,
+    })),
+  );
 
+  const message = buildNudgeMessage(withSuggestions);
+  // Key includes the sorted new `id:g<generation>` pairs so distinct
+  // batches — including a same-day reopen of an already-announced issue —
+  // never collide, while an identical retry of the same batch (e.g. a
+  // crash after fetch but before the ledger write) recomputes the same key
+  // and stays idempotent.
+  const idsKey = newIssues
+    .map(({ issue, generation }) => `${issue.id}:g${generation}`)
+    .sort()
+    .join(",")
+    .slice(0, 120);
+  const nudgeKey = `sentry_errors:${todayUtc()}:${idsKey}`;
+
+  // Reacquire only for persistence; propagate failures to the scheduler.
+  // Keep the exact generation snapshot used in the key for every ledger write.
+  const client = await pool.connect();
+  try {
     const insertResult = await client.query(
       `INSERT INTO elaine_nudges (user_id, source_app, nudge_key, message)
        VALUES ($1, 'admin', $2, $3)
@@ -365,7 +381,10 @@ export function startSentryErrorNudgeScheduler(): () => void {
     if (!stopped) void run();
   }, STARTUP_DELAY_MS);
 
-  const interval = setInterval(() => void run(), INTERVAL_MS);
+  const interval = setInterval(
+    () => void run(),
+    getSchedulerPollIntervalMs(INTERVAL_MS),
+  );
   interval.unref();
 
   logger.info(

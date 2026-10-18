@@ -217,6 +217,10 @@ export const BUCKET_DB_SQL: Record<string, string> = {
         SELECT pattern_crop_path AS path FROM pottery_items WHERE pattern_crop_path IS NOT NULL
         UNION ALL
         SELECT storage_path AS path FROM pottery_images WHERE storage_path IS NOT NULL
+        UNION ALL
+        SELECT original_image_path AS path FROM pottery_items WHERE original_image_path IS NOT NULL
+        UNION ALL
+        SELECT original_image_path AS path FROM pottery_images WHERE original_image_path IS NOT NULL
       `,
   quilting: `
         SELECT image_path AS path FROM quilting_fabrics WHERE image_path IS NOT NULL

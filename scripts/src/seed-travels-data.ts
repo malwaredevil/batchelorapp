@@ -289,7 +289,7 @@ async function main() {
   }
 
   const user = users[0];
-  console.log(`Seeding for user: ${user.email} (id=${user.id})`);
+  console.log(`Seeding for user id=${user.id}`);
 
   // Check existing trips
   const existingTrips = await supabase<Array<{ id: number }>>(

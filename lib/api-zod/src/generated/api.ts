@@ -183,6 +183,77 @@ export const ChangePasswordResponse = zod.void()
 
 
 /**
+ * @summary Check the protected original or earliest saved copy of a pottery photo
+ */
+
+export const inspectPotteryOriginalPhotoPathPhotoKeyRegExp = new RegExp('^(primary|[1-9][0-9]*)$');
+
+
+export const InspectPotteryOriginalPhotoParams = zod.object({
+  "id": zod.coerce.number().min(1),
+  "photoKey": zod.coerce.string().regex(inspectPotteryOriginalPhotoPathPhotoKeyRegExp)
+})
+
+export const inspectPotteryOriginalPhotoResponseVersionRegExp = new RegExp('^[a-f0-9]{64}$');
+
+
+export const InspectPotteryOriginalPhotoResponse = zod.object({
+  "version": zod.string().regex(inspectPotteryOriginalPhotoResponseVersionRegExp),
+  "available": zod.boolean(),
+  "source": zod.enum(['upload', 'existing']).nullable(),
+  "isCurrentOriginal": zod.boolean(),
+  "imageUrl": zod.string().nullable()
+})
+
+
+/**
+ * @summary View a protected original pottery photo
+ */
+
+export const viewPotteryOriginalPhotoPathPhotoKeyRegExp = new RegExp('^(primary|[1-9][0-9]*)$');
+
+
+export const ViewPotteryOriginalPhotoParams = zod.object({
+  "id": zod.coerce.number().min(1),
+  "photoKey": zod.coerce.string().regex(viewPotteryOriginalPhotoPathPhotoKeyRegExp)
+})
+
+export const ViewPotteryOriginalPhotoResponse = zod.unknown()
+
+
+/**
+ * Replaces the current photo, discarding its current edits. The protected copy remains available. Requires user confirmation. Does not recover edits made before protection existed.
+ * @summary Replace current pottery photo edits with its protected original or earliest saved copy
+ */
+
+export const restorePotteryOriginalPhotoPathPhotoKeyRegExp = new RegExp('^(primary|[1-9][0-9]*)$');
+
+
+export const RestorePotteryOriginalPhotoParams = zod.object({
+  "id": zod.coerce.number().min(1),
+  "photoKey": zod.coerce.string().regex(restorePotteryOriginalPhotoPathPhotoKeyRegExp)
+})
+
+export const restorePotteryOriginalPhotoBodyExpectedVersionRegExp = new RegExp('^[a-f0-9]{64}$');
+
+
+export const RestorePotteryOriginalPhotoBody = zod.object({
+  "expectedVersion": zod.string().regex(restorePotteryOriginalPhotoBodyExpectedVersionRegExp).describe('Use the exact version returned by inspectPotteryOriginalPhoto. Never guess; a changed photo returns 409.')
+})
+
+export const restorePotteryOriginalPhotoResponseVersionRegExp = new RegExp('^[a-f0-9]{64}$');
+
+
+export const RestorePotteryOriginalPhotoResponse = zod.object({
+  "version": zod.string().regex(restorePotteryOriginalPhotoResponseVersionRegExp),
+  "available": zod.boolean(),
+  "source": zod.enum(['upload', 'existing']).nullable(),
+  "isCurrentOriginal": zod.boolean(),
+  "imageUrl": zod.string().nullable()
+})
+
+
+/**
  * @summary List pottery
  */
 export const listPotteryQueryPageDefault = 1;

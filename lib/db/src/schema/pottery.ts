@@ -38,6 +38,8 @@ export const potteryItems = pgTable(
       .notNull()
       .default(sql`'{}'::text[]`),
     imagePath: text("image_path").notNull(),
+    originalImagePath: text("original_image_path"),
+    originalImageSource: text("original_image_source"),
     patternCropPath: text("pattern_crop_path"),
     acquiredAt: date("acquired_at"),
     condition: text("condition"),
@@ -151,6 +153,8 @@ export const potteryImages = pgTable(
       .notNull()
       .references(() => potteryItems.id, { onDelete: "cascade" }),
     storagePath: text("storage_path").notNull(),
+    originalImagePath: text("original_image_path"),
+    originalImageSource: text("original_image_source"),
     label: text("label"),
     position: integer("position").notNull().default(0),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),

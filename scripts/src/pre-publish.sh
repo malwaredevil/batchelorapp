@@ -93,6 +93,10 @@ run_bg appconfig pnpm --filter @workspace/api-server run lint:config
 # Complements pii-scan (which covers email + phone PII).
 run_bg secretsscan pnpm --filter @workspace/scripts run check-public-file-secrets
 
+# Independent local privacy-dataflow coverage; no dependency on the Replit
+# HoundDog callback. Invalid reports / scanner failures never count as clean.
+run_bg privacyscan flock /tmp/batchelor-validation-heavy.lock pnpm --filter @workspace/scripts run privacy:scan
+
 # Upload-limit guard
 run_bg uploadlimit pnpm --filter @workspace/scripts run check-upload-limits
 
@@ -164,6 +168,7 @@ declare -A LABELS=(
   [appconfig]="App-config drift"
   [forbidden]="Forbidden filenames"
   [secretsscan]="Secrets / credential scan"
+  [privacyscan]="Standalone HoundDog privacy dataflows (critical/medium gate)"
   [uploadlimit]="Upload-limit guard"
   [pgsingleton]="pg singleton guard"
   [composition]="Composition and configuration"
@@ -180,7 +185,7 @@ declare -A LABELS=(
 )
 
 FAILED=()
-for key in appconfig forbidden secretsscan uploadlimit pgsingleton composition guardrails secretsregistry schedulernames hardcodedconfig duplicatecode architecturepolicy backupcoverage databasesecurity cistatus githubdrift; do
+for key in appconfig forbidden secretsscan privacyscan uploadlimit pgsingleton composition guardrails secretsregistry schedulernames hardcodedconfig duplicatecode architecturepolicy backupcoverage databasesecurity cistatus githubdrift; do
   code=$(cat "$LOGDIR/$key.exit" 2>/dev/null || echo 1)
   if [[ "$code" -eq 0 ]]; then
     echo -e "${GREEN}✓${RESET} ${LABELS[$key]}"
@@ -231,7 +236,8 @@ echo "  │                resolved / resolvedInNextRelease / ignored (with reas
 echo "  │              Record remaining open IDs:                                     │"
 echo "  │                sentry-baseline write <count> <comma-ids>                   │"
 echo "  │ Stage 1c  — Security scan (REQUIRED — must happen before sync):            │"
-echo "  │              Run runDependencyAudit(), runSastScan(), runHoundDogScan()    │"
+echo "  │              Run runDependencyAudit() and runSastScan().                 │"
+echo "  │              Local HoundDog privacy scan is enforced above.              │"
 echo "  │              (see .local/skills/security-scan/SKILL.md).                   │"
 echo "  │              Every finding needs an explicit disposition: fix it for real, │"
 echo "  │              or if it's a known accepted pattern, add/update the matching  │"

@@ -20,6 +20,7 @@ export interface ScanFingerprintInput {
     order: number;
     sourceId?: string | number | null;
     content: string;
+    label?: string | null;
   }>;
   facts: object;
   lockedFields: readonly string[];
@@ -76,6 +77,7 @@ export function createScanFingerprint(input: ScanFingerprintInput): string {
       order: photo.order,
       sourceId: photo.sourceId ?? null,
       contentHash: createHash("sha256").update(photo.content).digest("hex"),
+      ...(photo.label !== undefined ? { label: photo.label } : {}),
     }));
   return createHash("sha256")
     .update(

@@ -39,7 +39,9 @@ import {
   shouldRunScheduledTask,
   recordScheduledTaskSuccess,
   recordScheduledTaskFailure,
+  getSchedulerPollIntervalMs,
 } from "./scheduler-guard";
+import { withRetry } from "./retry";
 import { runAllChecks } from "../routes/admin/integrations-health";
 import type { ServiceCheckStatus } from "../routes/admin/integrations-health";
 
@@ -135,11 +137,15 @@ function capFailureNudges(
 // ---------------------------------------------------------------------------
 
 async function resolveOwnerId(): Promise<number | null> {
-  const ownerRows = await db
-    .select({ id: appUsers.id })
-    .from(appUsers)
-    .where(eq(appUsers.isOwner, true))
-    .limit(1);
+  const ownerRows = await withRetry(
+    () =>
+      db
+        .select({ id: appUsers.id })
+        .from(appUsers)
+        .where(eq(appUsers.isOwner, true))
+        .limit(1),
+    { maxAttempts: 2, label: "integrations-health-nudges: owner lookup" },
+  );
   if (ownerRows.length === 0) {
     logger.info("integrations-health-nudges: no owner account found, skipping");
     return null;
@@ -160,16 +166,18 @@ async function resolveOwnerId(): Promise<number | null> {
 // ---------------------------------------------------------------------------
 
 export async function runScheduledIntegrationsHealthNudges(): Promise<void> {
-  const client = await pool.connect().catch((err: unknown) => {
+  const ownerId = await resolveOwnerId();
+  if (ownerId === null) return;
+  const { checks } = await runAllChecks();
+  const client = await withRetry(() => pool.connect(), {
+    maxAttempts: 2,
+    label: "integrations-health-nudges: connect",
+  }).catch((err: unknown) => {
     logger.warn({ err }, "integrations-health-nudges: could not connect to DB");
-    return null;
+    throw err;
   });
-  if (!client) return;
 
   try {
-    const ownerId = await resolveOwnerId();
-    if (ownerId === null) return;
-
     // Load persisted consecutive-error counts from the DB.
     const stateResult = await client.query<{
       service: string;
@@ -180,8 +188,6 @@ export async function runScheduledIntegrationsHealthNudges(): Promise<void> {
     const dbCounts = new Map(
       stateResult.rows.map((r) => [r.service, r.consecutive_error_count]),
     );
-
-    const { checks } = await runAllChecks();
 
     const rawFailureCandidates: {
       nudgeKey: string;
@@ -346,18 +352,20 @@ export async function primeLastKnownStatus(): Promise<void> {
 }
 
 export async function computeAndStoreIntegrationsHealthNudges(): Promise<void> {
-  const client = await pool.connect().catch((err: unknown) => {
+  // These operations can themselves need the pool. Do not hold a second
+  // connection idle while waiting for owner lookup or health probes.
+  const ownerId = await resolveOwnerId();
+  if (ownerId === null) return;
+  const { checks } = await runAllChecks();
+  const client = await withRetry(() => pool.connect(), {
+    maxAttempts: 2,
+    label: "integrations-health-nudges: connect",
+  }).catch((err: unknown) => {
     logger.warn({ err }, "integrations-health-nudges: could not connect to DB");
-    return null;
+    throw err;
   });
-  if (!client) return;
 
   try {
-    const ownerId = await resolveOwnerId();
-    if (ownerId === null) return;
-
-    const { checks } = await runAllChecks();
-
     const rawFailureCandidates: {
       nudgeKey: string;
       message: string;
@@ -524,7 +532,10 @@ export function startIntegrationsHealthNudgeScheduler(): () => void {
     }, STARTUP_DELAY_MS);
   });
 
-  const interval = setInterval(() => void run(), IN_PROCESS_INTERVAL_MS);
+  const interval = setInterval(
+    () => void run(),
+    getSchedulerPollIntervalMs(IN_PROCESS_INTERVAL_MS),
+  );
   interval.unref();
 
   logger.info(

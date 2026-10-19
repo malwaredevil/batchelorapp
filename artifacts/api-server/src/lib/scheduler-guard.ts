@@ -173,7 +173,7 @@ export function recordScheduledTaskFailure(_taskName: string): void {
 export async function shouldRunScheduledTask(
   taskName: string,
   minIntervalMs: number,
-  options: { recoverStuckClaims?: boolean } = {},
+  options: { recoverStuckClaims?: boolean; utcDate?: string } = {},
 ): Promise<boolean> {
   // One retry after a short delay before giving up. Supabase's pooler
   // occasionally drops an idle connection mid-claim ("Connection terminated
@@ -188,7 +188,8 @@ export async function shouldRunScheduledTask(
       return await claimScheduledTaskRun(
         taskName,
         minIntervalMs,
-        options.recoverStuckClaims ?? true,
+        options.utcDate ? false : (options.recoverStuckClaims ?? true),
+        options.utcDate,
       );
     } catch (err) {
       if (attempt === 2) {
@@ -216,6 +217,7 @@ async function claimScheduledTaskRun(
   taskName: string,
   minIntervalMs: number,
   recoverStuckClaims: boolean,
+  utcDate?: string,
 ): Promise<boolean> {
   // See CLAIM_GRACE_MS doc comment: compare against a slightly shorter
   // window than the nominal interval so a same-duration setInterval tick
@@ -223,6 +225,18 @@ async function claimScheduledTaskRun(
   // now() actually committed) still succeeds. expected_interval_ms below
   // still records the true, ungraced minIntervalMs for the heartbeat.
   const claimWindowMs = Math.max(0, minIntervalMs - CLAIM_GRACE_MS);
+  // Calendar-day work must not drift through midnight with a rolling cooldown.
+  // Freeze the target date for both the claim and its work. Reject a stale/future
+  // date before INSERT too, so crossing midnight while awaiting the DB cannot
+  // consume the new day's claim for the previous day's work.
+  const insertValues = utcDate
+    ? sql`SELECT ${taskName}, now(), ${minIntervalMs}, true
+          WHERE (now() AT TIME ZONE 'UTC')::date = ${utcDate}::date`
+    : sql`VALUES (${taskName}, now(), ${minIntervalMs}, true)`;
+  const cadenceDue = utcDate
+    ? sql`(scheduler_runs.last_run_at AT TIME ZONE 'UTC')::date < ${utcDate}::date`
+    : sql`scheduler_runs.last_run_at
+            < now() - (${claimWindowMs}::text || ' milliseconds')::interval`;
 
   // Single-statement upsert that atomically records expected_interval_ms AND
   // conditionally advances last_run_at.  Previously the interval was written
@@ -266,7 +280,7 @@ async function claimScheduledTaskRun(
     last_success_at: string | null;
   }>(sql`
       INSERT INTO scheduler_runs (name, last_run_at, expected_interval_ms, last_claim_granted)
-      VALUES (${taskName}, now(), ${minIntervalMs}, true)
+      ${insertValues}
       ON CONFLICT (name) DO UPDATE
         SET
           -- Always refresh the interval so the heartbeat's tolerance window
@@ -279,8 +293,7 @@ async function claimScheduledTaskRun(
           last_claim_granted = CASE
             WHEN (
               -- Arm 1: normal cadence — last claim was long enough ago
-              scheduler_runs.last_run_at
-                < now() - (${claimWindowMs}::text || ' milliseconds')::interval
+              ${cadenceDue}
             ) OR (
               -- Arm 2: crash recovery — the previous claim never completed
               -- (last_run_at > last_success_at) and enough time has passed to
@@ -300,8 +313,7 @@ async function claimScheduledTaskRun(
           -- Advance last_run_at iff the claim is granted (same condition).
           last_run_at = CASE
             WHEN (
-              scheduler_runs.last_run_at
-                < now() - (${claimWindowMs}::text || ' milliseconds')::interval
+              ${cadenceDue}
             ) OR (
               ${recoverStuckClaims}::boolean
               AND scheduler_runs.last_success_at IS NOT NULL
@@ -322,10 +334,8 @@ async function claimScheduledTaskRun(
     `);
 
   const row = result.rows[0];
-  // INSERT ON CONFLICT DO UPDATE always touches the target row (either inserts
-  // or updates), so RETURNING always emits exactly one row.  A missing row
-  // would only occur if the DB rejected the statement entirely — which would
-  // have already thrown above.
+  // A calendar date that became stale before the DB statement returns no row.
+  // Otherwise the atomic INSERT/UPDATE returns this contender's claim decision.
   const claimed = row?.claimed ?? false;
 
   if (!claimed && row) {
@@ -521,39 +531,23 @@ export function startSchedulerHeartbeat(): () => void {
     );
 
     try {
-      // Same one-retry-after-a-short-delay treatment as claimScheduledTaskRun
-      // (see shouldRunScheduledTask doc comment): Supabase's pooler
-      // occasionally drops an idle connection mid-query with a transient
-      // "Connection terminated unexpectedly" error lasting well under a
-      // second. Every OTHER caller of the DB in this codebase polls often
-      // enough (60s-5min) that a single blip self-heals silently on the next
-      // tick. This heartbeat only runs every 15 minutes, so without a retry
-      // here a single transient blip was immediately reported as an "error"
-      // check-in to Sentry Cron Monitoring — tripping a real alert for a
-      // problem that was already gone by the time anyone looked. Confirmed
-      // as the cause of the 2026-08-10 "scheduled-tasks-heartbeat" incident:
-      // two consecutive production check-ins failed with the identical
-      // "Connection terminated due to connection timeout" error from this
-      // exact query.
-      let result: Awaited<ReturnType<typeof db.execute<SchedulerRunRow>>>;
-      try {
-        result = await db.execute<SchedulerRunRow>(sql`
+      // Health reads run only every fifteen minutes. Give transient pooler
+      // failures a bounded recovery window inside this check-in, rather
+      // than waiting a full heartbeat to discover the database recovered.
+      // Retry only this read, never the work performed by the schedulers.
+      // Wrapped transient connection failures get two spaced retries; schema
+      // and permission errors fail immediately. Exhaustion still alerts.
+      const result = await withRetry(
+        () =>
+          db.execute<SchedulerRunRow>(sql`
           SELECT name, last_run_at, last_success_at, expected_interval_ms
           FROM scheduler_runs
           WHERE expected_interval_ms IS NOT NULL
-        `);
-      } catch (err) {
-        logger.warn(
-          { err },
-          "scheduler-heartbeat: health-check query failed, retrying once",
-        );
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        result = await db.execute<SchedulerRunRow>(sql`
-          SELECT name, last_run_at, last_success_at, expected_interval_ms
-          FROM scheduler_runs
-          WHERE expected_interval_ms IS NOT NULL
-        `);
-      }
+        `),
+        {
+          label: "scheduler-heartbeat: read scheduler health",
+        },
+      );
 
       const now = Date.now();
       const staleCandidates: Array<{

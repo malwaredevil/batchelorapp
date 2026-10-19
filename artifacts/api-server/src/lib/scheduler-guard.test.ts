@@ -68,6 +68,30 @@ describe("long-running task claim policy", () => {
   beforeEach(() => {
     mockExecute.mockReset();
   });
+  it("claims calendar-day work by UTC date, without reclaiming an ambiguous send", async () => {
+    mockExecute.mockResolvedValue(
+      skippedResult({
+        lastRunAt: new Date().toISOString(),
+        lastSuccessAt: new Date().toISOString(),
+      }),
+    );
+    const intervalMs = 24 * 60 * 60 * 1000;
+    await shouldRunScheduledTask("birthday-emails", intervalMs, {
+      recoverStuckClaims: false,
+      utcDate: "2026-10-19",
+    });
+    const compiled = new PgDialect().sqlToQuery(mockExecute.mock.calls[0]![0]);
+    expect(compiled.params).toContain(intervalMs);
+    expect(compiled.sql).toContain("(now() AT TIME ZONE 'UTC')::date");
+    expect(compiled.sql.match(/last_run_at AT TIME ZONE 'UTC'/g)).toHaveLength(
+      2,
+    );
+    expect(compiled.params.filter((p) => p === "2026-10-19")).toHaveLength(3);
+    expect(compiled.params.filter((p) => typeof p === "boolean")).toEqual([
+      false,
+      false,
+    ]);
+  });
   it.each([undefined, true, false])(
     "gates both SQL crash-recovery arms with recoverStuckClaims=%s",
     async (recoverStuckClaims) => {
@@ -1223,8 +1247,7 @@ describe("startSchedulerHeartbeat", () => {
     mockExecute.mockRejectedValue(new Error("DB connection lost"));
 
     stopHeartbeat = startSchedulerHeartbeat();
-    // +500ms beyond the grace period so the one-retry-then-give-up path (see
-    // scheduler-guard.ts) has time to run its internal delay before we assert.
+    // Unclassified/permanent errors fail immediately, without retries.
     await vi.advanceTimersByTimeAsync(FIRST_CHECK_DELAY_MS + 501);
 
     const statuses = (
@@ -1248,9 +1271,8 @@ describe("startSchedulerHeartbeat", () => {
       .mockResolvedValueOnce({ rows: [] });
 
     stopHeartbeat = startSchedulerHeartbeat();
-    // +500ms beyond the grace period so the retry's own internal delay
-    // (see scheduler-guard.ts) has time to fire within this advance window.
-    await vi.advanceTimersByTimeAsync(FIRST_CHECK_DELAY_MS + 501);
+    // Include the shared retry backoff plus bounded jitter.
+    await vi.advanceTimersByTimeAsync(FIRST_CHECK_DELAY_MS + 5_201);
 
     expect(mockExecute).toHaveBeenCalledTimes(2);
     const statuses = (
@@ -1261,20 +1283,38 @@ describe("startSchedulerHeartbeat", () => {
     expect(statuses).not.toContain("error");
   });
 
-  it("reports error only after BOTH the initial attempt and the retry fail", async () => {
+  it("reports error when all three bounded connection attempts fail", async () => {
     mockExecute.mockRejectedValue(
       new Error("Connection terminated due to connection timeout"),
     );
 
     stopHeartbeat = startSchedulerHeartbeat();
-    await vi.advanceTimersByTimeAsync(FIRST_CHECK_DELAY_MS + 501);
+    await vi.advanceTimersByTimeAsync(FIRST_CHECK_DELAY_MS + 16_000);
 
-    expect(mockExecute).toHaveBeenCalledTimes(2);
+    expect(mockExecute).toHaveBeenCalledTimes(3);
     const statuses = (
       Sentry.captureCheckIn as ReturnType<typeof vi.fn>
     ).mock.calls.map((args) => (args[0] as { status: string }).status);
     expect(statuses).toContain("error");
     expect(statuses).not.toContain("ok");
+  });
+
+  it("recovers on the third read after two wrapped database timeouts without sending an error check-in", async () => {
+    const wrapped = new Error("Failed query", {
+      cause: new Error("Connection terminated due to connection timeout"),
+    });
+    mockExecute
+      .mockRejectedValueOnce(wrapped)
+      .mockRejectedValueOnce(wrapped)
+      .mockResolvedValueOnce({ rows: [] });
+    stopHeartbeat = startSchedulerHeartbeat();
+    await vi.advanceTimersByTimeAsync(FIRST_CHECK_DELAY_MS + 16_000);
+    expect(mockExecute).toHaveBeenCalledTimes(3);
+    const statuses = vi
+      .mocked(Sentry.captureCheckIn)
+      .mock.calls.map(([checkIn]) => checkIn.status);
+    expect(statuses).toContain("ok");
+    expect(statuses).not.toContain("error");
   });
 
   it("stop function cancels both the startup timeout and the recurring interval", async () => {

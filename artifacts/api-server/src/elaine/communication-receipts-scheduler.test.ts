@@ -9,12 +9,13 @@ vi.mock("./communication-receipts", () => ({
   pruneOldCommunicationReceipts: mockPruneOldCommunicationReceipts,
 }));
 vi.mock("../lib/scheduler-guard", () => ({
+  getSchedulerPollIntervalMs: () => 15 * 60 * 1000,
   recordScheduledTaskFailure: mockRecordScheduledTaskFailure,
   recordScheduledTaskSuccess: mockRecordScheduledTaskSuccess,
   shouldRunScheduledTask: mockShouldRunScheduledTask,
 }));
 vi.mock("../lib/logger", () => ({
-  logger: { error: vi.fn() },
+  logger: { error: vi.fn(), info: vi.fn() },
 }));
 
 import { startCommunicationReceiptCleanupScheduler } from "./communication-receipts-scheduler";

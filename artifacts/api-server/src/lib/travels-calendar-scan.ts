@@ -29,6 +29,7 @@ import {
   recordScheduledTaskFailure,
 } from "./scheduler-guard";
 import { logger } from "./logger";
+import { startSchedulerPoller } from "./scheduler-poller";
 
 const SCAN_WINDOW_DAYS_PAST = 7;
 const SCAN_WINDOW_DAYS_FUTURE = 120;
@@ -257,7 +258,13 @@ const SCAN_INTERVAL_MS = 24 * 60 * 60 * 1000; // 1 day
 export function startCalendarTripScanScheduler(): () => void {
   const run = async (): Promise<void> => {
     if (
-      !(await shouldRunScheduledTask("travels-calendar-scan", SCAN_INTERVAL_MS))
+      !(await shouldRunScheduledTask(
+        "travels-calendar-scan",
+        SCAN_INTERVAL_MS,
+        {
+          recoverStuckClaims: false,
+        },
+      ))
     ) {
       logger.info("travels-calendar-scan: skipped (ran within the last day)");
       return;
@@ -280,13 +287,14 @@ export function startCalendarTripScanScheduler(): () => void {
     }
   };
 
-  void run();
-
-  const interval = setInterval(() => void run(), SCAN_INTERVAL_MS);
-  interval.unref();
+  const stop = startSchedulerPoller(
+    "travels-calendar-scan",
+    SCAN_INTERVAL_MS,
+    run,
+  );
 
   logger.info(
     "travels-calendar-scan: started (in-process fallback, runs daily)",
   );
-  return () => clearInterval(interval);
+  return stop;
 }

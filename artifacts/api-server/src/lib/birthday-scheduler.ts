@@ -15,21 +15,21 @@ import {
   recordScheduledTaskFailure,
 } from "./scheduler-guard";
 import { logger } from "./logger";
+import { startSchedulerPoller } from "./scheduler-poller";
+import {
+  claimWebhookSideEffect,
+  markWebhookSideEffectCompleted,
+} from "./webhook-side-effect-idempotency";
 
 const TASK_NAME = "birthday-emails";
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
-function todayMMDD(): string {
-  const now = new Date();
-  const mm = String(now.getUTCMonth() + 1).padStart(2, "0");
-  const dd = String(now.getUTCDate()).padStart(2, "0");
-  return `${mm}-${dd}`;
-}
-
-export async function runBirthdayEmails(): Promise<void> {
+export async function runBirthdayEmails(
+  utcDate = new Date().toISOString().slice(0, 10),
+): Promise<void> {
   if (!resendConfigured()) return;
 
-  const today = todayMMDD();
+  const today = utcDate.slice(5);
 
   const users = await db
     .select({
@@ -44,29 +44,49 @@ export async function runBirthdayEmails(): Promise<void> {
   const birthdayUsers = users.filter((u) => u.birthday === today);
 
   for (const user of birthdayUsers) {
+    const effectKey = `birthday-email:${utcDate}:${user.id}`;
+    let providerAccepted = false;
     try {
+      // Reuse the durable send ledger, but never reclaim uncertain sends.
+      // The key contains only the recipient ID and send date, never their email.
+      if (
+        !(await claimWebhookSideEffect({
+          effectKey,
+          provider: "resend",
+          channel: "email",
+          allowRetry: false,
+        }))
+      )
+        continue;
       await sendBirthdayEmail(user.email, user.displayName ?? null);
+      providerAccepted = true;
+      await markWebhookSideEffectCompleted(effectKey);
       logger.info(
         { userId: user.id },
-        "birthday-scheduler: sent birthday email",
+        "birthday-scheduler: provider accepted birthday email",
       );
     } catch (err) {
       logger.error(
-        { err, userId: user.id },
-        "birthday-scheduler: failed to send birthday email",
+        { err, userId: user.id, providerAccepted },
+        "birthday-scheduler: birthday email attempt did not complete",
       );
     }
   }
 }
 
 export function startBirthdayScheduler(): () => void {
-  let stopped = false;
   async function tick() {
     try {
-      const ok = await shouldRunScheduledTask(TASK_NAME, ONE_DAY_MS);
+      const utcDate = new Date().toISOString().slice(0, 10);
+      // One atomic claim per UTC date, not a rolling 24-hour delay. Freeze the
+      // work date across awaits and never replay an ambiguous same-day attempt.
+      const ok = await shouldRunScheduledTask(TASK_NAME, ONE_DAY_MS, {
+        recoverStuckClaims: false,
+        utcDate,
+      });
       if (ok) {
         try {
-          await runBirthdayEmails();
+          await runBirthdayEmails(utcDate);
           // Architecture hardening (#754): this call was previously missing,
           // so last_success_at for this task stayed NULL forever — the
           // heartbeat's crash-recovery check (which requires a non-null
@@ -81,14 +101,7 @@ export function startBirthdayScheduler(): () => void {
     } catch (err) {
       logger.error({ err }, "birthday-scheduler: tick error");
     }
-    if (!stopped)
-      setTimeout(() => {
-        void tick();
-      }, ONE_DAY_MS).unref();
   }
 
-  void tick();
-  return () => {
-    stopped = true;
-  };
+  return startSchedulerPoller(TASK_NAME, ONE_DAY_MS, tick);
 }

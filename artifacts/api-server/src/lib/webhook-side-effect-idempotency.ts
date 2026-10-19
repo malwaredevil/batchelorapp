@@ -1,6 +1,7 @@
 import { db, webhookSideEffects } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import { logger } from "./logger";
+import { startSchedulerPoller } from "./scheduler-poller";
 import {
   shouldRunScheduledTask,
   recordScheduledTaskSuccess,
@@ -18,6 +19,8 @@ export interface WebhookSideEffectClaimInput {
   effectKey: string;
   provider: "agentphone" | "resend";
   channel: "sms" | "email";
+  /** False for one-shot sends: even an uncertain/failed attempt stays reserved. */
+  allowRetry?: boolean;
 }
 
 export async function claimWebhookSideEffect(
@@ -30,9 +33,10 @@ export async function claimWebhookSideEffect(
       SET status = 'processing',
           updated_at = NOW(),
           last_error = NULL
-      WHERE app_webhook_side_effects.status = 'failed'
+       WHERE ${input.allowRetry ?? true}::boolean
+         AND (app_webhook_side_effects.status = 'failed'
         OR (app_webhook_side_effects.status = 'processing'
-            AND app_webhook_side_effects.updated_at < NOW() - INTERVAL '5 minutes')
+             AND app_webhook_side_effects.updated_at < NOW() - INTERVAL '5 minutes'))
     RETURNING effect_key
   `);
   return result.rows.length > 0;
@@ -125,11 +129,13 @@ export function startWebhookSideEffectCleanupScheduler(): () => void {
     }
   };
 
-  void run();
-  const interval = setInterval(() => void run(), CLEANUP_INTERVAL_MS);
-  interval.unref();
+  const stop = startSchedulerPoller(
+    "webhook-side-effect-cleanup",
+    CLEANUP_INTERVAL_MS,
+    run,
+  );
   logger.info(
     "webhook-side-effect-idempotency: cleanup scheduler started (runs daily, retains 30 days)",
   );
-  return () => clearInterval(interval);
+  return stop;
 }

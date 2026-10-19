@@ -5,6 +5,7 @@ import {
   shouldRunScheduledTask,
 } from "../lib/scheduler-guard";
 import { pruneOldCommunicationReceipts } from "./communication-receipts";
+import { startSchedulerPoller } from "../lib/scheduler-poller";
 
 const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
@@ -27,8 +28,9 @@ export function startCommunicationReceiptCleanupScheduler(): () => void {
     }
   };
 
-  void run();
-  const interval = setInterval(() => void run(), CLEANUP_INTERVAL_MS);
-  interval.unref();
-  return () => clearInterval(interval);
+  return startSchedulerPoller(
+    "communication-receipt-cleanup",
+    CLEANUP_INTERVAL_MS,
+    run,
+  );
 }

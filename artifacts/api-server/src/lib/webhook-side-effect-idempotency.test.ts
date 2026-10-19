@@ -14,6 +14,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
 
 const { execute, update, set, where } = vi.hoisted(() => ({
   execute: vi.fn(),
@@ -104,6 +105,24 @@ describe("claimWebhookSideEffect", () => {
       }),
     ).resolves.toBe(true);
   });
+
+  it.each([undefined, true, false])(
+    "gates all reclaim paths with allowRetry=%s (one-shot sends fail closed)",
+    async (allowRetry) => {
+      execute.mockResolvedValue({ rows: [] });
+      await claimWebhookSideEffect({
+        effectKey: "birthday-email:2026-10-19:example-id",
+        provider: "resend",
+        channel: "email",
+        allowRetry,
+      });
+      const compiled = new PgDialect().sqlToQuery(execute.mock.calls[0]![0]);
+      expect(compiled.params.at(-1)).toBe(allowRetry ?? true);
+      expect(compiled.sql).toMatch(
+        /WHERE \$\d+::boolean\s+AND \(app_webhook_side_effects.status = 'failed'\s+OR \(app_webhook_side_effects.status = 'processing'/,
+      );
+    },
+  );
 });
 
 describe("markWebhookSideEffectCompleted / markWebhookSideEffectFailed", () => {

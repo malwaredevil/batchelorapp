@@ -1,5 +1,8 @@
 import { z } from "zod/v4";
-import { syncPotterySizeCategory } from "../lib/pottery/size-categories";
+import {
+  syncPotterySizeCategory,
+  replacePotteryItemCategories,
+} from "../lib/pottery/size-categories";
 import {
   potteryThumbnailBody,
   savePotteryThumbnail,
@@ -18,7 +21,6 @@ import {
   db,
   potteryItems,
   potteryCategories,
-  potteryItemCategories,
   potteryImages,
 } from "@workspace/db";
 import {
@@ -414,19 +416,7 @@ export const potteryActionExecutors: Record<PotteryActionType, ActionExecutor> =
         return rows.map((r) => r.id);
       },
       replaceItemCategories: async (itemId, safeCategoryIds) => {
-        await db.transaction(async (tx) => {
-          await tx
-            .delete(potteryItemCategories)
-            .where(eq(potteryItemCategories.itemId, itemId));
-          if (safeCategoryIds.length > 0) {
-            await tx
-              .insert(potteryItemCategories)
-              .values(
-                safeCategoryIds.map((categoryId) => ({ itemId, categoryId })),
-              );
-          }
-        });
-        await syncPotterySizeCategory(itemId);
+        await replacePotteryItemCategories(itemId, safeCategoryIds);
       },
       actionType: "update_pottery_item_categories",
     }),
@@ -707,7 +697,7 @@ export const potteryActionTools: OpenAI.Chat.Completions.ChatCompletionTool[] =
             dimensions: {
               type: "string",
               description:
-                "Saved measurements, e.g. 8″ (20 cm) × 6″ (15 cm). Automatically creates or reuses separate size categories for each axis, never a combined size label. Equal sizes share one label. Do not invent measurements.",
+                "Saved measurements, e.g. 8″ (20 cm) × 6″ (15 cm). Automatically creates or reuses separate size categories for each axis, never a combined size label. Equal sizes share one label. When measurements change or are cleared, obsolete automatically managed size labels are removed; manually selected and uncertain legacy labels are preserved. Do not invent measurements.",
             },
             thumbnailSourceVersion: {
               type: "string",

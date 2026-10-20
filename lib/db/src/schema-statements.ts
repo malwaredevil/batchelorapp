@@ -208,6 +208,7 @@ export const STATEMENTS: string[] = [
     category_id integer NOT NULL REFERENCES pottery_categories(id) ON DELETE CASCADE,
     PRIMARY KEY (item_id, category_id)
   )`,
+  `ALTER TABLE pottery_item_categories ADD COLUMN IF NOT EXISTS automatic_size_key TEXT`,
   `CREATE TABLE IF NOT EXISTS pottery_images (
     id serial PRIMARY KEY,
     item_id integer NOT NULL REFERENCES pottery_items(id) ON DELETE CASCADE,

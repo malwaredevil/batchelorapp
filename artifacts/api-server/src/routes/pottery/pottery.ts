@@ -99,6 +99,7 @@ import {
 import {
   matchPotteryCategoryIds,
   syncPotterySizeCategory,
+  replacePotteryItemCategories,
 } from "../../lib/pottery/size-categories";
 import { getElaineGlobalConfig } from "../../lib/elaine-config";
 import {
@@ -538,23 +539,13 @@ router.patch("/items/:id", async (req, res) => {
       allCatIds.has(catId),
     );
 
-    await db.transaction(async (tx) => {
-      await tx.delete(itemCategories).where(eq(itemCategories.itemId, id));
-      if (safeCategoryIds.length > 0) {
-        await tx.insert(itemCategories).values(
-          safeCategoryIds.map((catId) => ({
-            itemId: id,
-            categoryId: catId,
-          })),
-        );
-      }
-    });
+    await replacePotteryItemCategories(id, safeCategoryIds);
   }
 
   // Re-sync the "Duplicate" category based on the item's current quantity.
   // Runs after any category replacement so it always wins, even if the user
   // didn't include "Duplicate" in their categoryIds list.
-  await syncPotterySizeCategory(id);
+  if (body.categoryIds === undefined) await syncPotterySizeCategory(id);
   await syncDuplicateCategory(id, row.quantity);
 
   res.json(UpdatePotteryResponse.parse(await serializeItem(row)));

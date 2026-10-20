@@ -1,4 +1,5 @@
-import { eq } from "drizzle-orm";
+import { and, eq, isNotNull, ne, sql } from "drizzle-orm";
+import { sizeCategoryKey } from "../../lib/pottery/size-label";
 import {
   db,
   potteryCategories as cats,
@@ -38,12 +39,31 @@ const ops: CategoryOps = {
   },
 
   async rename(id, name) {
-    const [updated] = await db
-      .update(cats)
-      .set({ name })
-      .where(eq(cats.id, id))
-      .returning({ id: cats.id });
-    return !!updated;
+    return db.transaction(async (tx) => {
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtext('pottery-size-category'))`,
+      );
+      const [updated] = await tx
+        .update(cats)
+        .set({ name })
+        .where(eq(cats.id, id))
+        .returning({ id: cats.id });
+      if (updated) {
+        const renamedKey = sizeCategoryKey(name);
+        await tx
+          .update(joinTable)
+          .set({ automaticSizeKey: null })
+          .where(
+            and(
+              eq(joinTable.categoryId, id),
+              renamedKey
+                ? ne(joinTable.automaticSizeKey, renamedKey)
+                : isNotNull(joinTable.automaticSizeKey),
+            ),
+          );
+      }
+      return !!updated;
+    });
   },
 
   async updateColors(id, bgColor, textColor) {
@@ -81,10 +101,24 @@ const ops: CategoryOps = {
   async reattachAssignments(assignments, targetId) {
     const rows = assignments as { itemId: number }[];
     if (rows.length === 0) return;
-    await db
-      .insert(joinTable)
-      .values(rows.map((r) => ({ itemId: r.itemId, categoryId: targetId })))
-      .onConflictDoNothing();
+    await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtext('pottery-size-category'))`,
+      );
+      await tx
+        .insert(joinTable)
+        .values(
+          rows.map((r) => ({
+            itemId: r.itemId,
+            categoryId: targetId,
+            automaticSizeKey: null,
+          })),
+        )
+        .onConflictDoUpdate({
+          target: [joinTable.itemId, joinTable.categoryId],
+          set: { automaticSizeKey: null },
+        });
+    });
   },
 
   async deleteCategoryRow(id) {

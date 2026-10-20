@@ -141,6 +141,8 @@ export const potteryItemCategories = pgTable(
     categoryId: integer("category_id")
       .notNull()
       .references(() => potteryCategories.id, { onDelete: "cascade" }),
+    // Null means manually selected or legacy provenance is unknown.
+    automaticSizeKey: text("automatic_size_key"),
   },
   (table) => [
     primaryKey({ columns: [table.itemId, table.categoryId] }),

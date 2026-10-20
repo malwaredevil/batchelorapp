@@ -24,6 +24,7 @@ import {
   ArrowLeft,
   Camera,
   Check,
+  Crop,
   ImagePlus,
   Lock,
   LockOpen,
@@ -57,6 +58,15 @@ import {
 import { AutocompleteInput } from "@/pottery/components/autocomplete-input";
 import { TagSelector } from "@/pottery/components/tag-selector";
 import { CameraModal } from "@/pottery/components/image-picker";
+import {
+  PotteryThumbnailEditor,
+  PotteryThumbnailImage,
+  StaleThumbnailPrompt,
+  isThumbnailStale,
+  getImageVersion,
+  type ThumbnailConfigValue,
+} from "@workspace/collection-ui";
+import { useSaveThumbnail } from "@/pottery/hooks/use-thumbnail";
 import { ImageEditor } from "@/pottery/components/image-editor";
 import { PhotoOriginalControls } from "@/pottery/components/photo-original-controls";
 import { getOriginalImageFile } from "@workspace/image-capture";
@@ -189,17 +199,21 @@ function DetailRow({
 interface GalleryProps {
   primaryUrl: string;
   primaryAlt: string;
+  thumbnail?: ThumbnailConfigValue | null;
   supplemental: PotteryImage[];
   itemId: number;
   onSelectedImageChange: (imageId: number | null) => void;
+  onAdjustThumbnail?: () => void;
 }
 
 function ImageGallery({
   primaryUrl,
   primaryAlt,
+  thumbnail,
   supplemental,
   itemId,
   onSelectedImageChange,
+  onAdjustThumbnail,
 }: GalleryProps) {
   const [activeIdx, setActiveIdx] = useState(0);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -465,7 +479,8 @@ function ImageGallery({
 
       {/* Main image display */}
       <div
-        className="relative overflow-hidden rounded-2xl border border-card-border bg-muted cursor-zoom-in"
+        className="relative aspect-square overflow-hidden rounded-2xl border border-card-border bg-muted cursor-zoom-in"
+        data-testid="pottery-main-photo-preview"
         onClick={() => setLightboxIndex(activeIdx)}
         title="Click to zoom"
       >
@@ -494,14 +509,15 @@ function ImageGallery({
             <Pencil className="h-4 w-4" />
           )}
         </button>
-        <img
+        <PotteryThumbnailImage
           src={selected.url}
           alt={
             isSupplemental
               ? (selectedSupplemental?.label ?? "Photo")
               : primaryAlt
           }
-          className="aspect-square w-full object-cover"
+          thumbnail={isSupplemental ? null : thumbnail}
+          imgClassName="aspect-square w-full object-cover"
         />
         {/* Label badge on selected supplemental image */}
         {isSupplemental && selectedSupplemental?.label && (
@@ -543,12 +559,26 @@ function ImageGallery({
         }}
       />
 
+      {onAdjustThumbnail && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={onAdjustThumbnail}
+          data-testid="button-adjust-thumbnail"
+        >
+          <Crop className="h-4 w-4" />
+          Adjust thumbnail
+        </Button>
+      )}
+
       {/* Thumbnail row */}
       <div className="flex flex-wrap gap-2 pb-1">
         {allImages.map((img, idx) => (
           <button
             key={img.id}
             type="button"
+            data-testid={idx === 0 ? "pottery-primary-thumbnail" : undefined}
             onClick={() => {
               setActiveIdx(idx);
               setShowLabelInput(false);
@@ -560,10 +590,11 @@ function ImageGallery({
                 : "border-card-border hover:border-primary/40",
             )}
           >
-            <img
+            <PotteryThumbnailImage
               src={img.url}
               alt={img.label ?? (idx === 0 ? "Primary" : "Photo")}
-              className="h-full w-full object-cover"
+              thumbnail={idx === 0 ? thumbnail : null}
+              imgClassName="h-full w-full object-cover"
             />
             {idx === 0 && (
               <span className="absolute bottom-0 left-0 right-0 bg-black/50 py-0.5 text-center text-[9px] text-white">
@@ -774,8 +805,13 @@ export default function PieceDetail() {
 
   const [editing, setEditing] = useState(false);
   const search = useSearch();
+  const saveThumbnail = useSaveThumbnail();
+  const [thumbOpen, setThumbOpen] = useState(false);
+  const itemThumb: ThumbnailConfigValue | null = item?.thumbnail ?? null;
   useEffect(() => {
-    if (new URLSearchParams(search).get("edit") === "1") setEditing(true);
+    const q = new URLSearchParams(search);
+    if (q.get("edit") === "1") setEditing(true);
+    if (q.get("thumbnail") === "1") setThumbOpen(true);
   }, []);
   const [name, setName] = useState("");
   const [quantity, setQuantity] = useState(1);
@@ -892,7 +928,8 @@ export default function PieceDetail() {
     "pottery-detail",
     isLoading || !item
       ? undefined
-      : `Pottery Piece Detail page: ${formatElaineContextEntity({ entity: "item", id: item.id, label: item.name })}${editing ? " — currently in edit mode with unsaved field changes" : ""}. ${item.maker ? `Maker: ${item.maker}. ` : ""}${item.style ? `Style: ${item.style}. ` : ""}${item.shape ? `Shape: ${item.shape}. ` : ""}${item.dimensions ? `Dimensions: ${item.dimensions}. ` : ""}Quantity: ${item.quantity ?? 1}. ${item.categories.length ? `${formatElaineContextList(item.categories, { label: "Categories", formatItem: (c) => formatElaineContextEntity({ entity: "category", id: c.id, label: c.name }) })}. ` : "Uncategorized. "}${item.dominantColors.length ? `Colors: ${item.dominantColors.join(", ")}. ` : ""}${item.motifs.length ? `Motifs: ${item.motifs.join(", ")}. ` : ""}${item.patternDescription ? `Pattern: ${item.patternDescription}. ` : ""}Photos: ${1 + item.images.length} (1 primary + ${item.images.length} supplemental, imageIds: ${item.images.map((im) => im.id).join(", ") || "none"}). Selected photoKey for original-copy actions: ${selectedPhotoId ?? "primary"}. Inspect its original-info first and use the returned version when restoring. A source of existing means only the earliest surviving saved copy, not a recovered camera original. ${item.lockedFields?.length ? `Locked fields (AI won't overwrite): ${item.lockedFields.join(", ")}. ` : "No fields are locked. "}${formatElaineContextList(allCategories ?? [], { label: "Available categories to assign", formatItem: (c) => formatElaineContextEntity({ entity: "category", id: c.id, label: c.name }) })}.`,
+      : `Current photo version (thumbnailSourceVersion): ${getImageVersion(item.imageUrl) ?? "unknown"}. ` +
+          `Pottery Piece Detail page: ${formatElaineContextEntity({ entity: "item", id: item.id, label: item.name })}${editing ? " — currently in edit mode with unsaved field changes" : ""}. ${item.maker ? `Maker: ${item.maker}. ` : ""}${item.style ? `Style: ${item.style}. ` : ""}${item.shape ? `Shape: ${item.shape}. ` : ""}${item.dimensions ? `Dimensions: ${item.dimensions}. ` : ""}Quantity: ${item.quantity ?? 1}. ${item.categories.length ? `${formatElaineContextList(item.categories, { label: "Categories", formatItem: (c) => formatElaineContextEntity({ entity: "category", id: c.id, label: c.name }) })}. ` : "Uncategorized. "}${item.dominantColors.length ? `Colors: ${item.dominantColors.join(", ")}. ` : ""}${item.motifs.length ? `Motifs: ${item.motifs.join(", ")}. ` : ""}${item.patternDescription ? `Pattern: ${item.patternDescription}. ` : ""}Thumbnail: ${itemThumb ? (isThumbnailStale(item.imageUrl, itemThumb) ? "stale custom framing (photo changed; showing default, reframe or use default)" : `custom ${itemThumb.mode} framing, zoom ${itemThumb.zoom}`) : "default"}${thumbOpen ? " (thumbnail editor open)" : ""}. Open the thumbnail editor via /pottery/piece/${item.id}?thumbnail=1. Photos: ${1 + item.images.length} (1 primary + ${item.images.length} supplemental, imageIds: ${item.images.map((im) => im.id).join(", ") || "none"}). Selected photoKey for original-copy actions: ${selectedPhotoId ?? "primary"}. Inspect its original-info first and use the returned version when restoring. A source of existing means only the earliest surviving saved copy, not a recovered camera original. ${item.lockedFields?.length ? `Locked fields (AI won't overwrite): ${item.lockedFields.join(", ")}. ` : "No fields are locked. "}${formatElaineContextList(allCategories ?? [], { label: "Available categories to assign", formatItem: (c) => formatElaineContextEntity({ entity: "category", id: c.id, label: c.name }) })}.`,
   );
 
   // ---------------------------------------------------------------------------
@@ -953,8 +990,45 @@ export default function PieceDetail() {
             onSelectedImageChange={setSelectedPhotoId}
             primaryUrl={item.imageUrl}
             primaryAlt={item.name}
+            thumbnail={itemThumb}
             supplemental={item.images}
             itemId={id}
+            onAdjustThumbnail={() => setThumbOpen(true)}
+          />
+          <StaleThumbnailPrompt
+            scope="detail"
+            items={[
+              {
+                id: item.id,
+                name: item.name,
+                imageUrl: item.imageUrl,
+                thumbnail: itemThumb,
+              },
+            ]}
+            onReframe={() => setThumbOpen(true)}
+            onUseDefault={async () => {
+              try {
+                await saveThumbnail(item.id, item.imageUrl, null);
+              } catch (e) {
+                toast.error(
+                  e instanceof Error ? e.message : "Could not reset thumbnail.",
+                );
+                throw e;
+              }
+            }}
+          />
+          <PotteryThumbnailEditor
+            open={thumbOpen}
+            onOpenChange={setThumbOpen}
+            src={item.imageUrl}
+            alt={item.name}
+            thumbnail={itemThumb}
+            onSave={async (framing) => {
+              await saveThumbnail(item.id, item.imageUrl, framing);
+              toast.success(
+                framing ? "Thumbnail saved." : "Using default thumbnail.",
+              );
+            }}
           />
         </div>
 

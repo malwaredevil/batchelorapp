@@ -208,6 +208,7 @@ export const STATEMENTS: string[] = [
     category_id integer NOT NULL REFERENCES pottery_categories(id) ON DELETE CASCADE,
     PRIMARY KEY (item_id, category_id)
   )`,
+  `ALTER TABLE pottery_item_categories ADD COLUMN IF NOT EXISTS automatic_size_key TEXT`,
   `CREATE TABLE IF NOT EXISTS pottery_images (
     id serial PRIMARY KEY,
     item_id integer NOT NULL REFERENCES pottery_items(id) ON DELETE CASCADE,
@@ -223,6 +224,23 @@ export const STATEMENTS: string[] = [
   `CREATE INDEX IF NOT EXISTS pottery_images_item_idx
      ON pottery_images (item_id)`,
   `ALTER TABLE pottery_items ADD COLUMN IF NOT EXISTS original_image_path TEXT`,
+  `ALTER TABLE pottery_items ADD COLUMN IF NOT EXISTS thumbnail JSONB`,
+  `CREATE OR REPLACE FUNCTION invalidate_pottery_thumbnail() RETURNS trigger
+   LANGUAGE plpgsql AS $$
+   BEGIN
+     IF NEW.image_path IS DISTINCT FROM OLD.image_path AND NEW.thumbnail IS NOT NULL THEN
+       NEW.thumbnail := jsonb_set(NEW.thumbnail, '{sourceVersion}',
+         to_jsonb(('stale:' || substr(md5(clock_timestamp()::text || txid_current()::text), 1, 24))::text));
+     END IF;
+     RETURN NEW;
+   END; $$`,
+  `DO $$ BEGIN
+     IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'pottery_thumbnail_photo_changed'
+       AND tgrelid = 'pottery_items'::regclass) THEN
+       CREATE TRIGGER pottery_thumbnail_photo_changed BEFORE UPDATE OF image_path ON pottery_items
+       FOR EACH ROW EXECUTE FUNCTION invalidate_pottery_thumbnail();
+     END IF;
+   END; $$`,
   `ALTER TABLE pottery_items ADD COLUMN IF NOT EXISTS original_image_source TEXT`,
   `ALTER TABLE pottery_images ADD COLUMN IF NOT EXISTS original_image_path TEXT`,
   `ALTER TABLE pottery_images ADD COLUMN IF NOT EXISTS original_image_source TEXT`,

@@ -79,6 +79,7 @@ import {
   scheduleCompletePhotoScan,
 } from "../../lib/ai-scan-pipeline";
 import { serializeItem, serializeItems } from "../../lib/pottery/serialize";
+import { potteryThumbnailRouter } from "./thumbnail";
 import { logger } from "../../lib/logger";
 import pLimit from "p-limit";
 import {
@@ -92,10 +93,14 @@ import {
   runAnalysisWithEvidenceTrace,
 } from "../../lib/ai-provenance";
 import {
-  matchCategoryIds,
   mergeExistingCategoryIds,
   parsePositiveIntegerArray,
 } from "../../lib/collection-parsing";
+import {
+  matchPotteryCategoryIds,
+  syncPotterySizeCategory,
+  replacePotteryItemCategories,
+} from "../../lib/pottery/size-categories";
 import { getElaineGlobalConfig } from "../../lib/elaine-config";
 import {
   storeUploadedOriginal,
@@ -174,6 +179,7 @@ function sentenceCase(value: string | null): string | null {
 
 const router: IRouter = Router();
 router.use(requireAuth);
+router.use(potteryThumbnailRouter);
 router.use(createPhotoOriginalRoutes(schedulePotteryRecognition));
 
 // ---------------------------------------------------------------------------
@@ -435,7 +441,7 @@ router.post("/items", aiLimiter, protectedPhotoUpload, async (req, res) => {
       .select({ id: categories.id, name: categories.name })
       .from(categories);
 
-    const autoCategoryIds = matchCategoryIds(allCats, [
+    const autoCategoryIds = matchPotteryCategoryIds(allCats, [
       analysis.name,
       analysis.style,
       analysis.shape,
@@ -457,6 +463,7 @@ router.post("/items", aiLimiter, protectedPhotoUpload, async (req, res) => {
       );
     }
 
+    await syncPotterySizeCategory(row.id);
     // Auto-assign (or remove) the "Duplicate" category based on quantity.
     await syncDuplicateCategory(row.id, row.quantity);
 
@@ -532,22 +539,13 @@ router.patch("/items/:id", async (req, res) => {
       allCatIds.has(catId),
     );
 
-    await db.transaction(async (tx) => {
-      await tx.delete(itemCategories).where(eq(itemCategories.itemId, id));
-      if (safeCategoryIds.length > 0) {
-        await tx.insert(itemCategories).values(
-          safeCategoryIds.map((catId) => ({
-            itemId: id,
-            categoryId: catId,
-          })),
-        );
-      }
-    });
+    await replacePotteryItemCategories(id, safeCategoryIds);
   }
 
   // Re-sync the "Duplicate" category based on the item's current quantity.
   // Runs after any category replacement so it always wins, even if the user
   // didn't include "Duplicate" in their categoryIds list.
+  if (body.categoryIds === undefined) await syncPotterySizeCategory(id);
   await syncDuplicateCategory(id, row.quantity);
 
   res.json(UpdatePotteryResponse.parse(await serializeItem(row)));
@@ -1273,7 +1271,7 @@ export async function runItemAnalysis(
   const allCats = await db
     .select({ id: categories.id, name: categories.name })
     .from(categories);
-  const autoCategoryIds = matchCategoryIds(allCats, [
+  const autoCategoryIds = matchPotteryCategoryIds(allCats, [
     merged.name,
     merged.style,
     merged.shape,
@@ -1297,6 +1295,7 @@ export async function runItemAnalysis(
       .values(newCatIds.map((catId) => ({ itemId: id, categoryId: catId })));
   }
 
+  await syncPotterySizeCategory(id);
   // Sync the "Duplicate" category based on quantity (unchanged by reanalysis,
   // but the category may have been manually removed — re-assert it here).
   await syncDuplicateCategory(id, item.quantity);
@@ -1523,7 +1522,7 @@ export async function createPotteryItemFromBuffer(
     const allCats = await db
       .select({ id: categories.id, name: categories.name })
       .from(categories);
-    const autoCategoryIds = matchCategoryIds(allCats, [
+    const autoCategoryIds = matchPotteryCategoryIds(allCats, [
       analysis.name,
       analysis.style,
       analysis.shape,
@@ -1545,6 +1544,7 @@ export async function createPotteryItemFromBuffer(
       );
     }
 
+    await syncPotterySizeCategory(row.id);
     return { id: row.id, name: row.name };
   } catch (err) {
     await deleteImage(imagePath).catch(() => {});

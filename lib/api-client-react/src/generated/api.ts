@@ -229,6 +229,7 @@ import type {
   SavePatternRequirementsBody,
   SendPhoneCodeInput,
   SetMagnetPrimaryImage200,
+  SetPotteryThumbnailBody,
   TravelsBulkCreatePackingItemsBody,
   TravelsCheckFlightsBody,
   TravelsCheckReservationNow200,
@@ -1715,6 +1716,78 @@ export function useGetStragglers<TData = Awaited<ReturnType<typeof getStragglers
 
 
 
+
+export const getSetPotteryThumbnailUrl = (id: number,) => {
+
+
+
+
+  return `/api/pottery/items/${id}/thumbnail`
+}
+
+/**
+ * @summary Adjust or reset optional thumbnail framing without changing the photo
+ */
+export const setPotteryThumbnail = async (id: number,
+    setPotteryThumbnailBody: SetPotteryThumbnailBody, options?: RequestInit): Promise<PotteryPotteryItem> => {
+
+  return customFetch<PotteryPotteryItem>(getSetPotteryThumbnailUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(setPotteryThumbnailBody)
+  }
+);}
+
+
+
+
+
+export const getSetPotteryThumbnailMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setPotteryThumbnail>>, TError,{id: number;data: BodyType<SetPotteryThumbnailBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setPotteryThumbnail>>, TError,{id: number;data: BodyType<SetPotteryThumbnailBody>}, TContext> => {
+
+const mutationKey = ['setPotteryThumbnail'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setPotteryThumbnail>>, {id: number;data: BodyType<SetPotteryThumbnailBody>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  setPotteryThumbnail(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetPotteryThumbnailMutationResult = NonNullable<Awaited<ReturnType<typeof setPotteryThumbnail>>>
+    export type SetPotteryThumbnailMutationBody = BodyType<SetPotteryThumbnailBody>
+    export type SetPotteryThumbnailMutationError = ErrorType<void>
+
+    /**
+ * @summary Adjust or reset optional thumbnail framing without changing the photo
+ */
+export const useSetPotteryThumbnail = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setPotteryThumbnail>>, TError,{id: number;data: BodyType<SetPotteryThumbnailBody>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setPotteryThumbnail>>,
+        TError,
+        {id: number;data: BodyType<SetPotteryThumbnailBody>},
+        TContext
+      > => {
+      return useMutation(getSetPotteryThumbnailMutationOptions(options));
+    }
 
 export const getGetPotteryUrl = (id: number,) => {
 

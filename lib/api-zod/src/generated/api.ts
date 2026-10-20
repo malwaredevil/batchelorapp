@@ -271,6 +271,17 @@ export const ListPotteryQueryParams = zod.object({
 })
 
 
+export const listPotteryResponseItemsItemThumbnailOneOneXMin = 0;
+export const listPotteryResponseItemsItemThumbnailOneOneXMax = 1;
+
+export const listPotteryResponseItemsItemThumbnailOneOneYMin = 0;
+export const listPotteryResponseItemsItemThumbnailOneOneYMax = 1;
+
+export const listPotteryResponseItemsItemThumbnailOneOneZoomMin = 0.1;
+export const listPotteryResponseItemsItemThumbnailOneOneZoomMax = 8;
+
+export const listPotteryResponseItemsItemThumbnailOneTwoSourceVersionMax = 32;
+
 
 
 export const ListPotteryResponse = zod.object({
@@ -308,6 +319,14 @@ export const ListPotteryResponse = zod.object({
   "position": zod.number()
 })),
   "imageUrl": zod.string(),
+  "thumbnail": zod.object({
+  "mode": zod.enum(['crop', 'contain']),
+  "x": zod.number().min(listPotteryResponseItemsItemThumbnailOneOneXMin).max(listPotteryResponseItemsItemThumbnailOneOneXMax),
+  "y": zod.number().min(listPotteryResponseItemsItemThumbnailOneOneYMin).max(listPotteryResponseItemsItemThumbnailOneOneYMax),
+  "zoom": zod.number().min(listPotteryResponseItemsItemThumbnailOneOneZoomMin).max(listPotteryResponseItemsItemThumbnailOneOneZoomMax)
+}).and(zod.object({
+  "sourceVersion": zod.string().min(1).max(listPotteryResponseItemsItemThumbnailOneTwoSourceVersionMax)
+})).nullish(),
   "recognitionRefreshStatus": zod.union([zod.literal('pending'),zod.literal('complete'),zod.literal(null)]).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 })),
@@ -320,6 +339,17 @@ export const ListPotteryResponse = zod.object({
 /**
  * @summary Add a pottery piece
  */
+
+export const createPotteryResponseThumbnailOneOneXMin = 0;
+export const createPotteryResponseThumbnailOneOneXMax = 1;
+
+export const createPotteryResponseThumbnailOneOneYMin = 0;
+export const createPotteryResponseThumbnailOneOneYMax = 1;
+
+export const createPotteryResponseThumbnailOneOneZoomMin = 0.1;
+export const createPotteryResponseThumbnailOneOneZoomMax = 8;
+
+export const createPotteryResponseThumbnailOneTwoSourceVersionMax = 32;
 
 
 
@@ -357,6 +387,14 @@ export const CreatePotteryResponse = zod.object({
   "position": zod.number()
 })),
   "imageUrl": zod.string(),
+  "thumbnail": zod.object({
+  "mode": zod.enum(['crop', 'contain']),
+  "x": zod.number().min(createPotteryResponseThumbnailOneOneXMin).max(createPotteryResponseThumbnailOneOneXMax),
+  "y": zod.number().min(createPotteryResponseThumbnailOneOneYMin).max(createPotteryResponseThumbnailOneOneYMax),
+  "zoom": zod.number().min(createPotteryResponseThumbnailOneOneZoomMin).max(createPotteryResponseThumbnailOneOneZoomMax)
+}).and(zod.object({
+  "sourceVersion": zod.string().min(1).max(createPotteryResponseThumbnailOneTwoSourceVersionMax)
+})).nullish(),
   "recognitionRefreshStatus": zod.union([zod.literal('pending'),zod.literal('complete'),zod.literal(null)]).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 })
@@ -375,12 +413,117 @@ export const GetStragglersResponse = zod.object({
 
 
 /**
+ * @summary Adjust or reset optional thumbnail framing without changing the photo
+ */
+
+
+
+export const SetPotteryThumbnailParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const setPotteryThumbnailBodySourceVersionMax = 32;
+
+export const setPotteryThumbnailBodyThumbnailOneXMin = 0;
+export const setPotteryThumbnailBodyThumbnailOneXMax = 1;
+
+export const setPotteryThumbnailBodyThumbnailOneYMin = 0;
+export const setPotteryThumbnailBodyThumbnailOneYMax = 1;
+
+export const setPotteryThumbnailBodyThumbnailOneZoomMin = 0.1;
+export const setPotteryThumbnailBodyThumbnailOneZoomMax = 8;
+
+
+
+export const SetPotteryThumbnailBody = zod.object({
+  "sourceVersion": zod.string().min(1).max(setPotteryThumbnailBodySourceVersionMax),
+  "thumbnail": zod.object({
+  "mode": zod.enum(['crop', 'contain']),
+  "x": zod.number().min(setPotteryThumbnailBodyThumbnailOneXMin).max(setPotteryThumbnailBodyThumbnailOneXMax),
+  "y": zod.number().min(setPotteryThumbnailBodyThumbnailOneYMin).max(setPotteryThumbnailBodyThumbnailOneYMax),
+  "zoom": zod.number().min(setPotteryThumbnailBodyThumbnailOneZoomMin).max(setPotteryThumbnailBodyThumbnailOneZoomMax)
+}).nullable()
+})
+
+
+export const setPotteryThumbnailResponseThumbnailOneOneXMin = 0;
+export const setPotteryThumbnailResponseThumbnailOneOneXMax = 1;
+
+export const setPotteryThumbnailResponseThumbnailOneOneYMin = 0;
+export const setPotteryThumbnailResponseThumbnailOneOneYMax = 1;
+
+export const setPotteryThumbnailResponseThumbnailOneOneZoomMin = 0.1;
+export const setPotteryThumbnailResponseThumbnailOneOneZoomMax = 8;
+
+export const setPotteryThumbnailResponseThumbnailOneTwoSourceVersionMax = 32;
+
+
+
+export const SetPotteryThumbnailResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "quantity": zod.number().min(1),
+  "lockedFields": zod.array(zod.string()),
+  "notes": zod.string().nullish(),
+  "dimensions": zod.string().nullish(),
+  "patternDescription": zod.string().nullish(),
+  "style": zod.string().nullish(),
+  "shape": zod.string().nullish(),
+  "maker": zod.string().nullish(),
+  "makerInfo": zod.string().nullish(),
+  "aiDescription": zod.string().nullish(),
+  "acquiredAt": zod.string().nullish(),
+  "glazeType": zod.string().nullish().describe('Jina CLIP zero-shot decoration\/glaze type classification'),
+  "surfaceZones": zod.object({
+
+}).passthrough().nullish().describe('AI-detected decorative surface zone breakdown (zones, complexity, repeatPattern)'),
+  "dominantColors": zod.array(zod.string()),
+  "motifs": zod.array(zod.string()),
+  "categories": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "bgColor": zod.string().nullish(),
+  "textColor": zod.string().nullish(),
+  "count": zod.number().optional().describe('Number of pieces assigned this category (only present on the category-list endpoint)')
+})),
+  "images": zod.array(zod.object({
+  "id": zod.number(),
+  "url": zod.string(),
+  "label": zod.string().nullish(),
+  "position": zod.number()
+})),
+  "imageUrl": zod.string(),
+  "thumbnail": zod.object({
+  "mode": zod.enum(['crop', 'contain']),
+  "x": zod.number().min(setPotteryThumbnailResponseThumbnailOneOneXMin).max(setPotteryThumbnailResponseThumbnailOneOneXMax),
+  "y": zod.number().min(setPotteryThumbnailResponseThumbnailOneOneYMin).max(setPotteryThumbnailResponseThumbnailOneOneYMax),
+  "zoom": zod.number().min(setPotteryThumbnailResponseThumbnailOneOneZoomMin).max(setPotteryThumbnailResponseThumbnailOneOneZoomMax)
+}).and(zod.object({
+  "sourceVersion": zod.string().min(1).max(setPotteryThumbnailResponseThumbnailOneTwoSourceVersionMax)
+})).nullish(),
+  "recognitionRefreshStatus": zod.union([zod.literal('pending'),zod.literal('complete'),zod.literal(null)]).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
+  "createdAt": zod.coerce.date()
+})
+
+
+/**
  * @summary Get a pottery piece
  */
 export const GetPotteryParams = zod.object({
   "id": zod.coerce.number()
 })
 
+
+export const getPotteryResponseThumbnailOneOneXMin = 0;
+export const getPotteryResponseThumbnailOneOneXMax = 1;
+
+export const getPotteryResponseThumbnailOneOneYMin = 0;
+export const getPotteryResponseThumbnailOneOneYMax = 1;
+
+export const getPotteryResponseThumbnailOneOneZoomMin = 0.1;
+export const getPotteryResponseThumbnailOneOneZoomMax = 8;
+
+export const getPotteryResponseThumbnailOneTwoSourceVersionMax = 32;
 
 
 
@@ -418,6 +561,14 @@ export const GetPotteryResponse = zod.object({
   "position": zod.number()
 })),
   "imageUrl": zod.string(),
+  "thumbnail": zod.object({
+  "mode": zod.enum(['crop', 'contain']),
+  "x": zod.number().min(getPotteryResponseThumbnailOneOneXMin).max(getPotteryResponseThumbnailOneOneXMax),
+  "y": zod.number().min(getPotteryResponseThumbnailOneOneYMin).max(getPotteryResponseThumbnailOneOneYMax),
+  "zoom": zod.number().min(getPotteryResponseThumbnailOneOneZoomMin).max(getPotteryResponseThumbnailOneOneZoomMax)
+}).and(zod.object({
+  "sourceVersion": zod.string().min(1).max(getPotteryResponseThumbnailOneTwoSourceVersionMax)
+})).nullish(),
   "recognitionRefreshStatus": zod.union([zod.literal('pending'),zod.literal('complete'),zod.literal(null)]).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 })
@@ -447,6 +598,17 @@ export const UpdatePotteryBody = zod.object({
   "categoryIds": zod.array(zod.number()).optional()
 })
 
+
+export const updatePotteryResponseThumbnailOneOneXMin = 0;
+export const updatePotteryResponseThumbnailOneOneXMax = 1;
+
+export const updatePotteryResponseThumbnailOneOneYMin = 0;
+export const updatePotteryResponseThumbnailOneOneYMax = 1;
+
+export const updatePotteryResponseThumbnailOneOneZoomMin = 0.1;
+export const updatePotteryResponseThumbnailOneOneZoomMax = 8;
+
+export const updatePotteryResponseThumbnailOneTwoSourceVersionMax = 32;
 
 
 
@@ -484,6 +646,14 @@ export const UpdatePotteryResponse = zod.object({
   "position": zod.number()
 })),
   "imageUrl": zod.string(),
+  "thumbnail": zod.object({
+  "mode": zod.enum(['crop', 'contain']),
+  "x": zod.number().min(updatePotteryResponseThumbnailOneOneXMin).max(updatePotteryResponseThumbnailOneOneXMax),
+  "y": zod.number().min(updatePotteryResponseThumbnailOneOneYMin).max(updatePotteryResponseThumbnailOneOneYMax),
+  "zoom": zod.number().min(updatePotteryResponseThumbnailOneOneZoomMin).max(updatePotteryResponseThumbnailOneOneZoomMax)
+}).and(zod.object({
+  "sourceVersion": zod.string().min(1).max(updatePotteryResponseThumbnailOneTwoSourceVersionMax)
+})).nullish(),
   "recognitionRefreshStatus": zod.union([zod.literal('pending'),zod.literal('complete'),zod.literal(null)]).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 })
@@ -554,6 +724,17 @@ export const ReanalyzePotteryParams = zod.object({
 })
 
 
+export const reanalyzePotteryResponseThumbnailOneOneXMin = 0;
+export const reanalyzePotteryResponseThumbnailOneOneXMax = 1;
+
+export const reanalyzePotteryResponseThumbnailOneOneYMin = 0;
+export const reanalyzePotteryResponseThumbnailOneOneYMax = 1;
+
+export const reanalyzePotteryResponseThumbnailOneOneZoomMin = 0.1;
+export const reanalyzePotteryResponseThumbnailOneOneZoomMax = 8;
+
+export const reanalyzePotteryResponseThumbnailOneTwoSourceVersionMax = 32;
+
 
 
 export const ReanalyzePotteryResponse = zod.object({
@@ -590,6 +771,14 @@ export const ReanalyzePotteryResponse = zod.object({
   "position": zod.number()
 })),
   "imageUrl": zod.string(),
+  "thumbnail": zod.object({
+  "mode": zod.enum(['crop', 'contain']),
+  "x": zod.number().min(reanalyzePotteryResponseThumbnailOneOneXMin).max(reanalyzePotteryResponseThumbnailOneOneXMax),
+  "y": zod.number().min(reanalyzePotteryResponseThumbnailOneOneYMin).max(reanalyzePotteryResponseThumbnailOneOneYMax),
+  "zoom": zod.number().min(reanalyzePotteryResponseThumbnailOneOneZoomMin).max(reanalyzePotteryResponseThumbnailOneOneZoomMax)
+}).and(zod.object({
+  "sourceVersion": zod.string().min(1).max(reanalyzePotteryResponseThumbnailOneTwoSourceVersionMax)
+})).nullish(),
   "recognitionRefreshStatus": zod.union([zod.literal('pending'),zod.literal('complete'),zod.literal(null)]).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 })
@@ -629,6 +818,17 @@ export const SetPrimaryImageBody = zod.object({
 })
 
 
+export const setPrimaryImageResponseThumbnailOneOneXMin = 0;
+export const setPrimaryImageResponseThumbnailOneOneXMax = 1;
+
+export const setPrimaryImageResponseThumbnailOneOneYMin = 0;
+export const setPrimaryImageResponseThumbnailOneOneYMax = 1;
+
+export const setPrimaryImageResponseThumbnailOneOneZoomMin = 0.1;
+export const setPrimaryImageResponseThumbnailOneOneZoomMax = 8;
+
+export const setPrimaryImageResponseThumbnailOneTwoSourceVersionMax = 32;
+
 
 
 export const SetPrimaryImageResponse = zod.object({
@@ -665,6 +865,14 @@ export const SetPrimaryImageResponse = zod.object({
   "position": zod.number()
 })),
   "imageUrl": zod.string(),
+  "thumbnail": zod.object({
+  "mode": zod.enum(['crop', 'contain']),
+  "x": zod.number().min(setPrimaryImageResponseThumbnailOneOneXMin).max(setPrimaryImageResponseThumbnailOneOneXMax),
+  "y": zod.number().min(setPrimaryImageResponseThumbnailOneOneYMin).max(setPrimaryImageResponseThumbnailOneOneYMax),
+  "zoom": zod.number().min(setPrimaryImageResponseThumbnailOneOneZoomMin).max(setPrimaryImageResponseThumbnailOneOneZoomMax)
+}).and(zod.object({
+  "sourceVersion": zod.string().min(1).max(setPrimaryImageResponseThumbnailOneTwoSourceVersionMax)
+})).nullish(),
   "recognitionRefreshStatus": zod.union([zod.literal('pending'),zod.literal('complete'),zod.literal(null)]).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 })
@@ -946,6 +1154,17 @@ export const MergePotteryCategoryResponse = zod.void()
  * @summary Compare a candidate photo against the collection
  */
 
+export const comparePotteryResponseMatchesItemItemThumbnailOneOneXMin = 0;
+export const comparePotteryResponseMatchesItemItemThumbnailOneOneXMax = 1;
+
+export const comparePotteryResponseMatchesItemItemThumbnailOneOneYMin = 0;
+export const comparePotteryResponseMatchesItemItemThumbnailOneOneYMax = 1;
+
+export const comparePotteryResponseMatchesItemItemThumbnailOneOneZoomMin = 0.1;
+export const comparePotteryResponseMatchesItemItemThumbnailOneOneZoomMax = 8;
+
+export const comparePotteryResponseMatchesItemItemThumbnailOneTwoSourceVersionMax = 32;
+
 
 
 export const ComparePotteryResponse = zod.object({
@@ -993,6 +1212,14 @@ export const ComparePotteryResponse = zod.object({
   "position": zod.number()
 })),
   "imageUrl": zod.string(),
+  "thumbnail": zod.object({
+  "mode": zod.enum(['crop', 'contain']),
+  "x": zod.number().min(comparePotteryResponseMatchesItemItemThumbnailOneOneXMin).max(comparePotteryResponseMatchesItemItemThumbnailOneOneXMax),
+  "y": zod.number().min(comparePotteryResponseMatchesItemItemThumbnailOneOneYMin).max(comparePotteryResponseMatchesItemItemThumbnailOneOneYMax),
+  "zoom": zod.number().min(comparePotteryResponseMatchesItemItemThumbnailOneOneZoomMin).max(comparePotteryResponseMatchesItemItemThumbnailOneOneZoomMax)
+}).and(zod.object({
+  "sourceVersion": zod.string().min(1).max(comparePotteryResponseMatchesItemItemThumbnailOneTwoSourceVersionMax)
+})).nullish(),
   "recognitionRefreshStatus": zod.union([zod.literal('pending'),zod.literal('complete'),zod.literal(null)]).nullable().describe('Status of the automatic complete-photo recognition refresh.'),
   "createdAt": zod.coerce.date()
 }),

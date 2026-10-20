@@ -28,6 +28,7 @@ export default [
       "artifacts/modules/src/ornaments/pages/collection-bulk-reanalyze.test.ts",
       "artifacts/modules/src/ornaments/components/use-barcode-camera.test.ts",
       "artifacts/modules/src/pottery/pages/collection-bulk-reanalyze.test.ts",
+      "artifacts/modules/src/pottery/thumbnail-geometry.test.ts",
       "artifacts/modules/src/quilting/hooks/bulk-reanalyze-run.test.ts",
       "artifacts/modules/src/quilting/components/image-viewer-pan-bounds.test.tsx",
       "artifacts/modules/src/magnets/pages/collection-compare.test.ts",

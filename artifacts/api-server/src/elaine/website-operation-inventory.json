@@ -2735,6 +2735,16 @@
     "reason": "Elaine has registered tools that reuse or mirror this website operation."
   },
   {
+    "operationId": "setPotteryThumbnail",
+    "method": "PUT",
+    "path": "/pottery/items/{id}/thumbnail",
+    "domain": "pottery",
+    "summary": "Adjust or reset optional thumbnail framing without changing the photo",
+    "disposition": "direct",
+    "mappedTools": ["update_pottery_item"],
+    "reason": "The existing pottery update tool uses the shared thumbnail saver; visual framing opens the item thumbnail editor."
+  },
+  {
     "operationId": "updatePotteryCategoryColors",
     "method": "PUT",
     "path": "/pottery/categories/{id}/colors",

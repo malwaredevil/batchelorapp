@@ -256,6 +256,41 @@ export interface PotteryPotteryImageUpdate {
   position?: number;
 }
 
+export type PotteryThumbnailFramingMode = typeof PotteryThumbnailFramingMode[keyof typeof PotteryThumbnailFramingMode];
+
+
+export const PotteryThumbnailFramingMode = {
+  crop: 'crop',
+  contain: 'contain',
+} as const;
+
+export interface PotteryThumbnailFraming {
+  mode: PotteryThumbnailFramingMode;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  x: number;
+  /**
+     * @minimum 0
+     * @maximum 1
+     */
+  y: number;
+  /**
+     * @minimum 0.1
+     * @maximum 8
+     */
+  zoom: number;
+}
+
+export type PotteryPotteryThumbnail = PotteryThumbnailFraming & {
+  /**
+     * @minLength 1
+     * @maxLength 32
+     */
+  sourceVersion: string;
+};
+
 /**
  * Status of the automatic complete-photo recognition refresh.
  * @nullable
@@ -313,6 +348,7 @@ export interface PotteryPotteryItem {
   categories: PotteryCategory[];
   images: PotteryPotteryImage[];
   imageUrl: string;
+  thumbnail?: PotteryPotteryThumbnail | null;
   /**
      * Status of the automatic complete-photo recognition refresh.
      * @nullable
@@ -3255,6 +3291,15 @@ page?: number;
  * @maximum 200
  */
 pageSize?: number;
+};
+
+export type SetPotteryThumbnailBody = {
+  /**
+     * @minLength 1
+     * @maxLength 32
+     */
+  sourceVersion: string;
+  thumbnail: PotteryThumbnailFraming | null;
 };
 
 export type DismissWatchlistAlert200 = {

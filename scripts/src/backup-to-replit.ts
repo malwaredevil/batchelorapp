@@ -197,6 +197,7 @@ CREATE TABLE IF NOT EXISTS pottery_item_categories (
 );
 
 ALTER TABLE pottery_items ADD COLUMN IF NOT EXISTS original_image_path TEXT;
+ALTER TABLE pottery_items ADD COLUMN IF NOT EXISTS thumbnail JSONB;
 ALTER TABLE pottery_items ADD COLUMN IF NOT EXISTS original_image_source TEXT;
 ALTER TABLE pottery_images ADD COLUMN IF NOT EXISTS original_image_path TEXT;
 ALTER TABLE pottery_images ADD COLUMN IF NOT EXISTS original_image_source TEXT;
@@ -2002,6 +2003,7 @@ async function copySnapshot(source: pg.Client, dest: pg.Client) {
       "dominant_colors",
       "motifs",
       "image_path",
+      "thumbnail",
       "original_image_path",
       "original_image_source",
       "pattern_crop_path",
@@ -2014,6 +2016,7 @@ async function copySnapshot(source: pg.Client, dest: pg.Client) {
       "created_at",
       "deleted_at",
     ],
+    jsonbColumns: ["thumbnail"],
     orderBy: "id",
   });
   await resetSequence(dest, "pottery_items", "id");

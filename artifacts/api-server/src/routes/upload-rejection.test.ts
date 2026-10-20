@@ -67,6 +67,10 @@ vi.mock("@workspace/db", async (importOriginal) => {
   return { ...actual, db: dbMock };
 });
 
+vi.mock("../lib/pottery/size-categories", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/pottery/size-categories")>()),
+  syncPotterySizeCategory: vi.fn(async () => ({ status: "matched" })),
+}));
 vi.mock("../lib/logger", () => ({
   logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() },
 }));

@@ -82,6 +82,18 @@ import {
   POTTERY_BULK_MAX,
 } from "@/pottery/lib/reanalyze-status";
 import { QuantityBadge } from "@/components/collection/QuantityBadge";
+import {
+  PotteryThumbnailImage,
+  PotteryThumbnailEditor,
+  StaleThumbnailPrompt,
+  type ThumbnailConfigValue,
+} from "@workspace/collection-ui";
+import { useSaveThumbnail } from "@/pottery/hooks/use-thumbnail";
+import { Crop } from "lucide-react";
+
+function thumbOf(item: PotteryItem): ThumbnailConfigValue | null {
+  return item.thumbnail ?? null;
+}
 
 // ---------------------------------------------------------------------------
 // Collection compare modal
@@ -234,6 +246,7 @@ function PieceCard({
   activeColor,
   onSetCategories,
   onDelete,
+  onAdjustThumbnail,
 }: {
   item: PotteryItem;
   selecting: boolean;
@@ -245,6 +258,7 @@ function PieceCard({
   activeColor: string | null;
   onSetCategories: (item: PotteryItem) => void;
   onDelete: (item: PotteryItem) => void;
+  onAdjustThumbnail: (item: PotteryItem) => void;
 }) {
   const [imgLoaded, setImgLoaded] = useState(false);
   const [zoomOpen, setZoomOpen] = useState(false);
@@ -319,7 +333,7 @@ function PieceCard({
 
       {/* Card actions menu — top-right */}
       {!selecting && (
-        <div className="absolute right-2 top-2 z-10 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition">
+        <div className="absolute right-2 top-2 z-10 opacity-0 group-hover:opacity-100 focus-within:opacity-100 [@media(pointer:coarse)]:opacity-100 transition">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -352,6 +366,16 @@ function PieceCard({
               >
                 <Pencil className="mr-2 h-3.5 w-3.5" />
                 Quick edit
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.preventDefault();
+                  onAdjustThumbnail(item);
+                }}
+                data-testid={`button-adjust-thumbnail-${item.id}`}
+              >
+                <Crop className="mr-2 h-3.5 w-3.5" />
+                Adjust thumbnail
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={(e) => {
@@ -402,18 +426,19 @@ function PieceCard({
         data-testid={`card-piece-${item.id}`}
       >
         <div className="aspect-square overflow-hidden bg-muted">
-          <img
-            ref={imgRef}
+          <PotteryThumbnailImage
+            imgRef={imgRef}
             src={item.imageUrl}
             alt={item.name}
+            thumbnail={thumbOf(item)}
             loading="lazy"
             onLoad={() => setImgLoaded(true)}
             onError={() => setImgLoaded(true)}
-            style={{
+            imgStyle={{
               filter: imgLoaded ? "none" : "blur(8px)",
               transition: "filter 0.4s ease",
             }}
-            className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+            imgClassName="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
           />
         </div>
         <div className="space-y-1.5 p-3">
@@ -999,6 +1024,9 @@ export default function Collection() {
   }, [groupByMaker, filtered]);
 
   const configSummary = useAppConfigSummary();
+  const saveThumbnail = useSaveThumbnail();
+  const [thumbEditId, setThumbEditId] = useState<number | null>(null);
+  const thumbEditItem = (data ?? []).find((i) => i.id === thumbEditId) ?? null;
 
   usePageAssistantContext(
     "pottery-collection",
@@ -1406,6 +1434,7 @@ export default function Collection() {
                         activeColor={filterColor}
                         onSetCategories={setCategoryEditItem}
                         onDelete={(item) => setDeleteConfirmId(item.id)}
+                        onAdjustThumbnail={(it) => setThumbEditId(it.id)}
                       />
                     ))}
                   </div>
@@ -1442,6 +1471,7 @@ export default function Collection() {
                       activeColor={filterColor}
                       onSetCategories={setCategoryEditItem}
                       onDelete={(item) => setDeleteConfirmId(item.id)}
+                      onAdjustThumbnail={(it) => setThumbEditId(it.id)}
                     />
                   ))}
                 </div>
@@ -1478,6 +1508,48 @@ export default function Collection() {
             <span className="text-sm font-medium">Analysing…</span>
           </div>
         </div>
+      )}
+
+      <StaleThumbnailPrompt
+        scope="gallery"
+        items={(data ?? []).map((i) => ({
+          id: i.id,
+          name: i.name,
+          imageUrl: i.imageUrl,
+          thumbnail: thumbOf(i),
+        }))}
+        onReframe={setThumbEditId}
+        onUseDefault={async (itemId) => {
+          const it = (data ?? []).find((x) => x.id === itemId);
+          if (!it) return;
+          try {
+            await saveThumbnail(itemId, it.imageUrl, null);
+          } catch (e) {
+            toast.error(
+              e instanceof Error ? e.message : "Could not reset thumbnail.",
+            );
+            throw e;
+          }
+        }}
+      />
+      {thumbEditItem && (
+        <PotteryThumbnailEditor
+          open
+          onOpenChange={(o) => !o && setThumbEditId(null)}
+          src={thumbEditItem.imageUrl}
+          alt={thumbEditItem.name}
+          thumbnail={thumbOf(thumbEditItem)}
+          onSave={async (framing) => {
+            await saveThumbnail(
+              thumbEditItem.id,
+              thumbEditItem.imageUrl,
+              framing,
+            );
+            toast.success(
+              framing ? "Thumbnail saved." : "Using default thumbnail.",
+            );
+          }}
+        />
       )}
 
       {/* Quick edit sheet */}

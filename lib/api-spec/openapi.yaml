@@ -487,6 +487,48 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PotteryStragglers"
+  /pottery/items/{id}/thumbnail:
+    put:
+      operationId: setPotteryThumbnail
+      tags:
+        - pottery
+      summary: Adjust or reset optional thumbnail framing without changing the photo
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - sourceVersion
+                - thumbnail
+              properties:
+                sourceVersion:
+                  type: string
+                  minLength: 1
+                  maxLength: 32
+                thumbnail:
+                  nullable: true
+                  allOf:
+                    - $ref: "#/components/schemas/PotteryThumbnailFraming"
+      responses:
+        "200":
+          description: Updated piece
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PotteryPotteryItem"
+        "404":
+          description: Piece not found
+        "409":
+          description: Main photo changed; refresh before adjusting its thumbnail
   /pottery/items/{id}:
     get:
       operationId: getPottery
@@ -7479,6 +7521,42 @@ components:
           type: integer
         pageSize:
           type: integer
+    PotteryThumbnailFraming:
+      type: object
+      required:
+        - mode
+        - x
+        - y
+        - zoom
+      properties:
+        mode:
+          type: string
+          enum:
+            - crop
+            - contain
+        x:
+          type: number
+          minimum: 0
+          maximum: 1
+        y:
+          type: number
+          minimum: 0
+          maximum: 1
+        zoom:
+          type: number
+          minimum: 0.1
+          maximum: 8
+    PotteryPotteryThumbnail:
+      allOf:
+        - $ref: "#/components/schemas/PotteryThumbnailFraming"
+        - type: object
+          required:
+            - sourceVersion
+          properties:
+            sourceVersion:
+              type: string
+              minLength: 1
+              maxLength: 32
     PotteryPotteryItem:
       type: object
       required:
@@ -7569,6 +7647,10 @@ components:
             $ref: "#/components/schemas/PotteryPotteryImage"
         imageUrl:
           type: string
+        thumbnail:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/PotteryPotteryThumbnail"
         recognitionRefreshStatus:
           type:
             - string

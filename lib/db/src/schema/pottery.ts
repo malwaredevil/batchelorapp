@@ -38,6 +38,13 @@ export const potteryItems = pgTable(
       .notNull()
       .default(sql`'{}'::text[]`),
     imagePath: text("image_path").notNull(),
+    thumbnail: jsonb("thumbnail").$type<{
+      mode: "crop" | "contain";
+      x: number;
+      y: number;
+      zoom: number;
+      sourceVersion: string;
+    }>(),
     originalImagePath: text("original_image_path"),
     originalImageSource: text("original_image_source"),
     patternCropPath: text("pattern_crop_path"),

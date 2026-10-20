@@ -337,6 +337,39 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Stragglers"
+  /pottery/{id}/thumbnail:
+    put:
+      operationId: setPotteryThumbnail
+      tags: [pottery]
+      summary: Adjust or reset optional thumbnail framing without changing the photo
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sourceVersion, thumbnail]
+              properties:
+                sourceVersion: { type: string, minLength: 1, maxLength: 32 }
+                thumbnail:
+                  nullable: true
+                  allOf:
+                    - $ref: "#/components/schemas/ThumbnailFraming"
+      responses:
+        "200":
+          description: Updated piece
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PotteryItem" }
+        "404":
+          description: Piece not found
+        "409":
+          description: Main photo changed; refresh before adjusting its thumbnail
   /pottery/{id}:
     get:
       operationId: getPottery
@@ -1257,6 +1290,21 @@ components:
           type: integer
         pageSize:
           type: integer
+    ThumbnailFraming:
+      type: object
+      required: [mode, x, y, zoom]
+      properties:
+        mode: { type: string, enum: [crop, contain] }
+        x: { type: number, minimum: 0, maximum: 1 }
+        y: { type: number, minimum: 0, maximum: 1 }
+        zoom: { type: number, minimum: 0.1, maximum: 8 }
+    PotteryThumbnail:
+      allOf:
+        - $ref: "#/components/schemas/ThumbnailFraming"
+        - type: object
+          required: [sourceVersion]
+          properties:
+            sourceVersion: { type: string, minLength: 1, maxLength: 32 }
     PotteryItem:
       type: object
       required:
@@ -1325,6 +1373,10 @@ components:
             $ref: "#/components/schemas/PotteryImage"
         imageUrl:
           type: string
+        thumbnail:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/PotteryThumbnail"
         recognitionRefreshStatus:
           type: ["string", "null"]
           enum: [pending, complete, null]

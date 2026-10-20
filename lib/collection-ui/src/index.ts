@@ -92,6 +92,32 @@ export {
   useValidatedCollectionPageSize,
 } from "./collection-state";
 
+export {
+  PotteryThumbnailImage,
+  PotteryThumbnailEditor,
+  StaleThumbnailPrompt,
+} from "./pottery-thumbnail";
+export {
+  clampFraming,
+  getImageVersion,
+  isThumbnailStale,
+  getActiveThumbnail,
+  getFramingStyle,
+  getImageFractions,
+  panFraming,
+  staleThumbnailKey,
+  THUMBNAIL_MIN_ZOOM,
+  THUMBNAIL_MAX_ZOOM,
+} from "./thumbnail-geometry";
+export type {
+  ThumbnailFramingValue,
+  ThumbnailConfigValue,
+  PotteryThumbnailImageProps,
+  PotteryThumbnailEditorProps,
+  StaleThumbnailCandidate,
+  StaleThumbnailPromptProps,
+} from "./pottery-thumbnail";
+
 export { CompareModal, CompareFloatingBar } from "./compare-modal";
 export type {
   CompareItem,

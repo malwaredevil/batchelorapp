@@ -7,6 +7,7 @@
 @source "../../../lib/web-core/src";
 @source "../../../lib/elaine-ui/src";
 @source "../../../lib/messenger-ui/src";
+@source "../../../lib/collection-ui/src";
 @import "../../../lib/elaine-ui/src/theme.css";
 
 @custom-variant dark (&:is(.dark *));

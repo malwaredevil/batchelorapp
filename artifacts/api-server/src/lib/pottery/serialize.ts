@@ -47,6 +47,7 @@ export interface SerializedItem {
   categories: CategoryResult[];
   images: PotteryImageResult[];
   imageUrl: string;
+  thumbnail: PotteryItemRow["thumbnail"];
   recognitionRefreshStatus: CompletePhotoScanStatus | null;
   createdAt: Date;
 }
@@ -80,6 +81,7 @@ const { serializeItem, serializeItems } = createCollectionSerializer<
       categories: cats,
       images: imgs,
       imageUrl: `/api/pottery/items/${row.id}/image?v=${pathCacheBuster(row.imagePath)}`,
+      thumbnail: row.thumbnail ?? null,
       recognitionRefreshStatus:
         getCompletePhotoScanStatus(`pottery:${row.id}`) ?? null,
       createdAt: row.createdAt,

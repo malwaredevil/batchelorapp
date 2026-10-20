@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { makeEagerSelectBuilder } from "../../test-helpers/db-mock";
+vi.mock("../../lib/pottery/size-categories", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("../../lib/pottery/size-categories")
+  >()),
+  syncPotterySizeCategory: vi.fn(async () => ({ status: "matched" })),
+}));
 
 const queue: unknown[][] = [];
 const set = vi.fn();
@@ -66,6 +72,7 @@ import {
 } from "../../lib/pottery/openai";
 import { clearAiScanPipelineCache } from "../../lib/ai-scan-pipeline";
 import { runItemAnalysis } from "./pottery";
+import { syncPotterySizeCategory } from "../../lib/pottery/size-categories";
 
 const item = {
   id: 1,
@@ -135,6 +142,7 @@ describe("pottery scan viewpoint wiring", () => {
   it("passes ordered labels through every scan lane and preserves locked facts", async () => {
     enqueueScan();
     await runItemAnalysis(1);
+    expect(syncPotterySizeCategory).toHaveBeenCalledWith(1);
     const urls = ["primary", ...photoLabels.map((_, i) => `photo-${i}`)].map(
       (path) =>
         `data:image/jpeg;base64,${Buffer.from(path).toString("base64")}`,

@@ -185,6 +185,7 @@ async function main() {
   await copyTable(source, dest, {
     table: "pottery_items",
     missingColumnDefaults: {
+      thumbnail: "NULL",
       original_image_path: "NULL",
       original_image_source: "NULL",
     },
@@ -202,6 +203,7 @@ async function main() {
       "dominant_colors",
       "motifs",
       "image_path",
+      "thumbnail",
       "original_image_path",
       "original_image_source",
       "pattern_crop_path",
@@ -213,6 +215,7 @@ async function main() {
       "locked_fields",
       "created_at",
     ],
+    jsonbColumns: ["thumbnail"],
     orderBy: "id",
   });
   await resetSequence(dest, "pottery_items", "id");

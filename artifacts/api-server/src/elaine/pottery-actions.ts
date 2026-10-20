@@ -1,4 +1,10 @@
 import { z } from "zod/v4";
+import { syncPotterySizeCategory } from "../lib/pottery/size-categories";
+import {
+  potteryThumbnailBody,
+  savePotteryThumbnail,
+} from "../lib/pottery/thumbnail";
+import { pathCacheBuster } from "../lib/path-cache-buster";
 import { getCategoryPalette } from "@workspace/web-core/colors";
 import { and, eq, isNull, or } from "drizzle-orm";
 import type OpenAI from "openai";
@@ -61,6 +67,31 @@ export const UpdatePotteryItemActionPayload = z
     style: z.string().max(200).optional(),
     shape: z.string().max(200).optional(),
     maker: z.string().max(200).optional(),
+    dimensions: z.string().max(200).optional(),
+    // Generated API validators use Zod 3; action payloads use Zod 4. Validate
+    // through the canonical contract rather than mixing incompatible schemas.
+    thumbnail: z
+      .unknown()
+      .transform((value, ctx) => {
+        const parsed = potteryThumbnailBody.shape.thumbnail.safeParse(value);
+        if (parsed.success) return parsed.data;
+        for (const issue of parsed.error.issues)
+          ctx.addIssue({
+            code: "custom",
+            path: issue.path,
+            message: issue.message,
+          });
+        return z.NEVER;
+      })
+      .optional(),
+    thumbnailSourceVersion: z
+      .string()
+      .refine(
+        (version) =>
+          potteryThumbnailBody.shape.sourceVersion.safeParse(version).success,
+        { message: "Invalid thumbnail photo version." },
+      )
+      .optional(),
     condition: z.string().max(200).optional(),
     origin: z.string().max(200).optional(),
     approximateEra: z.string().max(200).optional(),
@@ -73,10 +104,20 @@ export const UpdatePotteryItemActionPayload = z
       v.style !== undefined ||
       v.shape !== undefined ||
       v.maker !== undefined ||
+      v.dimensions !== undefined ||
+      v.thumbnail !== undefined ||
       v.condition !== undefined ||
       v.origin !== undefined ||
       v.approximateEra !== undefined,
     { message: "At least one field to update must be provided" },
+  )
+  .refine(
+    (v) => v.thumbnail == null || v.thumbnailSourceVersion !== undefined,
+    {
+      message:
+        "Custom thumbnail framing requires the photo version seen when proposed. Open the thumbnail editor if it is unavailable.",
+      path: ["thumbnailSourceVersion"],
+    },
   );
 
 export const DeletePotteryItemActionPayload = z.object({
@@ -223,17 +264,39 @@ export const potteryActionExecutors: Record<PotteryActionType, ActionExecutor> =
       if (payload.style !== undefined) updates.style = payload.style;
       if (payload.shape !== undefined) updates.shape = payload.shape;
       if (payload.maker !== undefined) updates.maker = payload.maker;
+      if (payload.dimensions !== undefined)
+        updates.dimensions = payload.dimensions;
       if (payload.condition !== undefined)
         updates.condition = payload.condition;
       if (payload.origin !== undefined) updates.origin = payload.origin;
       if (payload.approximateEra !== undefined)
         updates.approximateEra = payload.approximateEra;
 
-      const [row] = await db
-        .update(potteryItems)
-        .set(updates)
-        .where(eq(potteryItems.id, payload.itemId))
-        .returning();
+      let [row] = Object.keys(updates).length
+        ? await db
+            .update(potteryItems)
+            .set(updates)
+            .where(eq(potteryItems.id, payload.itemId))
+            .returning()
+        : await db
+            .select()
+            .from(potteryItems)
+            .where(eq(potteryItems.id, payload.itemId))
+            .limit(1);
+      if (payload.thumbnail !== undefined) {
+        if (!row)
+          throw Object.assign(new Error("Pottery piece not found."), {
+            status: 404,
+          });
+        row = await savePotteryThumbnail(payload.itemId, {
+          sourceVersion:
+            payload.thumbnail === null
+              ? pathCacheBuster(row.imagePath)
+              : payload.thumbnailSourceVersion,
+          thumbnail: payload.thumbnail,
+        });
+      }
+      await syncPotterySizeCategory(payload.itemId);
       return {
         status: 200,
         body: { type: "update_pottery_item", result: row },
@@ -363,6 +426,7 @@ export const potteryActionExecutors: Record<PotteryActionType, ActionExecutor> =
               );
           }
         });
+        await syncPotterySizeCategory(itemId);
       },
       actionType: "update_pottery_item_categories",
     }),
@@ -640,6 +704,32 @@ export const potteryActionTools: OpenAI.Chat.Completions.ChatCompletionTool[] =
             style: { type: "string" },
             shape: { type: "string" },
             maker: { type: "string" },
+            dimensions: {
+              type: "string",
+              description:
+                "Saved measurements, e.g. 8″ (20 cm) × 6″ (15 cm). Automatically creates or reuses separate size categories for each axis, never a combined size label. Equal sizes share one label. Do not invent measurements.",
+            },
+            thumbnailSourceVersion: {
+              type: "string",
+              minLength:
+                potteryThumbnailBody.shape.sourceVersion.minLength ?? undefined,
+              maxLength:
+                potteryThumbnailBody.shape.sourceVersion.maxLength ?? undefined,
+              description:
+                "Required with non-null thumbnail. Copy the current photo version from page context or imageUrl v parameter when proposing the action; never replace it with a newer version at approval time. If unavailable, navigate to the thumbnail editor instead.",
+            },
+            thumbnail: {
+              type: ["object", "null"],
+              description:
+                "Optional collection thumbnail only, never edits the photo. Non-null framing requires thumbnailSourceVersion from the photo seen when proposed. Null resets default; mode contain with x/y .5 and zoom 1 shows the whole photo. Crop mode uses requested focal x/y (0..1) and zoom (.1..8). Do not invent a visual selection: navigate to /pottery/piece/{itemId}?thumbnail=1 for the user to drag/zoom a locked square. Main-photo changes invalidate custom framing and prompt reframe/default.",
+              properties: {
+                mode: { type: "string", enum: ["crop", "contain"] },
+                x: { type: "number", minimum: 0, maximum: 1 },
+                y: { type: "number", minimum: 0, maximum: 1 },
+                zoom: { type: "number", minimum: 0.1, maximum: 8 },
+              },
+              required: ["mode", "x", "y", "zoom"],
+            },
             condition: { type: "string" },
             origin: { type: "string" },
             approximateEra: { type: "string" },

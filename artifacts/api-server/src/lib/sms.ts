@@ -4,6 +4,7 @@ import { logger } from "./logger";
 import { agentphoneRequest } from "./agentphone-http";
 
 interface AgentPhoneNumber {
+  id?: string;
   phoneNumber: string;
 }
 
@@ -13,6 +14,7 @@ interface AgentPhoneListResponse {
 
 interface CachedFromNumber {
   number: string;
+  id?: string;
   /** Unix timestamp (ms) after which the cache entry is considered stale. */
   expiresAt: number;
 }
@@ -27,13 +29,13 @@ let cachedFromNumber: CachedFromNumber | null = null;
 // AgentPhone has exactly one provisioned number for this workspace.
 // We look it up lazily (and cache it with a TTL) rather than hardcoding it,
 // so a future re-provision doesn't require a code change or restart.
-async function getFromNumber(): Promise<string> {
+async function getFromNumber(signal?: AbortSignal): Promise<string> {
   if (cachedFromNumber && Date.now() < cachedFromNumber.expiresAt) {
     return cachedFromNumber.number;
   }
   const response = await agentphoneRequest(
     "/v1/numbers",
-    { method: "GET" },
+    { method: "GET", ...(signal ? { signal, retry: false } : {}) },
     { op: "list-numbers" },
   );
   if (!response.ok) {
@@ -50,7 +52,14 @@ async function getFromNumber(): Promise<string> {
   if (!number) {
     throw new Error("AgentPhone: no provisioned phone number found");
   }
-  cachedFromNumber = { number, expiresAt: Date.now() + FROM_NUMBER_TTL_MS };
+  const id = data.data?.[0]?.id;
+  cachedFromNumber = {
+    number,
+    ...(typeof id === "string" && /^[a-zA-Z0-9_-]{1,200}$/.test(id)
+      ? { id }
+      : {}),
+    expiresAt: Date.now() + FROM_NUMBER_TTL_MS,
+  };
   return number;
 }
 
@@ -126,11 +135,15 @@ export class SmsOptedOutError extends Error {
 // responses — those must go out regardless of opt-out state and already
 // contain brand name + STOP instructions, so they also bypass the first-
 // message compliance header. Never pass it from any other call site.
+export interface SmsSendResult {
+  messageId?: string;
+}
+
 export async function sendSms(
   toNumber: string,
   body: string,
   options?: { bypassOptOutCheck?: boolean },
-): Promise<void> {
+): Promise<SmsSendResult> {
   const isComplianceReply = options?.bypassOptOutCheck === true;
 
   let isFirstMessage = false;
@@ -182,6 +195,17 @@ export async function sendSms(
     }
     throw new Error(`Failed to send SMS (status ${response.status})`);
   }
+  // A successful HTTP response is already an outbound attempt. Missing or
+  // malformed metadata must not throw and encourage an accidental resend.
+  const result: unknown = await response.json().catch(() => null);
+  const id =
+    result && typeof result === "object" && "id" in result
+      ? result.id
+      : undefined;
+  const messageId =
+    typeof id === "string" && /^[a-zA-Z0-9_-]{1,200}$/.test(id)
+      ? id
+      : undefined;
 
   // Record the first outbound timestamp so subsequent messages skip the
   // compliance header. Fire-and-forget: a failure here is non-critical
@@ -198,4 +222,59 @@ export async function sendSms(
         ),
       );
   }
+  return messageId ? { messageId } : {};
+}
+
+const SMS_STATUS_CACHE_MS = 30_000;
+let statusCache:
+  | { expiresAt: number; statuses: Map<string, string> }
+  | undefined;
+const SMS_PROVIDER_STATUSES = new Set([
+  "accepted",
+  "queued",
+  "sending",
+  "sent",
+  "delivered",
+  "read",
+  "failed",
+  "undelivered",
+]);
+
+/** Read-only, bounded lookup. A missing record never means "not sent". */
+export async function getSmsMessageStatuses(): Promise<Map<string, string>> {
+  if (statusCache && statusCache.expiresAt > Date.now())
+    return statusCache.statuses;
+  await getFromNumber(AbortSignal.timeout(5_000));
+  if (!cachedFromNumber?.id) return new Map();
+  const response = await agentphoneRequest(
+    `/v1/numbers/${encodeURIComponent(cachedFromNumber.id)}/messages?limit=200`,
+    { method: "GET", retry: false, signal: AbortSignal.timeout(5_000) },
+    { op: "message-status" },
+  );
+  if (!response.ok) throw new Error("SMS status lookup unavailable");
+  const result: unknown = await response.json();
+  const statuses = new Map<string, string>();
+  if (
+    result &&
+    typeof result === "object" &&
+    "data" in result &&
+    Array.isArray(result.data)
+  ) {
+    for (const message of result.data.slice(0, 200)) {
+      if (!message || typeof message !== "object") continue;
+      if (
+        message.direction === "outbound" &&
+        message.channel === "sms" &&
+        typeof message.id === "string" &&
+        typeof message.status === "string" &&
+        SMS_PROVIDER_STATUSES.has(message.status)
+      ) {
+        statuses.set(message.id, message.status);
+      }
+    }
+  }
+  // Cache only opaque identifiers and allowlisted statuses, never message
+  // bodies or phone numbers. Chat receipt polling shares this short cache.
+  statusCache = { expiresAt: Date.now() + SMS_STATUS_CACHE_MS, statuses };
+  return statuses;
 }

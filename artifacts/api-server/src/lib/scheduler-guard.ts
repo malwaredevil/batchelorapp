@@ -173,7 +173,12 @@ export function recordScheduledTaskFailure(_taskName: string): void {
 export async function shouldRunScheduledTask(
   taskName: string,
   minIntervalMs: number,
-  options: { recoverStuckClaims?: boolean; utcDate?: string } = {},
+  options: {
+    recoverStuckClaims?: boolean;
+    utcDate?: string;
+    /** Opt-in cooldown for retry-safe work, including a never-successful run. */
+    incompleteRetryIntervalMs?: number;
+  } = {},
 ): Promise<boolean> {
   // One retry after a short delay before giving up. Supabase's pooler
   // occasionally drops an idle connection mid-claim ("Connection terminated
@@ -190,6 +195,7 @@ export async function shouldRunScheduledTask(
         minIntervalMs,
         options.utcDate ? false : (options.recoverStuckClaims ?? true),
         options.utcDate,
+        options.utcDate ? undefined : options.incompleteRetryIntervalMs,
       );
     } catch (err) {
       if (attempt === 2) {
@@ -218,6 +224,7 @@ async function claimScheduledTaskRun(
   minIntervalMs: number,
   recoverStuckClaims: boolean,
   utcDate?: string,
+  incompleteRetryIntervalMs?: number,
 ): Promise<boolean> {
   // See CLAIM_GRACE_MS doc comment: compare against a slightly shorter
   // window than the nominal interval so a same-duration setInterval tick
@@ -237,6 +244,19 @@ async function claimScheduledTaskRun(
     ? sql`(scheduler_runs.last_run_at AT TIME ZONE 'UTC')::date < ${utcDate}::date`
     : sql`scheduler_runs.last_run_at
             < now() - (${claimWindowMs}::text || ' milliseconds')::interval`;
+  // Opt-in only for idempotent work. Keep the same atomic claim and persisted
+  // cooldown across instances/restarts; never enable this for ambiguous sends.
+  const incompleteRetryDue =
+    incompleteRetryIntervalMs !== undefined &&
+    Number.isFinite(incompleteRetryIntervalMs) &&
+    incompleteRetryIntervalMs >= STUCK_CLAIM_THRESHOLD_MS
+      ? sql`(
+          (scheduler_runs.last_success_at IS NULL
+            OR scheduler_runs.last_run_at > scheduler_runs.last_success_at)
+          AND scheduler_runs.last_run_at
+            < now() - (${incompleteRetryIntervalMs}::text || ' milliseconds')::interval
+        )`
+      : sql`false`;
 
   // Single-statement upsert that atomically records expected_interval_ms AND
   // conditionally advances last_run_at.  Previously the interval was written
@@ -293,7 +313,7 @@ async function claimScheduledTaskRun(
           last_claim_granted = CASE
             WHEN (
               -- Arm 1: normal cadence — last claim was long enough ago
-              ${cadenceDue}
+              ${cadenceDue} OR ${incompleteRetryDue}
             ) OR (
               -- Arm 2: crash recovery — the previous claim never completed
               -- (last_run_at > last_success_at) and enough time has passed to
@@ -313,7 +333,7 @@ async function claimScheduledTaskRun(
           -- Advance last_run_at iff the claim is granted (same condition).
           last_run_at = CASE
             WHEN (
-              ${cadenceDue}
+              ${cadenceDue} OR ${incompleteRetryDue}
             ) OR (
               ${recoverStuckClaims}::boolean
               AND scheduler_runs.last_success_at IS NOT NULL

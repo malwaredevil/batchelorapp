@@ -66,6 +66,9 @@ import {
  * the developer to add the entry alongside their new handler.
  */
 const TOOL_VALUE_TO_CONST_NAME = new Map<string, string>([
+  ["browse_pottery_collection", "BROWSE_POTTERY_COLLECTION_TOOL_NAME"],
+  ["browse_fabric_collection", "BROWSE_FABRIC_COLLECTION_TOOL_NAME"],
+  ["browse_ornament_collection", "BROWSE_ORNAMENT_COLLECTION_TOOL_NAME"],
   [LIST_SENTRY_ISSUES_TOOL_NAME, "LIST_SENTRY_ISSUES_TOOL_NAME"],
   [LIST_ELAINE_SUGGESTIONS_TOOL_NAME, "LIST_ELAINE_SUGGESTIONS_TOOL_NAME"],
   [SAVE_ELAINE_SUGGESTION_TOOL_NAME, "SAVE_ELAINE_SUGGESTION_TOOL_NAME"],

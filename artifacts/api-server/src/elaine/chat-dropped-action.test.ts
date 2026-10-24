@@ -69,6 +69,8 @@ const {
   mockRecordElaineLesson,
   mockBuildSelfHealLessonInput,
   mockCallMeExecutor,
+  mockContactLookup,
+  mockReceiptLookup,
 } = vi.hoisted(() => {
   const MOCK_TRACE = {
     version: 1 as const,
@@ -142,6 +144,12 @@ const {
       tags: ["self-heal", "ungrounded-claim"],
     }),
     mockCallMeExecutor: vi.fn(),
+    mockContactLookup: vi
+      .fn()
+      .mockResolvedValue(
+        '{"contactName":"Tester","voice":true,"phoneVerified":true}',
+      ),
+    mockReceiptLookup: vi.fn().mockResolvedValue([]),
   };
 });
 
@@ -369,7 +377,7 @@ vi.mock("./communication-actions", async (importOriginal) => ({
   ).communicationActionSchemas,
   communicationActionExecutors: { call_me: mockCallMeExecutor },
   buildCommunicationActionLabel: vi.fn().mockResolvedValue(""),
-  executeListContactChannels: vi.fn().mockResolvedValue([]),
+  executeListContactChannels: mockContactLookup,
   executeListScheduledContacts: vi.fn().mockResolvedValue([]),
   listContactChannelsTool: {
     type: "function",
@@ -377,6 +385,12 @@ vi.mock("./communication-actions", async (importOriginal) => ({
   },
   LIST_CONTACT_CHANNELS_TOOL_NAME: "list_contact_channels",
   LIST_SCHEDULED_CONTACTS_TOOL_NAME: "list_scheduled_contacts",
+  GET_COMMUNICATION_RECEIPTS_TOOL_NAME: "get_recent_communication_receipts",
+}));
+
+vi.mock("./sms-receipt-status", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./sms-receipt-status")>()),
+  readCommunicationReceipts: mockReceiptLookup,
 }));
 
 vi.mock("./reminder-actions", () => ({
@@ -441,8 +455,13 @@ vi.mock("./office-actions", () => ({
   SUMMARIZE_INBOX_TOOL_NAME: "summarize_inbox",
 }));
 
-vi.mock("./runtime", () =>
+vi.mock("./runtime", async () =>
   buildRuntimeMock({
+    selectElaineReplanTool: (
+      await vi.importActual<typeof import("./runtime/replan-policy")>(
+        "./runtime/replan-policy",
+      )
+    ).selectElaineReplanTool,
     MODEL_VISIBLE_HARD_TOOL_NAMES: mockHardToolNames,
     // Self-heal detector — controlled per-test via mockDetectClaimedCheckWithoutToolCall.
     detectClaimedCheckWithoutToolCall: mockDetectClaimedCheckWithoutToolCall,
@@ -1257,6 +1276,192 @@ describe("POST /api/elaine/chat — dropped-action corrective text", () => {
 });
 
 describe("POST /api/elaine/chat — dependency deferral", () => {
+  it.each(["auto_run", "one_by_one"])(
+    "routes contact lookup → self-call → receipt using real dispatch policy (%s)",
+    async (mode) => {
+      const controls = [
+        mockRegisterToolCalls,
+        mockRecordObservation,
+        mockSnapshot,
+        mockRecordModelRound,
+        mockVerify,
+        mockComplete,
+      ];
+      const originals = controls.map((control) =>
+        control.getMockImplementation(),
+      );
+      try {
+        const { ElaineTurnRuntime } = await vi.importActual<
+          typeof import("./runtime/turn-runtime")
+        >("./runtime/turn-runtime");
+        const { MODEL_VISIBLE_HARD_TOOL_NAMES } = await vi.importActual<
+          typeof import("./runtime/model-tool-policy")
+        >("./runtime/model-tool-policy");
+        const { buildElaineSourceRoute } = await vi.importActual<
+          typeof import("./runtime/source-policy")
+        >("./runtime/source-policy");
+        const { classifyElaineRequest } = await vi.importActual<
+          typeof import("./runtime/classifier")
+        >("./runtime/classifier");
+        const message =
+          'Call me now at +1 (210) 555-0123 and say exactly: "Bring tea."';
+        const requestClass = classifyElaineRequest({ message });
+        const runtime = new ElaineTurnRuntime({
+          traceId: "on-demand-call-regression",
+          requestClass,
+          sourceRoute: buildElaineSourceRoute({
+            message,
+            requestClass,
+            capabilities: [],
+          }),
+          plan: toRuntimePlan({
+            version: 1,
+            goal: "Make the requested call",
+            assumptions: [],
+            completionCriteria: ["Call disposition reported"],
+            steps: [
+              {
+                id: "lookup",
+                label: "Check contact channels",
+                kind: "lookup",
+                toolName: "list_contact_channels",
+                dependsOn: [],
+                expectedEvidence: "Verified recipient",
+                required: true,
+              },
+              {
+                id: "call",
+                label: "Call requester",
+                kind: "action",
+                toolName: "call_me",
+                dependsOn: ["lookup"],
+                expectedEvidence: "Provider acceptance",
+                required: true,
+              },
+              {
+                id: "receipt",
+                label: "Check call receipt",
+                kind: "lookup",
+                toolName: "get_recent_communication_receipts",
+                dependsOn: ["call"],
+                expectedEvidence: "Verified receipt",
+                required: true,
+              },
+            ],
+          }),
+        });
+        mockRegisterToolCalls.mockImplementation((calls) =>
+          runtime.registerToolCalls(calls),
+        );
+        mockRecordObservation.mockImplementation((input) =>
+          runtime.recordObservation(input),
+        );
+        mockSnapshot.mockImplementation(() => runtime.snapshot());
+        mockRecordModelRound.mockImplementation(() =>
+          runtime.recordModelRound(),
+        );
+        mockVerify.mockImplementation((input) => runtime.verify(input));
+        mockComplete.mockImplementation(() => runtime.complete());
+        for (const name of MODEL_VISIBLE_HARD_TOOL_NAMES)
+          mockHardToolNames.add(name);
+        mockIsOpenAIResponsesConfigured.mockReturnValue(true);
+        primeDbForFreshChat();
+        selectQueue[4] = [{ actionConfirmationMode: mode }];
+        mockCallMeExecutor.mockResolvedValue({
+          status: 200,
+          body: {
+            type: "call_me",
+            result: {
+              callId: "mock-call-1",
+              receiptId: 91,
+              receiptStatus: "accepted",
+            },
+          },
+        });
+        mockContactLookup.mockClear();
+        mockReceiptLookup.mockClear();
+        const round = (name: string, args: unknown, callId: string) => ({
+          responseId: callId,
+          text: "",
+          reasoningSummary: "",
+          functionCalls: [{ name, callId, arguments: JSON.stringify(args) }],
+          webSearchCitations: [],
+          usage: null,
+        });
+        mockStreamOpenAIResponseRound
+          .mockResolvedValueOnce(
+            round(
+              "list_contact_channels",
+              { contactName: "Tester" },
+              "lookup-1",
+            ),
+          )
+          .mockResolvedValueOnce(
+            round("call_me", { greeting: "Hi, bring tea." }, "call-1"),
+          );
+        if (mode === "auto_run") {
+          mockStreamOpenAIResponseRound
+            .mockResolvedValueOnce(
+              round("get_recent_communication_receipts", {}, "receipt-1"),
+            )
+            .mockResolvedValueOnce({
+              ...round("unused", {}, "final"),
+              functionCalls: [],
+              text: "The provider accepted the call; an answered call or delivered message is not confirmed.",
+            });
+        }
+        const res = await request(buildApp())
+          .post("/api/elaine/chat")
+          .send({ message, appId: "hub" })
+          .buffer(true);
+        expect(res.status).toBe(200);
+        expect(mockContactLookup).toHaveBeenCalledWith("Tester");
+        expect(
+          (runtime.snapshot().observations ?? []).some(
+            (observation) =>
+              observation.toolName === "list_contact_channels" &&
+              observation.success,
+          ),
+        ).toBe(true);
+        const secondRound = mockStreamOpenAIResponseRound.mock.calls[1]?.[0];
+        expect(JSON.stringify(secondRound.input)).toContain("phoneVerified");
+        if (mode === "auto_run") {
+          expect(mockCallMeExecutor).toHaveBeenCalledTimes(1);
+          expect(mockCallMeExecutor.mock.calls[0]?.[0]).toMatchObject({
+            greeting: "Bring tea.",
+            expectedDestination: "+12105550123",
+          });
+          expect(mockReceiptLookup).toHaveBeenCalledWith({
+            ownerUserId: TEST_USER_ID,
+            limit: 10,
+          });
+          expect(parseSseResponse(res.text).allDeltaText).toContain(
+            "not yet confirmed",
+          );
+          expect(
+            runtime
+              .snapshot()
+              .plan.steps.slice(0, 3)
+              .every((step) => step.status === "completed"),
+          ).toBe(true);
+        } else {
+          expect(mockCallMeExecutor).not.toHaveBeenCalled();
+          expect(mockReceiptLookup).not.toHaveBeenCalled();
+          expect(parseSseResponse(res.text).eventTypes).toContain("action");
+          expect(runtime.snapshot().status).toBe("awaiting_confirmation");
+          expect(res.text).toContain("+12105550123");
+        }
+        assertSelectQueueDrained();
+      } finally {
+        controls.forEach((control, index) => {
+          const original = originals[index];
+          if (original) control.mockImplementation(original);
+          else control.mockReset();
+        });
+      }
+    },
+  );
+
   it("returns not-attempted output and forces the deferred action after its same-batch lookup completes", async () => {
     const controls = [
       mockRegisterToolCalls,
@@ -2018,6 +2223,112 @@ describe("POST /api/elaine/chat — Responses-to-OpenRouter tool fallback", () =
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("POST /api/elaine/chat — auto_run executor failure corrective text", () => {
+  it.each([
+    {
+      requirement: "leave the same text as voicemail if unanswered",
+      scheduled: false,
+    },
+    {
+      requirement: "if she doesn't answer, leave a message saying hello",
+      scheduled: false,
+    },
+    {
+      requirement: "leave a message on the answering machine",
+      scheduled: true,
+    },
+  ])(
+    "binds an omitted voicemail requirement ($requirement, scheduled=$scheduled)",
+    async ({ requirement, scheduled }) => {
+      const { callPreflight } =
+        await vi.importActual<typeof import("./call-preflight")>(
+          "./call-preflight",
+        );
+      primeDbForAutoRunChat();
+      // The shared helper also primes a trip-label lookup; self-calls use no trip.
+      selectQueue.splice(5);
+      setUpStreamingToolCall(
+        "call_me",
+        JSON.stringify({
+          greeting: "Bring tea.",
+          ...(scheduled ? { scheduleAt: "2026-10-25T10:00:00Z" } : {}),
+        }),
+      );
+      mockRegisterToolCalls.mockReturnValue([
+        {
+          id: "call-preflight",
+          name: "call_me",
+          allowed: true,
+          stepId: "call",
+          consequential: true,
+          confirmationRequired: false,
+        },
+      ]);
+      mockCallMeExecutor.mockImplementation(async (payload) =>
+        callPreflight(payload),
+      );
+      const res = await request(buildApp())
+        .post("/api/elaine/chat")
+        .send({
+          message: `Call me ${scheduled ? "tomorrow" : "now"} and ${requirement}.`,
+          appId: "hub",
+        })
+        .buffer(true);
+      const { allDeltaText, eventTypes } = parseSseResponse(res.text);
+      expect(mockCallMeExecutor).toHaveBeenCalledTimes(1);
+      expect(mockCallMeExecutor.mock.calls[0]?.[0]).toHaveProperty(
+        "voicemailMessage",
+      );
+      expect(allDeltaText).toContain("No call was placed or scheduled");
+      expect(allDeltaText).toContain("voicemail");
+      expect(allDeltaText).not.toContain("Please try again");
+      expect(eventTypes).not.toContain("action");
+    },
+  );
+
+  it("appends a saved scheduling confirmation after the model's initial reply without repeating the action", async () => {
+    primeDbForAutoRunChat();
+    selectQueue.splice(5);
+    setUpStreamingToolCall(
+      "call_me",
+      JSON.stringify({
+        greeting: "Test reminder",
+        scheduleAt: "2026-10-23T13:30:00.000Z",
+      }),
+    );
+    mockRegisterToolCalls.mockReturnValue([
+      {
+        id: "tc-test-1",
+        name: "call_me",
+        allowed: true,
+        stepId: "step-1",
+        consequential: true,
+        confirmationRequired: false,
+      },
+    ]);
+    mockCallMeExecutor.mockResolvedValue({
+      status: 200,
+      body: {
+        type: "call_me",
+        result: {
+          scheduled: true,
+          scheduledActionId: 38,
+          scheduledFor: "2026-10-23T13:30:00.000Z",
+          timezone: "Europe/Berlin",
+        },
+      },
+    });
+    const res = await request(buildApp())
+      .post("/api/elaine/chat")
+      .send({ message: "Schedule my test reminder call", appId: "hub" })
+      .buffer(true);
+    expect(res.status).toBe(200);
+    const { allDeltaText } = parseSseResponse(res.text);
+    expect(allDeltaText).toContain("Confirmed: your call is scheduled");
+    expect(allDeltaText).toContain("3:30 PM");
+    expect(allDeltaText).toContain("Europe/Berlin");
+    expect(mockCallMeExecutor).toHaveBeenCalledTimes(1);
+  });
+
   it("Scenario E: auto_run action executor returns non-2xx → corrective delta streams, no action event", async () => {
     primeDbForAutoRunChat();
 

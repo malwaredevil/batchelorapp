@@ -36,6 +36,7 @@ export default [
       "artifacts/modules/src/magnets/pages/image-editor-transform.test.ts",
       "artifacts/modules/src/quilting/lib/photo-recognition-status.test.ts",
       "lib/api-client-react/src/custom-fetch.test.ts",
+      "lib/api-client-react/src/collection-pages.test.ts",
       "lib/api-client-react/src/elaine.test.ts",
       "lib/api-client-react/src/ornaments-hallmark.test.ts",
       // Excluded from its package tsconfig (intentional CI sentinel); ESLint

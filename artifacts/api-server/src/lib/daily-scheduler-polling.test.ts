@@ -55,7 +55,7 @@ describe.each([
   [
     "travels-calendar-scan",
     startCalendarTripScanScheduler,
-    { recoverStuckClaims: false },
+    { recoverStuckClaims: false, incompleteRetryIntervalMs: 3_600_000 },
   ],
   [
     "webhook-side-effect-cleanup",

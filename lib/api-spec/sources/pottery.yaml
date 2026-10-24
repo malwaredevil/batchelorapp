@@ -19,6 +19,18 @@ tags:
   - name: stats
     description: Collection statistics
 paths:
+  /field-options:
+    get:
+      operationId: getPotteryFieldOptions
+      tags: [pottery]
+      summary: List unique maker names for pottery edit suggestions
+      responses:
+        "200":
+          description: Lightweight options from the active household collection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PotteryFieldOptions"
   /items/{id}/photos/{photoKey}/original-info:
     get:
       operationId: inspectPotteryOriginalPhoto
@@ -263,6 +275,14 @@ paths:
       tags: [pottery]
       summary: List pottery
       parameters:
+        - name: view
+          in: query
+          required: false
+          description: Gallery returns the searchable/sortable index without notes, makerInfo, aiDescription, surfaceZones or supplemental images (images is empty). Fetch the item detail before editing. Page through all results using total; no response contains more than 200 items.
+          schema:
+            type: string
+            enum: [full, gallery]
+            default: full
         - name: q
           in: query
           required: false
@@ -1305,6 +1325,13 @@ components:
           required: [sourceVersion]
           properties:
             sourceVersion: { type: string, minLength: 1, maxLength: 32 }
+    PotteryFieldOptions:
+      type: object
+      required: [makers]
+      properties:
+        makers:
+          type: array
+          items: { type: string }
     PotteryItem:
       type: object
       required:

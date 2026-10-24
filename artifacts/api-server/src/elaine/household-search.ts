@@ -111,6 +111,8 @@ export async function searchHouseholdData(
         name: potteryItems.name,
         maker: potteryItems.maker,
         style: potteryItems.style,
+        patternDescription: potteryItems.patternDescription,
+        aiDescription: potteryItems.aiDescription,
       })
       .from(potteryItems)
       .where(
@@ -123,10 +125,10 @@ export async function searchHouseholdData(
     if (rows.length > 0) {
       const lines = rows.map(
         (r) =>
-          `- "${r.name}"${r.maker ? ` by ${r.maker}` : ""}${r.style ? `, ${r.style}` : ""}, itemId: ${r.id}`,
+          `- "${r.name}"${r.maker ? ` by ${r.maker}` : ""}${r.style ? `, ${r.style}` : ""}, itemId: ${r.id}, saved decoration: ${r.patternDescription ?? r.aiDescription ?? "unknown"}`,
       );
       parts.push(
-        `Found ${rows.length} pottery piece(s) matching "${query}":\n${lines.join("\n")}\nCall show_pottery_item with the itemId to show a visual card.`,
+        `Pottery search sample: ${rows.length} returned (limit 5; NOT a complete collection review) matching "${query}":\n${lines.join("\n")}\nCall show_pottery_item for full saved catalog evidence, not image inspection. For a complete owner-authorized review use browse_pottery_collection and follow every nextCursor; report unique IDs read versus total and missing descriptions.`,
       );
     } else {
       parts.push(`No pottery pieces found matching "${query}".`);
@@ -158,7 +160,7 @@ export async function searchHouseholdData(
           `- "${r.name}"${r.seriesOrCollection ? `, ${r.seriesOrCollection}` : ""}${r.year ? ` (${r.year})` : ""}, itemId: ${r.id}`,
       );
       parts.push(
-        `Found ${rows.length} ornament(s) matching "${query}":\n${lines.join("\n")}`,
+        `Ornament search sample: ${rows.length} returned (limit 5; NOT a complete collection review) matching "${query}":\n${lines.join("\n")}\nFor a complete owner-authorized review use browse_ornament_collection and follow every nextCursor. Report unique itemIds read versus total and missing descriptions. Evidence is saved catalog metadata, not fresh image inspection.`,
       );
     } else {
       parts.push(`No ornaments found matching "${query}".`);
@@ -191,7 +193,7 @@ export async function searchHouseholdData(
           `- "${r.name}"${r.designer ? ` by ${r.designer}` : ""}${r.manufacturer ? `, ${r.manufacturer}` : ""}, fabricId: ${r.id}`,
       );
       parts.push(
-        `Found ${rows.length} fabric(s) matching "${query}":\n${lines.join("\n")}\nCall show_fabric_swatch with the fabricId to show a visual card.`,
+        `Fabric search sample: ${rows.length} returned (limit 5; NOT a complete collection review) matching "${query}":\n${lines.join("\n")}\nCall show_fabric_swatch with the fabricId to show a visual card, not to inspect image pixels. For a complete owner-authorized review use browse_fabric_collection and follow every nextCursor. Report unique fabricIds read versus total and missing descriptions. Evidence is saved catalog metadata, not fresh image inspection.`,
       );
     } else {
       parts.push(`No fabrics found matching "${query}".`);

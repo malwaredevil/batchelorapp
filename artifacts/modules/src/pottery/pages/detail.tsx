@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useRoute, useSearch } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useGetPottery,
-  useListPottery,
+  useGetPotteryFieldOptions,
   useUpdatePottery,
   useDeletePottery,
   useReanalyzePottery,
@@ -12,6 +12,7 @@ import {
   getListPotteryQueryKey,
   getGetCollectionStatsQueryKey,
   getGetPotteryQueryKey,
+  getGetPotteryFieldOptionsQueryKey,
   getUploadErrorMessage,
 } from "@workspace/api-client-react";
 import type {
@@ -786,22 +787,8 @@ export default function PieceDetail() {
     },
   });
   const { data: allCategories = [] } = useListCategories();
-  const { data: _listData } = useListPottery({ pageSize: 200 });
-  const allItems = _listData?.items ?? [];
-
-  const fieldSuggestions = useMemo(() => {
-    const unique = (fn: (i: PotteryItem) => string | null | undefined) => {
-      const seen = new Set<string>();
-      for (const i of allItems) {
-        const v = fn(i);
-        if (v?.trim()) seen.add(v.trim());
-      }
-      return Array.from(seen).sort((a, b) => a.localeCompare(b));
-    };
-    return {
-      maker: unique((i) => i.maker),
-    };
-  }, [allItems]);
+  const { data: fieldOptions } = useGetPotteryFieldOptions();
+  const fieldSuggestions = { maker: fieldOptions?.makers ?? [] };
 
   const [editing, setEditing] = useState(false);
   const search = useSearch();
@@ -862,6 +849,9 @@ export default function PieceDetail() {
       onSuccess: (updated) => {
         queryClient.setQueryData(getGetPotteryQueryKey(id), updated);
         queryClient.invalidateQueries({ queryKey: getListPotteryQueryKey() });
+        void queryClient.invalidateQueries({
+          queryKey: getGetPotteryFieldOptionsQueryKey(),
+        });
         toast.success("AI analysis refreshed.");
       },
       onError: () => toast.error("Re-analysis failed. Please try again."),
@@ -873,6 +863,9 @@ export default function PieceDetail() {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetPotteryQueryKey(id) });
         queryClient.invalidateQueries({ queryKey: getListPotteryQueryKey() });
+        void queryClient.invalidateQueries({
+          queryKey: getGetPotteryFieldOptionsQueryKey(),
+        });
         setEditing(false);
         toast.success("Saved.");
       },

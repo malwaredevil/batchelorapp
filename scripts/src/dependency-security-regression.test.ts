@@ -10,6 +10,53 @@ const typographyRequire = createRequire(
   elaineRequire.resolve("@tailwindcss/typography"),
 );
 
+test("every Zod consumer uses the patched major and compatible entry points", () => {
+  for (const workspace of [
+    "artifacts/api-server",
+    "artifacts/web",
+    "artifacts/modules",
+    "artifacts/elaine",
+    "artifacts/mockup-sandbox",
+    "lib/api-zod",
+    "lib/db",
+  ]) {
+    const localRequire = createRequire(
+      new URL(`../../${workspace}/package.json`, import.meta.url),
+    );
+    assert.equal(localRequire("zod/package.json").version, "4.6.6", workspace);
+    const { z } = localRequire("zod");
+    const { z: explicitV4 } = localRequire("zod/v4");
+    const nested = z.object({
+      metadata: explicitV4.record(explicitV4.string(), explicitV4.unknown()),
+    });
+    assert.deepEqual(nested.parse({ metadata: { note: "ok" } }), {
+      metadata: { note: "ok" },
+    });
+  }
+});
+
+test("real form resolvers return field errors rather than throwing Zod 4 failures", async () => {
+  for (const app of ["web", "modules", "elaine", "mockup-sandbox"]) {
+    const localRequire = createRequire(
+      new URL(`../../artifacts/${app}/package.json`, import.meta.url),
+    );
+    const { z } = localRequire("zod");
+    const { zodResolver } = localRequire("@hookform/resolvers/zod");
+    const schema = z.object({
+      quantity: z.coerce.number().int().min(1).default(1),
+    });
+    const resolve = zodResolver(schema);
+    const options = { fields: {}, shouldUseNativeValidation: false };
+    const invalid = await resolve({ quantity: 0 }, {}, options);
+    assert.equal(invalid.errors.quantity.type, "too_small", app);
+    assert.match(invalid.errors.quantity.message, /1/, app);
+    const valid = await resolve({ quantity: "2" }, {}, options);
+    assert.deepEqual(valid, { values: { quantity: 2 }, errors: {} }, app);
+    const omitted = await resolve({}, {}, options);
+    assert.deepEqual(omitted, { values: { quantity: 1 }, errors: {} }, app);
+  }
+});
+
 test("typography resolves the patched selector parser", () => {
   assert.equal(
     typographyRequire("postcss-selector-parser/package.json").version,

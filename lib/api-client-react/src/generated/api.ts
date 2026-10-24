@@ -154,6 +154,7 @@ import type {
   PotteryMergeCategoryInput,
   PotteryPotteryBulkReanalyzeInput,
   PotteryPotteryBulkReanalyzeResult,
+  PotteryPotteryFieldOptions,
   PotteryPotteryImage,
   PotteryPotteryImageUpdate,
   PotteryPotteryItem,
@@ -1244,6 +1245,83 @@ export const useChangePassword = <TError = ErrorType<Error>,
       > => {
       return useMutation(getChangePasswordMutationOptions(options));
     }
+
+export const getGetPotteryFieldOptionsUrl = () => {
+
+
+
+
+  return `/api/pottery/field-options`
+}
+
+/**
+ * @summary List unique maker names for pottery edit suggestions
+ */
+export const getPotteryFieldOptions = async ( options?: RequestInit): Promise<PotteryPotteryFieldOptions> => {
+
+  return customFetch<PotteryPotteryFieldOptions>(getGetPotteryFieldOptionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPotteryFieldOptionsQueryKey = () => {
+    return [
+    `/api/pottery/field-options`
+    ] as const;
+    }
+
+
+export const getGetPotteryFieldOptionsQueryOptions = <TData = Awaited<ReturnType<typeof getPotteryFieldOptions>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPotteryFieldOptions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPotteryFieldOptionsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPotteryFieldOptions>>> = ({ signal }) => getPotteryFieldOptions({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPotteryFieldOptions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPotteryFieldOptionsQueryResult = NonNullable<Awaited<ReturnType<typeof getPotteryFieldOptions>>>
+export type GetPotteryFieldOptionsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List unique maker names for pottery edit suggestions
+ */
+
+export function useGetPotteryFieldOptions<TData = Awaited<ReturnType<typeof getPotteryFieldOptions>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPotteryFieldOptions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPotteryFieldOptionsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getInspectPotteryOriginalPhotoUrl = (id: number,
     photoKey: string,) => {

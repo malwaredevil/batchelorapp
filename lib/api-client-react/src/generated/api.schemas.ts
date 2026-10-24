@@ -365,6 +365,10 @@ export interface PotteryPotteryListResponse {
   pageSize: number;
 }
 
+export interface PotteryPotteryFieldOptions {
+  makers: string[];
+}
+
 export interface PotteryPotteryUpdate {
   /** @minLength 1 */
   name?: string;
@@ -3275,6 +3279,10 @@ export type RestorePotteryOriginalPhoto200 = {
 
 export type ListPotteryParams = {
 /**
+ * Gallery returns the searchable/sortable index without notes, makerInfo, aiDescription, surfaceZones or supplemental images (images is empty). Fetch the item detail before editing. Page through all results using total; no response contains more than 200 items.
+ */
+view?: ListPotteryView;
+/**
  * Text search across name, pattern description, style, shape, maker, and motifs
  */
 q?: string;
@@ -3292,6 +3300,14 @@ page?: number;
  */
 pageSize?: number;
 };
+
+export type ListPotteryView = typeof ListPotteryView[keyof typeof ListPotteryView];
+
+
+export const ListPotteryView = {
+  full: 'full',
+  gallery: 'gallery',
+} as const;
 
 export type SetPotteryThumbnailBody = {
   /**

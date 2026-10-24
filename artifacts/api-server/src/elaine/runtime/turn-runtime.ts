@@ -446,7 +446,14 @@ export class ElaineTurnRuntime {
         .filter((step) => step.status === "waiting_input")
         .map((step) => step.id),
     );
-    const deferredByInput = new Set(waitingInputStepIds);
+    // A receipt cannot be looked up until its call has been approved. Keep
+    // those dependents deferred, not failed, during manual confirmation.
+    const deferredByInput = new Set([
+      ...waitingInputStepIds,
+      ...this.trace.plan.steps
+        .filter((step) => step.status === "waiting_confirmation")
+        .map((step) => step.id),
+    ]);
     let foundDeferredStep = true;
     while (foundDeferredStep) {
       foundDeferredStep = false;

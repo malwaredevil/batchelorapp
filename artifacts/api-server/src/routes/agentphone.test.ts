@@ -226,6 +226,10 @@ beforeEach(() => {
   nextInsertThrows = false;
   nextInsertThrowsDbError = false;
   vi.clearAllMocks();
+  runAgentphoneTurn.mockReset().mockResolvedValue({
+    replyText: "Mock Elaine reply",
+    history: [],
+  });
   mockAgentphoneRequest.mockReset();
   mockAgentphoneRequest.mockResolvedValue({ ok: false, status: 404 });
   dbMock.insert.mockImplementation(() => makeInsertBuilder());
@@ -389,6 +393,10 @@ describe("POST /api/agentphone/webhook — signature verification", () => {
 
 describe("POST /api/agentphone/webhook — signed call-ended events", () => {
   it("updates the provider-id-matched receipt with an explicit provider status", async () => {
+    const cleanupWhere = vi.fn().mockResolvedValue([]);
+    dbMock.update.mockImplementationOnce(() => ({
+      set: () => ({ where: cleanupWhere }),
+    }));
     const body = JSON.stringify({
       event: "agent.call_ended",
       channel: "voice",
@@ -412,6 +420,28 @@ describe("POST /api/agentphone/webhook — signed call-ended events", () => {
       "provider-call-123",
       "answered",
     );
+    expect(cleanupWhere).toHaveBeenCalledTimes(1);
+    expect(getSqlParamValues(cleanupWhere.mock.calls[0]?.[0])).toEqual([
+      "provider-call-123",
+    ]);
+  });
+
+  it("retries the signed call-ended event if private call-context cleanup fails", async () => {
+    dbMock.update.mockImplementationOnce(() => {
+      throw new Error("temporary cleanup failure");
+    });
+    const body = JSON.stringify({
+      event: "agent.call_ended",
+      channel: "voice",
+      data: { callId: "call-cleanup-retry", status: "completed" },
+    });
+    const res = await request(await buildApp())
+      .post("/api/agentphone/webhook")
+      .set(buildHeaders(freshTimestamp(), body, "ended-cleanup-retry"))
+      .set("Content-Type", "application/json")
+      .send(body);
+    expect(res.status).toBe(503);
+    expect(res.body).toEqual({ error: "Service unavailable" });
   });
 
   it("records ended with answer unknown when no authoritative status is supplied", async () => {
@@ -1292,18 +1322,8 @@ describe("POST /api/agentphone/webhook — voice channel", () => {
     expect(getSqlParamValues(lookups.at(0)?.at(0)?.at(0))).toEqual([FROM]);
     expect(getSqlParamValues(lookups.at(1)?.at(0)?.at(0))).toEqual([FROM]);
     expect(mockAgentphoneRequest).toHaveBeenCalledTimes(1);
-    expect(runAgentphoneTurn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: 1,
-        channel: "voice",
-        history: [
-          expect.objectContaining({
-            content: expect.stringContaining("daily communications check"),
-          }),
-        ],
-      }),
-    );
-    expect(runAgentphoneTurn).toHaveBeenCalledTimes(1);
+    expect(runAgentphoneTurn).not.toHaveBeenCalled();
+    expect(res.text).toContain("This is your daily communications check.");
     expect(lastConversationUpdate?.pendingOutboundId).toBeNull();
     expect(res.text).not.toContain("don't recognize");
     expect(res.text.split("\n").filter(Boolean)).toHaveLength(2);
@@ -1941,7 +1961,7 @@ describe("POST /api/agentphone/webhook — voice channel", () => {
     dbMock.update.mockImplementation(makeVoiceUpdateMock(106));
 
     const app = await buildApp();
-    await sendVoiceWebhook(
+    const res = await sendVoiceWebhook(
       app,
       "Hello?",
       FROM,
@@ -1950,22 +1970,14 @@ describe("POST /api/agentphone/webhook — voice channel", () => {
       "call-exact",
     );
 
-    expect(runAgentphoneTurn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        channel: "voice",
-        inputText: "Hello?",
-        history: [
-          expect.objectContaining({
-            role: "assistant",
-            content: expect.stringContaining("Your prescription is ready."),
-          }),
-        ],
-      }),
-    );
-    expect(runAgentphoneTurn).toHaveBeenCalledTimes(1);
+    expect(runAgentphoneTurn).not.toHaveBeenCalled();
+    expect(res.text).toContain('"text":"Your prescription is ready."');
     expect(dbMock.select).toHaveBeenCalledTimes(3);
     expect(dbMock.update).toHaveBeenCalledTimes(1);
-    expect(lastConversationUpdate?.messages).toEqual([]);
+    expect(lastConversationUpdate?.messages).toEqual([
+      { role: "user", content: "Hello?" },
+      { role: "assistant", content: "Your prescription is ready." },
+    ]);
     expect(JSON.stringify(lastConversationUpdate?.messages)).not.toContain(
       "The recipient has now spoken",
     );
@@ -1973,9 +1985,13 @@ describe("POST /api/agentphone/webhook — voice channel", () => {
       "The pharmacy closes at six",
     );
     expect(lastConversationUpdate).toMatchObject({
-      pendingOutboundId: null,
-      pendingOutboundCallId: null,
+      pendingOutboundOpening: null,
     });
+    expect(lastConversationUpdate).not.toHaveProperty("pendingOutboundId");
+    expect(lastConversationUpdate).not.toHaveProperty("pendingOutboundCallId");
+    expect(lastConversationUpdate).not.toHaveProperty(
+      "pendingOutboundPrivateContext",
+    );
   });
 
   it("reloads raced correlation but never infers it from an unattached row", async () => {
@@ -2060,7 +2076,8 @@ describe("POST /api/agentphone/webhook — voice channel", () => {
     ).not.toContain("Must not be delivered without a stored call id.");
   });
 
-  it("keeps pending outbound context when the Elaine turn fails", async () => {
+  it("delivers the exact saved opening even if the voice model is unavailable", async () => {
+    mockVerifiedCall("retry-call");
     selectQueue.push([{ id: 1 }]);
     selectQueue.push([
       {
@@ -2091,6 +2108,158 @@ describe("POST /api/agentphone/webhook — voice channel", () => {
     );
 
     expect(res.status).toBe(200);
+    expect(res.text).toContain('"text":"Please deliver this on retry."');
+    expect(runAgentphoneTurn).not.toHaveBeenCalled();
+    expect(lastConversationUpdate).toMatchObject({
+      pendingOutboundId: null,
+      pendingOutboundOpening: null,
+    });
+  });
+
+  it("keeps private instructions available for later turns of the exact call without repeating the opening", async () => {
+    mockVerifiedCall("call-followup");
+    const spokenHistory = [
+      { role: "user" as const, content: "Hello?" },
+      {
+        role: "assistant" as const,
+        content: "Your pickup is ready. Would you like the details?",
+      },
+    ];
+    selectQueue.push(
+      [{ id: 1 }],
+      [
+        {
+          id: 181,
+          userId: 1,
+          messages: spokenHistory,
+          version: 1,
+          pendingOutboundId: "private-followup",
+          pendingOutboundCallId: "call-followup",
+          pendingOutboundOpening: null,
+          pendingOutboundPrivateContext:
+            "If the caller asks, the shop closes at six.",
+          pendingOutboundExpiresAt: new Date(Date.now() + 60_000),
+        },
+      ],
+    );
+    dbMock.update.mockImplementation(makeVoiceUpdateMock(181));
+    runAgentphoneTurn.mockImplementationOnce(
+      async ({
+        history,
+      }: {
+        history: Array<{ role: "user" | "assistant"; content: string }>;
+      }) => ({
+        replyText: "The shop closes at six.",
+        history: [
+          ...history,
+          {
+            role: "user" as const,
+            content: "Yes, what time does the shop close?",
+          },
+          { role: "assistant" as const, content: "The shop closes at six." },
+        ],
+      }),
+    );
+    const res = await sendVoiceWebhook(
+      await buildApp(),
+      "Yes, what time does the shop close?",
+      FROM,
+      "voice-followup",
+      "outbound",
+      "call-followup",
+    );
+    expect(runAgentphoneTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        history: [
+          ...spokenHistory,
+          expect.objectContaining({
+            content: expect.stringContaining(
+              "If the caller asks, the shop closes at six.",
+            ),
+          }),
+        ],
+      }),
+    );
+    expect(res.text).toContain('"text":"The shop closes at six."');
+    expect(res.text).not.toContain("Your pickup is ready");
+    expect(JSON.stringify(lastConversationUpdate?.messages)).not.toContain(
+      "Not spoken aloud",
+    );
+    expect(lastConversationUpdate).not.toHaveProperty(
+      "pendingOutboundPrivateContext",
+    );
+    expect(lastConversationUpdate).not.toHaveProperty("pendingOutboundId");
+  });
+
+  it("never delivers an expired opening or exposes its private follow-up instructions", async () => {
+    mockVerifiedCall("expired-call");
+    selectQueue.push(
+      [{ id: 1 }],
+      [
+        {
+          id: 183,
+          userId: 1,
+          messages: [],
+          version: 0,
+          pendingOutboundId: "expired-context",
+          pendingOutboundCallId: "expired-call",
+          pendingOutboundOpening: "Expired opening must not be spoken.",
+          pendingOutboundPrivateContext: "Expired private instruction.",
+          pendingOutboundExpiresAt: new Date(Date.now() - 60_000),
+        },
+      ],
+    );
+    dbMock.update.mockImplementation(makeVoiceUpdateMock(183));
+    const res = await sendVoiceWebhook(
+      await buildApp(),
+      "Hello?",
+      FROM,
+      "expired-voice-context",
+      "outbound",
+      "expired-call",
+    );
+    expect(runAgentphoneTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        history: [],
+      }),
+    );
+    expect(res.text).not.toContain("Expired");
+    expect(lastConversationUpdate).not.toHaveProperty("pendingOutboundId");
+  });
+
+  it("retains private follow-up context when a later model turn fails", async () => {
+    mockVerifiedCall("call-followup-retry");
+    selectQueue.push(
+      [{ id: 1 }],
+      [
+        {
+          id: 182,
+          userId: 1,
+          messages: [],
+          version: 1,
+          pendingOutboundId: "retained-followup",
+          pendingOutboundCallId: "call-followup-retry",
+          pendingOutboundOpening: null,
+          pendingOutboundPrivateContext:
+            "If asked, read the saved description.",
+          pendingOutboundExpiresAt: new Date(Date.now() + 60_000),
+        },
+      ],
+    );
+    dbMock.update.mockImplementation(makeVoiceUpdateMock(182));
+    runAgentphoneTurn.mockRejectedValueOnce(
+      new Error("temporary model failure"),
+    );
+    const res = await sendVoiceWebhook(
+      await buildApp(),
+      "Please read the description.",
+      FROM,
+      "followup-model-failure",
+      "outbound",
+      "call-followup-retry",
+    );
+    expect(res.status).toBe(200);
+    expect(res.text).toContain("something went wrong");
     expect(lastConversationUpdate).toBeUndefined();
   });
 

@@ -1725,21 +1725,21 @@ export const getElaineDailyBriefQueryKey = () =>
 
 const getElaineDailyBriefFn = (
   options?: RequestInit,
-): Promise<DailyBrief> =>
-  customFetch<DailyBrief>("/api/elaine/daily-brief", {
+): Promise<DailyBrief | null> =>
+  customFetch<DailyBrief | null>("/api/elaine/daily-brief", {
     ...options,
     method: "GET",
   });
 
 export function useGetElaineDailyBrief<
-  TData = DailyBrief,
+  TData = DailyBrief | null,
   TError = unknown,
 >(options?: {
-  query?: UseQueryOptions<DailyBrief, TError, TData>;
+  query?: UseQueryOptions<DailyBrief | null, TError, TData>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const { query: queryOptions } = options ?? {};
   const queryKey = queryOptions?.queryKey ?? getElaineDailyBriefQueryKey();
-  const queryFn: QueryFunction<DailyBrief> = ({ signal }) =>
+  const queryFn: QueryFunction<DailyBrief | null> = ({ signal }) =>
     getElaineDailyBriefFn({ signal });
   const queryOpts = {
     queryKey,
@@ -1747,7 +1747,7 @@ export function useGetElaineDailyBrief<
     staleTime: 5 * 60 * 1000,
     retry: false,
     ...queryOptions,
-  } as UseQueryOptions<DailyBrief, TError, TData> & { queryKey: QueryKey };
+  } as UseQueryOptions<DailyBrief | null, TError, TData> & { queryKey: QueryKey };
   const query = useQuery(queryOpts) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
   };

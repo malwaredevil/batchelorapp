@@ -409,7 +409,7 @@ function checkGoogleOAuth(): ServiceCheckResult {
 async function checkGoogleMaps(): Promise<ServiceCheckResult> {
   return runCheck("Google Maps", env.googleMapsApiKey, async (key) => {
     const resp = await fetch(
-      `https://maps.googleapis.com/maps/api/geocode/json?address=health&key=${encodeURIComponent(key)}`,
+      `https://maps.googleapis.com/maps/api/geocode/json?address=Stuttgart&key=${encodeURIComponent(key)}`,
       { signal: AbortSignal.timeout(CHECK_TIMEOUT_MS) },
     );
     if (!resp.ok) {

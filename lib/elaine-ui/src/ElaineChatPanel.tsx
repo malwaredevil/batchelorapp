@@ -22,7 +22,6 @@ import {
   Settings2,
   Play,
   Square,
-  Sun,
   Radio,
   Phone,
   Mail,
@@ -32,8 +31,6 @@ import {
   Users,
 } from "lucide-react";
 import {
-  useGetElaineDailyBrief,
-  useDismissElaineDailyBrief,
   useGetElaineCrossChannelContext,
   useClearElaineCrossChannelContext,
   type CrossChannelEntry,
@@ -53,6 +50,7 @@ import {
 } from "@workspace/ui";
 import { ElaineAvatar, ElaineName } from "./ElaineAvatar";
 import type { CommunicationReceipt, ElaineChat } from "./useElaineChat";
+import { communicationResultLists } from "./communication-result-lists";
 import { MarkdownMessage } from "./MarkdownMessage";
 import { ChatWidget } from "./ChatWidgets";
 import { LinkPreviewCard } from "./LinkPreviewCard";
@@ -190,24 +188,7 @@ function parseCommunicationResult(result: unknown): {
         : typeof inner.ok === "boolean"
           ? inner.ok
           : undefined,
-    recipients: Array.isArray(inner.recipients)
-      ? (inner.recipients as Array<{
-          name: string;
-          channel: string | null;
-          ok: boolean;
-          error: string | null;
-          status?: string;
-          receiptStatus?: string;
-          receiptId?: string;
-        }>)
-      : undefined,
-    receipts: Array.isArray(inner.receipts)
-      ? (inner.receipts as Array<{
-          receiptId: string;
-          channel: string;
-          status: string;
-        }>)
-      : undefined,
+    ...communicationResultLists(inner),
   };
 }
 
@@ -575,10 +556,8 @@ interface ElaineChatPanelProps {
   /** Rendered above the composer, below the message list — for app-specific
    *  in-progress cards (travels uses this for the magnet-check result). */
   belowMessagesSlot?: ReactNode;
-  /** When true, suppresses the morning brief banner inside the panel. Use
-   *  this on surfaces that already render the brief themselves (e.g. the
-   *  full Elaine chat page renders it as a top-level banner above the panel). */
-  hideBrief?: boolean;
+  /** Hide the compact cross-channel summary on surfaces that render it separately. */
+  hideCrossChannel?: boolean;
 }
 
 /**
@@ -595,7 +574,7 @@ export function ElaineChatPanel({
   emptyState,
   composerLeftSlot,
   belowMessagesSlot,
-  hideBrief = false,
+  hideCrossChannel = false,
 }: ElaineChatPanelProps) {
   const {
     settings,
@@ -796,14 +775,6 @@ export function ElaineChatPanel({
     [setInput, tts],
   );
 
-  // Morning brief — shown as dismissible banner when the widget opens
-  const { data: brief, refetch: refetchBrief } = useGetElaineDailyBrief();
-  const dismissBrief = useDismissElaineDailyBrief({
-    mutation: { onSuccess: () => void refetchBrief() },
-  });
-  const showBrief =
-    !hideBrief && brief != null && !brief.dismissed && brief.content.length > 0;
-
   // Cross-channel activity — compact summary of recent SMS/email/Slack turns
   const { data: crossChannel, refetch: refetchCrossChannel } =
     useGetElaineCrossChannelContext();
@@ -821,7 +792,7 @@ export function ElaineChatPanel({
       (e) => e.iso != null && now - new Date(e.iso).getTime() <= SEVEN_DAYS_MS,
     )
     .slice(0, 2);
-  const showCrossChannel = !hideBrief && recentEntries.length > 0;
+  const showCrossChannel = !hideCrossChannel && recentEntries.length > 0;
 
   return (
     <>
@@ -834,21 +805,6 @@ export function ElaineChatPanel({
           <div className="flex items-center justify-center gap-2 py-2 text-xs text-muted-foreground">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
             Loading earlier messages…
-          </div>
-        )}
-        {showBrief && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 px-3.5 py-3 text-sm text-foreground leading-relaxed relative">
-            <div className="flex items-start gap-2">
-              <Sun className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-              <p className="flex-1 whitespace-pre-wrap">{brief.content}</p>
-              <button
-                onClick={() => dismissBrief.mutate()}
-                className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-                aria-label="Dismiss"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
           </div>
         )}
         {showCrossChannel && (

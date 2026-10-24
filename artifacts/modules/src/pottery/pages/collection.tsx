@@ -1,14 +1,15 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { Link, useLocation, useSearch } from "wouter";
 import {
-  useListPottery,
+  listPottery,
+  fetchAllCollectionPages,
   useListPotteryCategories as useListCategories,
   useReanalyzePottery,
   useUpdatePottery,
   useDeletePottery,
   getListPotteryQueryKey,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { PotteryPotteryItem as PotteryItem } from "@workspace/api-client-react";
 import { topMotifs } from "../lib/motifs";
 import {
@@ -748,13 +749,13 @@ function sortItems(items: PotteryItem[], key: SortKey): PotteryItem[] {
 export default function Collection() {
   const [, navigate] = useLocation();
   const locationSearch = useSearch();
-  const {
-    data: listData,
-    isLoading,
-    isError,
-    refetch,
-  } = useListPottery({ pageSize: 200 });
-  const data = listData?.items;
+  const { data, isLoading, isError, refetch } = useQuery({
+    queryKey: [...getListPotteryQueryKey(), "gallery-index"],
+    queryFn: ({ signal }) =>
+      fetchAllCollectionPages((page) =>
+        listPottery({ page, pageSize: 100, view: "gallery" }, { signal }),
+      ),
+  });
   const { data: allCategories = [] } = useListCategories();
 
   const [search, setSearch] = useState("");

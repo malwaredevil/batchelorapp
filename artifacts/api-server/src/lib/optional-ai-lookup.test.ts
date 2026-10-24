@@ -1,9 +1,10 @@
 import OpenAI from "openai";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Sentry } from "./sentry";
 import {
   classifyOptionalLookupTimeout,
   withOptionalAILookup,
+  withRecoverableAIRequest,
 } from "./optional-ai-lookup";
 
 describe("optional AI lookup telemetry", () => {
@@ -79,5 +80,71 @@ describe("optional AI lookup telemetry", () => {
         throw error;
       }),
     ).rejects.toBe(error);
+  });
+
+  it("waits for confirmed recovery before downgrading an SDK timeout", async () => {
+    let timeoutEvent!: Promise<Sentry.Event | null>;
+    let recover!: () => void;
+    const recovered = new Promise<void>((resolve) => {
+      recover = resolve;
+    });
+    const workflow = withRecoverableAIRequest(async () => {
+      const processors =
+        Sentry.getCurrentScope().getScopeData().eventProcessors;
+      const processor = processors[processors.length - 1]!;
+      timeoutEvent = Promise.resolve(
+        processor(event, {
+          originalException: new OpenAI.APIConnectionTimeoutError(),
+        }),
+      );
+      await recovered;
+      return "fallback result";
+    });
+    const observed = vi.fn();
+    void timeoutEvent.then(observed);
+    await Promise.resolve();
+    expect(observed).not.toHaveBeenCalled();
+    recover();
+    await expect(workflow).resolves.toBe("fallback result");
+    await expect(timeoutEvent).resolves.toMatchObject({
+      level: "warning",
+      exception: { values: [{ mechanism: { handled: true } }] },
+    });
+  });
+
+  it("keeps the original SDK error when recovery fails and does not retry", async () => {
+    let timeoutEvent!: Promise<Sentry.Event | null>;
+    const error = new OpenAI.APIConnectionTimeoutError();
+    const operation = vi.fn(async () => {
+      const processors =
+        Sentry.getCurrentScope().getScopeData().eventProcessors;
+      timeoutEvent = Promise.resolve(
+        processors[processors.length - 1]!(event, {
+          originalException: error,
+        }),
+      );
+      throw error;
+    });
+    await expect(withRecoverableAIRequest(operation)).rejects.toBe(error);
+    await expect(timeoutEvent).resolves.toBe(event);
+    expect(operation).toHaveBeenCalledOnce();
+  });
+
+  it("does not change unrelated errors after successful recovery or leak scope", async () => {
+    const parent = Sentry.getCurrentScope();
+    const previous = [...parent.getScopeData().eventProcessors];
+    let unrelated!: Promise<Sentry.Event | null>;
+    await withRecoverableAIRequest(async () => {
+      const processors =
+        Sentry.getCurrentScope().getScopeData().eventProcessors;
+      unrelated = Promise.resolve(
+        processors[processors.length - 1]!(event, {
+          originalException: new TypeError("bad response"),
+        }),
+      );
+    });
+    await expect(unrelated).resolves.toBe(event);
+    expect(Sentry.getCurrentScope()).toBe(parent);
+    expect(parent.getScopeData().eventProcessors).toEqual(previous);
   });
 });

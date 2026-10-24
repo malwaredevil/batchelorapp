@@ -1,4 +1,10 @@
 import { z } from "zod/v4";
+import {
+  callConstraintFields,
+  CALL_CONSTRAINT_TOOL_PROPERTIES,
+  callPreflight,
+  type CallConstraints,
+} from "./call-preflight";
 import type OpenAI from "openai";
 import { and, count, eq, gt, ilike, isNull, min, sql } from "drizzle-orm";
 import {
@@ -37,6 +43,7 @@ import {
   type RelativeTimeSpec,
 } from "../lib/relative-time-resolver";
 import { isValidIanaTimeZone } from "../lib/timezone";
+import { formatScheduledContactTime } from "../lib/scheduled-time-display";
 import {
   claimCommunicationProposal,
   cancelScheduledCommunicationReceipts,
@@ -128,6 +135,7 @@ async function resolveEffectiveTimezone(
 }
 
 const CallContactPayload = z.object({
+  ...callConstraintFields,
   contactName: z.string().min(1).max(100),
   message: z.string().min(1).max(500),
   scheduleAt: scheduleAtField,
@@ -703,6 +711,7 @@ async function deliverElaineChat(
 // verified phone number. Self-directed — always resolves from userId, never
 // from a contact name. Available on web + SMS (excluded from email).
 const CallMePayload = z.object({
+  ...callConstraintFields,
   greeting: z
     .string()
     .min(1)
@@ -783,7 +792,7 @@ export const communicationReceiptsReadTool: OpenAI.Chat.Completions.ChatCompleti
     function: {
       name: GET_COMMUNICATION_RECEIPTS_TOOL_NAME,
       description:
-        "Read recent communication execution receipts for this user. MUST call this when asked whether Elaine called, texted, emailed, or otherwise sent something, or whether an attempt went through. Report the recorded status exactly; accepted/pending is not delivered. If no receipt is returned, say there is no recorded execution.",
+        "Read recent communication execution receipts for this user. MUST call this when asked whether Elaine called, texted, emailed, or otherwise sent something, or whether an attempt went through. Report the recorded status exactly. For SMS: accepted means handed to the texting service, not confirmed delivered; completed/deliveryConfirmed means the provider confirmed delivery. Never equate delivery with the recipient reading it. If no receipt is returned, say there is no recorded execution.",
       parameters: {
         type: "object",
         properties: {
@@ -856,7 +865,10 @@ export async function fireCallContact(
   contactName: string,
   message: string,
   receiptContext?: CommunicationReceiptContext,
+  constraints: CallConstraints = {},
 ): Promise<{ status: number; body: unknown }> {
+  const requirementsError = callPreflight(constraints);
+  if (requirementsError) return requirementsError;
   const contact = await resolveContact(contactName);
   if (!contact) {
     return {
@@ -882,6 +894,8 @@ export async function fireCallContact(
       },
     };
   }
+  const destinationError = callPreflight(constraints, contact.phoneNumber);
+  if (destinationError) return destinationError;
   // Gate on AgentPhone health before attempting the call — consistent with
   // how fireMessageContactToResolved gates SMS and how resolveContactChannels
   // reports voice availability.
@@ -1043,7 +1057,10 @@ export async function fireCallMe(
   userId: number,
   greeting?: string,
   receiptContext?: CommunicationReceiptContext,
+  constraints: CallConstraints = {},
 ): Promise<{ status: number; body: unknown }> {
+  const requirementsError = callPreflight(constraints);
+  if (requirementsError) return requirementsError;
   const [user] = await db
     .select({
       phoneNumber: appUsers.phoneNumber,
@@ -1090,6 +1107,9 @@ export async function fireCallMe(
     (user.displayName
       ? `Hi ${user.displayName}, it's Elaine from the Batchelor app calling. How can I help you?`
       : "Hi, it's Elaine from the Batchelor app. How can I help you?");
+
+  const destinationError = callPreflight(constraints, user.phoneNumber);
+  if (destinationError) return destinationError;
 
   const claimed = await claimCommunicationReceipt(
     receiptContext,
@@ -1494,10 +1514,11 @@ async function fireMessageContactToResolved(
     return receiptDuplicateResult("message_contact", claimed);
   }
   try {
-    await sendSms(contact.phoneNumber, message);
+    const sent = await sendSms(contact.phoneNumber, message);
     if (claimed) {
       await finishCommunicationReceipt(claimed.receipt, "accepted", {
         channel: "sms",
+        providerId: sent?.messageId,
       });
     }
     return {
@@ -1634,6 +1655,8 @@ export const communicationActionExecutors: Record<
     userId: number,
     receiptContext?: CommunicationReceiptContext,
   ) => {
+    const requirementsError = callPreflight(payload);
+    if (requirementsError) return requirementsError;
     if (!(await claimProposalBeforeExecution(receiptContext))) {
       return proposalAlreadyUsedResult("call_contact", receiptContext);
     }
@@ -1658,9 +1681,17 @@ export const communicationActionExecutors: Record<
       // delivery scheduler claims and fires this the same way it fires every
       // other reminder, calling fireCallContact as the delivery mechanism.
       const contact = await resolveContact(payload.contactName);
+      const destinationError = callPreflight(
+        payload,
+        contact?.phoneVerified ? contact.phoneNumber : null,
+      );
+      if (destinationError) return destinationError;
       const storedPayload = {
         contactName: payload.contactName,
         message: payload.message,
+        ...(payload.expectedDestination
+          ? { expectedDestination: payload.expectedDestination }
+          : {}),
       };
       const duplicate = await findDuplicateScheduledReminder({
         userId,
@@ -1728,6 +1759,7 @@ export const communicationActionExecutors: Record<
             channel: "voice",
             scheduled: true,
             scheduledActionId: row?.id,
+            timezone: tz,
             ...(scheduledReceipt
               ? {
                   receiptId: scheduledReceipt.receipt.id,
@@ -1746,6 +1778,7 @@ export const communicationActionExecutors: Record<
       payload.contactName,
       payload.message,
       receiptContext,
+      payload,
     );
   }) as ActionExecutor,
 
@@ -1871,6 +1904,7 @@ export const communicationActionExecutors: Record<
           result: {
             scheduled: true,
             scheduledActionIds: rows.map((r) => r.id),
+            timezone: tz,
             receipts: rows
               .filter((row) => row.receiptId)
               .map((row) => ({
@@ -2139,10 +2173,11 @@ export const communicationActionExecutors: Record<
         return receiptDuplicateResult("continue_in_channel", claimed);
       }
       try {
-        await sendSms(user.phoneNumber, message);
+        const sent = await sendSms(user.phoneNumber, message);
         if (claimed) {
           await finishCommunicationReceipt(claimed.receipt, "accepted", {
             channel: "sms",
+            providerId: sent?.messageId,
           });
         }
         return {
@@ -2481,10 +2516,11 @@ export const communicationActionExecutors: Record<
           return;
         }
         try {
-          await sendSms(user.phoneNumber, message);
+          const sent = await sendSms(user.phoneNumber, message);
           if (claimed) {
             await finishCommunicationReceipt(claimed.receipt, "accepted", {
               channel: "sms",
+              providerId: sent?.messageId,
             });
             receiptOutcomes.push({
               receiptId: claimed.receipt.id,
@@ -2635,7 +2671,23 @@ export const communicationActionExecutors: Record<
     userId: number,
     receiptContext?: CommunicationReceiptContext,
   ) => {
+    const requirementsError = callPreflight(payload);
+    if (requirementsError) return requirementsError;
     if (payload.scheduleAt) {
+      if (payload.expectedDestination) {
+        const [user] = await db
+          .select({
+            phoneNumber: appUsers.phoneNumber,
+            phoneVerified: appUsers.phoneVerified,
+          })
+          .from(appUsers)
+          .where(eq(appUsers.id, userId));
+        const destinationError = callPreflight(
+          payload,
+          user?.phoneVerified ? user.phoneNumber : null,
+        );
+        if (destinationError) return destinationError;
+      }
       const tz = await resolveEffectiveTimezone(userId, payload.timezone);
       let scheduledFor: string;
       try {
@@ -2656,7 +2708,12 @@ export const communicationActionExecutors: Record<
       // message_contact. The scheduler re-runs the full phone-number/
       // verification/opt-out checks via fireCallMe at fire time, not just
       // now — see dispatchElaineActionReminder in reminders-scheduler.ts.
-      const storedPayload = { greeting: payload.greeting };
+      const storedPayload = {
+        greeting: payload.greeting,
+        ...(payload.expectedDestination
+          ? { expectedDestination: payload.expectedDestination }
+          : {}),
+      };
       const scheduledReceipt = await claimCommunicationReceipt(
         receiptContext ? { ...receiptContext, status: "scheduled" } : undefined,
         userId,
@@ -2708,6 +2765,7 @@ export const communicationActionExecutors: Record<
             channel: "voice",
             scheduled: true,
             scheduledActionId: row?.id,
+            timezone: tz,
             ...(scheduledReceipt
               ? {
                   receiptId: scheduledReceipt.receipt.id,
@@ -2720,7 +2778,7 @@ export const communicationActionExecutors: Record<
         },
       };
     }
-    return fireCallMe(userId, payload.greeting, receiptContext);
+    return fireCallMe(userId, payload.greeting, receiptContext, payload);
   }) as ActionExecutor,
 
   cancel_scheduled_contact: (async (
@@ -2851,6 +2909,7 @@ export const LIST_SCHEDULED_CONTACTS_TOOL_NAME = "list_scheduled_contacts";
 export async function executeListScheduledContacts(
   userId: number,
 ): Promise<string> {
+  const timezone = await getUserTimezone(userId);
   const rows = await db
     .select({
       id: reminders.id,
@@ -2875,13 +2934,7 @@ export async function executeListScheduledContacts(
 
   const lines = rows.map((r) => {
     const when = r.scheduledFor
-      ? new Date(r.scheduledFor).toLocaleString("en-US", {
-          month: "short",
-          day: "numeric",
-          hour: "numeric",
-          minute: "2-digit",
-          hour12: true,
-        })
+      ? `${formatScheduledContactTime(new Date(r.scheduledFor).toISOString(), timezone)} [scheduledFor=${new Date(r.scheduledFor).toISOString()}]`
       : "unknown time";
     const { label } = describeScheduledElaineAction(
       r.actionType,
@@ -3076,6 +3129,8 @@ export const communicationActionTools: OpenAI.Chat.Completions.ChatCompletionToo
           "CRITICAL — write `message` in FIRST PERSON as exactly what Elaine says. Do NOT attribute the message to the requester. " +
           "WRONG: 'Jonathan asked me to remind you to pick up the cat.' " +
           "RIGHT: 'Hey, just a reminder to pick up the cat from the vet today!' " +
+          "Preserve a supplied exact script verbatim; do not add greetings, introductions, or attribution. Use call_me instead when the recipient is the requesting user. " +
+          "Include expectedDestination when a number was supplied, and voicemailMessage whenever voicemail was requested; never silently drop either requirement. " +
           "Confirm the contact name and message wording before proposing this action. " +
           "If the user wants the call at a future time, include `scheduleAt` — either an exact ISO 8601 datetime, or (STRONGLY preferred, including for a bare clock time like 'at 3:45pm' with no explicit day) the structured relative-time spec described on that field; never hand-compute the datetime (or its UTC offset) yourself. " +
           "Only include `timezone` when the user explicitly names a different timezone/city for this call than their own (see that field's description) — omit it otherwise. " +
@@ -3089,6 +3144,7 @@ export const communicationActionTools: OpenAI.Chat.Completions.ChatCompletionToo
         parameters: {
           type: "object",
           properties: {
+            ...CALL_CONSTRAINT_TOOL_PROPERTIES,
             contactName: {
               type: "string",
               description:
@@ -3269,6 +3325,8 @@ export const communicationActionTools: OpenAI.Chat.Completions.ChatCompletionToo
           "whether they want the call right now or at a future time. " +
           "This calls THE SAME USER who is chatting, never another household member — use call_contact for that. " +
           "Available on web and SMS channels. NOT available over email. " +
+          "Preserve a supplied exact script verbatim in greeting; do not add introductions or rewrite it. " +
+          "Include expectedDestination when a number was supplied, and voicemailMessage whenever voicemail was requested; never silently drop either requirement. " +
           "If the user wants the call at a future time (e.g. 'call me at 2:30', 'call me in an hour', " +
           "'call me tomorrow morning and remind me to X'), include `scheduleAt` — either an exact ISO 8601 " +
           "datetime, or (STRONGLY preferred, including for a bare clock time like 'call me at 2:30' with no " +
@@ -3283,6 +3341,7 @@ export const communicationActionTools: OpenAI.Chat.Completions.ChatCompletionToo
         parameters: {
           type: "object",
           properties: {
+            ...CALL_CONSTRAINT_TOOL_PROPERTIES,
             greeting: {
               type: "string",
               description:

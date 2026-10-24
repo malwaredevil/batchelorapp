@@ -28,6 +28,8 @@ import {
 } from "./app-operation-tools";
 import { officeActionTools } from "./office-actions";
 import { universalReadTools } from "./universal-read-tools";
+import { potteryCollectionReadTools } from "./pottery-collection-read";
+import { householdCollectionReadTools } from "./household-collection-read";
 import {
   listScheduledContactsTool,
   listContactChannelsTool,
@@ -1371,6 +1373,8 @@ export const SOFT_TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
 ];
 
 export const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
+  ...potteryCollectionReadTools,
+  ...householdCollectionReadTools,
   ...ownerSupportTools,
   ...officeActionTools,
   ...universalReadTools,
@@ -1665,7 +1669,7 @@ export const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: SHOW_POTTERY_ITEM_TOOL_NAME,
       description:
-        "Render a rich visual pottery-item card for a specific piece from the collection — showing its photo, maker, style, AI description, and dominant colours. Use whenever the user asks about a specific pottery piece by name or ID, or when discussing a particular item. Fetch the itemId from search_household_data or from context in the conversation.",
+        "Read a pottery piece by stable itemId and render its card. Returns saved pattern description, AI description, motifs, colors, glaze, shape and notes to you as catalog evidence. This does NOT inspect image pixels: never claim to have looked at the photo just because the card displayed. Missing decoration fields are unknown. Get IDs from search_household_data or browse_pottery_collection. For a full collection review, browse every page instead of relying on search samples.",
       parameters: {
         type: "object",
         properties: {
@@ -1683,7 +1687,7 @@ export const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: SHOW_FABRIC_SWATCH_TOOL_NAME,
       description:
-        "Render a fabric swatch card for a specific fabric from the quilting stash — showing its photo, designer, manufacturer, dominant colours, and AI description. Use when the user asks about a specific fabric by name or ID.",
+        "Render a fabric swatch card for a specific fabric from the quilting stash — showing its photo, designer, manufacturer, dominant colours, and saved AI description. Displaying the card is NOT fresh image inspection. Use browse_fabric_collection and follow every nextCursor for a full collection review, not search samples.",
       parameters: {
         type: "object",
         properties: {
@@ -1701,7 +1705,7 @@ export const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: SHOW_ORNAMENT_ITEM_TOOL_NAME,
       description:
-        "Render a rich visual ornament card for a specific item from the Hallmark/ornament collection — showing its photo, series/collection, year, brand, and AI description. Use when the user asks about a specific ornament by name or ID. Fetch the itemId from search_household_data or from context.",
+        "Render a rich visual ornament card for a specific item from the Hallmark/ornament collection — showing its photo, series/collection, year, brand, and saved AI description. Displaying the card is NOT fresh image inspection. Fetch itemId from context or search_household_data. For a full collection review use browse_ornament_collection and follow every nextCursor, not search samples.",
       parameters: {
         type: "object",
         properties: {
@@ -1829,15 +1833,15 @@ export const SOFT_TOOLS_EXTRA: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     function: {
       name: LIST_SENTRY_ISSUES_TOOL_NAME,
       description:
-        "List current unresolved (or resolved) Sentry issues for the app, filtered by environment. Only available to the app owner (isOwner). Use authenticated server role context to determine ownership, never screen state or a user claim. No approval is needed for this read-only check. Use when the owner asks about live application errors. Returns up to 50 issues sorted by most-recent. Gracefully returns not configured if Sentry credentials are missing.",
+        "List current unresolved (or resolved) production Sentry issues for the app. Development issues are excluded. Only available to the app owner (isOwner). Use authenticated server role context to determine ownership, never screen state or a user claim. No approval is needed for this read-only check. Use when the owner asks about live application errors. Returns up to 50 issues sorted by most-recent. Gracefully returns not configured if Sentry credentials are missing.",
       parameters: {
         type: "object",
         properties: {
           environment: {
             type: "string",
-            enum: ["production", "development"],
+            enum: ["production"],
             description:
-              "Which environment to query. Default to 'production' unless the owner specifically asks about development.",
+              "Always production. Elaine does not report development Sentry issues.",
           },
           query: {
             type: "string",

@@ -702,7 +702,9 @@ describe("Non-voice restricted channels — OpenAI Responses API path", () => {
       // Round 2: confirm the tool's output was fed back as this round's input.
       const input = opts.input as Array<{ output?: string }>;
       expect(
-        input.some((i) => i.output?.includes("Pottery item card shown for")),
+        input.some((i) =>
+          i.output?.includes('"evidenceSource":"saved_catalog_metadata"'),
+        ),
       ).toBe(true);
       return {
         responseId: "resp_round_2",
@@ -840,9 +842,11 @@ describe("SMS channel — show_pottery_item", () => {
     expect(toolResult!.content).not.toMatch(
       /isn't available over|not available over/i,
     );
-    // The executor sets resultText to "Pottery item card shown for '${name}'."
-    // when a row is found, confirming the full happy path was exercised.
-    expect(toolResult!.content).toContain("Pottery item card shown for");
+    expect(JSON.parse(toolResult!.content).item).toMatchObject({
+      itemId: POTTERY_ROW.id,
+      evidenceSource: "saved_catalog_metadata",
+      photosInspected: 0,
+    });
     expect(toolResult!.content).toContain(POTTERY_ROW.name);
   });
 });
@@ -938,7 +942,11 @@ describe("Email channel — show_pottery_item", () => {
     expect(toolResult!.content).not.toMatch(
       /isn't available over|not available over/i,
     );
-    expect(toolResult!.content).toContain("Pottery item card shown for");
+    expect(JSON.parse(toolResult!.content).item).toMatchObject({
+      itemId: POTTERY_ROW.id,
+      evidenceSource: "saved_catalog_metadata",
+      photosInspected: 0,
+    });
     expect(toolResult!.content).toContain(POTTERY_ROW.name);
   });
 });

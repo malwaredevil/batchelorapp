@@ -168,12 +168,15 @@ export function createCollectionSerializer<TRow extends { id: number }, TItem>(
     );
   }
 
-  async function serializeItems(rows: TRow[]): Promise<TItem[]> {
+  async function serializeItems(
+    rows: TRow[],
+    options: { includeImages?: boolean } = {},
+  ): Promise<TItem[]> {
     if (rows.length === 0) return [];
     const itemIds = rows.map((r) => r.id);
     const [rawCats, rawImgs] = await Promise.all([
       config.fetchRawCategories(itemIds),
-      config.fetchRawImages(itemIds),
+      options.includeImages === false ? [] : config.fetchRawImages(itemIds),
     ]);
     const catsMap = buildCatsMap(rawCats);
     const imgsMap = buildImgsMap(rawImgs);

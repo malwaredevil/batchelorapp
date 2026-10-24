@@ -561,6 +561,25 @@ afterEach(() => {
 
 // ── GET /conversation ────────────────────────────────────────────────────────
 
+describe("retired automatic morning brief display", () => {
+  it("returns null without reading, generating or changing saved brief data", async () => {
+    const res = await request(buildApp({ userId: 1 })).get(
+      "/api/elaine/daily-brief",
+    );
+    expect(res.status).toBe(200);
+    expect(res.body).toBeNull();
+    expect(dbMock.select).not.toHaveBeenCalled();
+    expect(dbMock.insert).not.toHaveBeenCalled();
+    expect(dbMock.update).not.toHaveBeenCalled();
+    expect(dbMock.delete).not.toHaveBeenCalled();
+  });
+
+  it("still requires a signed-in session", async () => {
+    const res = await request(buildApp({})).get("/api/elaine/daily-brief");
+    expect(res.status).toBe(401);
+  });
+});
+
 describe("GET /api/elaine/conversation", () => {
   it("returns an empty first page when no widget-default conversation exists", async () => {
     // resolveWidgetDefaultConversationId: no existing conversation → insert new one
@@ -1055,6 +1074,7 @@ describe("GET /api/elaine/communication-receipts", () => {
         ...ownerReceipt,
         createdAt: ownerReceipt.createdAt.toISOString(),
         updatedAt: ownerReceipt.updatedAt.toISOString(),
+        scheduledFor: null,
         // A completed call can no longer change, so clients stop polling.
         pending: false,
       },

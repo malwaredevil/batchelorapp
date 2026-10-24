@@ -1012,6 +1012,14 @@
       "metric": 1
     },
     {
+      "id": "exception:hardcoded-config:artifacts/api-server/src/lib/sms.ts:constant:constant:SMS_STATUS_CACHE_MS:const SMS_STATUS_CACHE_MS = 30_000;",
+      "category": "hardcoded-config",
+      "file": "artifacts/api-server/src/lib/sms.ts",
+      "evidence": "constant:SMS_STATUS_CACHE_MS:const SMS_STATUS_CACHE_MS = 30_000;",
+      "reason": "Fixed provider-read throttle shared by receipt pollers bounds API traffic; this is transport protection, not an owner-facing product setting. The exact expression remains reviewed.",
+      "metric": 1
+    },
+    {
       "id": "exception:hardcoded-config:artifacts/api-server/src/lib/ssrf-safe-fetch.ts:constant:constant:DNS_TIMEOUT_MS:const DNS_TIMEOUT_MS = 2000;",
       "category": "hardcoded-config",
       "file": "artifacts/api-server/src/lib/ssrf-safe-fetch.ts",

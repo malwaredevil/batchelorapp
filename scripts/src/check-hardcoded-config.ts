@@ -294,6 +294,11 @@ function reviewedConstants(
  * source lines. Removed/config-store-backed declarations have no exception.
  */
 export const ANCHORED_CONFIG_ALLOWLIST: readonly ConfigAnchor[] = [
+  // Fixed provider-read throttle shared by receipt pollers, not an owner-facing
+  // product setting. Keep the exact expression reviewed to bound API traffic.
+  ...reviewedConstants("artifacts/api-server/src/lib/sms.ts", {
+    SMS_STATUS_CACHE_MS: "30_000",
+  }),
   // Deployment-tool connection deadline, not an application setting. It must
   // work before either database is reachable and fit within merge setup's limit.
   ...reviewedConstants("scripts/src/backup-connections.ts", {

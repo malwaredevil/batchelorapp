@@ -5,87 +5,33 @@ import {
 } from "./model-tool-policy";
 import { ELAINE_TOOL_POLICIES } from "../capability-registry";
 
-const IMPLEMENTED_MAIN_CHAT_HARD_TOOLS = [
-  "discover_app_operations",
-  "read_app_operation",
-  "search_household_data",
-  "show_trip_card",
-  "show_pottery_item",
-  "show_fabric_swatch",
-  "show_ornament_item",
-  "web_search",
-  "ebay_search",
-  "search_hallmark",
-  "search_flights",
-  "fetch_page",
-  "consult_experts",
-  "get_weather_forecast",
-  "find_nearby_places",
-  "get_route_info",
-  "get_air_quality",
-  "get_pollen_forecast",
-  "calculate_yardage",
-  "query_household_data",
-  "lookup_product_barcode",
-  "summarize_inbox",
-  "find_emails_about_topic",
-  "get_email_detail",
-  "list_notes",
-  "get_note",
-  "list_reminders",
-  "list_scheduled_contacts",
-  "list_notifications",
-  "get_notification_counts",
-  "get_notification_preferences",
-  "list_memories",
-  "list_elaine_tasks",
-  "get_elaine_task",
-  "remember_household_fact",
-  "remember_lesson",
-  "search_trip_documents",
-  "show_destination_card",
-  "get_exchange_rate",
-  "suggest_clothing_layers",
-  "check_integrations_health",
-  "get_owner_settings",
-  "list_sentry_issues",
-  "list_elaine_suggestions",
-  "save_elaine_suggestion",
-  "get_recent_elaine_diagnostics",
-  "generate_document",
-  "analyze_pottery_photo",
-  "analyze_fabric_photo",
-  "analyze_ornament_photo",
-  "lookup_book_value",
-  "lookup_retail_value",
-  "get_recent_communication_receipts",
-].sort();
-
 describe("model-visible hard-tool policy", () => {
-  it("keeps every implemented main-chat hard tool in the dispatch set", () => {
-    expect([...MODEL_VISIBLE_HARD_TOOL_NAMES].sort()).toEqual(
-      IMPLEMENTED_MAIN_CHAT_HARD_TOOLS,
-    );
+  it("dispatches every web read declared by the capability registry", () => {
+    // Independent source of truth, not a second copy of the dispatch list:
+    // the old test and the list both omitted an implemented contact lookup.
+    const missing = Object.values(ELAINE_TOOL_POLICIES)
+      .filter(
+        (policy) => policy.kind === "read" && policy.channels.includes("web"),
+      )
+      .map((policy) => policy.toolName)
+      .filter((name) => !MODEL_VISIBLE_HARD_TOOL_NAMES.has(name));
+    expect(missing).toEqual([]);
     expect(
       [...MODEL_VISIBLE_HARD_TOOL_NAMES].every(
-        (name) => MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS[name],
+        (name) =>
+          MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS[name] &&
+          ELAINE_TOOL_POLICIES[name],
       ),
     ).toBe(true);
-    const registeredToolNames = new Set(
-      Object.values(ELAINE_TOOL_POLICIES).map((policy) => policy.toolName),
-    );
-    expect(
-      [...MODEL_VISIBLE_HARD_TOOL_NAMES].filter(
-        (name) => !registeredToolNames.has(name),
-      ),
-    ).toEqual([]);
   });
 
   it("does not treat actions, navigation, or mode changes as hard reads", () => {
-    expect(MODEL_VISIBLE_HARD_TOOL_NAMES.has("update_trip")).toBe(false);
-    expect(MODEL_VISIBLE_HARD_TOOL_NAMES.has("suggest_navigation")).toBe(false);
-    expect(
-      MODEL_VISIBLE_HARD_TOOL_NAMES.has("set_action_confirmation_mode"),
-    ).toBe(false);
+    for (const name of [
+      "update_trip",
+      "suggest_navigation",
+      "set_action_confirmation_mode",
+    ]) {
+      expect(MODEL_VISIBLE_HARD_TOOL_NAMES.has(name)).toBe(false);
+    }
   });
 });

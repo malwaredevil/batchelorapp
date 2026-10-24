@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   useUpdatePottery,
+  useGetPottery,
   useDeletePottery,
   useListPotteryCategories as useListCategories,
   getListPotteryQueryKey,
@@ -42,6 +43,33 @@ export function QuickEditSheet({
   onClose,
   onDeleted,
 }: QuickEditSheetProps) {
+  // Gallery records deliberately omit notes: never initialize an editable form
+  // from that projection, or saving the name could erase existing notes.
+  const { data, isError, refetch } = useGetPottery(item.id);
+  if (!data || isError) {
+    return (
+      <QuickEditSheetFrame title={item.name} onClose={onClose} footer={null}>
+        {isError ? (
+          <Button onClick={() => void refetch()}>
+            Could not load piece. Retry
+          </Button>
+        ) : (
+          <p role="status">Loading piece…</p>
+        )}
+      </QuickEditSheetFrame>
+    );
+  }
+  return (
+    <QuickEditForm
+      key={item.id}
+      item={data}
+      onClose={onClose}
+      onDeleted={onDeleted}
+    />
+  );
+}
+
+function QuickEditForm({ item, onClose, onDeleted }: QuickEditSheetProps) {
   const queryClient = useQueryClient();
   const { data: allCategories = [] } = useListCategories();
 
@@ -50,12 +78,6 @@ export function QuickEditSheet({
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<number[]>(
     item.categories.map((c) => c.id),
   );
-
-  useEffect(() => {
-    setName(item.name);
-    setNotes(item.notes ?? "");
-    setSelectedCategoryIds(item.categories.map((c) => c.id));
-  }, [item]);
 
   function toggleCategory(catId: number) {
     setSelectedCategoryIds((prev) =>

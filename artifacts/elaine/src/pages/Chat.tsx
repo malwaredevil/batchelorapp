@@ -17,26 +17,19 @@ import {
   PanelRightClose,
   PanelRightOpen,
   Plus,
-  RefreshCw,
   Search,
-  Sun,
   Trash2,
-  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getTripPhotoImageUrl } from "@workspace/api-client-react";
 import { crossAppUrl } from "@workspace/web-core/cross-app";
 import {
   getElaineConversationMessagesFn,
-  getElaineDailyBriefQueryKey,
   getInfiniteElaineConversationsQueryKey,
   getListElaineConversationsQueryKey,
   useDeleteElaineConversation,
-  useDismissElaineDailyBrief,
-  useGetElaineDailyBrief,
   useInfiniteElaineConversations,
   useListElaineConversations,
-  useRegenerateElaineDailyBrief,
   useRenameElaineConversation,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -261,24 +254,6 @@ export default function Chat() {
     [editingTitle, renameConversation],
   );
 
-  // Daily morning brief
-  const { data: brief, isLoading: briefLoading } = useGetElaineDailyBrief();
-  const dismissBrief = useDismissElaineDailyBrief({
-    mutation: {
-      onSuccess: () => {
-        void qc.invalidateQueries({ queryKey: getElaineDailyBriefQueryKey() });
-      },
-    },
-  });
-  const regenerateBrief = useRegenerateElaineDailyBrief({
-    mutation: {
-      onSuccess: (data) => {
-        qc.setQueryData(getElaineDailyBriefQueryKey(), data);
-      },
-    },
-  });
-  const showBrief = brief != null && !brief.dismissed;
-
   const handleSelectConversation = useCallback(
     async (id: number) => {
       if (loadingConvId === id) return;
@@ -298,47 +273,6 @@ export default function Chat() {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Daily morning brief — spans full width above all three panels */}
-      {briefLoading && (
-        <div className="shrink-0 border-b border-amber-200/50 bg-amber-50/60 px-6 py-3 dark:border-amber-900/30 dark:bg-amber-950/15">
-          <div className="flex items-center gap-2.5 text-sm text-amber-700/60 dark:text-amber-300/40">
-            <Sun className="h-4 w-4 animate-pulse" />
-            <span>Preparing your morning brief…</span>
-          </div>
-        </div>
-      )}
-      {!briefLoading && showBrief && (
-        <div className="shrink-0 border-b border-amber-200/50 bg-amber-50/60 px-6 py-3 dark:border-amber-900/30 dark:bg-amber-950/15">
-          <div className="flex items-start gap-3">
-            <Sun className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-            <p className="flex-1 text-sm leading-relaxed text-foreground">
-              {brief.content}
-            </p>
-            <div className="flex shrink-0 items-center gap-1 pl-1">
-              <button
-                type="button"
-                onClick={() => regenerateBrief.mutate(undefined)}
-                disabled={regenerateBrief.isPending}
-                className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
-                title="Regenerate brief"
-              >
-                <RefreshCw
-                  className={`h-3.5 w-3.5 ${regenerateBrief.isPending ? "animate-spin" : ""}`}
-                />
-              </button>
-              <button
-                type="button"
-                onClick={() => dismissBrief.mutate(undefined)}
-                disabled={dismissBrief.isPending}
-                className="rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-40"
-                title="Dismiss"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       <div className="flex min-h-0 flex-1">
         {/* ── Left sidebar: conversation history (collapsible) ────────────── */}
         <aside

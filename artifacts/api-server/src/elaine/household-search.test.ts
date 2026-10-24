@@ -27,7 +27,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // import or mock factory.
 // ---------------------------------------------------------------------------
 const { isNullSpy, dbMock, selectQueue } = vi.hoisted(() => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const isNullSpy = vi.fn<any>();
 
   // Each entry is the rows that the next db.select() call should resolve with.
@@ -209,7 +208,10 @@ describe("searchHouseholdData — ornaments", () => {
 
     const result = await searchHouseholdData("angel", ["ornaments"]);
 
-    expect(result).toContain("Found 2 ornament(s)");
+    expect(result).toContain("Ornament search sample: 2 returned");
+    expect(result).toContain("limit 5; NOT a complete collection review");
+    expect(result).toContain("browse_ornament_collection");
+    expect(result).toContain("unique itemIds read versus total");
     expect(result).toContain("Angel");
     expect(result).toContain("Angel Deluxe");
   });
@@ -240,6 +242,9 @@ describe("searchHouseholdData — fabrics", () => {
 
     expect(result).toContain("Blue Batik");
     expect(result).toContain("fabricId: 12");
+    expect(result).toContain("limit 5; NOT a complete collection review");
+    expect(result).toContain("browse_fabric_collection");
+    expect(result).toContain("unique fabricIds read versus total");
   });
 
   it("excludes a soft-deleted fabric — returns 'No fabrics found'", async () => {
@@ -403,6 +408,23 @@ describe("searchHouseholdData — trips", () => {
 // ---------------------------------------------------------------------------
 
 describe("searchHouseholdData — multiple domains", () => {
+  it("labels pottery hits as a bounded metadata sample and points full reviews to pagination", async () => {
+    selectQueue.push([
+      {
+        id: 1,
+        name: "Blue bowl",
+        maker: null,
+        style: null,
+        patternDescription: "Painted blue flowers",
+        aiDescription: "Catalog description",
+      },
+    ]);
+    const result = await searchHouseholdData("blue", ["pottery"]);
+    expect(result).toContain("Painted blue flowers");
+    expect(result).toContain("limit 5; NOT a complete collection review");
+    expect(result).toContain("browse_pottery_collection");
+    expect(result).toContain("not image inspection");
+  });
   it("applies separate isNull predicates for each collection", async () => {
     selectQueue.push([{ id: 1, name: "Blue Vase", maker: null, style: null }]); // pottery
     selectQueue.push([

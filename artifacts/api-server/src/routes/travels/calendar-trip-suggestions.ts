@@ -35,7 +35,14 @@ router.get("/calendar-trip-suggestions", async (_req, res) => {
 router.post("/calendar-trip-suggestions/scan", aiLimiter, async (req, res) => {
   try {
     const result = await scanCalendarForTripSuggestions();
-    res.json(result);
+    if (!result.completed) {
+      res.status(503).json({
+        error:
+          "The trip-suggestion scan timed out. Your existing trips are unchanged. Please try again later.",
+      });
+      return;
+    }
+    res.json({ scanned: result.scanned, created: result.created });
   } catch (err) {
     logger.error(
       { err, userId: req.session.userId },

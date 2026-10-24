@@ -251,16 +251,7 @@ export const SCAFFOLD_ELAINE_ACTION_ANCHORS: ReadonlyArray<{
   // runtime/model-tool-policy.ts
   {
     file: `${ELAINE_RELDIR}/runtime/model-tool-policy.ts`,
-    anchor: "export const MODEL_VISIBLE_HARD_TOOL_NAMES = new Set<string>([",
-  },
-  {
-    file: `${ELAINE_RELDIR}/runtime/model-tool-policy.ts`,
     anchor: "export const MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS",
-  },
-  // runtime/model-tool-policy.test.ts
-  {
-    file: `${ELAINE_RELDIR}/runtime/model-tool-policy.test.ts`,
-    anchor: "const IMPLEMENTED_MAIN_CHAT_HARD_TOOLS = [",
   },
   // scaffolded-read-registry.ts
   {
@@ -975,32 +966,15 @@ export function buildReadToolCatalogEdits(spec: ToolSpec): Edit[] {
       file: FILES.modelToolPolicy,
       description: `model-tool-policy.ts: MODEL_VISIBLE_HARD_TOOL_NAMES + status label for ${spec.name}`,
       apply: (content) => {
-        if (content.includes(`"${spec.name}"`)) return null;
-        let next = insertAfterAnchor(
-          content,
-          "export const MODEL_VISIBLE_HARD_TOOL_NAMES = new Set<string>([",
-          `\n  "${spec.name}",`,
-        );
+        if (content.includes(`${spec.name}:`)) return null;
         // Every model-visible hard tool must have a truthy status label
-        // (enforced by runtime/model-tool-policy.test.ts).
-        next = insertAfterAnchor(
-          next,
+        // and names derive from those labels. Capability metadata drives
+        // the independent contract test, so no test expectation is generated.
+        return insertAfterAnchor(
+          content,
           "export const MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS",
           `\n  // TODO(scaffold): replace with a human-written status label for ${spec.name}.\n  ${spec.name}: "checking ${cfg.capabilityDomain} data",`,
           /=\s*\{/,
-        );
-        return next;
-      },
-    },
-    {
-      file: FILES.modelToolPolicyTest,
-      description: `model-tool-policy.test.ts: IMPLEMENTED_MAIN_CHAT_HARD_TOOLS entry for ${spec.name}`,
-      apply: (content) => {
-        if (content.includes(`"${spec.name}"`)) return null;
-        return insertAfterAnchor(
-          content,
-          "const IMPLEMENTED_MAIN_CHAT_HARD_TOOLS = [",
-          `\n  "${spec.name}",`,
         );
       },
     },

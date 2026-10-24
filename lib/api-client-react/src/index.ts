@@ -16,6 +16,7 @@ export * from "./travels";
 export * from "./elaine";
 export * from "./ornaments-hallmark";
 export * from "./pottery";
+export * from "./collection-pages";
 export * from "./pottery-photo-originals";
 export * from "./ornaments";
 export * from "./binary";

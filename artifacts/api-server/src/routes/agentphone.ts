@@ -6,6 +6,7 @@ import { db, appUsers, agentphoneConversations } from "@workspace/db";
 import { env } from "../lib/env";
 import { logger } from "../lib/logger";
 import { sendSms, SmsOptedOutError } from "../lib/sms";
+import { appendCommunicationHistoryTurn } from "../lib/communication-history";
 import {
   getVerifiedOutboundRecipient,
   invalidateVerifiedOutboundRecipient,
@@ -22,6 +23,7 @@ import {
   updateCallCommunicationReceiptsByProviderId,
 } from "../elaine/communication-receipts";
 import {
+  clearPendingOutboundCallContextByCallId,
   getAgentphoneConversation,
   getOrCreateAgentphoneConversation,
 } from "../lib/agentphone-conversation";
@@ -242,16 +244,12 @@ async function runRestrictedTurnAndPersist(
     const pendingPrivateContext = pendingOutboundId
       ? current.pendingOutboundPrivateContext
       : null;
-    const pendingInstruction = pendingOpening
+    const pendingInstruction = pendingPrivateContext
       ? {
           role: "assistant" as const,
           content:
-            `[Not spoken aloud — pending outbound call context: The recipient has now spoken for the first time. ` +
-            `Introduce yourself as Elaine and naturally deliver this call purpose now: "${pendingOpening}".` +
-            (pendingPrivateContext
-              ? ` After delivering it, also remember: ${pendingPrivateContext}`
-              : "") +
-            "]",
+            `[Not spoken aloud — context for this verified outbound call: ` +
+            `${pendingPrivateContext}]`,
         }
       : null;
     const history = pendingInstruction
@@ -259,21 +257,32 @@ async function runRestrictedTurnAndPersist(
       : storedHistory;
     let replyText: string;
     let updatedHistory: AgentphoneChatMessage[];
-    try {
-      const result = await runAgentphoneTurn({
-        userId,
+    if (pendingOpening) {
+      // The user already chose this message. Once the verified recipient
+      // speaks, deliver it verbatim instead of letting a model replace it.
+      // Empty startup events never reach this function.
+      replyText = pendingOpening;
+      updatedHistory = appendCommunicationHistoryTurn(
+        storedHistory,
         inputText,
-        history,
-        channel,
-        ...(inboundMessageId ? { inboundMessageId } : {}),
-      });
-      replyText = result.replyText;
-      updatedHistory = result.history;
-    } catch (err) {
-      logger.error({ err }, "agentphone: restricted Elaine turn failed");
-      // In particular, retain pending outbound context so a bounded retry can
-      // still deliver the opening. Do not persist a synthetic failure turn.
-      throw err;
+        replyText,
+      );
+    } else {
+      try {
+        const result = await runAgentphoneTurn({
+          userId,
+          inputText,
+          history,
+          channel,
+          ...(inboundMessageId ? { inboundMessageId } : {}),
+        });
+        replyText = result.replyText;
+        updatedHistory = result.history;
+      } catch (err) {
+        logger.error({ err }, "agentphone: restricted Elaine turn failed");
+        // Keep the call's private follow-up context on transient failures.
+        throw err;
+      }
     }
 
     // The pending instruction is model-only context. Never persist it in the
@@ -288,7 +297,7 @@ async function runRestrictedTurnAndPersist(
       .update(agentphoneConversations)
       .set({
         messages: persistedHistory,
-        ...(pendingOutboundId
+        ...(pendingOutboundId && !pendingPrivateContext
           ? {
               pendingOutboundId: null,
               pendingOutboundCallId: null,
@@ -296,6 +305,12 @@ async function runRestrictedTurnAndPersist(
               pendingOutboundPrivateContext: null,
               pendingOutboundExpiresAt: null,
             }
+          : {}),
+        // Private follow-up instructions remain tied to this exact call, but
+        // the opening is consumed only once. Never put instructions in the
+        // shared SMS/voice history.
+        ...(pendingOpening && pendingPrivateContext
+          ? { pendingOutboundOpening: null }
           : {}),
         version: current.version + 1,
         updatedAt: new Date(),
@@ -880,6 +895,10 @@ router.post("/webhook", webhookLimiter, async (req: Request, res: Response) => {
         res.status(503).json({ error: "Call receipt is not correlated yet" });
         return;
       }
+      // Retained follow-up instructions belong only to this call. Exact-ID
+      // cleanup cannot erase a newer call's context, and failures are retried
+      // through the existing signed call-ended delivery mechanism.
+      await clearPendingOutboundCallContextByCallId(callId);
     } catch (err) {
       logger.error(
         { errorType: err instanceof Error ? err.name : "UnknownError", callId },

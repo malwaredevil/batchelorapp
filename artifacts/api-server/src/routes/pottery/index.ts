@@ -4,10 +4,12 @@ import categoriesRouter from "./categories";
 import compareRouter from "./compare";
 import statsRouter from "./stats";
 import watchlistRouter from "./watchlist";
+import fieldOptionsRouter from "./field-options";
 
 const router: IRouter = Router();
 
 router.use(potteryRouter);
+router.use(fieldOptionsRouter);
 router.use(categoriesRouter);
 router.use(compareRouter);
 router.use(statsRouter);

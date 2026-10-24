@@ -4,6 +4,7 @@ import {
   hasCurrentRetrievedEvidence,
   provenanceForTool,
 } from "./source-policy";
+import { classifyElaineRequest } from "./classifier";
 
 const capabilities = [
   {
@@ -33,6 +34,30 @@ const capabilities = [
 ] as const;
 
 describe("Elaine source policy", () => {
+  it.each(["Call me now", "Call Jane tomorrow", "Send my message today"])(
+    "does not invent a research prerequisite for %s",
+    (message) => {
+      const requestClass = classifyElaineRequest({ message });
+      const route = buildElaineSourceRoute({
+        message,
+        requestClass,
+        capabilities,
+      });
+      expect(requestClass.requiresFreshData).toBe(false);
+      expect(route.requiresRetrievedEvidence).toBe(false);
+      expect(route.preferredKinds[0]).toBe("batchelor_app");
+    },
+  );
+
+  it("still requires current evidence for research combined with an action", () => {
+    const message = "Check the latest weather forecast and call me with it";
+    const route = buildElaineSourceRoute({
+      message,
+      requestClass: classifyElaineRequest({ message }),
+      capabilities,
+    });
+    expect(route.requiresRetrievedEvidence).toBe(true);
+  });
   it("keeps stable explanations on the model fast path", () => {
     const route = buildElaineSourceRoute({
       message: "Why do leaves change color?",

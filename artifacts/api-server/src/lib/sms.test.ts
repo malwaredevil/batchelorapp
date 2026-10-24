@@ -99,6 +99,98 @@ describe("sendSms() — opt-out enforcement", () => {
     );
   });
 
+  it("returns the provider message ID without claiming delivery", async () => {
+    selectQueue.push([
+      { smsOptedOutAt: null, smsFirstOutboundSentAt: new Date() },
+    ]);
+    mockFetch
+      .mockResolvedValueOnce(
+        makeOkResponse({
+          data: [{ id: "number_test", phoneNumber: "+15550001111" }],
+        }),
+      )
+      .mockResolvedValueOnce(
+        makeOkResponse({ id: "message_test", status: "queued" }),
+      );
+    const { sendSms } = await import("./sms");
+    expect(await sendSms("+15551234567", "Test message")).toEqual({
+      messageId: "message_test",
+    });
+    expect(
+      mockFetch.mock.calls.filter(([, init]) => init.method === "POST"),
+    ).toHaveLength(1);
+  });
+
+  it("does not turn malformed success metadata into a resend-triggering failure", async () => {
+    selectQueue.push([
+      { smsOptedOutAt: null, smsFirstOutboundSentAt: new Date() },
+    ]);
+    mockFetch
+      .mockResolvedValueOnce(
+        makeOkResponse({ data: [{ phoneNumber: "+15550001111" }] }),
+      )
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.reject(new SyntaxError("Invalid JSON")),
+      });
+    const { sendSms } = await import("./sms");
+    expect(await sendSms("+15551234567", "Test message")).toEqual({});
+    expect(
+      mockFetch.mock.calls.filter(([, init]) => init.method === "POST"),
+    ).toHaveLength(1);
+  });
+
+  it("reads and briefly caches only allowlisted outbound SMS statuses", async () => {
+    mockFetch
+      .mockResolvedValueOnce(
+        makeOkResponse({
+          data: [{ id: "number_test", phoneNumber: "+15550001111" }],
+        }),
+      )
+      .mockResolvedValueOnce(
+        makeOkResponse({
+          data: [
+            {
+              id: "delivered_message",
+              direction: "outbound",
+              channel: "sms",
+              status: "delivered",
+              body: "Never retain this",
+            },
+            {
+              id: "queued_message",
+              direction: "outbound",
+              channel: "sms",
+              status: "queued",
+            },
+            {
+              id: "inbound_message",
+              direction: "inbound",
+              channel: "sms",
+              status: "delivered",
+            },
+            {
+              id: "unknown_message",
+              direction: "outbound",
+              channel: "sms",
+              status: "invented",
+            },
+          ],
+        }),
+      );
+    const { getSmsMessageStatuses } = await import("./sms");
+    const statuses = await getSmsMessageStatuses();
+    expect([...statuses]).toEqual([
+      ["delivered_message", "delivered"],
+      ["queued_message", "queued"],
+    ]);
+    expect(await getSmsMessageStatuses()).toBe(statuses);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(
+      mockFetch.mock.calls.every(([, init]) => init.method === "GET"),
+    ).toBe(true);
+  });
+
   it("throws SmsOptedOutError when the recipient has opted out", async () => {
     // Simulate an opted-out user row.
     selectQueue.push([

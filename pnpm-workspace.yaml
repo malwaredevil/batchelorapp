@@ -12,7 +12,8 @@ allowBuilds:
 autoInstallPeers: false
 
 catalog:
-  vitest: "4.1.11"
+  "@hookform/resolvers": 6.0.0
+  vitest: "4.1.12"
   "@replit/connectors-sdk": "0.4.1"
   "@replit/vite-plugin-cartographer": ^0.5.21
   "@replit/vite-plugin-dev-banner": ^0.1.1
@@ -35,10 +36,10 @@ catalog:
   tailwind-merge: ^3.3.1
   tailwindcss: ^4.1.14
   tsx: ^4.21.0
-  vite: ^7.3.7
+  vite: 7.3.7
   vite-plugin-pwa: ^1.3.0
   wouter: ^3.3.5
-  zod: ^3.25.76
+  zod: 4.6.6
 
 minimumReleaseAge: 1440
 
@@ -78,6 +79,7 @@ overrides:
   "@tailwindcss/oxide>@tailwindcss/oxide-win32-x64-msvc": "-"
   drizzle-orm: 0.45.2
   esbuild: 0.28.1
+  vite: 7.3.7 # GHSA-587h-7wmj-h5pm: also cover non-catalog and transitive Vite consumers.
   uuid: ">=11.1.1" # GHSA/Dependabot: missing buffer bounds check in v3/v5/v6 when buf is provided; forces exceljs's transitive uuid dep to the patched version
   nanoid: "^3.3.17" # GHSA-2v37-7h3g-55p8/CVE-2026-67213: custom generators loop indefinitely when size is zero; patched 3.3.17. Pinned to the 3.x range (not >=) — an unbounded range let pnpm resolve postcss's transitive dep up to nanoid 5.x, an unverified major bump
   "esbuild>@esbuild/aix-ppc64": "-"
@@ -110,7 +112,7 @@ overrides:
   "brace-expansion@^5": "5.0.12"
   filelist: ">=2.0.2 <3" # GHSA-mh99: transitively pulls minimatch@^10 which has no brace-expansion dep
   jake: ">=12.10.1 <13" # required by ejs; v12 uses filelist@^2, eliminating brace-expansion@^2 chain
-  body-parser: ">=2.3.0"
+  body-parser: "2.4.0" # Patched compressed-body teardown DoS; retain Express's major.
   js-yaml: 4.3.2 # GHSA-5p4m-2wfm-xmqj/CVE-2026-59870 plus maxTotalMergeKeys CPU-limit bypass; patched 4.3.2. Keep EXACT pin (not a range) — an unbounded override previously let js-yaml jump to an ESM-only v5 and broke orval codegen (see orval-codegen-js-yaml-pin memory)
   "lightningcss>lightningcss-android-arm64": "-"
   "lightningcss>lightningcss-darwin-arm64": "-"
@@ -126,14 +128,16 @@ overrides:
   # new major can never be silently selected by a future lockfile regeneration.
   "@xmldom/xmldom": ">=0.8.15 <0.9" # GHSA-6gmq-8vp8-gcm6: namespace-confusion issue; patched 0.8.15; mammoth expects ^0.8
   browserslist: ">=4.28.7 <5" # GHSA-c83g-rgw3-j3cx / GHSA-73wf-gq98-2v4g: arbitrary file read + poisoned-stats DoS; patched 4.28.7
-  dompurify: "3.4.16" # GHSA-p98j-92pf-mc4p; retain the parent's major.
+  dompurify: "3.4.17" # GHSA-cg2g-xh64-v4q7 / GHSA-mrv2-3pqr-j5jr; retain the parent's major.
   fast-copy: "4.1.2" # GHSA-jggr-w7fw-pc2j: stack exhaustion; compatible pino-pretty transitive patch.
-  fast-uri: "3.1.8" # Authority/host confusion plus GHSA-hrr3-gc8f-f4qj.
-  "undici@^7": "7.29.1" # Patched request smuggling and response parsing; retain jsdom's expected major.
-  "undici@^8": "8.10.2" # Patched request smuggling and response parsing; retain API server's expected major.
-  ip-address: "10.7.1" # Closes address classification / SSRF bypasses; retain express-rate-limit's major.
+  fast-uri: "3.1.9" # Patched URI scheme and host canonicalization.
+  "undici@^7": "7.30.1" # Patched EventSource/SRI/content-encoding handling; preserve jsdom's major.
+  "undici@^8": "8.12.2" # Same fixes, preserving the API server's major.
+  "zod@^4": "4.6.6" # Constrained collection memory exhaustion.
+  serialize-javascript: "7.1.3" # Patched serialized function closing-script escaping; preserve major.
+  ip-address: "10.7.4" # Also closes GHSA-rxp7-6hxx-x8q5 IPv6 zone parsing ReDoS; retain express-rate-limit's major.
   linkify-it: ">=5.0.2 <6" # GHSA: ReDoS; patched 5.0.2; parent expects ^5
-  markdown-it: "14.3.2" # Patched linkify/smartquotes DoS; retain typedoc's major.
+  markdown-it: "14.3.3" # GHSA-gfr2-rv44-r23c: patched multiline link-reference DoS; retain typedoc's major.
   postcss: ">=8.5.23 <9" # GHSA-fxqj-rqcc-2cmp (CVE-2026-69153): incomplete fix of prior sourceMappingURL path-traversal GHSA; patched 8.5.23; parent expects ^8
   "@tailwindcss/typography>postcss-selector-parser": "7.1.6" # GHSA-rj75-hqrm-r3gf; verified typography selector compatibility in regression tests.
   "mammoth>argparse": "-" # Library-only usage: prune the CLI-only dependency and its unpatched sprintf-js (GHSA-hp3w-g68c-fv3c).

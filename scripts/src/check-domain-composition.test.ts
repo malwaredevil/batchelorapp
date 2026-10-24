@@ -2559,13 +2559,17 @@ test("real ELAINE_IMPORTED_TOOL_FILES: every enrolled file actually exists", () 
   }
 });
 
-test("real ELAINE_IMPORTED_TOOL_FILES: enrolled files are tool modules or the owner support catalog", () => {
+test("real ELAINE_IMPORTED_TOOL_FILES: enrolled files are tool modules or specialized catalogs/readers", () => {
   // Ensures no accidentally mis-named file sneaks into the list.
   for (const filePath of ELAINE_IMPORTED_TOOL_FILES) {
     assert.ok(
       filePath.endsWith("-actions.ts") ||
         filePath.endsWith("-tools.ts") ||
-        filePath === "artifacts/api-server/src/elaine/owner-tool-catalog.ts",
+        filePath === "artifacts/api-server/src/elaine/owner-tool-catalog.ts" ||
+        filePath ===
+          "artifacts/api-server/src/elaine/household-collection-read.ts" ||
+        filePath ===
+          "artifacts/api-server/src/elaine/pottery-collection-read.ts",
       `ELAINE_IMPORTED_TOOL_FILES contains unexpected tool source "${filePath}"`,
     );
   }

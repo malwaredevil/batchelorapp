@@ -787,9 +787,8 @@ const SETTLED_CALL_STATUSES = new Set([
 
 /**
  * Whether a receipt's status can still change, so clients know when to stop
- * polling. Only an in-flight send or an accepted call without a settled call
- * status can still move; message receipts stay "accepted" (there is no
- * delivery callback) and "unknown" is final unless a late webhook arrives.
+ * polling. In-flight sends, accepted calls, and accepted SMS attempts with a
+ * provider message ID can still move. Untracked texts cannot be polled.
  * Bounded by `windowMs` so a receipt orphaned by a restart stops polling.
  */
 export function isCommunicationReceiptPending(
@@ -798,12 +797,18 @@ export function isCommunicationReceiptPending(
     channel: string;
     callStatus: string | null;
     updatedAt: Date;
+    providerId?: string | null;
   },
   now: Date,
   windowMs: number,
 ): boolean {
   if (receipt.updatedAt.getTime() <= now.getTime() - windowMs) return false;
   if (receipt.status === "executing") return true;
+  if (receipt.channel === "sms" && receipt.status === "accepted") {
+    return (
+      typeof receipt.providerId === "string" && receipt.providerId.length > 0
+    );
+  }
   return (
     receipt.channel === "voice" &&
     receipt.status === "accepted" &&

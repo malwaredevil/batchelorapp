@@ -305,21 +305,16 @@ test("buildReadRegistryEdit wires the read tool into the dispatch registry", () 
 });
 
 // ── model-tool-policy hard-tool contract wiring for read tools ──────────────
-const MODEL_TOOL_POLICY_FIXTURE = `export const MODEL_VISIBLE_HARD_TOOL_NAMES = new Set<string>([
-  "existing_read_tool",
-]);
-
-export const MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS: Readonly<
+const MODEL_TOOL_POLICY_FIXTURE = `export const MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS: Readonly<
   Record<string, string>
 > = {
   existing_read_tool: "checking something",
-};`;
+};
+export const MODEL_VISIBLE_HARD_TOOL_NAMES = new Set<string>(
+  Object.keys(MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS),
+);`;
 
-const MODEL_TOOL_POLICY_TEST_FIXTURE = `const IMPLEMENTED_MAIN_CHAT_HARD_TOOLS = [
-  "existing_read_tool",
-].sort();`;
-
-test("read scaffold wires hard-tool name, status label, and contract-test expectation", () => {
+test("read scaffold derives dispatch names from labels without copying test expectations", () => {
   const spec = { ...SPEC, name: "probe_read_tool", kind: "read" as const };
   const edits = buildReadToolCatalogEdits(spec);
   const policyEdit = edits.find((e) =>
@@ -329,11 +324,17 @@ test("read scaffold wires hard-tool name, status label, and contract-test expect
     e.description.includes("IMPLEMENTED_MAIN_CHAT_HARD_TOOLS"),
   );
   assert.ok(policyEdit, "missing model-tool-policy edit");
-  assert.ok(testEdit, "missing model-tool-policy.test edit");
+  assert.equal(
+    testEdit,
+    undefined,
+    "independent contract expectations must not be generated",
+  );
 
   const policyOut = policyEdit!.apply(MODEL_TOOL_POLICY_FIXTURE);
   assert.ok(policyOut, "policy edit unexpectedly skipped");
-  assert.ok(policyOut!.includes('  "probe_read_tool",'), "name not inserted");
+  assert.ok(
+    policyOut!.includes("Object.keys(MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS)"),
+  );
   assert.match(
     policyOut!,
     /probe_read_tool: "checking pottery data",/,
@@ -342,14 +343,6 @@ test("read scaffold wires hard-tool name, status label, and contract-test expect
   assert.match(policyOut!, /TODO\(scaffold\)[^\n]*status label/);
   // idempotent
   assert.equal(policyEdit!.apply(policyOut!), null);
-
-  const testOut = testEdit!.apply(MODEL_TOOL_POLICY_TEST_FIXTURE);
-  assert.ok(testOut, "test edit unexpectedly skipped");
-  assert.ok(
-    testOut!.includes('  "probe_read_tool",'),
-    "expectation entry not inserted",
-  );
-  assert.equal(testEdit!.apply(testOut!), null);
 });
 
 // ── travels domain + kind=read coverage ──────────────────────────────────────

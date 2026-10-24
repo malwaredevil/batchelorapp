@@ -193,6 +193,38 @@ describe("dispatchElaineActionReminder — call_contact branch", () => {
     expect(result.status).toBe(200);
   });
 
+  it("retains a pinned destination so delivery rechecks the current verified contact", async () => {
+    await dispatchElaineActionReminder(
+      "call_contact",
+      {
+        contactName: "Jane",
+        message: "Exact script",
+        expectedDestination: "+12105550123",
+      },
+      42,
+    );
+    expect(mockFireCallContact).toHaveBeenCalledWith(
+      "Jane",
+      "Exact script",
+      undefined,
+      { expectedDestination: "+12105550123" },
+    );
+  });
+
+  it("does not silently drop invalid saved constraints and dispatch anyway", async () => {
+    const result = await dispatchElaineActionReminder(
+      "call_contact",
+      {
+        contactName: "Jane",
+        message: "Exact script",
+        expectedDestination: "invalid",
+      },
+      42,
+    );
+    expect(result.status).toBe(422);
+    expect(mockFireCallContact).not.toHaveBeenCalled();
+  });
+
   it("coerces missing contactName/message to empty strings (never throws)", async () => {
     await dispatchElaineActionReminder("call_contact", {}, 1);
     expect(mockFireCallContact).toHaveBeenCalledWith("", "");

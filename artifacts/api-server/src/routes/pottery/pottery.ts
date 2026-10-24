@@ -78,7 +78,12 @@ import {
   runCompletePhotoScan,
   scheduleCompletePhotoScan,
 } from "../../lib/ai-scan-pipeline";
-import { serializeItem, serializeItems } from "../../lib/pottery/serialize";
+import {
+  serializeItem,
+  serializeItems,
+  serializeGalleryItems,
+} from "../../lib/pottery/serialize";
+import { sendCompressedJson } from "../../lib/compressed-json";
 import { potteryThumbnailRouter } from "./thumbnail";
 import { logger } from "../../lib/logger";
 import pLimit from "p-limit";
@@ -122,6 +127,15 @@ const {
   zoneEmbedding: _zoneEmbedding,
   ...itemColumns
 } = getTableColumns(potteryItems);
+
+// The complete gallery index never needs these potentially large detail fields.
+const {
+  notes: _notes,
+  makerInfo: _makerInfo,
+  aiDescription: _aiDescription,
+  surfaceZones: _surfaceZones,
+  ...galleryColumns
+} = itemColumns;
 
 const MAX_NAME = 200;
 const MAX_NOTES = 4000;
@@ -194,7 +208,7 @@ router.get("/items", async (req, res) => {
     res.status(400).json({ error: "Invalid query parameters." });
     return;
   }
-  const { q, categoryId, page, pageSize } = parsed.data;
+  const { q, categoryId, page, pageSize, view } = parsed.data;
 
   const conditions: SQL<unknown>[] = [];
   const textSearch = q
@@ -249,18 +263,26 @@ router.get("/items", async (req, res) => {
 
   const offset = (page - 1) * pageSize;
   const rows = await db
-    .select(itemColumns)
+    .select(view === "gallery" ? galleryColumns : itemColumns)
     .from(potteryItems)
     .where(finalWhere)
     .orderBy(
       ...(textSearch?.relevance ? [textSearch.relevance] : []),
       desc(potteryItems.createdAt),
+      desc(potteryItems.id),
     )
     .limit(pageSize)
     .offset(offset);
 
-  const items = await serializeItems(rows);
-  res.json(ListPotteryResponse.parse({ items, total, page, pageSize }));
+  const items =
+    view === "gallery"
+      ? await serializeGalleryItems(rows)
+      : await serializeItems(rows);
+  await sendCompressedJson(
+    req,
+    res,
+    ListPotteryResponse.parse({ items, total, page, pageSize }),
+  );
 });
 
 // Stragglers: pieces that need re-analysis — either missing a similarity

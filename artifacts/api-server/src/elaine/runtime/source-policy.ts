@@ -79,7 +79,9 @@ export function buildElaineSourceRoute(input: {
   const hasHouseholdIntent = HOUSEHOLD_RE.test(message);
   const hasFirstPartyIntent = FIRST_PARTY_RE.test(message);
   const isCurrent =
-    input.requestClass.requiresFreshData || CURRENT_RE.test(message);
+    input.requestClass.requiresFreshData ||
+    (!["action", "mixed"].includes(input.requestClass.kind) &&
+      CURRENT_RE.test(message));
   const stableExplanation =
     input.requestClass.kind === "answer" &&
     STABLE_EXPLANATION_RE.test(message) &&
@@ -87,7 +89,8 @@ export function buildElaineSourceRoute(input: {
 
   const preferredKinds: ElaineSourceKind[] = [];
   if (input.pageContext?.trim()) preferredKinds.push("current_context");
-  if (hasHouseholdIntent) preferredKinds.push("batchelor_app");
+  if (hasHouseholdIntent || input.requestClass.kind === "action")
+    preferredKinds.push("batchelor_app");
   if (hasFirstPartyIntent) preferredKinds.push("first_party_provider");
   if (isCurrent) preferredKinds.push("specialized_api", "web");
   if (!stableExplanation) preferredKinds.push("model_synthesis");

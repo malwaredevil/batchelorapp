@@ -23,6 +23,7 @@ import {
 } from "./scheduler-guard";
 import { logger } from "./logger";
 import { env } from "./env";
+import { CallConstraintsSchema, callPreflight } from "../elaine/call-preflight";
 import { getValidAccessToken } from "./google-calendar-tokens";
 import { getCalendarEvent } from "./google-calendar";
 import {
@@ -381,6 +382,16 @@ export async function dispatchElaineActionReminder(
   if (actionType === "call_contact") {
     const contactName = String(p.contactName ?? "");
     const message = String(p.message ?? "");
+    const constraints = CallConstraintsSchema.safeParse(p);
+    if (!constraints.success) return callPreflight(p)!;
+    if (Object.keys(constraints.data).length) {
+      return fireCallContact(
+        contactName,
+        message,
+        receiptContext,
+        constraints.data,
+      );
+    }
     return receiptContext
       ? fireCallContact(contactName, message, receiptContext)
       : fireCallContact(contactName, message);
@@ -400,6 +411,16 @@ export async function dispatchElaineActionReminder(
   }
   if (actionType === "call_me") {
     const greeting = typeof p.greeting === "string" ? p.greeting : undefined;
+    const constraints = CallConstraintsSchema.safeParse(p);
+    if (!constraints.success) return callPreflight(p)!;
+    if (Object.keys(constraints.data).length) {
+      return fireCallMe(
+        createdByUserId,
+        greeting,
+        receiptContext,
+        constraints.data,
+      );
+    }
     return receiptContext
       ? fireCallMe(createdByUserId, greeting, receiptContext)
       : fireCallMe(createdByUserId, greeting);

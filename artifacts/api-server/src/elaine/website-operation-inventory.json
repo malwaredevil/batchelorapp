@@ -1,5 +1,15 @@
 [
   {
+    "operationId": "getPotteryFieldOptions",
+    "method": "GET",
+    "path": "/pottery/field-options",
+    "domain": "pottery",
+    "summary": "List unique maker names for pottery edit suggestions",
+    "disposition": "universal_bridge",
+    "mappedTools": ["discover_app_operations", "read_app_operation"],
+    "reason": "Elaine can read the same lightweight household maker suggestions as the pottery edit form through the reviewed JSON operation bridge."
+  },
+  {
     "operationId": "inspectPotteryOriginalPhoto",
     "method": "GET",
     "path": "/pottery/items/{id}/photos/{photoKey}/original-info",
@@ -1601,7 +1611,7 @@
     "domain": "fabrics",
     "summary": "List all fabrics",
     "disposition": "direct",
-    "mappedTools": ["query_household_data", "search_household_data"],
+    "mappedTools": ["browse_fabric_collection"],
     "reason": "Elaine has registered tools that reuse or mirror this website operation."
   },
   {
@@ -1711,7 +1721,7 @@
     "domain": "ornaments",
     "summary": "List ornaments",
     "disposition": "direct",
-    "mappedTools": ["query_household_data", "search_household_data"],
+    "mappedTools": ["browse_ornament_collection"],
     "reason": "Elaine has registered tools that reuse or mirror this website operation."
   },
   {
@@ -1771,8 +1781,8 @@
     "domain": "pottery",
     "summary": "List pottery",
     "disposition": "direct",
-    "mappedTools": ["query_household_data", "search_household_data"],
-    "reason": "Elaine has registered tools that reuse or mirror this website operation."
+    "mappedTools": ["browse_pottery_collection"],
+    "reason": "Owner-authorized read-only keyset browsing supplies all active household pieces across bounded pages, stable IDs, saved descriptive evidence and explicit coverage. Search/summary samples are not complete reviews."
   },
   {
     "operationId": "listPotteryCategories",

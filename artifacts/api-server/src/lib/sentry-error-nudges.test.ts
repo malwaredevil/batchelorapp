@@ -233,6 +233,15 @@ beforeEach(() => {
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe("computeAndStoreSentryErrorNudges", () => {
+  it("queries only production for both new and resolved automatic alerts", async () => {
+    setSentryLists([]);
+    setSeenLedger([]);
+    await computeAndStoreSentryErrorNudges();
+    expect(mockListSentryIssues.mock.calls).toEqual([
+      [{ environment: "production", query: "is:unresolved" }],
+      [{ environment: "production", query: "is:resolved" }],
+    ]);
+  });
   it("does nothing (and does not throw) when Sentry is not configured", async () => {
     mockIsConfigured.mockReturnValue(false);
     await computeAndStoreSentryErrorNudges();

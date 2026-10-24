@@ -68,6 +68,50 @@ describe("long-running task claim policy", () => {
   beforeEach(() => {
     mockExecute.mockReset();
   });
+  it("opts retry-safe tasks into an atomic cooldown even before their first success", async () => {
+    mockExecute.mockResolvedValue({ rows: [{ claimed: true }] });
+    await shouldRunScheduledTask("travels-calendar-scan", 86_400_000, {
+      recoverStuckClaims: false,
+      incompleteRetryIntervalMs: 3_600_000,
+    });
+    const compiled = new PgDialect().sqlToQuery(mockExecute.mock.calls[0]![0]);
+    expect(compiled.sql).toContain("ON CONFLICT (name) DO UPDATE");
+    expect(compiled.sql.match(/last_success_at IS NULL/g)).toHaveLength(2);
+    expect(compiled.params.filter((p) => p === 3_600_000)).toHaveLength(2);
+    expect(
+      compiled.sql.match(/last_run_at > scheduler_runs.last_success_at/g),
+    ).toHaveLength(4);
+    expect(compiled.params.filter((p) => typeof p === "boolean")).toEqual([
+      false,
+      false,
+    ]);
+  });
+
+  it.each([undefined, 0, -1, 1_000, Number.NaN, Number.POSITIVE_INFINITY])(
+    "does not enable an unsafe or unrequested incomplete retry interval (%s)",
+    async (incompleteRetryIntervalMs) => {
+      mockExecute.mockResolvedValue({ rows: [{ claimed: false }] });
+      await shouldRunScheduledTask("test", 86_400_000, {
+        recoverStuckClaims: false,
+        incompleteRetryIntervalMs,
+      });
+      const compiled = new PgDialect().sqlToQuery(
+        mockExecute.mock.calls[0]![0],
+      );
+      expect(compiled.sql).not.toContain("last_success_at IS NULL");
+    },
+  );
+
+  it("never enables incomplete retries for calendar-day sends", async () => {
+    mockExecute.mockResolvedValue({ rows: [{ claimed: false }] });
+    await shouldRunScheduledTask("birthday-emails", 86_400_000, {
+      utcDate: "2026-10-21",
+      incompleteRetryIntervalMs: 3_600_000,
+    });
+    const compiled = new PgDialect().sqlToQuery(mockExecute.mock.calls[0]![0]);
+    expect(compiled.sql).not.toContain("last_success_at IS NULL");
+    expect(compiled.params).not.toContain(3_600_000);
+  });
   it("claims calendar-day work by UTC date, without reclaiming an ambiguous send", async () => {
     mockExecute.mockResolvedValue(
       skippedResult({

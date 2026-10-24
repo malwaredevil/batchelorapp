@@ -72,7 +72,7 @@ export function FullChatPanel({
       onNavigated={onNavigated}
       avatarSize={avatarSize}
       bubbleWidthClass={bubbleWidthClass}
-      hideBrief={true}
+      hideCrossChannel={true}
       emptyState={
         emptyState ?? (
           <div className="flex flex-col items-center gap-2 py-8 text-center">

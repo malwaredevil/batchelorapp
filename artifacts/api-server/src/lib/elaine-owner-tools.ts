@@ -208,8 +208,10 @@ export async function executeOwnerSupportTool(
     })
     .strict()
     .parse(raw);
-  const result = await listSentryIssues(input);
-  return JSON.stringify({ ...result, ...input, count: result.issues.length });
+  // Enforce the owner's production-only policy even for stale model tool calls.
+  const options = { ...input, environment: "production" as const };
+  const result = await listSentryIssues(options);
+  return JSON.stringify({ ...result, ...options, count: result.issues.length });
 }
 
 let investigationRunning = false;

@@ -586,6 +586,74 @@ describe("SMS_SLACK_CHANNEL_EXTRAS — call_contact / message_contact", () => {
 // ── 4. SMS channel offers call_contact / message_contact to the model ─────────
 
 describe("runAgentphoneTurn — call_contact / message_contact offered and executed", () => {
+  it.each([
+    { channel: "sms", scheduled: false },
+    { channel: "sms", scheduled: true },
+    { channel: "slack", scheduled: false },
+    { channel: "slack", scheduled: true },
+  ])(
+    "keeps an omitted voicemail requirement over $channel (scheduled=$scheduled)",
+    async ({ channel, scheduled }) => {
+      const actual = await vi.importActual<
+        typeof import("./communication-actions")
+      >("./communication-actions");
+      const calls = await import("../lib/calls");
+      const dial = vi
+        .spyOn(calls, "initiateOutboundCall")
+        .mockRejectedValue(
+          new Error("Unexpected provider dispatch in a mocked regression"),
+        );
+      const executor = mockCallContactExecutor.getMockImplementation();
+      try {
+        mockCallContactExecutor.mockImplementation(
+          actual.communicationActionExecutors.call_contact,
+        );
+        let round = 0;
+        mockCallModel.mockImplementation(
+          (
+            _model: unknown,
+            fn: (client: unknown, model: unknown) => unknown,
+          ) => {
+            const response =
+              round++ === 0
+                ? makeToolCallCompletion("call_contact", {
+                    contactName: "Alice",
+                    message: "Bring tea.",
+                    ...(scheduled
+                      ? { scheduleAt: "2026-10-25T10:00:00Z" }
+                      : {}),
+                  })
+                : makeTextCompletion(
+                    "No call was placed because the requested voicemail is unsupported.",
+                  );
+            return fn(makeFakeClient(response), "mock-model");
+          },
+        );
+        const params = {
+          userId: 42,
+          inputText: `Call Alice ${scheduled ? "tomorrow" : "now"} and if she doesn't answer leave a message saying hello.`,
+          history: [],
+        };
+        if (channel === "sms") await runAgentphoneTurn(params);
+        else await runElaineSlackTurn(params);
+        expect(mockCallContactExecutor).toHaveBeenCalledTimes(1);
+        expect(mockCallContactExecutor.mock.calls[0]?.[0]).toHaveProperty(
+          "voicemailMessage",
+        );
+        expect(
+          await mockCallContactExecutor.mock.results[0]?.value,
+        ).toMatchObject({
+          status: 422,
+          body: { attempted: false, code: "voicemail_script_unsupported" },
+        });
+        expect(dial).not.toHaveBeenCalled();
+      } finally {
+        dial.mockRestore();
+        if (executor) mockCallContactExecutor.mockImplementation(executor);
+      }
+    },
+  );
+
   it("includes call_contact and message_contact in the tools offered over SMS", async () => {
     const capturedToolNames: string[] = [];
 
@@ -629,36 +697,53 @@ describe("runAgentphoneTurn — call_contact / message_contact offered and execu
     expect(capturedToolNames).not.toContain("broadcast_message");
   });
 
-  it("executes the call_contact executor when the model calls it over SMS", async () => {
-    // Arrange: model first calls call_contact, then returns a text reply.
-    let callCount = 0;
-    mockCallModel.mockImplementation(
-      (_model: unknown, fn: (client: unknown, model: unknown) => unknown) => {
-        callCount += 1;
-        const response =
-          callCount === 1
-            ? makeToolCallCompletion("call_contact", {
-                contactName: "Alice",
-                message: "Please call me when you're free.",
-              })
-            : makeTextCompletion("I've initiated a call to Alice for you.");
-        return fn(makeFakeClient(response), "openai/gpt-4o-mini");
-      },
-    );
+  it.each([
+    { channel: "sms", scheduled: false },
+    { channel: "slack", scheduled: false },
+    { channel: "sms", scheduled: true },
+    { channel: "slack", scheduled: true },
+  ])(
+    "preserves exact requested speech over $channel (scheduled=$scheduled)",
+    async ({ channel, scheduled }) => {
+      // Arrange: model first calls call_contact, then returns a text reply.
+      let callCount = 0;
+      mockCallModel.mockImplementation(
+        (_model: unknown, fn: (client: unknown, model: unknown) => unknown) => {
+          callCount += 1;
+          const response =
+            callCount === 1
+              ? makeToolCallCompletion("call_contact", {
+                  contactName: "Alice",
+                  message: "Hi, bring tea.",
+                  ...(scheduled ? { scheduleAt: "2026-10-25T10:00:00Z" } : {}),
+                })
+              : makeTextCompletion("I've initiated a call to Alice for you.");
+          return fn(makeFakeClient(response), "openai/gpt-4o-mini");
+        },
+      );
 
-    const result = await runAgentphoneTurn({
-      userId: 42,
-      inputText: "call Alice and ask her to call me back",
-      history: [],
-    });
+      const params = {
+        userId: 42,
+        inputText: `Call Alice ${scheduled ? "tomorrow" : "now"} and say exactly “Bring tea”.`,
+        history: [],
+      };
+      const result =
+        channel === "sms"
+          ? await runAgentphoneTurn(params)
+          : await runElaineSlackTurn(params);
 
-    // The call_contact executor must have been invoked (not gated out).
-    expect(mockCallContactExecutor).toHaveBeenCalled();
+      // The call_contact executor must have been invoked (not gated out).
+      expect(mockCallContactExecutor).toHaveBeenCalled();
+      expect(mockCallContactExecutor.mock.calls[0]?.[0]).toMatchObject({
+        message: "Bring tea",
+        ...(scheduled ? { scheduleAt: "2026-10-25T10:00:00Z" } : {}),
+      });
 
-    // The turn must still return a reply.
-    expect(typeof result.replyText).toBe("string");
-    expect(result.replyText.length).toBeGreaterThan(0);
-  });
+      // The turn must still return a reply.
+      expect(typeof result.replyText).toBe("string");
+      expect(result.replyText.length).toBeGreaterThan(0);
+    },
+  );
 });
 
 // ── 5. Slack channel offers call_contact / message_contact to the model ────────

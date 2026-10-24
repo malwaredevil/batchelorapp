@@ -139,3 +139,50 @@ describe("POST /api/travels/reservations/:id/check-now", () => {
     expect(enqueueJob).not.toHaveBeenCalled();
   });
 });
+
+describe("PATCH /api/travels/reservations/:id — Zod 4 compatibility", () => {
+  it.each([{ providerName: "Updated provider" }, {}])(
+    "does not apply creation defaults to a partial edit: %j",
+    async (patch) => {
+      selectQueue.push([{ id: 5 }]);
+      const res = await request(buildApp())
+        .patch("/api/travels/reservations/5")
+        .send(patch);
+      expect(res.status).toBe(200);
+      expect(updateCalls).toHaveLength(1);
+      expect(updateCalls[0]?.set).toEqual({
+        ...patch,
+        updatedAt: expect.any(Date),
+      });
+    },
+  );
+
+  it("still accepts intentional clears and disabled monitoring", async () => {
+    selectQueue.push([{ id: 5 }]);
+    const patch = {
+      passengerNames: [],
+      segments: [],
+      rawExtracted: {},
+      monitoringEnabled: false,
+      monitoringPolicy: "paused",
+      reservationType: "hotel",
+    };
+    const res = await request(buildApp())
+      .patch("/api/travels/reservations/5")
+      .send(patch);
+    expect(res.status).toBe(200);
+    expect(updateCalls[0]?.set).toEqual({
+      ...patch,
+      updatedAt: expect.any(Date),
+    });
+  });
+
+  it("rejects invalid collection fields without updating a reservation", async () => {
+    selectQueue.push([{ id: 5 }]);
+    const res = await request(buildApp())
+      .patch("/api/travels/reservations/5")
+      .send({ passengerNames: "not an array" });
+    expect(res.status).toBe(400);
+    expect(dbMock.update).not.toHaveBeenCalled();
+  });
+});

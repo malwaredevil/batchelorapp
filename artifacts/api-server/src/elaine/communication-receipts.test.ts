@@ -536,3 +536,47 @@ describe("hasUncorrelatedVoiceReceiptSince", () => {
     );
   });
 });
+
+describe("SMS receipt delivery polling", () => {
+  const now = new Date("2026-10-23T06:00:00Z");
+  const recent = {
+    status: "accepted",
+    channel: "sms",
+    callStatus: null,
+    providerId: "provider_message",
+    updatedAt: new Date("2026-10-23T05:59:50Z"),
+  };
+  it("polls accepted SMS receipts only when a provider ID makes verification possible", () => {
+    expect(isCommunicationReceiptPending(recent, now, 60_000)).toBe(true);
+    expect(
+      isCommunicationReceiptPending(
+        { ...recent, providerId: null },
+        now,
+        60_000,
+      ),
+    ).toBe(false);
+  });
+  it("stops polling after delivery, failure, or the bounded polling window", () => {
+    expect(
+      isCommunicationReceiptPending(
+        { ...recent, status: "completed" },
+        now,
+        60_000,
+      ),
+    ).toBe(false);
+    expect(
+      isCommunicationReceiptPending(
+        { ...recent, status: "failed" },
+        now,
+        60_000,
+      ),
+    ).toBe(false);
+    expect(
+      isCommunicationReceiptPending(
+        { ...recent, updatedAt: new Date("2026-10-23T05:00:00Z") },
+        now,
+        60_000,
+      ),
+    ).toBe(false);
+  });
+});

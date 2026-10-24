@@ -21,6 +21,7 @@ import {
 } from "./elaine-config";
 import { env } from "./env";
 import { logger } from "./logger";
+import { withRecoverableAIRequest } from "./optional-ai-lookup";
 
 export type OpenAIResponsesRole = "reasoning" | "balanced" | "fast";
 export type OpenAIResponsesScope = "elaine" | "app";
@@ -771,25 +772,27 @@ export async function generateOpenAIResponseTextWithFallback(
   options: GenerateOpenAIResponseTextOptions,
   fallback: () => Promise<string>,
 ): Promise<OpenAIResponseTextWithFallbackResult> {
-  const config = options.config ?? (await getElaineGlobalConfig());
-  if (isOpenAIResponsesConfigured(config, options.scope ?? "app")) {
-    try {
-      const result = await generateOpenAIResponseText({ ...options, config });
-      return {
-        text: result.text,
-        provider: "openai-responses",
-        model: result.model,
-      };
-    } catch (err) {
-      if (!config.features.enableOpenAIResponsesFallback) throw err;
-      const category =
-        err instanceof OpenAIResponsesUnavailableError
-          ? err.category
-          : "provider_error";
-      recordOpenAIResponsesFallback(category);
+  return withRecoverableAIRequest(async () => {
+    const config = options.config ?? (await getElaineGlobalConfig());
+    if (isOpenAIResponsesConfigured(config, options.scope ?? "app")) {
+      try {
+        const result = await generateOpenAIResponseText({ ...options, config });
+        return {
+          text: result.text,
+          provider: "openai-responses",
+          model: result.model,
+        };
+      } catch (err) {
+        if (!config.features.enableOpenAIResponsesFallback) throw err;
+        const category =
+          err instanceof OpenAIResponsesUnavailableError
+            ? err.category
+            : "provider_error";
+        recordOpenAIResponsesFallback(category);
+      }
     }
-  }
-  return { text: await fallback(), provider: "openrouter", model: null };
+    return { text: await fallback(), provider: "openrouter", model: null };
+  });
 }
 
 export function chatUserContentToResponseInput(

@@ -346,7 +346,9 @@ export const JOB_REGISTRY = [
       );
     },
   },
-] satisfies JobDefinition<z.ZodTypeAny>[];
+  // The registry holds heterogeneous schemas. Preserve Zod 3's explicit
+  // any-output boundary; the worker validates with each schema before dispatch.
+] satisfies JobDefinition<z.ZodType<any>>[];
 
 export const JOB_REGISTRY_BY_TYPE = new Map(
   JOB_REGISTRY.map((definition) => [definition.type, definition]),

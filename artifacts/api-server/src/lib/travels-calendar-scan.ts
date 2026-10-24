@@ -12,6 +12,7 @@
  * never produces duplicate cards.
  */
 import crypto from "node:crypto";
+import OpenAI from "openai";
 import {
   db,
   travelsCalendarTripSuggestions,
@@ -30,6 +31,7 @@ import {
 } from "./scheduler-guard";
 import { logger } from "./logger";
 import { startSchedulerPoller } from "./scheduler-poller";
+import { withOptionalAILookup } from "./optional-ai-lookup";
 
 const SCAN_WINDOW_DAYS_PAST = 7;
 const SCAN_WINDOW_DAYS_FUTURE = 120;
@@ -90,22 +92,24 @@ Return ONLY valid JSON in this exact shape, with no extra text:
 Only include a trip if at least one relatedEventIds entry is present. If no events look travel-related, return {"trips": []}.`;
 
   const models = await getModels();
-  const raw = await callModel(models.fastVision, async (client, model) => {
-    const resp = await client.chat.completions.create({
-      model,
-      messages: [{ role: "user", content: prompt }],
-      max_tokens: 2000,
-      response_format: { type: "json_object" },
-    });
-    return resp.choices[0]?.message?.content ?? "{}";
-  });
+  const raw = await withOptionalAILookup(() =>
+    callModel(models.fastVision, async (client, model) => {
+      const resp = await client.chat.completions.create({
+        model,
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: 2000,
+        response_format: { type: "json_object" },
+      });
+      return resp.choices[0]?.message?.content ?? "{}";
+    }),
+  );
 
   try {
     const parsed = parseAiJson(raw) as { trips?: AiSuggestedTrip[] };
     return Array.isArray(parsed.trips) ? parsed.trips : [];
   } catch (err) {
     logger.warn({ err }, "travels-calendar-scan: failed to parse AI response");
-    return [];
+    throw err;
   }
 }
 
@@ -113,16 +117,17 @@ Only include a trip if at least one relatedEventIds entry is present. If no even
  * Scan every connected calendar (every user's personal calendars plus the
  * shared Travel calendar) for travel-looking events not already linked to a
  * trip, ask the AI to cluster them into candidate trips, and store any new
- * candidates as pending suggestions. Best-effort — logs and returns rather
- * than throwing, so it's always safe to call from a scheduler or a manual
- * "Scan now" endpoint.
+ * candidates as pending suggestions. Expected AI timeouts return an explicit
+ * incomplete result; unexpected failures propagate to the caller's error path.
  */
 export async function scanCalendarForTripSuggestions(): Promise<{
   scanned: number;
   created: number;
+  completed: boolean;
 }> {
   const calendars = await getAllConnectedCalendars();
-  if (calendars.length === 0) return { scanned: 0, created: 0 };
+  if (calendars.length === 0)
+    return { scanned: 0, created: 0, completed: true };
 
   const now = new Date();
   const timeMin = new Date(
@@ -184,14 +189,20 @@ export async function scanCalendarForTripSuggestions(): Promise<{
 
   const candidates = events.filter((e) => !linkedEventIds.has(e.id));
 
-  if (candidates.length === 0) return { scanned: events.length, created: 0 };
+  if (candidates.length === 0) {
+    return { scanned: events.length, created: 0, completed: true };
+  }
 
   let aiTrips: AiSuggestedTrip[] = [];
   try {
     aiTrips = await askAiForTripCandidates(candidates);
   } catch (err) {
-    logger.warn({ err }, "travels-calendar-scan: AI call failed");
-    return { scanned: events.length, created: 0 };
+    if (!(err instanceof OpenAI.APIConnectionTimeoutError)) throw err;
+    logger.warn(
+      { scanned: events.length, completed: false },
+      "travels-calendar-scan: optional AI timed out; scan incomplete",
+    );
+    return { scanned: events.length, created: 0, completed: false };
   }
 
   const validEventIds = new Set(candidates.map((e) => e.id));
@@ -243,10 +254,11 @@ export async function scanCalendarForTripSuggestions(): Promise<{
     );
   }
 
-  return { scanned: events.length, created };
+  return { scanned: events.length, created, completed: true };
 }
 
 const SCAN_INTERVAL_MS = 24 * 60 * 60 * 1000; // 1 day
+const INCOMPLETE_RETRY_INTERVAL_MS = 60 * 60 * 1000; // At most once an hour.
 
 /**
  * Best-effort in-process daily scheduler, same caveat as other schedulers
@@ -263,16 +275,30 @@ export function startCalendarTripScanScheduler(): () => void {
         SCAN_INTERVAL_MS,
         {
           recoverStuckClaims: false,
+          incompleteRetryIntervalMs: INCOMPLETE_RETRY_INTERVAL_MS,
         },
       ))
     ) {
-      logger.info("travels-calendar-scan: skipped (ran within the last day)");
+      logger.info(
+        "travels-calendar-scan: skipped (not due or retry cooling down)",
+      );
       return;
     }
     const t0 = Date.now();
     logger.info("travels-calendar-scan: run starting");
     try {
-      await scanCalendarForTripSuggestions();
+      const result = await scanCalendarForTripSuggestions();
+      if (!result.completed) {
+        logger.warn(
+          {
+            durationMs: Date.now() - t0,
+            retryAfterMs: INCOMPLETE_RETRY_INTERVAL_MS,
+          },
+          "travels-calendar-scan: run incomplete; retry eligible after cooldown",
+        );
+        recordScheduledTaskFailure("travels-calendar-scan");
+        return;
+      }
       logger.info(
         { durationMs: Date.now() - t0 },
         "travels-calendar-scan: run complete",

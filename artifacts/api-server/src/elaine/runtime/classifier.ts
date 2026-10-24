@@ -1,7 +1,7 @@
 import type { ElaineRequestClass } from "./contracts";
 
 const ACTION_RE =
-  /\b(add|book|cancel|change|connect|create|delete|disconnect|draft|edit|email|generate|mark|merge|move|notify|remove|rename|restore|save|send|set|share|sync|text|toggle|update|upload)\b/i;
+  /\b(add|book|call|cancel|change|connect|create|delete|dial|disconnect|draft|edit|email|generate|mark|merge|move|notify|remove|rename|restore|save|send|set|share|sync|text|toggle|update|upload)\b/i;
 const EXPLICIT_MEMORY_ACTION_RE =
   /^(?:(?:can|could|will|would)\s+you\s+)?(?:please\s+)?(?:(?:correct|forget)\b|remember\b(?!\s+(?:how|what|when|where|whether|who|why)\b))/i;
 const EXPLANATION_RE =
@@ -25,7 +25,10 @@ export function classifyElaineRequest(input: {
   const action =
     (ACTION_RE.test(message) || EXPLICIT_MEMORY_ACTION_RE.test(message)) &&
     !EXPLANATION_RE.test(message);
-  const research = RESEARCH_RE.test(message);
+  // Temporal instructions describe when to act, not facts to research.
+  const research = RESEARCH_RE.test(
+    action ? message.replace(/\b(today|tomorrow)\b/gi, "") : message,
+  );
   const householdRead = HOUSEHOLD_READ_RE.test(message);
 
   let kind: ElaineRequestClass["kind"] = "answer";

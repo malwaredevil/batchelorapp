@@ -86,6 +86,20 @@ describe("trusted owner support", () => {
       query: "is:unresolved",
     });
   });
+  it("enforces production-only reporting even for a stale development tool call", async () => {
+    const result = JSON.parse(
+      await executeOwnerSupportTool(
+        "list_sentry_issues",
+        '{"environment":"development","query":"is:resolved"}',
+        42,
+      ),
+    );
+    expect(mocks.sentry).toHaveBeenCalledWith({
+      environment: "production",
+      query: "is:resolved",
+    });
+    expect(result.environment).toBe("production");
+  });
   it.each(["email", "the group messenger", "unknown"])(
     "denies privileged tools on %s",
     async (channel) => {

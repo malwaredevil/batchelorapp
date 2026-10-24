@@ -248,6 +248,168 @@ describe("call_contact executor", () => {
       expect.objectContaining({ toNumber: "+12105551234" }),
     );
   });
+
+  it("preserves a supplied script and matching destination without sending a substitute", async () => {
+    mockSelect.mockResolvedValue(makeContact());
+    const message = "Exact script — do not change “these words”.";
+    const result = await communicationActionExecutors.call_contact(
+      {
+        contactName: "Jane",
+        message,
+        expectedDestination: "+1 (210) 555-1234",
+      } as never,
+      1,
+    );
+    expect(result.status).toBe(200);
+    expect(mockInitiateOutboundCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toNumber: "+12105551234",
+        openingMessage: message,
+      }),
+    );
+  });
+
+  it.each([undefined, "2027-01-01T12:00:00Z"])(
+    "does not call or schedule when voicemail is required (schedule %s)",
+    async (scheduleAt) => {
+      mockInsertReturning.mockClear();
+      const result = await communicationActionExecutors.call_contact(
+        {
+          contactName: "Jane",
+          message: "Exact text",
+          voicemailMessage: "Exact text",
+          scheduleAt,
+        } as never,
+        1,
+      );
+      expect(result.status).toBe(422);
+      expect(result.body).toMatchObject({
+        attempted: false,
+        code: "voicemail_script_unsupported",
+      });
+      expect(mockInitiateOutboundCall).not.toHaveBeenCalled();
+      expect(mockInsertReturning).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([undefined, "2027-01-01T12:00:00Z"])(
+    "rejects a mismatched destination before dispatch (schedule %s)",
+    async (scheduleAt) => {
+      mockSelect.mockResolvedValue(makeContact());
+      mockInsertReturning.mockClear();
+      const result = await communicationActionExecutors.call_contact(
+        {
+          contactName: "Jane",
+          message: "Exact text",
+          expectedDestination: "+12105559999",
+          scheduleAt,
+        } as never,
+        1,
+      );
+      expect(result.status).toBe(422);
+      expect(result.body).toMatchObject({
+        attempted: false,
+        code: "call_destination_mismatch",
+      });
+      expect(mockInitiateOutboundCall).not.toHaveBeenCalled();
+      expect(mockInsertReturning).not.toHaveBeenCalled();
+    },
+  );
+});
+
+describe("self-call constraints", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSelect.mockResolvedValue(makeContact());
+    mockInitiateOutboundCall.mockResolvedValue({ callId: "self-call" });
+  });
+  it("retains the supplied opening on the requesting user's own verified phone", async () => {
+    const result = await communicationActionExecutors.call_me(
+      {
+        greeting: "Exactly this.",
+        expectedDestination: "+12105551234",
+      } as never,
+      1,
+    );
+    expect(result.status).toBe(200);
+    expect(mockInitiateOutboundCall).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 1,
+        toNumber: "+12105551234",
+        openingMessage: "Exactly this.",
+      }),
+    );
+  });
+
+  it("rechecks a pinned destination at scheduled delivery instead of using a changed profile number", async () => {
+    const { fireCallMe, fireCallContact } =
+      await import("./communication-actions");
+    mockSelect.mockResolvedValue(makeContact({ phoneNumber: "+12105559999" }));
+    const constraints = { expectedDestination: "+12105551234" };
+    expect(
+      (await fireCallMe(1, "Exact script", undefined, constraints)).body,
+    ).toMatchObject({ code: "call_destination_mismatch", attempted: false });
+    expect(
+      (await fireCallContact("Jane", "Exact script", undefined, constraints))
+        .body,
+    ).toMatchObject({ code: "call_destination_mismatch", attempted: false });
+    expect(mockInitiateOutboundCall).not.toHaveBeenCalled();
+  });
+
+  it.each(["call_me", "call_contact"] as const)(
+    "does not schedule %s against an unverified explicit destination",
+    async (type) => {
+      mockSelect.mockResolvedValue(makeContact({ phoneVerified: false }));
+      const result = await communicationActionExecutors[type](
+        {
+          greeting: "Exact script",
+          contactName: "Jane",
+          message: "Exact script",
+          expectedDestination: "+12105551234",
+          scheduleAt: "2027-01-01T12:00:00Z",
+        } as never,
+        1,
+      );
+      expect(result.status).toBe(422);
+      expect(mockInsertReturning).not.toHaveBeenCalled();
+      expect(mockInitiateOutboundCall).not.toHaveBeenCalled();
+    },
+  );
+  it.each([undefined, "2027-01-01T12:00:00Z"])(
+    "rejects self-call voicemail before dispatch (schedule %s)",
+    async (scheduleAt) => {
+      const result = await communicationActionExecutors.call_me(
+        {
+          greeting: "Exact text",
+          voicemailMessage: "Exact text",
+          scheduleAt,
+        } as never,
+        1,
+      );
+      expect(result.status).toBe(422);
+      expect(mockInitiateOutboundCall).not.toHaveBeenCalled();
+      expect(mockInsertReturning).not.toHaveBeenCalled();
+    },
+  );
+  it.each([undefined, "2027-01-01T12:00:00Z"])(
+    "rejects a mismatched self-call destination (schedule %s)",
+    async (scheduleAt) => {
+      const result = await communicationActionExecutors.call_me(
+        {
+          greeting: "Exact text",
+          expectedDestination: "+12105559999",
+          scheduleAt,
+        } as never,
+        1,
+      );
+      expect(result.body).toMatchObject({
+        code: "call_destination_mismatch",
+        attempted: false,
+      });
+      expect(mockInitiateOutboundCall).not.toHaveBeenCalled();
+      expect(mockInsertReturning).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe("recent communication repeat challenge", () => {

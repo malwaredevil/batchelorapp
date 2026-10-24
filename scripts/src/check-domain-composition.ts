@@ -93,6 +93,15 @@ const requirements: Array<{
   excludes?: string[];
   fix?: string;
 }> = [
+  ...["pottery-collection-read", "household-collection-read"].map((reader) => ({
+    path: `artifacts/api-server/src/elaine/${reader}.ts`,
+    includes: [
+      "createCollectionReviewReader",
+      'from "./collection-review-reader"',
+    ],
+    excludes: ["afterId: z.", "max(", "count()"],
+    fix: "Configure createCollectionReviewReader for collection reviews; keep owner authorization and bounded keyset paging in that shared server helper.",
+  })),
   // Redirect security policy must stay shared across browser and OAuth routes.
   ...[
     "artifacts/web/src/pages/login.tsx",
@@ -1401,6 +1410,8 @@ export const ELAINE_IMPORTED_TOOL_FILES: readonly string[] = [
   "artifacts/api-server/src/elaine/reminder-actions.ts",
   "artifacts/api-server/src/elaine/communication-actions.ts",
   "artifacts/api-server/src/elaine/universal-read-tools.ts",
+  "artifacts/api-server/src/elaine/pottery-collection-read.ts",
+  "artifacts/api-server/src/elaine/household-collection-read.ts",
   "artifacts/api-server/src/elaine/office-actions.ts",
   "artifacts/api-server/src/elaine/pottery-actions.ts",
   "artifacts/api-server/src/elaine/quilting-actions.ts",

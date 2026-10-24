@@ -1326,6 +1326,16 @@ export const ELAINE_APP_OPERATION_CATALOG = [
     requestBody: null,
   },
   {
+    operationId: "getPotteryFieldOptions",
+    method: "GET",
+    path: "/pottery/field-options",
+    domain: "pottery",
+    summary: "List unique maker names for pottery edit suggestions",
+    access: "read",
+    parameters: [],
+    requestBody: null,
+  },
+  {
     operationId: "getPreferences",
     method: "GET",
     path: "/hub/preferences",

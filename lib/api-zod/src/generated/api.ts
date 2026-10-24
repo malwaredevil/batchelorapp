@@ -183,6 +183,14 @@ export const ChangePasswordResponse = zod.void()
 
 
 /**
+ * @summary List unique maker names for pottery edit suggestions
+ */
+export const GetPotteryFieldOptionsResponse = zod.object({
+  "makers": zod.array(zod.string())
+})
+
+
+/**
  * @summary Check the protected original or earliest saved copy of a pottery photo
  */
 
@@ -256,6 +264,7 @@ export const RestorePotteryOriginalPhotoResponse = zod.object({
 /**
  * @summary List pottery
  */
+export const listPotteryQueryViewDefault = `full`;
 export const listPotteryQueryPageDefault = 1;
 
 export const listPotteryQueryPageSizeDefault = 60;
@@ -264,6 +273,7 @@ export const listPotteryQueryPageSizeMax = 200;
 
 
 export const ListPotteryQueryParams = zod.object({
+  "view": zod.enum(['full', 'gallery']).default(listPotteryQueryViewDefault).describe('Gallery returns the searchable\/sortable index without notes, makerInfo, aiDescription, surfaceZones or supplemental images (images is empty). Fetch the item detail before editing. Page through all results using total; no response contains more than 200 items.'),
   "q": zod.coerce.string().optional().describe('Text search across name, pattern description, style, shape, maker, and motifs'),
   "categoryId": zod.coerce.number().optional().describe('Filter to items that belong to this category ID'),
   "page": zod.coerce.number().min(1).default(listPotteryQueryPageDefault),

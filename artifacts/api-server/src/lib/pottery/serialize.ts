@@ -19,8 +19,20 @@ import {
 
 type ItemRowForSerialization = Omit<
   PotteryItemRow,
-  "embedding" | "visualEmbedding" | "zoneEmbedding"
->;
+  | "embedding"
+  | "visualEmbedding"
+  | "zoneEmbedding"
+  | "notes"
+  | "makerInfo"
+  | "aiDescription"
+  | "surfaceZones"
+> &
+  Partial<
+    Pick<
+      PotteryItemRow,
+      "notes" | "makerInfo" | "aiDescription" | "surfaceZones"
+    >
+  >;
 
 export type { CategoryResult };
 
@@ -65,14 +77,14 @@ const { serializeItem, serializeItems } = createCollectionSerializer<
       name: row.name,
       quantity: row.quantity,
       lockedFields: row.lockedFields ?? [],
-      notes: row.notes,
+      notes: row.notes ?? null,
       dimensions: row.dimensions,
       patternDescription: row.patternDescription,
       style: row.style,
       shape: row.shape,
       maker: row.maker,
-      makerInfo: row.makerInfo,
-      aiDescription: row.aiDescription,
+      makerInfo: row.makerInfo ?? null,
+      aiDescription: row.aiDescription ?? null,
       acquiredAt: row.acquiredAt,
       dominantColors: row.dominantColors ?? [],
       motifs: row.motifs ?? [],
@@ -90,3 +102,17 @@ const { serializeItem, serializeItems } = createCollectionSerializer<
 });
 
 export { serializeItem, serializeItems };
+
+/** Only the fields used by gallery controls, comparison and thumbnails. */
+export async function serializeGalleryItems(rows: ItemRowForSerialization[]) {
+  const items = await serializeItems(rows, { includeImages: false });
+  return items.map(
+    ({
+      notes: _notes,
+      makerInfo: _makerInfo,
+      aiDescription: _aiDescription,
+      surfaceZones: _surfaceZones,
+      ...item
+    }) => item,
+  );
+}

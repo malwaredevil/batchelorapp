@@ -47,7 +47,7 @@ export default function AddQuilt() {
     register,
     handleSubmit: rhfHandleSubmit,
     formState: { errors },
-  } = useForm<AddQuiltFields>({
+  } = useForm<z.input<typeof AddQuiltSchema>, unknown, AddQuiltFields>({
     resolver: zodResolver(AddQuiltSchema),
     defaultValues: { name: "" },
   });

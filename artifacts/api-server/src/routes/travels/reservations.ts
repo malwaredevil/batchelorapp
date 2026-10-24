@@ -54,7 +54,7 @@ const UpsertReservationSchema = z.object({
   checkOutDate: z.string().optional(),
   destinationIata: z.string().max(10).optional(),
   originIata: z.string().max(10).optional(),
-  rawExtracted: z.record(z.unknown()).default({}),
+  rawExtracted: z.record(z.string(), z.unknown()).default({}),
   monitoringEnabled: z.boolean().default(true),
   monitoringPolicy: z
     .enum(["minimal", "standard", "aggressive", "paused"])
@@ -217,7 +217,26 @@ router.patch("/reservations/:id", async (req, res) => {
   if (!existing)
     return void res.status(404).json({ error: "reservation not found" });
 
-  const PatchSchema = UpsertReservationSchema.partial();
+  // Zod 4 applies defaults inside optional fields. An unrelated PATCH must
+  // never reset passengers, segments or monitoring preferences.
+  const PatchSchema = UpsertReservationSchema.partial().extend({
+    reservationType: UpsertReservationSchema.shape.reservationType
+      .removeDefault()
+      .optional(),
+    passengerNames: UpsertReservationSchema.shape.passengerNames
+      .removeDefault()
+      .optional(),
+    segments: UpsertReservationSchema.shape.segments.removeDefault().optional(),
+    rawExtracted: UpsertReservationSchema.shape.rawExtracted
+      .removeDefault()
+      .optional(),
+    monitoringEnabled: UpsertReservationSchema.shape.monitoringEnabled
+      .removeDefault()
+      .optional(),
+    monitoringPolicy: UpsertReservationSchema.shape.monitoringPolicy
+      .removeDefault()
+      .optional(),
+  });
   const parsed = PatchSchema.safeParse(req.body);
   if (!parsed.success)
     return void res.status(400).json({ error: parsed.error.flatten() });

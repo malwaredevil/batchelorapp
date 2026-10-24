@@ -3,65 +3,12 @@
  * write a grounded answer. Keep this list aligned with the hard-tool executor
  * in Elaine's main streaming chat route.
  */
-export const MODEL_VISIBLE_HARD_TOOL_NAMES = new Set<string>([
-  "search_household_data",
-  "show_trip_card",
-  "show_pottery_item",
-  "show_fabric_swatch",
-  "show_ornament_item",
-  "web_search",
-  "ebay_search",
-  "search_hallmark",
-  "search_flights",
-  "fetch_page",
-  "consult_experts",
-  "get_weather_forecast",
-  "find_nearby_places",
-  "get_route_info",
-  "get_air_quality",
-  "get_pollen_forecast",
-  "calculate_yardage",
-  "query_household_data",
-  "lookup_product_barcode",
-  "summarize_inbox",
-  "find_emails_about_topic",
-  "get_email_detail",
-  "list_notes",
-  "get_note",
-  "list_notifications",
-  "get_notification_counts",
-  "get_notification_preferences",
-  "list_memories",
-  "list_elaine_tasks",
-  "get_elaine_task",
-  "remember_household_fact",
-  "remember_lesson",
-  "search_trip_documents",
-  "show_destination_card",
-  "get_exchange_rate",
-  "suggest_clothing_layers",
-  "discover_app_operations",
-  "read_app_operation",
-  "check_integrations_health",
-  "get_owner_settings",
-  "list_sentry_issues",
-  "list_elaine_suggestions",
-  "save_elaine_suggestion",
-  "get_recent_elaine_diagnostics",
-  "generate_document",
-  "list_reminders",
-  "list_scheduled_contacts",
-  "analyze_pottery_photo",
-  "analyze_fabric_photo",
-  "analyze_ornament_photo",
-  "lookup_book_value",
-  "lookup_retail_value",
-  "get_recent_communication_receipts",
-]);
-
 export const MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS: Readonly<
   Record<string, string>
 > = {
+  browse_pottery_collection: "reading a page of your pottery collection",
+  browse_fabric_collection: "reading a page of your fabric collection",
+  browse_ornament_collection: "reading a page of your ornament collection",
   search_household_data: "searching your collection",
   show_trip_card: "looking up that trip",
   show_pottery_item: "looking up that pottery piece",
@@ -110,6 +57,7 @@ export const MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS: Readonly<
   generate_document: "creating that document",
   list_reminders: "checking your reminders",
   list_scheduled_contacts: "checking your scheduled contacts",
+  list_contact_channels: "checking the contact's available channels",
   analyze_pottery_photo: "analyzing that pottery photo",
   analyze_fabric_photo: "analyzing that fabric photo",
   analyze_ornament_photo: "analyzing that ornament photo",
@@ -117,6 +65,10 @@ export const MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS: Readonly<
   lookup_retail_value: "looking up that retail value",
   get_recent_communication_receipts: "checking recent communication receipts",
 };
+
+export const MODEL_VISIBLE_HARD_TOOL_NAMES = new Set<string>(
+  Object.keys(MODEL_VISIBLE_HARD_TOOL_STATUS_LABELS),
+);
 
 export const SPECIALIZED_CURRENT_TOOL_NAMES = new Set<string>([
   "ebay_search",

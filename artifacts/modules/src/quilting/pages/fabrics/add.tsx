@@ -53,7 +53,7 @@ export default function AddFabric() {
     register,
     handleSubmit: rhfHandleSubmit,
     formState: { errors },
-  } = useForm<AddFabricFields>({
+  } = useForm<z.input<typeof AddFabricSchema>, unknown, AddFabricFields>({
     resolver: zodResolver(AddFabricSchema),
     defaultValues: { quantity: 1, quantityUnit: "yards" },
   });

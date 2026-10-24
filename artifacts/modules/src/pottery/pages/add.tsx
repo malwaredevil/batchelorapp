@@ -69,7 +69,7 @@ export default function AddPiece() {
     handleSubmit: rhfHandleSubmit,
     watch,
     formState: { errors },
-  } = useForm<AddPieceFields>({
+  } = useForm<z.input<typeof AddPieceSchema>, unknown, AddPieceFields>({
     resolver: zodResolver(AddPieceSchema),
     defaultValues: { quantity: 1 },
   });

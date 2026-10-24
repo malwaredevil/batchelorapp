@@ -59,7 +59,7 @@ const addSchema = z.object({
   brand: z.string().min(1, "Brand is required"),
   seriesOrCollection: z.string().nullable(),
   year: z.string().nullable(), // input is string, parse to number
-  quantity: z.coerce.number().min(1),
+  quantity: z.coerce.number<string | number>().min(1),
   barcodeValue: z.string().nullable(),
   notes: z.string().nullable(),
   description: z.string().nullable(),
@@ -145,7 +145,11 @@ export default function AddOrnament() {
       : `Add ornament page. Enter details manually or scan a barcode first.${configSummary ? ` ${configSummary}` : ""}`,
   );
 
-  const form = useForm<z.infer<typeof addSchema>>({
+  const form = useForm<
+    z.input<typeof addSchema>,
+    unknown,
+    z.output<typeof addSchema>
+  >({
     resolver: zodResolver(addSchema),
     defaultValues: {
       name: prefill?.name || "",
@@ -164,7 +168,7 @@ export default function AddOrnament() {
     },
   });
 
-  type AddFormValues = z.infer<typeof addSchema>;
+  type AddFormValues = z.input<typeof addSchema>;
 
   function appendFormValues(formData: FormData, values: AddFormValues) {
     formData.append("name", values.name);

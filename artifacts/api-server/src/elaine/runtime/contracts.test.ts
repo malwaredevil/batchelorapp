@@ -57,17 +57,17 @@ describe("sanitizeRuntimeText", () => {
   // error message, e.g.:
   //   "Unexpected token '<', \"<think>SE\"... is not valid JSON"
   //
-  // HIDDEN_REASONING_RE only matches complete open+close tag pairs, so the
-  // bare opening-tag fragment that appears in that error string is intentionally
-  // NOT stripped by sanitizeRuntimeText.
+  // Tagged-block cleanup preserves unclosed diagnostic fragments, so the bare
+  // opening-tag fragment in that error string is intentionally NOT stripped
+  // by sanitizeRuntimeText.
   //
   // Team decision (locked in by this test): the fragment `<think>` in an error
   // message reveals that the model used hidden reasoning, but does not reveal
   // the content of that reasoning.  That disclosure is acceptable — it is
   // equivalent to saying "JSON was rejected because the response started with a
-  // reasoning block" — and suppressing it would require a broader regex that
+  // reasoning block" — and suppressing it would require broader cleanup that
   // could over-strip legitimate user content containing angle-bracket tokens.
-  // If the policy changes, update HIDDEN_REASONING_RE and this test together.
+  // If the policy changes, update the cleanup option and this test together.
 
   it("does NOT strip a bare <think> opening tag with no matching close tag", () => {
     // This is the exact form that appears in a JSON.parse error message such as:

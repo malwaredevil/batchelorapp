@@ -1,4 +1,5 @@
 import { z } from "zod/v4";
+import { stripTextMarkup } from "@workspace/web-core/text-safety";
 
 export const ElaineRequestKindSchema = z.enum([
   "answer",
@@ -269,8 +270,6 @@ const SECRET_ASSIGNMENT_RE =
 const BEARER_RE = /\bbearer\s+[a-z0-9._~+/=-]+/gi;
 const DATABASE_URL_RE =
   /\bpostgres(?:ql)?:\/\/[^\s]+|\b(?:SUPABASE|DATABASE)_URL\s*[:=]\s*\S+/gi;
-const HIDDEN_REASONING_RE =
-  /<(?:think|thinking|reasoning)>[\s\S]*?<\/(?:think|thinking|reasoning)>/gi;
 
 /**
  * Runtime traces only accept concise user-safe summaries. This is a final
@@ -278,8 +277,11 @@ const HIDDEN_REASONING_RE =
  * arguments, provider payloads, documents, or chain-of-thought here.
  */
 export function sanitizeRuntimeText(value: unknown, maxLength = 240): string {
-  const text = String(value ?? "")
-    .replace(HIDDEN_REASONING_RE, "[private reasoning omitted]")
+  const text = stripTextMarkup(String(value ?? ""), {
+    hiddenTags: ["think", "thinking", "reasoning"],
+    replacement: "[private reasoning omitted]",
+    preserveUnclosed: true,
+  })
     .replace(BEARER_RE, "Bearer [redacted]")
     .replace(SECRET_ASSIGNMENT_RE, "$1=[redacted]")
     .replace(DATABASE_URL_RE, "[database connection redacted]")

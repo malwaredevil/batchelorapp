@@ -10,29 +10,40 @@
  */
 export function detectStatedLocation(message: string): string | null {
   // Patterns: verb phrase + preposition + place name.
-  // Captures everything after the preposition up to punctuation or end-of-string.
+  // Match only the prefix; inspect the remaining text separately so trailing
+  // whitespace cannot backtrack against a second, overlapping place capture.
   const patterns = [
     // "I'm in/at X", "I am in/at X"
-    /\b(?:i['\u2019]?m|i\s+am)\s+(?:in|at)\s+(.+?)(?:[.!?,]|$)/i,
+    /\b(?:i['\u2019]?m|i\s+am)\s+(?:in|at)\s+/gi,
     // "we're in/at X", "we are in/at X"
-    /\b(?:we['\u2019]?re|we\s+are)\s+(?:in|at)\s+(.+?)(?:[.!?,]|$)/i,
+    /\b(?:we['\u2019]?re|we\s+are)\s+(?:in|at)\s+/gi,
     // "just arrived in/at X"
-    /\bjust\s+arrived\s+(?:in|at)\s+(.+?)(?:[.!?,]|$)/i,
+    /\bjust\s+arrived\s+(?:in|at)\s+/gi,
     // "just got to X"
-    /\bjust\s+got\s+to\s+(.+?)(?:[.!?,]|$)/i,
+    /\bjust\s+got\s+to\s+/gi,
     // "currently in/at X"
-    /\bcurrently\s+(?:in|at)\s+(.+?)(?:[.!?,]|$)/i,
+    /\bcurrently\s+(?:in|at)\s+/gi,
     // "visiting X"
-    /\bvisiting\s+(.+?)(?:[.!?,]|$)/i,
+    /\bvisiting\s+/gi,
     // "staying in/at X"
-    /\bstaying\s+(?:in|at)\s+(.+?)(?:[.!?,]|$)/i,
+    /\bstaying\s+(?:in|at)\s+/gi,
     // "I've arrived in/at X"
-    /\bi['\u2019]?ve\s+arrived\s+(?:in|at)\s+(.+?)(?:[.!?,]|$)/i,
+    /\bi['\u2019]?ve\s+arrived\s+(?:in|at)\s+/gi,
   ];
   for (const pattern of patterns) {
-    const match = message.match(pattern);
-    if (match?.[1]) {
-      const place = match[1].trim().slice(0, 120);
+    while (pattern.exec(message) !== null) {
+      const bodyStart = pattern.lastIndex;
+      const remaining = message.slice(bodyStart);
+      const stop = remaining.search(/[.!?,\r\n]/);
+      if (stop >= 0 && /[\r\n]/.test(remaining[stop])) {
+        // No punctuation/end before the newline, as with the old dot capture.
+        // Every later prefix on this same line would fail too; skip it once.
+        pattern.lastIndex = bodyStart + stop + 1;
+        continue;
+      }
+      const place = (stop < 0 ? remaining : remaining.slice(0, stop))
+        .trim()
+        .slice(0, 120);
       // Reject matches that are suspiciously short (< 2 chars) or contain
       // placeholder-like tokens — they're unlikely to be real place names.
       if (place.length >= 2 && !/^\s*$/.test(place)) return place;

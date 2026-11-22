@@ -36,6 +36,7 @@ vi.mock("./notifications", () => ({
 }));
 
 vi.mock("./scheduler-guard", () => ({
+  getSchedulerPollIntervalMs: (interval: number) => Math.min(interval, 900_000),
   shouldRunScheduledTask: vi.fn().mockResolvedValue(true),
   recordScheduledTaskSuccess: vi.fn().mockResolvedValue(undefined),
   recordScheduledTaskFailure: vi.fn(),

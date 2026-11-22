@@ -14,6 +14,7 @@
 import { pool } from "@workspace/db";
 import { logger } from "./logger";
 import { getAirQuality, getPollenForecast } from "./travels/google-maps";
+import { startSchedulerPoller } from "./scheduler-poller";
 import {
   shouldRunScheduledTask,
   recordScheduledTaskSuccess,
@@ -38,11 +39,8 @@ function daysUntil(dateStr: string): number {
 }
 
 export async function computeAndStoreNudges(): Promise<void> {
-  const client = await pool.connect().catch((err: unknown) => {
-    logger.warn({ err }, "travels-nudges: could not connect to DB");
-    return null;
-  });
-  if (!client) return;
+  // Let the scheduler record failure rather than marking skipped work successful.
+  const client = await pool.connect();
 
   try {
     const { rows: trips } = await client.query<{
@@ -184,9 +182,11 @@ const IN_PROCESS_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 export function startNudgeScheduler(): () => void {
   const run = async (): Promise<void> => {
     if (
-      !(await shouldRunScheduledTask("travels-nudges", IN_PROCESS_INTERVAL_MS))
+      !(await shouldRunScheduledTask("travels-nudges", IN_PROCESS_INTERVAL_MS, {
+        recoverStuckClaims: false,
+      }))
     ) {
-      logger.info("travels-nudges: skipped (ran within the last hour)");
+      logger.info("travels-nudges: claim not granted; work deferred");
       return;
     }
     const t0 = Date.now();
@@ -207,11 +207,7 @@ export function startNudgeScheduler(): () => void {
     }
   };
 
-  void run();
-
-  const interval = setInterval(() => void run(), IN_PROCESS_INTERVAL_MS);
-  interval.unref();
-
-  logger.info("travels-nudges: started (in-process fallback, runs hourly)");
-  return () => clearInterval(interval);
+  // Check again after a denied/failed claim without waiting another full hour.
+  // Keep the hourly atomic claim; never reclaim a potentially slow active run.
+  return startSchedulerPoller("travels-nudges", IN_PROCESS_INTERVAL_MS, run);
 }

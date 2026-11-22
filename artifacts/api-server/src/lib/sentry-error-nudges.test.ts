@@ -14,6 +14,8 @@
  * call shape: client.query(sql, paramsArray) → mock.calls[i] = [sql, params]
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import OpenAI from "openai";
+import { Sentry } from "./sentry";
 
 // ── Hoisted mocks ─────────────────────────────────────────────────────────────
 
@@ -369,8 +371,8 @@ describe("computeAndStoreSentryErrorNudges", () => {
     expect(ledgerUpsertCalls()).toHaveLength(3);
   });
 
-  it("still inserts the alert when suggestion generation fails", async () => {
-    // mockCallModel rejects by default (beforeEach).
+  it("still inserts and records the alert when optional suggestion generation times out", async () => {
+    mockCallModel.mockRejectedValue(new OpenAI.APIConnectionTimeoutError());
     setSentryLists([issue("55")]);
     setSeenLedger([]);
     await computeAndStoreSentryErrorNudges();
@@ -379,6 +381,7 @@ describe("computeAndStoreSentryErrorNudges", () => {
     expect(String((inserts[0]![1] as unknown[])[2])).not.toContain(
       "Possible fix",
     );
+    expect(ledgerUpsertCalls()).toHaveLength(1);
   });
 
   it("propagates a failed DB connection so the scheduler can retry it", async () => {
@@ -596,6 +599,40 @@ describe("computeAndStoreSentryErrorNudges", () => {
 });
 
 describe("generateFixSuggestion", () => {
+  it("keeps optional SDK timeouts observable as handled warnings without leaking the scope", async () => {
+    const parentScope = Sentry.getCurrentScope();
+    const previous = [...parentScope.getScopeData().eventProcessors];
+    let captured: Sentry.Event | null | undefined;
+    mockCallModel.mockImplementationOnce(async () => {
+      const error = new OpenAI.APIConnectionTimeoutError();
+      const processors =
+        Sentry.getCurrentScope().getScopeData().eventProcessors;
+      captured = await processors[processors.length - 1]!(
+        {
+          level: "error",
+          exception: {
+            values: [
+              {
+                value: "Request timed out.",
+                mechanism: { type: "auto.ai.openai", handled: false },
+              },
+            ],
+          },
+        },
+        { originalException: error },
+      );
+      throw error;
+    });
+    await expect(generateFixSuggestion(issue("1"))).resolves.toBeNull();
+    expect(captured).toMatchObject({
+      level: "warning",
+      exception: { values: [{ mechanism: { handled: true } }] },
+    });
+    expect(mockCallModel).toHaveBeenCalledOnce();
+    expect(Sentry.getCurrentScope()).toBe(parentScope);
+    expect(parentScope.getScopeData().eventProcessors).toEqual(previous);
+  });
+
   it("returns null when the model replies NONE", async () => {
     mockCallModel.mockResolvedValue({
       choices: [{ message: { content: "NONE" } }],

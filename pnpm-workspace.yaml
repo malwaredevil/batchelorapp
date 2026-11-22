@@ -28,7 +28,7 @@ catalog:
   clsx: ^2.1.1
   cross-env: ^7.0.3
   drizzle-orm: ^0.45.2
-  fast-xml-parser: ^5.2.5
+  fast-xml-parser: 5.12.1
   framer-motion: ^12.23.24
   lucide-react: ^0.545.0
   react: 19.1.0
@@ -111,6 +111,11 @@ overrides:
   "brace-expansion@^2": "2.1.7"
   "brace-expansion@^5": "5.0.12"
   filelist: ">=2.0.2 <3" # GHSA-mh99: transitively pulls minimatch@^10 which has no brace-expansion dep
+  # Current workbox/filelist/typedoc and Sentry-plugin releases still request
+  # vulnerable modern matcher versions. Preserve legacy glob 7/minimatch 3 APIs;
+  # regression tests exercise the real Workbox and FileList consumers.
+  "glob@>=9 <14.0.2": "14.0.6" # GHSA-3g3m-2fjr-6pw4: stop traversal after abort.
+  "minimatch@>=7 <11.0.1": "11.0.9" # GHSA-g3hv-75wg-m249: bound pattern expansion.
   jake: ">=12.10.1 <13" # required by ejs; v12 uses filelist@^2, eliminating brace-expansion@^2 chain
   body-parser: "2.4.0" # Patched compressed-body teardown DoS; retain Express's major.
   js-yaml: 4.3.2 # GHSA-5p4m-2wfm-xmqj/CVE-2026-59870 plus maxTotalMergeKeys CPU-limit bypass; patched 4.3.2. Keep EXACT pin (not a range) — an unbounded override previously let js-yaml jump to an ESM-only v5 and broke orval codegen (see orval-codegen-js-yaml-pin memory)
@@ -141,7 +146,7 @@ overrides:
   postcss: ">=8.5.23 <9" # GHSA-fxqj-rqcc-2cmp (CVE-2026-69153): incomplete fix of prior sourceMappingURL path-traversal GHSA; patched 8.5.23; parent expects ^8
   "@tailwindcss/typography>postcss-selector-parser": "7.1.6" # GHSA-rj75-hqrm-r3gf; verified typography selector compatibility in regression tests.
   "mammoth>argparse": "-" # Library-only usage: prune the CLI-only dependency and its unpatched sprintf-js (GHSA-hp3w-g68c-fv3c).
-  qs: ">=6.16.0 <7" # GHSA-x5fp-wj9c-mxmx / GHSA-4mjr-xmp4-gh2g: prototype-pollution and isBuffer DoS; patched 6.16.0
+  qs: "6.17.1" # Also closes GHSA-6pq8-jhm2-2vcw: hostile comma-array values must not crash serialization.
   proxy-addr: "2.0.8" # GHSA-jqcg-44mw-7w3h: IPv4-mapped IPv6 trust-subnet bypass.
   source-map-js: "1.2.2" # GHSA-68fv-2mgg-jv7q: indexed source-map offset DoS.
   "rollup>@rollup/rollup-android-arm-eabi": "-"

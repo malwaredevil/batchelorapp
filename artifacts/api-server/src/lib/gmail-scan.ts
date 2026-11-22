@@ -339,16 +339,18 @@ async function scanConnectionForTravelDocuments(
 
 /**
  * Scan every connected household Gmail account for new travel booking
- * emails. Best-effort per connection — one user's failure (revoked token,
- * transient API error) never blocks the others.
+ * emails. Attempt every connection even when another fails, but propagate
+ * incomplete work afterward so schedulers cannot record it as a success.
  */
 export async function scanAllGmailConnections(): Promise<GmailScanResult[]> {
   const connections = await getAllGmailConnections();
   const results: GmailScanResult[] = [];
+  const failures: unknown[] = [];
   for (const conn of connections) {
     try {
       results.push(await scanConnectionForTravelDocuments(conn.userId));
     } catch (err) {
+      failures.push(err);
       logger.warn(
         { err, userId: conn.userId },
         "gmail-scan: connection scan failed",
@@ -360,6 +362,12 @@ export async function scanAllGmailConnections(): Promise<GmailScanResult[]> {
         autoIgnoredDuplicates: 0,
       });
     }
+  }
+  if (failures.length > 0) {
+    throw new AggregateError(
+      failures,
+      "Gmail scan incomplete: connection scans failed",
+    );
   }
   return results;
 }

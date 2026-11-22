@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   success: vi.fn(),
   failure: vi.fn(),
   connections: vi.fn(),
+  accessToken: vi.fn(),
 }));
 
 vi.mock("@workspace/db", async (importOriginal) => ({
@@ -21,7 +22,7 @@ vi.mock("./scheduler-guard", async (importOriginal) => ({
 
 vi.mock("./gmail-tokens", () => ({
   getAllGmailConnections: mocks.connections,
-  getValidGmailAccessToken: vi.fn(),
+  getValidGmailAccessToken: mocks.accessToken,
 }));
 
 vi.mock("./gmail-api", () => ({
@@ -57,6 +58,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date("2026-10-16T11:00:00Z"));
   vi.clearAllMocks();
   mocks.connections.mockResolvedValue([]);
+  mocks.accessToken.mockResolvedValue(null);
   mocks.success.mockResolvedValue(undefined);
 });
 
@@ -67,6 +69,22 @@ afterEach(() => {
 });
 
 describe("Gmail scheduler due-work polling", () => {
+  it("attempts other connections but records failure, not success, after a connection scan fails", async () => {
+    mocks.claim.mockResolvedValueOnce(true).mockResolvedValue(false);
+    mocks.connections.mockResolvedValue([{ userId: 1 }, { userId: 2 }]);
+    mocks.accessToken.mockRejectedValueOnce(
+      new Error("Connection terminated unexpectedly"),
+    );
+    stop = startGmailScanScheduler();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mocks.accessToken.mock.calls).toEqual([[1], [2]]);
+    expect(mocks.failure).toHaveBeenCalledExactlyOnceWith("gmail-scan");
+    expect(mocks.success).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(HOUR_MS);
+    expect(mocks.connections).toHaveBeenCalledOnce();
+    expect(mocks.accessToken).toHaveBeenCalledTimes(2);
+  });
+
   it("catches up when a startup claim is denied instead of waiting six more hours", async () => {
     let lastRunAt = Date.now() - 5 * HOUR_MS;
     mocks.claim.mockImplementation(async (_name, intervalMs) => {

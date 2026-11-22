@@ -75,7 +75,7 @@ import {
   attachElaineTurnListener,
   detachElaineTurnListener,
 } from "./turn-registry";
-import { phoneVerifyLimiter, aiLimiter } from "../middleware/rateLimit";
+import { phoneVerifyLimiter } from "../middleware/rateLimit";
 import { logger } from "../lib/logger";
 import {
   callModel,

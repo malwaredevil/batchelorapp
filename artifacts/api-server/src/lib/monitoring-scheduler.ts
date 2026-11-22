@@ -27,6 +27,7 @@ import {
   recordScheduledTaskFailure,
 } from "./scheduler-guard";
 import { logger } from "./logger";
+import { startSchedulerPoller } from "./scheduler-poller";
 import { createHash } from "crypto";
 
 // ---------------------------------------------------------------------------
@@ -582,9 +583,12 @@ export async function runMonitoringCheckForReservation(
 const INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
 export function startMonitoringScheduler(): () => void {
-  // eslint-disable-next-line @typescript-eslint/no-misused-promises
   const run = async (): Promise<void> => {
-    if (!(await shouldRunScheduledTask("monitoring-scheduler", INTERVAL_MS)))
+    if (
+      !(await shouldRunScheduledTask("monitoring-scheduler", INTERVAL_MS, {
+        recoverStuckClaims: false,
+      }))
+    )
       return;
     try {
       await runMonitoringCycle();
@@ -595,13 +599,23 @@ export function startMonitoringScheduler(): () => void {
     }
   };
 
-  // Initial run after 2 min startup grace period, then every hour
-  const initialTimer = setTimeout(run, 2 * 60 * 1000);
-  const interval = setInterval(run, INTERVAL_MS);
+  // Preserve startup grace, then poll due work without overlapping local runs.
+  let stopPolling: (() => void) | undefined;
+  const initialTimer = setTimeout(
+    () => {
+      stopPolling = startSchedulerPoller(
+        "monitoring-scheduler",
+        INTERVAL_MS,
+        run,
+      );
+    },
+    2 * 60 * 1000,
+  );
+  initialTimer.unref();
 
   logger.info("monitoring-scheduler: started");
   return () => {
     clearTimeout(initialTimer);
-    clearInterval(interval);
+    stopPolling?.();
   };
 }

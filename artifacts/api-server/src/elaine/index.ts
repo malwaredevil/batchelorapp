@@ -76,6 +76,11 @@ import {
   detachElaineTurnListener,
 } from "./turn-registry";
 import { phoneVerifyLimiter } from "../middleware/rateLimit";
+import {
+  buildPageReferenceMessage,
+  buildConversationReferenceMessages,
+  PAGE_CONTEXT_INSTRUCTIONS,
+} from "./untrusted-context";
 import { logger } from "../lib/logger";
 import {
   callModel,
@@ -4205,36 +4210,6 @@ async function buildUserContext(
 }
 
 /**
- * Sanitize a raw pageContext string before injecting it into the system prompt.
- * Strips HTML, HTML entities, and common prompt-injection trigger phrases, then
- * caps the result at 6 000 characters so it cannot crowd out tool definitions.
- */
-function sanitizePageContext(raw: string | null | undefined): string {
-  if (!raw) return "(no page context was shared for this screen)";
-  return raw
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&[a-zA-Z0-9#]+;/g, " ")
-    .replace(
-      /ignore\s+(all\s+)?(previous|prior|above)\s+(instructions?|constraints?|rules?|guidelines?)/gi,
-      "[filtered]",
-    )
-    .replace(/you\s+are\s+now\s+(a|an|the)\b/gi, "[filtered]")
-    .replace(
-      /disregard\s+(your\s+)?(training|instructions?|guidelines?|rules?)/gi,
-      "[filtered]",
-    )
-    .replace(
-      /your\s+(new\s+)?(primary\s+)?(instructions?|task|goal|objective|purpose)\s+(is|are)/gi,
-      "[filtered]",
-    )
-    .replace(/\[\[[\s\S]*?\]\]/g, "[filtered]")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 6000);
-}
-
-/**
  * Defense-in-depth against the model occasionally ignoring the "never write
  * out THINK -> PLAN -> ACT" instruction and leaking a literal internal
  * reasoning preamble (e.g. "THINK. The user asked for... 1. Acknowledge...
@@ -4895,7 +4870,7 @@ router.post("/chat", async (req, res) => {
     isOwner: user?.isOwner === true,
     channelLabel: appLabel,
     contextBlockLabel: `live, possibly unsaved, on-screen state in ${appLabel}`,
-    contextBlock: sanitizePageContext(pageContext),
+    contextBlock: PAGE_CONTEXT_INSTRUCTIONS,
     memoryBlock,
     memorySummary,
     crossChannelContext,
@@ -4980,21 +4955,12 @@ router.post("/chat", async (req, res) => {
 
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: "system", content: systemPrompt },
-    // When an older thread was summarised, inject the summary as a system
-    // message so the model has full context without the token cost of the
-    // original turns.
-    ...(summaryPrefixBlock
-      ? [
-          {
-            role: "system" as const,
-            content: `[EARLIER CONVERSATION — SUMMARISED]\n${summaryPrefixBlock}`,
-          },
-        ]
-      : []),
+    ...buildConversationReferenceMessages(summaryPrefixBlock),
     ...history.map((m) => ({
       role: m.role,
       content: stripElaineCitationMetadata(m.content),
     })),
+    buildPageReferenceMessage(pageContext),
     { role: "user", content: userTurnContent },
   ];
 
@@ -5259,15 +5225,12 @@ router.post("/chat", async (req, res) => {
   }
   const planForModel = formatPlanForModel(runtime.snapshot());
   const statelessOpenAIInput: ResponseInput = [
-    ...(summaryPrefixBlock
-      ? [
-          {
-            type: "message" as const,
-            role: "developer" as const,
-            content: `[EARLIER CONVERSATION — SUMMARISED]\n${summaryPrefixBlock}`,
-          },
-        ]
-      : []),
+    ...buildConversationReferenceMessages(summaryPrefixBlock).map(
+      (message) => ({
+        type: "message" as const,
+        ...message,
+      }),
+    ),
     ...history.map(
       (historyMessage): EasyInputMessage => ({
         type: "message",
@@ -5279,11 +5242,13 @@ router.post("/chat", async (req, res) => {
       }),
     ),
     { type: "message", role: "developer", content: planForModel },
+    { type: "message", ...buildPageReferenceMessage(pageContext) },
     responseUserMessage,
   ];
   let nextOpenAIInput: ResponseInput = reusableOpenAIState
     ? [
         { type: "message", role: "developer", content: planForModel },
+        { type: "message", ...buildPageReferenceMessage(pageContext) },
         responseUserMessage,
       ]
     : statelessOpenAIInput;

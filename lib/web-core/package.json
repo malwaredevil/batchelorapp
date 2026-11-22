@@ -10,6 +10,7 @@
     "./use-mobile": "./src/use-mobile.tsx",
     "./colors": "./src/colors.ts",
     "./collection-text": "./src/collection-text.ts",
+    "./text-safety": "./src/text-safety.ts",
     "./mount-app": "./src/mount-app.tsx",
     "./not-found": "./src/not-found.tsx",
     "./download": "./src/download.ts",

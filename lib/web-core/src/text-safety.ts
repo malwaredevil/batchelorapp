@@ -13,6 +13,9 @@ export function stripTextMarkup(
     preserveUnclosed?: boolean;
   },
 ): string {
+  if (typeof text !== "string") {
+    throw new TypeError("Text cleanup requires a string");
+  }
   const hidden = new Set(options.hiddenTags.map((tag) => tag.toLowerCase()));
   const output: string[] = [];
   let depth = 0;
@@ -21,12 +24,15 @@ export function stripTextMarkup(
   let hiddenStart = -1;
   let sawClosing = false;
 
-  for (let i = 0; i < text.length; i++) {
-    if (text[i] === "<") {
+  let offset = 0;
+  for (const character of text) {
+    const i = offset;
+    offset += character.length;
+    if (character === "<") {
       tokenStart = i;
       continue;
     }
-    if (text[i] !== ">" || tokenStart < 0) continue;
+    if (character !== ">" || tokenStart < 0) continue;
 
     let nameStart = tokenStart + 1;
     const closing = text[nameStart] === "/";

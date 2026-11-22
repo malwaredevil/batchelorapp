@@ -26,8 +26,25 @@ describe("linear text cleanup", () => {
 
   it("preserves Unicode offsets and unrelated markup", () => {
     expect(
-      stripTextMarkup("İ <think>secret</think> 日本 <b>visible</b>", reasoning),
-    ).toBe("İ [private reasoning omitted] 日本 <b>visible</b>");
+      stripTextMarkup(
+        "İ 😀 <think>secret</think> 日本 <b>visible</b>",
+        reasoning,
+      ),
+    ).toBe("İ 😀 [private reasoning omitted] 日本 <b>visible</b>");
+  });
+
+  it("rejects objects before any user-controlled length property can be read", () => {
+    const input = {
+      get length() {
+        throw new Error("An object length must not be inspected");
+      },
+    };
+    expect(() =>
+      stripTextMarkup(input as unknown as string, reasoning),
+    ).toThrow("Text cleanup requires a string");
+    expect(() => stripTextMarkup([] as unknown as string, reasoning)).toThrow(
+      "Text cleanup requires a string",
+    );
   });
 
   it("cleans scripts and ordinary markup as text, including spaced end tags", () => {

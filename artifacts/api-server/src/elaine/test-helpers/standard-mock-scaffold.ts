@@ -59,7 +59,14 @@ export function sentryMockFactory() {
     setUser: vi.fn(),
     captureException: vi.fn(),
     captureMessage: vi.fn(),
-    withScope: vi.fn(),
+    withScope: vi.fn(
+      (
+        callback: (scope: {
+          setTag: ReturnType<typeof vi.fn>;
+          addEventProcessor: ReturnType<typeof vi.fn>;
+        }) => unknown,
+      ) => callback({ setTag: vi.fn(), addEventProcessor: vi.fn() }),
+    ),
     startSpan: vi.fn((_o: unknown, cb: () => unknown) => cb()),
     setConversationId: vi.fn(),
     Scope: class {},

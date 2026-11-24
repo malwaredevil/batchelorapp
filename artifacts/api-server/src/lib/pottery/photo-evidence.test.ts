@@ -48,6 +48,53 @@ const labels = [
 ];
 const urls = labels.map((_, i) => `data:image/jpeg;base64,photo${i}`);
 
+describe("pottery name metric conversions", () => {
+  async function analyzeName(name: string, dimensions: string) {
+    vi.mocked(generateOpenAIResponseTextWithFallback).mockResolvedValueOnce({
+      text: JSON.stringify({ name, dimensions }),
+    } as never);
+    return analyzeImage([urls[0]!]);
+  }
+
+  it.each([
+    ["7.25", 18],
+    ["7.375", 19],
+    ["3.5", 9],
+    ["10.25", 26],
+    ["6.25", 16],
+    ["1.375", 3],
+    ["8.25", 21],
+    ["5.25", 13],
+    ["4.75", 12],
+  ])("converts the full %s-inch measurement to %i cm", async (inches, cm) => {
+    const dimensions = `${inches} in (${cm} cm)`;
+    const result = await analyzeName(`${inches}″ (999 cm) Bowl`, dimensions);
+
+    expect(result.name).toBe(`${inches}" (${cm} cm) Bowl`);
+    expect(result.dimensions).toBe(dimensions);
+  });
+
+  it("converts both dimensions independently and keeps the separator and title spacing", async () => {
+    const dimensions = "7.25 in × 3.5 in";
+    const result = await analyzeName('7.25″ (64 cm) × 3.5" Tray', dimensions);
+
+    expect(result.name).toBe('7.25" (18 cm) × 3.5" (9 cm) Tray');
+    expect(result.dimensions).toBe(dimensions);
+  });
+
+  it.each([
+    ["11", 28],
+    ["7¼", 18],
+  ])("still converts %s inches to %i cm", async (inches, cm) => {
+    const result = await analyzeName(
+      `${inches}″ (999 cm) Bowl`,
+      `${inches} in`,
+    );
+
+    expect(result.name).toBe(`${inches}" (${cm} cm) Bowl`);
+  });
+});
+
 describe("pottery photo viewpoint evidence", () => {
   beforeEach(() => {
     vi.clearAllMocks();

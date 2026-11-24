@@ -82,6 +82,15 @@ export const APP_CONFIG_DEFAULTS: AppConfigDefault[] = [
     description:
       "AbortController timeout for Perplexity Sonar web-search calls via OpenRouter.",
   },
+  {
+    module: "web_search",
+    key: "agreement_timeout_ms",
+    value: "2500",
+    type: "integer",
+    label: "Web search cross-check timeout (ms)",
+    description:
+      "Short deadline for comparing two search results; the results are kept if the comparison fails.",
+  },
 
   // ── openrouter ────────────────────────────────────────────────────────────
   {

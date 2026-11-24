@@ -6,6 +6,7 @@ import { db, travelsGmailConnections } from "@workspace/db";
 import { createGmailOAuthClient } from "./gmail-oauth";
 import { OAUTH_EXPIRY_BUFFER_MS, refreshGoogleToken } from "./google-oauth";
 import { logger } from "./logger";
+import { withRetry } from "./retry";
 import { encryptToken, decryptToken } from "./token-encryption";
 
 export interface GmailConnection {
@@ -34,7 +35,10 @@ export async function getGmailConnection(
 
 /** Every household member with a connected Gmail account. */
 export async function getAllGmailConnections(): Promise<GmailConnection[]> {
-  const rows = await db.select().from(travelsGmailConnections);
+  const rows = await withRetry(
+    async () => await db.select().from(travelsGmailConnections),
+    { maxAttempts: 2, label: "gmail-connections-read" },
+  );
   return rows.map((row) => ({
     id: row.id,
     userId: row.userId,
@@ -51,11 +55,17 @@ export async function getAllGmailConnections(): Promise<GmailConnection[]> {
 export async function getValidGmailAccessToken(
   userId: number,
 ): Promise<string | null> {
-  const [row] = await db
-    .select()
-    .from(travelsGmailConnections)
-    .where(eq(travelsGmailConnections.userId, userId))
-    .limit(1);
+  // Retry only this read. Replaying the token refresh or the whole scan could
+  // duplicate external work after a partially successful attempt.
+  const [row] = await withRetry(
+    async () =>
+      await db
+        .select()
+        .from(travelsGmailConnections)
+        .where(eq(travelsGmailConnections.userId, userId))
+        .limit(1),
+    { maxAttempts: 2, label: "gmail-access-token-read" },
+  );
   if (!row) return null;
 
   const notExpired =

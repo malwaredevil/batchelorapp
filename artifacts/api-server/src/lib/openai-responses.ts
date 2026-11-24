@@ -431,33 +431,58 @@ export function finalizeReasoningSummary(
   return combined || undefined;
 }
 
-function createBaseParams(
+export function createBaseParams(
   options: SharedRequestOptions,
   config: ElaineGlobalConfig,
+  shortLookup = false,
 ): ResponseCreateParams {
+  const model = resolveOpenAIResponsesModel(config, options.role);
+  // GPT-6.2 appends top-level instructions after input instead of prepending
+  // them. Put the initial policy in the reusable prefix. On a continuation,
+  // leave that prefix intact and supply current-turn instructions separately
+  // (Elaine's policy can include refreshed account and page context).
+  const prependPolicy =
+    shortLookup ||
+    (/^gpt-6\.2(?:-|$)/.test(model) && !options.previousResponseId);
   return {
-    model: resolveOpenAIResponsesModel(config, options.role),
-    instructions: options.instructions,
-    input: options.input,
-    previous_response_id: options.previousResponseId ?? undefined,
+    model,
+    instructions: prependPolicy ? undefined : options.instructions,
+    input: prependPolicy
+      ? [
+          { role: "developer", content: options.instructions },
+          ...(typeof options.input === "string"
+            ? [{ role: "user" as const, content: options.input }]
+            : options.input),
+        ]
+      : options.input,
+    previous_response_id: shortLookup
+      ? undefined
+      : (options.previousResponseId ?? undefined),
     max_output_tokens:
       options.maxOutputTokens ??
       config.thresholds.openAIResponsesMaxOutputTokens,
-    reasoning: buildReasoningParam(options),
+    reasoning: shortLookup
+      ? { effort: options.reasoningEffort ?? "none" }
+      : buildReasoningParam(options),
     text: { verbosity: options.verbosity ?? "medium" },
-    context_management: [
-      {
-        type: "compaction",
-        compact_threshold: config.thresholds.openAICompactionThresholdTokens,
-      },
-    ],
+    context_management: shortLookup
+      ? undefined
+      : [
+          {
+            type: "compaction",
+            compact_threshold:
+              config.thresholds.openAICompactionThresholdTokens,
+          },
+        ],
     prompt_cache_key: options.promptCacheKey,
     safety_identifier: options.safetyIdentifier,
-    store: resolveOpenAIResponsesStore(
-      config,
-      options.role,
-      options.scope ?? "elaine",
-    ),
+    store:
+      !shortLookup &&
+      resolveOpenAIResponsesStore(
+        config,
+        options.role,
+        options.scope ?? "elaine",
+      ),
   };
 }
 
@@ -645,6 +670,8 @@ export async function streamOpenAIResponseRound(
 
 export interface GenerateOpenAIResponseTextOptions extends SharedRequestOptions {
   scope?: "elaine" | "app";
+  /** Optional enrichment: one short, unretained, stateless request. */
+  optionalLookup?: { timeoutMs: number };
   jsonSchema?: {
     name: string;
     description?: string;
@@ -676,29 +703,35 @@ export async function generateOpenAIResponseText(
   const client = getDirectClient(config);
   const model = resolveOpenAIResponsesModel(config, options.role);
   const startedAt = Date.now();
+  const shortLookup = options.optionalLookup;
   metrics.requests += 1;
   metrics.byRole[options.role] += 1;
 
   try {
     const response = (await circuitBreaker.execute(
-      "openai-responses",
+      shortLookup ? "openai-responses:optional-lookup" : "openai-responses",
       async () =>
-        client.responses.create({
-          ...createBaseParams(options, config),
-          stream: false,
-          text: {
-            verbosity: options.verbosity ?? "medium",
-            format: options.jsonSchema
-              ? {
-                  type: "json_schema",
-                  name: options.jsonSchema.name,
-                  description: options.jsonSchema.description,
-                  schema: options.jsonSchema.schema,
-                  strict: options.jsonSchema.strict ?? true,
-                }
-              : undefined,
+        client.responses.create(
+          {
+            ...createBaseParams(options, config, Boolean(shortLookup)),
+            stream: false,
+            text: {
+              verbosity: options.verbosity ?? "medium",
+              format: options.jsonSchema
+                ? {
+                    type: "json_schema",
+                    name: options.jsonSchema.name,
+                    description: options.jsonSchema.description,
+                    schema: options.jsonSchema.schema,
+                    strict: options.jsonSchema.strict ?? true,
+                  }
+                : undefined,
+            },
           },
-        }),
+          shortLookup
+            ? { timeout: shortLookup.timeoutMs, maxRetries: 0 }
+            : undefined,
+        ),
     )) as Response;
     if (response.status !== "completed") {
       throw new OpenAIResponsesUnavailableError(

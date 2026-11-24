@@ -19,16 +19,16 @@
   "private": true,
   "devDependencies": {
     "husky": "^9.1.7",
-    "lint-staged": "^17.0.8",
-    "prettier": "^3.8.3",
+    "lint-staged": "^17.6.1",
+    "prettier": "^3.10.1",
     "typescript": "~5.9.3",
-    "@axe-core/playwright": "^4.12.1",
-    "@playwright/test": "^1.61.1",
+    "@axe-core/playwright": "^4.14.0",
+    "@playwright/test": "^1.65.1",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
-    "typescript-eslint": "^8.46.2"
+    "typescript-eslint": "^8.73.0"
   },
   "dependencies": {
-    "@replit/connectors-sdk": "^0.4.1"
+    "@replit/connectors-sdk": "^0.7.0"
   }
 }

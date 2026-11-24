@@ -98,16 +98,16 @@ const UNICODE_FRACTIONS: Record<string, number> = {
 };
 
 /**
- * Finds every inch measurement in a generated name (e.g. `11"`, `10½″`)
+ * Finds every inch measurement in a generated name (e.g. `11"`, `10½″`, `7.25″`)
  * and ensures it is followed by the correct cm equivalent in parentheses.
  */
 function addMetricToName(name: string): string {
   return name.replace(
-    /(\d+)([½¼¾⅓⅔⅛⅜⅝⅞]?)([″"])\s*(?:\(\d+\s*cm\))?/g,
-    (_match, whole: string, frac: string) => {
-      const inches = parseInt(whole, 10) + (UNICODE_FRACTIONS[frac] ?? 0);
+    /(\d+(?:\.\d+)?)([½¼¾⅓⅔⅛⅜⅝⅞]?)[″"](?:\s*\(\d+\s*cm\))?/g,
+    (_match, value: string, frac: string) => {
+      const inches = Number(value) + (UNICODE_FRACTIONS[frac] ?? 0);
       const cm = Math.round(inches * 2.54);
-      return `${whole}${frac}" (${cm} cm)`;
+      return `${value}${frac}" (${cm} cm)`;
     },
   );
 }

@@ -25,6 +25,7 @@ import {
   beforeAll,
 } from "vitest";
 import express, { type Express } from "express";
+import OpenAI from "openai";
 import request from "supertest";
 import { buildPlannerToolCatalogMock } from "./test-helpers/planner-tool-catalog-mock";
 import {
@@ -49,6 +50,7 @@ const {
   mockCallModelWithSubagent,
   mockCallModel,
   mockGetElaineGlobalConfig,
+  mockGenerateOpenAIResponseText,
   mockIsOpenAIResponsesConfigured,
   mockIsReusableElaineResponseState,
   mockStreamOpenAIResponseRound,
@@ -107,6 +109,7 @@ const {
     mockCallModelWithSubagent: vi.fn(),
     mockCallModel: vi.fn().mockResolvedValue(""),
     mockGetElaineGlobalConfig: vi.fn(),
+    mockGenerateOpenAIResponseText: vi.fn(),
     mockIsOpenAIResponsesConfigured: vi.fn().mockReturnValue(false),
     mockIsReusableElaineResponseState: vi.fn().mockReturnValue(false),
     mockStreamOpenAIResponseRound: vi.fn(),
@@ -167,6 +170,10 @@ vi.mock("../lib/env", () => ({
 vi.mock("../lib/ai-client", () => ({
   callModel: mockCallModel,
   callModelWithSubagent: mockCallModelWithSubagent,
+  getModels: vi.fn().mockResolvedValue({
+    research: "mock-research",
+    fastVision: "mock-fast-vision",
+  }),
   HIDDEN_REASONING: {},
 }));
 
@@ -180,7 +187,7 @@ vi.mock("../lib/elaine-config", () => ({
 }));
 
 vi.mock("../lib/openai-responses", () => ({
-  generateOpenAIResponseText: vi.fn(),
+  generateOpenAIResponseText: mockGenerateOpenAIResponseText,
   getOpenAIResponsesMetrics: vi.fn().mockResolvedValue({}),
   isOpenAIResponsesConfigured: mockIsOpenAIResponsesConfigured,
   isRecoverableOpenAIStateError: vi.fn().mockReturnValue(false),
@@ -195,6 +202,9 @@ vi.mock("../lib/openai-responses", () => ({
 
 vi.mock("../lib/app-config", () => ({
   APP_CONFIG_DEFAULTS: [],
+  getConfig: vi.fn(
+    (_module: string, _key: string, fallback: number) => fallback,
+  ),
   getAllConfig: vi.fn().mockResolvedValue([]),
   updateConfigValue: vi.fn().mockResolvedValue(undefined),
 }));
@@ -253,8 +263,8 @@ vi.mock("../lib/sms", () => ({
   SmsOptedOutError: class extends Error {},
 }));
 
-vi.mock("../lib/web-search", () => ({
-  webSearch: vi.fn().mockResolvedValue([]),
+vi.mock("../lib/web-search", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/web-search")>()),
   fetchPage: vi.fn().mockResolvedValue(""),
 }));
 
@@ -996,6 +1006,84 @@ describe("start_new_chat tool → SSE done payload", () => {
     },
     15_000,
   );
+
+  it("finishes a full-page chat with cited search leads when verification times out", async () => {
+    primeDbForFreshChat();
+    selectQueue[1] = [{ id: 100 }];
+    mockIsOpenAIResponsesConfigured.mockReturnValue(true);
+    mockHardToolNames.add("web_search");
+
+    mockGenerateOpenAIResponseText.mockRejectedValueOnce(
+      new OpenAI.APIConnectionTimeoutError(),
+    );
+    const search = vi
+      .fn()
+      .mockResolvedValueOnce({
+        choices: [{ message: { content: "A ceramics shop listing." } }],
+        citations: ["https://shop.example/listing"],
+      })
+      .mockResolvedValueOnce({
+        choices: [{ message: { content: "A studio listing." } }],
+        citations: ["https://studio.example/listing"],
+      });
+    mockCallModel.mockImplementation(async (model, callback) => {
+      if (model !== "mock-research") return "";
+      return callback({ chat: { completions: { create: search } } }, model);
+    });
+
+    const capture = vi.fn();
+    const finalReply =
+      "I found a ceramics shop and a studio, but I couldn't cross-check them.";
+    const baseRound = { model: "gpt-4o", webSearchCitations: [], usage: null };
+    mockStreamOpenAIResponseRound
+      .mockImplementationOnce(async () => ({
+        ...baseRound,
+        responseId: "resp_search",
+        text: "",
+        functionCalls: [
+          {
+            callId: "search_call",
+            name: "web_search",
+            arguments: JSON.stringify({ query: "ceramics shops and studios" }),
+          },
+        ],
+      }))
+      .mockImplementationOnce(async (params) => {
+        capture(params);
+        params.onTextDelta(finalReply);
+        return {
+          ...baseRound,
+          responseId: "resp_reply",
+          text: finalReply,
+          functionCalls: [],
+        };
+      });
+
+    const res = await request(buildApp())
+      .post("/api/elaine/chat")
+      .send({
+        appId: "elaine",
+        conversationId: 100,
+        message: "Are there any pottery shops near my hotel?",
+      })
+      .buffer(true);
+
+    expect(res.status).toBe(200);
+    expect(res.text).not.toContain("event: error");
+    expect(search).toHaveBeenCalledTimes(2);
+    expect(mockGenerateOpenAIResponseText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        role: "fast",
+        optionalLookup: { timeoutMs: 2_500 },
+      }),
+    );
+    const continuation = JSON.stringify(capture.mock.calls[0]?.[0].input);
+    expect(continuation).toContain("[CORROBORATION: unverified]");
+    expect(continuation).toContain("https://shop.example/listing");
+    expect(continuation).toContain("https://studio.example/listing");
+    expect(res.text).toContain("event: delta");
+    expect(parseDoneEvent(res.text)?.content).toContain(finalReply);
+  }, 15_000);
 
   it("Scenario A — emits newChatRequested:true in the done event when the model calls start_new_chat", async () => {
     primeDbForFreshChat();

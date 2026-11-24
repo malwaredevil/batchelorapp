@@ -58,16 +58,16 @@ beforeEach(() => {
 });
 
 describe("getElaineGlobalConfig", () => {
-  it("upgrades supporting roles without changing voice, Astra, or embeddings", async () => {
+  it("uses GPT-6.2 for direct reasoning and balanced roles without changing voice or embeddings", async () => {
     selectQueue.push([]);
     const { DEFAULT_MODELS, ELAINE_CONFIG_DEFAULTS } =
       await import("./elaine-config");
 
     expect(ELAINE_CONFIG_DEFAULTS.chatModel).toBe("google/gemini-2.5-flash");
     expect(ELAINE_CONFIG_DEFAULTS.subagentModel).toBe("z-ai/glm-5.2");
-    expect(DEFAULT_MODELS.openAIReasoning).toBe("gpt-6-astra");
+    expect(DEFAULT_MODELS.openAIReasoning).toBe("gpt-6.2-astra");
     expect(DEFAULT_MODELS.expertPanelAlt).toBe("openai/gpt-6-astra");
-    expect(DEFAULT_MODELS.openAIBalanced).toBe("gpt-6.1-sol");
+    expect(DEFAULT_MODELS.openAIBalanced).toBe("gpt-6.2-sol");
     expect(DEFAULT_MODELS.openAIFast).toBe("gpt-6-luna");
     expect(DEFAULT_MODELS.restrictedTextModel).toBe("openai/gpt-5.1");
     expect(DEFAULT_MODELS.fastVision).toBe("google/gemini-3.8-flash");

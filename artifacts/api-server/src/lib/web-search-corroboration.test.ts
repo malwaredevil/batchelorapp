@@ -121,11 +121,11 @@ describe("assessCorroboration — agreement verdict", () => {
     );
   });
 
-  it('returns "corroborated" when no verdict supplied and ≥ 2 distinct domains (conservative default)', () => {
-    // Without a verdict the function cannot detect conflict — it conservatively
-    // returns corroborated. Callers that need conflict detection must pass the
-    // verdict from checkAnswerAgreement().
-    expect(assessCorroboration(primary, secondary)).toBe("corroborated");
+  it('returns "unverified" without a successful comparison, even with distinct domains', () => {
+    expect(assessCorroboration(primary, secondary)).toBe("unverified");
+    expect(assessCorroboration(primary, secondary, "unavailable")).toBe(
+      "unverified",
+    );
   });
 
   it('returns "conflicting" when verdict is "conflict" even with ≥ 2 distinct domains', () => {
@@ -175,6 +175,21 @@ describe("assessCorroboration — agreement verdict", () => {
 // tool results cannot yield a normal-confidence reply)
 // ---------------------------------------------------------------------------
 describe("buildWebSearchToolResult", () => {
+  it("keeps the findings and citations when cross-checking is unavailable", () => {
+    const text = buildWebSearchToolResult(
+      "One shop listing.",
+      "Another studio listing.",
+      ["https://shop.example", "https://studio.example"],
+      "unverified",
+    );
+    expect(text).toContain("One shop listing.");
+    expect(text).toContain("Another studio listing.");
+    expect(text).toContain("https://shop.example");
+    expect(text).toContain("https://studio.example");
+    expect(text).toContain("[CORROBORATION: unverified]");
+    expect(text).toContain("their agreement could not be verified");
+  });
+
   it("returns a no-results message when both answers are empty", () => {
     const text = buildWebSearchToolResult("", "", [], "no_reliable_answer");
     expect(text).toBe("No results found for this search.");

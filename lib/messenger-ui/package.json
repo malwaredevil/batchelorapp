@@ -11,7 +11,7 @@
     "@workspace/elaine-ui": "workspace:*",
     "@workspace/web-core": "workspace:*",
     "clsx": "catalog:",
-    "emoji-picker-react": "^4.12.0",
+    "emoji-picker-react": "^5.1.4",
     "lucide-react": "catalog:",
     "tailwind-merge": "catalog:"
   },

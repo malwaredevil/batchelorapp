@@ -26,13 +26,13 @@
   "devDependencies": {
     "@tanstack/react-query": "catalog:",
     "@testing-library/jest-dom": "^6.9.1",
-    "@testing-library/react": "^16.3.2",
+    "@testing-library/react": "^16.3.3",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "jsdom": "^29.1.1",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "sonner": "^2.0.7",
+    "sonner": "^2.0.8",
     "vitest": "catalog:"
   }
 }

@@ -1,25 +1,8 @@
 version: 2
 updates:
   - package-ecosystem: "npm"
-    directories:
-      - "/"
-      - "/artifacts/api-server"
-      - "/artifacts/elaine"
-      - "/artifacts/modules"
-      - "/artifacts/web"
-      - "/lib/api-client-react"
-      - "/lib/api-spec"
-      - "/lib/api-zod"
-      - "/lib/db"
-      - "/lib/elaine-ui"
-      - "/lib/gmail-ui"
-      - "/lib/image-capture"
-      - "/lib/messenger-ui"
-      - "/lib/travels-settings-ui"
-      - "/lib/ui"
-      - "/lib/vite-config"
-      - "/lib/web-core"
-      - "/scripts"
+    # The root pnpm workspace and shared lockfile cover all workspace packages.
+    directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
